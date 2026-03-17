@@ -43,7 +43,7 @@ tracing             = "0.1"
 tracing-subscriber  = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Networking
-reqwest        = { version = "0.12", features = ["json"] }
+reqwest        = { version = "0.13", features = ["json"] }
 uuid           = { version = "1", features = ["v3", "v4", "serde"] }
 
 # Error handling
