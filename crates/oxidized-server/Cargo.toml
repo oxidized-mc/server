@@ -19,6 +19,7 @@ oxidized-world    = { workspace = true }
 oxidized-game     = { workspace = true }
 
 tokio             = { workspace = true }
+bytes             = { workspace = true }
 tracing           = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde             = { workspace = true }

@@ -1,6 +1,7 @@
 # Phase 2 — TCP Listener + Raw Framing
 
 **Crate:** `oxidized-protocol`  
+**Status:** ✅ Complete  
 **Reward:** Server accepts TCP connections; raw packet bytes are logged in debug mode.
 
 ---

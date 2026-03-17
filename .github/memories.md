@@ -247,3 +247,17 @@ and serialization macros. The TOML + serde version is ~500 lines — all type-sa
 automatic (de)serialization. Prefer serde derives over hand-rolled parsers for any
 structured data format.
 **Applies to:** Any future parser (NBT reader/writer could also benefit from serde).
+
+### 2026-03-17 — Phase 2: TCP listener works, MC client sends real packets
+**Context:** Phase 2 — TCP Listener + Raw Framing.
+**Learning:** A real MC 26.1-pre-3 client connected and we could see handshake (0x00, 18 bytes)
+and status request (0x00, 0 bytes) packets in the debug log. The client retries 4+ times when
+no status response comes back — important for Phase 3 to handle quickly.
+**Applies to:** Phase 3 (Handshake + Status) — must respond before client timeout.
+
+### 2026-03-17 — VarInt encoding matches vanilla exactly
+**Context:** Phase 2 — VarInt codec implementation.
+**Learning:** The encode/decode for known test vectors (0, 127, 128, 300, 25565, -1, i32::MAX,
+i32::MIN) matches the vanilla Java implementation byte-for-byte. Proptest with all i32 values
+confirms roundtrip correctness. The `varint_size()` helper is useful for pre-calculating buffer sizes.
+**Applies to:** All future packet codec work.
