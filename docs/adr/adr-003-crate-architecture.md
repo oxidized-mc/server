@@ -135,7 +135,7 @@ All shared dependencies are declared in `[workspace.dependencies]` and reference
 
 - Cross-crate API changes require careful coordination — adding a field to an NBT type may require updating protocol and world crates
 - `pub` visibility must be carefully designed — too restrictive blocks legitimate use, too permissive leaks implementation details
-- Five crates adds overhead to CI (each crate is a compilation unit) though Cargo's caching mitigates this
+- Six crates adds overhead to CI (each crate is a compilation unit) though Cargo's caching mitigates this
 
 ### Neutral
 

@@ -24,11 +24,12 @@ for entities, and a dedicated tick thread with parallel phase execution.
 
 ## Crate Architecture
 
-Five crates in a strict dependency DAG
+Six crates in a strict dependency DAG
 ([ADR-003](../adr/adr-003-crate-architecture.md)):
 
 ```
 oxidized-nbt         (leaf — no internal deps)
+oxidized-macros      (proc-macro leaf — no internal deps)
     ↑           ↑
 oxidized-protocol   oxidized-world
     ↑           ↑       ↑
@@ -40,6 +41,7 @@ oxidized-protocol   oxidized-world
 | Crate | Responsibility |
 |---|---|
 | `oxidized-nbt` | NBT binary format codec. Zero Minecraft-specific knowledge. |
+| `oxidized-macros` | Proc-macro crate: `#[derive(McPacket, McRead, McWrite)]` for compile-time codegen. |
 | `oxidized-protocol` | ~300 packet structs, 5 protocol states, wire types (`VarInt`, `Position`, etc.). Depends on `nbt`. |
 | `oxidized-world` | Anvil I/O, chunk storage, block state registry, lighting, world generation. Depends on `nbt`. |
 | `oxidized-game` | Game simulation: ECS tick phases, entity logic, commands, crafting, loot. Depends on `protocol` + `world`. |

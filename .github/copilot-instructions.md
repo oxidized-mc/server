@@ -51,6 +51,41 @@ Never let a lower-layer crate import a higher-layer crate.
 
 ---
 
+## Development Lifecycle
+
+All work in Oxidized follows the [Development Lifecycle](../docs/lifecycle/README.md).
+The 9 stages are: **Identify → Research → Decide (ADR) → Plan → Test First → Implement →
+Review → Integrate → Retrospect.** See [Quality Gates](../docs/lifecycle/quality-gates.md)
+for pass/fail criteria at each stage.
+
+### Persistent Memories
+
+**Before starting any task**, check [`.github/memories.md`](memories.md) for relevant
+prior learnings. **After completing any phase or discovering something noteworthy**, update
+memories.md with patterns, gotchas, or improvement notes. Memories are institutional
+knowledge that persists across sessions — treat them as a first-class project artifact.
+
+### Continuous Improvement
+
+Every code review and phase completion must actively look for improvements:
+- **Outdated ADRs?** → Create a superseding ADR and plan migration
+- **Better patterns?** → Record in memories.md and schedule refactoring
+- **Missing tests?** → Add them now, not later
+- **Technical debt?** → Record it explicitly (TODO comment + memories.md entry)
+
+See [Continuous Improvement](../docs/lifecycle/continuous-improvement.md) for the full process.
+
+### Phase Retrospectives
+
+After every phase completion, conduct a mandatory retrospective:
+1. What went well? What patterns worked?
+2. What surprised us? What was harder than expected?
+3. What should change? Are any ADRs outdated?
+4. What technical debt was incurred?
+5. Update memories.md with all findings
+
+---
+
 ## Development Workflow
 
 ### Task Size Gating — Plan Before Acting
@@ -62,9 +97,10 @@ Never let a lower-layer crate import a higher-layer crate.
 - A decision affects a public trait (breaking change for all callers)
 
 **Planning steps:**
-1. Use `explore` agent to check the decompiled Java reference + existing Rust code
-2. Write a plan to the session plan file; break into SQL `todos`
-3. Confirm the plan with the user before writing any code
+1. Check [persistent memories](memories.md) for relevant prior learnings
+2. Use `explore` agent to check the decompiled Java reference + existing Rust code
+3. Write a plan to the session plan file; break into SQL `todos`
+4. Confirm the plan with the user before writing any code
 
 **Start directly (no plan needed):**
 - Single-file bug fix, typo, or doc update
@@ -97,11 +133,19 @@ Key paths:
 | Phase | Agent | Prompt |
 |---|---|---|
 | **Explore** | `explore` | "Where is X in the Java reference? Find callers of Y." |
+| **Write tests (TDD)** | `general-purpose` | "Write failing tests for X in crate Y." |
 | **Implement** | `general-purpose` | "Implement X in crate Y — follow Java reference at path Z." |
 | **Build & test** | `task` | `cargo test -p oxidized-nbt` — full output on failure only. |
-| **Code review** | `code-review` | Review staged changes before commit. |
+| **Code review** | `code-review` | Review staged changes — check ADR compliance + improvements. |
 
 Parallelise independent `explore` calls. Never re-read files an agent already reported.
+
+**Code review must check:**
+1. Correctness and edge cases
+2. ADR compliance
+3. Pattern consistency
+4. Stale references
+5. **Improvement opportunities** (outdated ADRs, better patterns, missing tests)
 
 ---
 

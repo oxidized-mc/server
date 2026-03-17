@@ -23,6 +23,11 @@ docs/
 │   ├── world-format.md    # Chunk, Anvil, NBT, world gen internals
 │   └── entity-system.md   # Entity hierarchy, AI, synced data
 │
+├── lifecycle/             # Development lifecycle and processes
+│   ├── README.md          # 9-stage development lifecycle
+│   ├── quality-gates.md   # Pass/fail criteria for each stage
+│   └── continuous-improvement.md  # ADR evolution, retrospectives, tech debt
+│
 ├── phases/                # 38 implementation phases
 │   ├── README.md          # Phase index + dependency graph
 │   └── phase-01 … phase-38
@@ -40,6 +45,8 @@ docs/
 | Want to... | Go to |
 |---|---|
 | Understand the big picture | [architecture/overview.md](architecture/overview.md) |
+| Understand the development process | [lifecycle/README.md](lifecycle/README.md) |
+| See quality standards | [lifecycle/quality-gates.md](lifecycle/quality-gates.md) |
 | Understand crate boundaries | [architecture/crate-layout.md](architecture/crate-layout.md) |
 | Understand the wire protocol | [architecture/protocol.md](architecture/protocol.md) |
 | See why a design choice was made | [adr/README.md](adr/README.md) |
@@ -47,6 +54,7 @@ docs/
 | See all binary formats | [reference/data-formats.md](reference/data-formats.md) |
 | Browse the reference index | [reference/README.md](reference/README.md) |
 | See the current phase | [phases/README.md](phases/README.md) |
+| Read project learnings | [../.github/memories.md](../.github/memories.md) |
 
 ---
 

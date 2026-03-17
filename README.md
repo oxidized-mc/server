@@ -84,10 +84,12 @@ cargo clippy --workspace --all-targets -- -D warnings  # lints
 | Document | Description |
 |---|---|
 | [Architecture Overview](./docs/architecture/overview.md) | System design, threading model, data flow |
-| [Crate Layout](./docs/architecture/crate-layout.md) | 5-crate workspace, dependency rules |
+| [Crate Layout](./docs/architecture/crate-layout.md) | 6-crate workspace, dependency rules |
+| [Development Lifecycle](./docs/lifecycle/README.md) | 9-stage lifecycle, quality gates, continuous improvement |
 | [Protocol](./docs/architecture/protocol.md) | Wire protocol, packet states, encryption |
 | [Phases](./docs/phases/README.md) | 38-phase implementation roadmap |
 | [ADRs](./docs/adr/README.md) | 32 Architecture Decision Records |
+| [Memories](.github/memories.md) | Persistent learnings, patterns, gotchas |
 | [Java Class Map](./docs/reference/java-class-map.md) | 110+ vanilla Java → Rust mappings |
 | [Data Formats](./docs/reference/data-formats.md) | Binary format specs (VarInt, NBT, chunks) |
 
