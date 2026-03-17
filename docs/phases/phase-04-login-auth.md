@@ -1,5 +1,6 @@
 # Phase 4 — Login + Encryption + Compression
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-protocol`  
 **Reward:** 🎉 A real vanilla Minecraft 26.1 client can connect and authenticate
 (both online and offline mode).
