@@ -1,0 +1,120 @@
+# ADR-002: Error Handling Strategy
+
+| Field | Value |
+|-------|-------|
+| Status | Accepted |
+| Date | 2026-03-17 |
+| Phases | All |
+| Deciders | Oxidized Core Team |
+
+## Context
+
+The vanilla Minecraft server uses Java's exception model extensively — broad `try-catch` blocks that silently swallow errors, `catch (Exception e)` clauses that log a one-line message and continue, and checked exceptions that are declared but rarely handled meaningfully. This leads to silent data corruption (e.g., a malformed chunk is skipped without warning), obscure stack traces that don't indicate what operation was being attempted, and inconsistent error propagation (some paths throw, others return null, others log and continue).
+
+Rust's type system forces explicit error handling through `Result<T, E>`. There is no implicit exception propagation — every fallible call site must decide what to do with the error. This is a strength, but it requires a deliberate strategy to keep the codebase ergonomic. Without a plan, we risk either boilerplate-heavy manual error wiring or overly permissive `unwrap()` calls that crash the server.
+
+Our crate architecture (ADR-003) has clear boundaries: `oxidized-nbt`, `oxidized-protocol`, `oxidized-world`, `oxidized-game`, and the `oxidized-server` binary. Library crates need precise, typed errors so consumers can match on specific failure modes. The server binary needs convenient error aggregation for top-level reporting. We need a strategy that serves both needs.
+
+## Decision Drivers
+
+- **Type safety at crate boundaries**: callers of library crates must be able to match on specific error variants (e.g., `NbtError::InvalidTag` vs `NbtError::UnexpectedEof`)
+- **Ergonomic `?` operator usage**: functions should compose with `?` without excessive `.map_err()` boilerplate
+- **Rich context on failure**: errors must carry enough information to diagnose the problem — what operation was attempted, what input caused it, where in the pipeline it failed
+- **No silent swallowing**: every error must be either handled explicitly or propagated — never discarded
+- **Zero panics in production**: the server must never crash from an `unwrap()` or `expect()` on a `None`/`Err`
+
+## Considered Options
+
+### Option 1: anyhow everywhere
+
+Use `anyhow::Result` as the return type for all functions, including library crates. This is maximally ergonomic — any error type converts to `anyhow::Error` via `?`, and `.context("doing X")` adds rich messages. However, callers lose the ability to match on specific error variants. This makes it hard for `oxidized-game` to distinguish between "chunk not found" (generate it) and "chunk corrupted" (log and skip) when calling `oxidized-world`.
+
+### Option 2: thiserror for library crates, anyhow at the binary boundary
+
+Each library crate defines its own error enum using `thiserror::Error` derive. These enums have specific variants with typed payloads. The server binary (which is the top-level consumer) converts library errors to `anyhow::Result` at the boundary, adding context as needed. This gives type safety where it matters (crate APIs) and convenience where it matters (application-level orchestration).
+
+### Option 3: Custom error enum hierarchy (no dependencies)
+
+Define all error types manually without `thiserror` — implement `std::fmt::Display` and `std::error::Error` by hand. This avoids the proc-macro dependency but adds significant boilerplate (10-15 lines per error variant). For a project with 5+ crates and dozens of error types, this becomes a maintenance burden that discourages adding proper error context.
+
+### Option 4: color-eyre for pretty backtraces
+
+Use `color-eyre` (a fork of `eyre`) for colorized, spantrace-aware error reports. This provides beautiful terminal output but is primarily a reporting layer — it doesn't solve the library-vs-binary typing problem. It also adds a runtime cost for capturing spantraces on every error construction. Better suited as an optional development-time enhancement than a core strategy.
+
+## Decision
+
+**We use `thiserror` for all library crates and `anyhow` at the server binary boundary.** Each library crate (`oxidized-nbt`, `oxidized-protocol`, `oxidized-world`, `oxidized-game`) defines its own error enum with `#[derive(thiserror::Error)]`. Error variants carry relevant context as fields:
+
+```rust
+#[derive(Debug, thiserror::Error)]
+pub enum ProtocolError {
+    #[error("unknown packet id {id:#x} in state {state}")]
+    UnknownPacket { id: i32, state: &'static str },
+
+    #[error("packet too large: {size} bytes (max {max})")]
+    PacketTooLarge { size: usize, max: usize },
+
+    #[error("varint exceeded 5 bytes")]
+    VarIntTooLong,
+
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Nbt(#[from] oxidized_nbt::NbtError),
+}
+```
+
+The server binary uses `anyhow::Result` for its `main()` and top-level orchestration functions. Library errors are automatically converted via `From` impls generated by `thiserror`'s `#[from]` attribute. When additional context is needed, we use `anyhow::Context`:
+
+```rust
+let config = Config::load(path)
+    .context("failed to load server configuration")?;
+```
+
+**Production code must never use `.unwrap()` or `.expect()`**. This is enforced by workspace-level Clippy lints. The only exceptions are in test code and `const` contexts where the compiler can prove the value is `Some`/`Ok`.
+
+## Consequences
+
+### Positive
+
+- Library consumers can pattern-match on specific error variants to make recovery decisions (retry, skip, escalate)
+- The `?` operator works seamlessly across crate boundaries thanks to `#[from]` conversions
+- Error messages carry structured context (packet IDs, sizes, coordinates) not just string dumps
+- Clippy enforcement of no-unwrap prevents entire classes of runtime panics
+- `thiserror` generates `Display` and `Error` impls with zero runtime cost beyond the format string
+
+### Negative
+
+- Two error handling crates in the dependency tree (`thiserror` + `anyhow`) — though both are lightweight and widely used
+- Error enum variants need maintenance as new failure modes are discovered — adding a variant is a minor breaking change for downstream match arms (mitigated with `#[non_exhaustive]`)
+
+### Neutral
+
+- `#[non_exhaustive]` on all public error enums prevents downstream exhaustive matches, allowing us to add variants without semver breaks
+- `color-eyre` may be added later as a dev-time feature flag for prettier error output during debugging
+
+## Compliance
+
+- **Workspace Clippy lints** in root `Cargo.toml`:
+  ```toml
+  [workspace.lints.clippy]
+  unwrap_used = "deny"
+  expect_used = "deny"
+  ```
+- **CI check**: `cargo clippy --workspace -- -D warnings` must pass — any `unwrap()` or `expect()` in non-test code fails the build
+- **Code review criteria**: every new public error enum must use `#[derive(thiserror::Error)]` and `#[non_exhaustive]`
+- **Error variant audit**: error variants must carry enough context to diagnose the failure without needing a debugger — reviewer checks for bare `#[error("failed")]` variants and requests specifics
+
+## Related ADRs
+
+- [ADR-003: Crate Workspace Architecture](adr-003-crate-architecture.md) — defines the crate boundaries where error types are exchanged
+- [ADR-004: Logging, Tracing & Observability](adr-004-logging-observability.md) — errors are logged with tracing spans for contextual correlation
+- [ADR-007: Packet Codec Framework](adr-007-packet-codec.md) — protocol errors use `ProtocolError` enum
+
+## References
+
+- [thiserror documentation](https://docs.rs/thiserror/latest/thiserror/)
+- [anyhow documentation](https://docs.rs/anyhow/latest/anyhow/)
+- [Rust Error Handling — Andrew Gallant (BurntSushi)](https://blog.burntsushi.net/rust-error-handling/)
+- [Rust API Guidelines — Error types](https://rust-lang.github.io/api-guidelines/interoperability.html#error-types-are-meaningful-and-well-behaved-c-good-err)
