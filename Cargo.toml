@@ -31,8 +31,8 @@ bytes          = "1"
 
 # Crypto
 aes            = "0.8"
-cfb-mode       = "0.8"
-rsa            = { version = "0.9", features = ["sha2"] }
+md-5           = "0.10"
+rsa            = { version = "0.9", features = ["sha2", "getrandom"] }
 rand           = "0.10"
 sha1           = "0.10"
 
@@ -45,6 +45,7 @@ tracing-subscriber  = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Networking
 reqwest        = { version = "0.13", features = ["json"] }
+urlencoding    = "2"
 uuid           = { version = "1", features = ["v3", "v4", "serde"] }
 
 # Error handling
