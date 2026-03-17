@@ -1,1 +1,4 @@
-// oxidized-protocol — Minecraft 26.1 protocol implementation
+//! Minecraft 26.1 protocol implementation.
+//!
+//! Packet codec, connection state machine, encryption, compression,
+//! and all 185 packet definitions.

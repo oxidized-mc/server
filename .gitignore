@@ -8,6 +8,7 @@
 
 # Minecraft reference files (large, not needed in git)
 /mc-server-ref/server.jar
+/mc-server-ref/*.jar
 /mc-server-ref/extracted/
 /mc-server-ref/mc-extracted/
 /mc-server-ref/decompiled/

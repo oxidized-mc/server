@@ -64,4 +64,4 @@ All documentation targets **Minecraft 26.1-pre-3**:
 | Build time | 2026-03-17T13:36:07Z |
 
 The decompiled reference is at `mc-server-ref/decompiled/` (gitignored).
-Run `scripts/decompile.sh` to regenerate it.
+See [reference/README.md](reference/README.md) for instructions on regenerating it.

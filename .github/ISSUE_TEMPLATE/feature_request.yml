@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the suggestion! Check the [roadmap](../../blob/main/PHASES.md)
+        Thanks for the suggestion! Check the [roadmap](../../blob/main/docs/phases/README.md)
         first — your feature may already be planned.
 
   - type: dropdown
@@ -33,7 +33,24 @@ body:
         - "Phase 18 — Commands"
         - "Phase 19 — World Ticking"
         - "Phase 20 — World Saving"
-        - "Phase 21+ — Later phase"
+        - "Phase 21 — Inventory"
+        - "Phase 22 — Block Interaction"
+        - "Phase 23 — Flat World Gen"
+        - "Phase 24 — Noise World Gen"
+        - "Phase 25 — Combat"
+        - "Phase 26 — Passive Mobs"
+        - "Phase 27 — Hostile Mobs"
+        - "Phase 28 — Redstone"
+        - "Phase 29 — Crafting"
+        - "Phase 30 — Block Entities"
+        - "Phase 31 — Advancements"
+        - "Phase 32 — Scoreboards"
+        - "Phase 33 — RCON/Query"
+        - "Phase 34 — Loot Tables"
+        - "Phase 35 — Enchantments"
+        - "Phase 36 — Structures"
+        - "Phase 37 — JSON-RPC"
+        - "Phase 38 — Performance"
         - "Not in roadmap"
 
   - type: textarea

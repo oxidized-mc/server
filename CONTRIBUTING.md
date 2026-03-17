@@ -10,6 +10,7 @@ Thank you for your interest in contributing! This document explains the process.
 - [How to Contribute](#how-to-contribute)
 - [Development Setup](#development-setup)
 - [Architecture](#architecture)
+- [Design Decisions (ADRs)](#design-decisions-adrs)
 - [Commit Style](#commit-style)
 - [Pull Request Process](#pull-request-process)
 - [Testing](#testing)
@@ -30,7 +31,7 @@ Be respectful and constructive.
 | 🐛 Bug report | Open a [bug report issue](.github/ISSUE_TEMPLATE/bug_report.yml) |
 | 💡 Feature request | Open a [feature request issue](.github/ISSUE_TEMPLATE/feature_request.yml) |
 | 📖 Docs | Edit any `.md` file and open a PR |
-| 🧩 Implementation | Pick a phase from [PHASES.md](./PHASES.md) and open a PR |
+| 🧩 Implementation | Pick a phase from the [roadmap](./docs/phases/README.md) and open a PR |
 | 🔍 Review | Review open PRs and leave constructive feedback |
 
 ---
@@ -39,8 +40,8 @@ Be respectful and constructive.
 
 ```bash
 # 1. Fork and clone
-git clone https://github.com/your-org/oxidized
-cd oxidized
+git clone https://github.com/dodoflix/Oxidized.git
+cd Oxidized
 
 # 2. Rust stable (toolchain pinned via rust-toolchain.toml)
 rustup update stable
@@ -81,6 +82,20 @@ The workspace has five crates — keep concerns separated:
 **Reference code:** The decompiled vanilla server lives in `mc-server-ref/decompiled/`
 (gitignored). When implementing something, always check the Java reference first.
 **Rewrite idiomatically in Rust — do not transliterate Java line-by-line.**
+
+For detailed architecture docs, see [`docs/architecture/`](./docs/architecture/).
+
+---
+
+## Design Decisions (ADRs)
+
+All significant design decisions are documented as
+[Architecture Decision Records](./docs/adr/README.md). Before implementing any
+phase, read the ADRs linked in that phase's doc file.
+
+Key principle: **the wire protocol is sacred** (we can't change what the client
+sends or expects), but everything server-side uses modern, data-oriented Rust
+design rather than cloning vanilla Java patterns.
 
 ---
 

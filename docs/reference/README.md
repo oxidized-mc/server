@@ -22,10 +22,13 @@ The decompiled vanilla reference is at:
 mc-server-ref/decompiled/
 ```
 
-This directory is **gitignored**. Regenerate it with:
+This directory is **gitignored**. To regenerate it, download the Minecraft 26.1-pre-3
+server JAR from the [Mojang version manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json),
+extract the bundled server from `META-INF/versions/`, and decompile with
+[Vineflower](https://github.com/Vineflower/vineflower):
 
 ```bash
-./scripts/decompile.sh
+java -jar vineflower.jar mc-server-ref/extracted/server.jar mc-server-ref/decompiled/
 ```
 
 The root packages of interest:
