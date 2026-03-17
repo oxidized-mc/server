@@ -54,12 +54,14 @@ AES-128-CFB8 is a stream cipher mode that encrypts one byte at a time using an 8
 
 ```rust
 use aes::Aes128;
-use cfb8::Encryptor as Cfb8Enc;
-use cfb8::Decryptor as Cfb8Dec;
+// Manual CFB-8 implementation — the `cfb8` crate 0.9.0-rc.3 is incompatible
+// with cipher 0.5 and `cfb-mode` only supports CFB-128, not CFB-8.
+// We implement CFB-8 directly using AES-128 block cipher.
 
 pub struct CipherState {
-    encryptor: Cfb8Enc<Aes128>,
-    decryptor: Cfb8Dec<Aes128>,
+    cipher: Aes128,
+    enc_iv: [u8; 16],  // separate shift registers for each direction
+    dec_iv: [u8; 16],
 }
 
 impl CipherState {
@@ -264,6 +266,6 @@ Encryption must be enabled **after** the `EncryptionResponse` is received but **
 - [wiki.vg — Protocol Encryption](https://wiki.vg/Protocol_Encryption)
 - [wiki.vg — Packet Format (with compression)](https://wiki.vg/Protocol#With_compression)
 - [AES-CFB8 mode — NIST SP 800-38A](https://csrc.nist.gov/publications/detail/sp/800-38a/final)
-- [RustCrypto cfb8 crate](https://docs.rs/cfb-mode/latest/cfb_mode/)
+- ~~RustCrypto cfb8 crate~~ — not used; manual CFB-8 implementation required (see implementation notes above)
 - [flate2 crate documentation](https://docs.rs/flate2/latest/flate2/)
 - [Netty CipherEncoder source](https://github.com/netty/netty/blob/4.1/handler/src/main/java/io/netty/handler/codec/)

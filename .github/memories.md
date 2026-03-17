@@ -278,3 +278,104 @@ no status response comes back — important for Phase 3 to handle quickly.
 i32::MIN) matches the vanilla Java implementation byte-for-byte. Proptest with all i32 values
 confirms roundtrip correctness. The `varint_size()` helper is useful for pre-calculating buffer sizes.
 **Applies to:** All future packet codec work.
+
+---
+
+## Phase 2 Retrospective (2026-03-17)
+
+### What went well
+- **VarInt/VarLong codec is rock-solid.** Proptest across all i32 values confirmed 100% roundtrip
+  correctness. Test naming and coverage followed TDD properly.
+- **Connection struct design is extensible.** Adding cipher and compression fields later (Phase 4)
+  was straightforward because the struct was well-factored from the start.
+- **Frame codec correctly handles edge cases.** Maximum packet length validation, zero-length
+  frames, and multi-byte VarInt lengths all tested.
+
+### What surprised us
+- **MC client retries aggressively.** 4+ connection attempts when no status response — important
+  for Phase 3 to handle connections quickly or the client gives up.
+- **CI failure on this commit was expected.** Phase 2 added types used by Phase 3; the commit
+  compiled but CI ran clippy which flagged unused code. Fixed in Phase 3 commit.
+
+### Metrics
+- **Tests:** 73 total (48 Phase 1 + 25 new: VarInt/VarLong, frame codec, connection)
+- **Crates touched:** 2 (oxidized-protocol new, oxidized-server updated)
+- **ADR compliance:** ADR-006 (network I/O), ADR-007 (packet codec) — both followed
+
+---
+
+## Phase 3 Retrospective (2026-03-17)
+
+### What went well
+- **Server list ping works end-to-end.** Real MC 26.1-pre-3 client shows the server in the
+  multiplayer list with correct MOTD, player count (0/20), and version string.
+- **Protocol dispatch pattern is clean.** The `handle_handshake()` → `handle_status()` dispatch
+  pattern with match on packet IDs is simple and extensible for future states.
+- **Wire type helpers are reusable.** The `read_string()`, `write_string()`, `read_u16()`, etc.
+  helpers in `codec/types.rs` are used across all subsequent phases.
+
+### What surprised us
+- **Status response JSON must match vanilla exactly.** The `version.protocol` field must be the
+  integer protocol version (1073742124), not a string. The `players` object must include
+  `max` and `online` even when empty. Client is strict about JSON structure.
+- **Ping/pong timing matters.** The client sends a `PingRequestPacket` with a timestamp and
+  expects the same timestamp echoed back. This is used for latency display.
+
+### What should change going forward
+- **Test against real client earlier.** Phase 2 had no real client testing; Phase 3 caught
+  issues that a real client test would have revealed (JSON format strictness).
+
+### Metrics
+- **Tests:** 98 total (73 prior + 25 new: packet codec, status JSON, dispatch, integration)
+- **Integration tests:** 3 (full status exchange, protocol mismatch, graceful shutdown)
+- **ADR compliance:** ADR-006, ADR-007, ADR-008 — all followed
+
+---
+
+## Phase 4 Retrospective (2026-03-17)
+
+### What went well
+- **Full login flow works.** Online and offline mode authentication, encryption, and compression
+  all functional. Connection transitions cleanly from Login → Configuration state.
+- **Manual CFB-8 implementation is correct.** Despite the `cfb8` crate being broken
+  (incompatible with cipher 0.5), our manual implementation passes all vanilla test vectors
+  including the tricky "simon" hash (many online sources have the wrong value).
+- **Code review caught a real security bug.** URL injection vulnerability in `auth.rs` where
+  username/server_hash were interpolated directly into the session server URL. Fixed with
+  `urlencoding::encode()` before merge.
+- **Encrypted+compressed pipeline is transparent.** The `read_raw_packet()` and `send_raw()`
+  methods handle encryption and compression internally — callers don't need to know.
+
+### What surprised us
+- **`cfb-mode` 0.8 is CFB-128, NOT CFB-8.** Minecraft needs CFB-8 (1-byte feedback). The
+  naming is misleading. Had to implement CFB-8 manually using AES-128 block cipher directly.
+- **RSA + rand version incompatibility.** RSA 0.9 depends on rand_core 0.6, but our rand 0.10
+  uses rand_core 0.9. Solution: use `rsa::rand_core::OsRng` for RSA, `rand::rng()` elsewhere.
+- **Java's `UUID.nameUUIDFromBytes()` is non-standard.** It hashes raw input with MD5 (no
+  namespace prefix), unlike Rust's `Uuid::new_v3()` which prepends 16 nil bytes. Had to use
+  raw MD5 + manual version/variant bit setting.
+- **wiki.vg "simon" test vector is wrong in many sources.** Correct value:
+  `"88e16a1019277b15d58faf0541e11910eb756f6"` (no leading minus, starts with 88e).
+- **Encryption is stream-level, compression is frame-level.** Encryption operates on raw TCP
+  bytes INCLUDING frame length prefixes (cipher state advances per byte). Compression is
+  per-packet and independent. This distinction is critical for correct implementation.
+
+### What should change going forward
+- **ADR-009 referenced `cfb8` crate but we couldn't use it.** ADRs should note implementation
+  caveats when the chosen approach doesn't work. Updated ADR-009 with actual implementation.
+- **URL-encode all external API parameters by default.** The auth URL injection was subtle —
+  make encoding the default pattern for any URL construction.
+
+### Technical debt acknowledged
+- **No real client testing yet.** The login flow is tested with unit/integration tests but not
+  against a real Minecraft 26.1-pre-3 client. The server transitions to Configuration state
+  but Configuration packets are not implemented — client will hang.
+- **`reqwest` is a heavy dependency.** Consider whether a lighter HTTP client would suffice
+  for the single Mojang auth endpoint.
+
+### Metrics
+- **Tests:** 158 total (98 prior + 60 new: crypto 17, compression 10, auth 4, login packets 11,
+  codec types 8, connection 5, server integration 5)
+- **Security bugs found in review:** 1 (URL injection in auth.rs)
+- **Crate incompatibilities worked around:** 2 (cfb8, RSA+rand)
+- **ADR compliance:** ADR-006, ADR-007, ADR-008, ADR-009 — all followed (ADR-009 updated)

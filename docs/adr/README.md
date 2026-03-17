@@ -95,7 +95,7 @@ These principles inform every ADR:
 | [002](adr-002-error-handling.md) | Error Handling Strategy | Accepted | All |
 | [003](adr-003-crate-architecture.md) | Crate Workspace Architecture | Accepted | P01 |
 | [004](adr-004-logging-observability.md) | Logging, Tracing & Observability | Accepted | P01, P38 |
-| [005](adr-005-configuration.md) | Configuration Management | Accepted | P01, P19 |
+| [005](adr-005-configuration.md) | Configuration Management | **Superseded by [ADR-033](adr-033-configuration-format.md)** | P01, P19 |
 
 ### Network Layer
 
@@ -154,13 +154,20 @@ These principles inform every ADR:
 | [031](adr-031-management-api.md) | Management & Remote Access APIs | Accepted | P33, P37 |
 | [032](adr-032-scalability.md) | Performance & Scalability Architecture | Accepted | P38 |
 
+### Process & Strategy
+
+| ADR | Title | Status | Phases |
+|-----|-------|--------|--------|
+| [033](adr-033-configuration-format.md) | Configuration Format Evolution | Accepted | P01 (retrofit) |
+| [034](adr-034-testing-strategy.md) | Comprehensive Testing Strategy | Accepted | All |
+
 ---
 
 ## Phase → ADR Cross-Reference
 
 | Phase | Relevant ADRs |
 |-------|---------------|
-| P01 Bootstrap | 001, 002, 003, 004, 005, 030 |
+| P01 Bootstrap | 001, 002, 003, 004, ~~005~~ → 033, 030, 034 |
 | P02 TCP Framing | 001, 006, 007 |
 | P03 Handshake/Status | 006, 007, 008 |
 | P04 Login/Auth | 006, 007, 008, 009 |
