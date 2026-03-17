@@ -26,14 +26,14 @@ tokio-util     = { version = "0.7", features = ["codec"] }
 # Serialization
 serde          = { version = "1", features = ["derive"] }
 serde_json     = "1"
-toml           = "0.8"
+toml           = "1"
 bytes          = "1"
 
 # Crypto
 aes            = "0.8"
 cfb-mode       = "0.8"
 rsa            = { version = "0.9", features = ["sha2"] }
-rand           = "0.8"
+rand           = "0.10"
 sha1           = "0.10"
 
 # Compression
@@ -44,7 +44,7 @@ tracing             = "0.1"
 tracing-subscriber  = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # Networking
-reqwest        = { version = "0.12", features = ["json"] }
+reqwest        = { version = "0.13", features = ["json"] }
 uuid           = { version = "1", features = ["v3", "v4", "serde"] }
 
 # Error handling
@@ -74,7 +74,7 @@ quote          = "1"
 proc-macro2    = "1"
 
 # Math / noise
-glam           = "0.29"
+glam           = "0.32"
 
 # Internal workspace crates
 oxidized-protocol = { path = "crates/oxidized-protocol" }
