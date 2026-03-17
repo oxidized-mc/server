@@ -13,6 +13,7 @@ oxidized-nbt      = { workspace = true }
 oxidized-world    = { workspace = true }
 oxidized-protocol = { workspace = true }
 
+bevy_ecs     = { workspace = true }
 serde        = { workspace = true }
 serde_json   = { workspace = true }
 thiserror    = { workspace = true }
@@ -23,7 +24,7 @@ parking_lot  = { workspace = true }
 ahash        = { workspace = true }
 bitflags     = { workspace = true }
 glam         = { workspace = true }
-indexmap     = { workspace = true }
+indexmap      = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

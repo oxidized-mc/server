@@ -65,7 +65,7 @@ bevy_ecs       = "0.18"
 rayon          = "1.10"
 
 # Memory management
-bumpalo        = { version = "3", features = ["allocator_api"] }
+bumpalo        = "3"
 mimalloc       = { version = "0.1", default-features = false }
 
 # Proc-macro support
