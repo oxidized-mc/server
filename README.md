@@ -36,10 +36,11 @@ See the [38-phase roadmap](./docs/phases/README.md) and
 Oxidized/
 ├── crates/
 │   ├── oxidized-nbt/        # NBT read/write, SNBT, GZIP/zlib
-│   ├── oxidized-protocol/   # Network: TCP, packet codec, all 26.1 packets
+│   ├── oxidized-macros/     # Proc-macro: #[derive(McPacket, McRead, McWrite)]
+│   ├── oxidized-protocol/   # Network: TCP, packet codec, typestate connections
 │   ├── oxidized-world/      # World, chunks (Anvil), blocks, items, lighting
-│   ├── oxidized-game/       # Entities, AI, combat, commands, crafting
-│   └── oxidized-server/     # Binary — startup, server loop, tick
+│   ├── oxidized-game/       # ECS (bevy_ecs): entities, AI, combat, commands
+│   └── oxidized-server/     # Binary — startup, tick loop, network layer
 ├── docs/
 │   ├── adr/                 # 32 Architecture Decision Records
 │   ├── architecture/        # System design documents

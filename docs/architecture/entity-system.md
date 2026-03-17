@@ -1,10 +1,29 @@
 # Entity System
 
-## Overview
+## Design Philosophy
 
-Minecraft's entity system is a deep class hierarchy. This document maps the Java
-hierarchy to the planned Rust design and details the synced entity data system,
-AI system, and tracking.
+Oxidized uses **[bevy_ecs](https://docs.rs/bevy_ecs/latest/bevy_ecs/)** as a
+standalone library for all entity representation and processing (see
+[ADR-018](../adr/adr-018-entity-system.md)). There is no trait inheritance
+hierarchy. Instead:
+
+- **Entities** are opaque `Entity` IDs — lightweight handles with no data.
+- **Components** are plain Rust structs annotated with `#[derive(Component)]`.
+  All entity state is decomposed into components.
+- **Systems** are functions that declare their data access via `Query<>`
+  parameters. `bevy_ecs` analyzes queries and schedules non-conflicting systems
+  for automatic parallel execution.
+
+This architecture gives us cache-friendly iteration over contiguous component
+arrays, safe multi-threaded ticking (independent systems run on different cores),
+and trivial behavioral composition — adding a capability to any entity is just
+inserting a new component.
+
+> **Why not trait objects?** ADR-018 explicitly evaluated and **rejected** the
+> OOP approach (`pub trait Entity`, `Arc<dyn Trait>`, `hecs`). Trait objects
+> preserve all of vanilla Java's problems (pointer chasing, no parallelism,
+> composition rigidity) while fighting Rust's ownership model. See the ADR for
+> the full rationale.
 
 **Java references:**
 - `net.minecraft.world.entity.Entity`
@@ -15,112 +34,351 @@ AI system, and tracking.
 
 ---
 
-## Java Class Hierarchy (Server-Side)
+## Vanilla Java → ECS Mapping
+
+Vanilla's deep class hierarchy maps to flat component composition. Each level of
+the Java hierarchy becomes a set of components plus a marker component.
 
 ```
-Entity
-└── LivingEntity
-    ├── Mob
-    │   ├── PathfinderMob
-    │   │   ├── WaterAnimal (Squid, Dolphin, …)
-    │   │   ├── AmbientCreature (Bat)
-    │   │   └── Animal
-    │   │       ├── Cow, Pig, Sheep, Chicken, Horse, …
-    │   │       └── TamableAnimal (Wolf, Cat, Parrot)
-    │   └── Monster
-    │       ├── Zombie, Husk, DrownedZombie
-    │       ├── Skeleton, Stray, WitherSkeleton
-    │       ├── Creeper
-    │       ├── Spider, CaveSpider
-    │       ├── Enderman
-    │       ├── Blaze
-    │       ├── Witch
-    │       └── (others)
-    └── Player
-        └── ServerPlayer   ← server-side player
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Java Class            │ ECS Representation                             │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ Entity (base)         │ Position, Rotation, Velocity, OnGround,       │
+│                       │ FallDistance, EntityFlags, BoundingBox,        │
+│                       │ EntityType, TickCount, NoGravity*, Silent*,   │
+│                       │ CustomName*, SynchedData, …                   │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ LivingEntity          │ LivingEntityMarker + Health, Equipment,       │
+│                       │ ActiveEffects, Attributes, ArmorValue,        │
+│                       │ AbsorptionAmount, DeathTime, HurtTime,        │
+│                       │ LastDamageSource                              │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ Mob                   │ MobMarker + AiGoals, NavigationPath, Target   │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ PathfinderMob         │ PathfinderMobMarker (inherits Mob components) │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ Monster               │ MonsterMarker                                 │
+│ Animal                │ AnimalMarker + BreedCooldown                  │
+│ TamableAnimal         │ TamableMarker + Owner(Entity)                 │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ Player                │ PlayerMarker + PlayerInventory, GameMode,     │
+│                       │ FoodData, ExperienceData, Abilities,          │
+│                       │ SelectedSlot                                  │
+├───────────────────────┼────────────────────────────────────────────────┤
+│ Zombie                │ ZombieMarker + shared components above        │
+│ Skeleton              │ SkeletonMarker + shared components above      │
+│ Creeper               │ CreeperMarker + FuseTime, ExplosionRadius     │
+│ Villager              │ VillagerMarker + BrainAi, VillagerData        │
+└───────────────────────┴────────────────────────────────────────────────┘
+
+  * NoGravity, Silent, CustomName are optional components — inserted only when
+    the flag is set, removed when cleared. Systems filter with With<>/Without<>.
+```
+
+A zombie entity in the ECS `World` has the following components: `Position`,
+`Rotation`, `Velocity`, `OnGround`, `FallDistance`, `EntityFlags`, `BoundingBox`,
+`EntityType`, `TickCount`, `SynchedData`, `Health`, `Equipment`, `ActiveEffects`,
+`Attributes`, `AiGoals`, `NavigationPath`, `LivingEntityMarker`, `MobMarker`,
+`PathfinderMobMarker`, `MonsterMarker`, `ZombieMarker`.
+
+Systems that implement zombie-specific logic query `With<ZombieMarker>`:
+
+```rust
+fn zombie_sunlight_burning_system(
+    mut commands: Commands,
+    query: Query<(Entity, &Position), (With<ZombieMarker>, Without<Burning>)>,
+    time: Res<DayTime>,
+) {
+    for (entity, pos) in &query {
+        if time.is_day() && pos.0.y > 64.0 && /* sky visible check */ true {
+            commands.entity(entity).insert(Burning { ticks_remaining: 80 });
+        }
+    }
+}
 ```
 
 ---
 
-## Rust Design
+## Component Catalog
+
+All fields from vanilla's `Entity` base class are decomposed into individual
+components. The data is identical to vanilla — only the storage model changes.
+
+### Core Components (all entities)
+
+These correspond to fields from `net.minecraft.world.entity.Entity`:
 
 ```rust
-// Trait-based composition (not deep inheritance)
+#[derive(Component)]
+pub struct Position(pub DVec3);          // pos — current world position
 
-pub trait Entity: Send + Sync {
-    fn id(&self) -> EntityId;
-    fn uuid(&self) -> Uuid;
-    fn pos(&self) -> Vec3;
-    fn rot(&self) -> (f32, f32);   // yaw, pitch
-    fn entity_type(&self) -> &EntityType;
-    fn bounding_box(&self) -> AABB;
-    fn tick(&mut self, level: &mut ServerLevel);
-    fn save(&self) -> CompoundTag;
-    fn load(&mut self, tag: &CompoundTag);
+#[derive(Component)]
+pub struct OldPosition(pub DVec3);       // previous tick position (for delta packets)
+
+#[derive(Component)]
+pub struct Rotation {
+    pub yaw: f32,
+    pub pitch: f32,
 }
 
-pub trait LivingEntity: Entity {
-    fn health(&self) -> f32;
-    fn max_health(&self) -> f32;
-    fn hurt(&mut self, source: DamageSource, amount: f32) -> bool;
-    fn kill(&mut self);
-    fn active_effects(&self) -> &HashMap<MobEffectId, MobEffectInstance>;
+#[derive(Component)]
+pub struct OldRotation {
+    pub yaw: f32,
+    pub pitch: f32,
 }
 
-pub trait Mob: LivingEntity {
-    fn goal_selector(&self) -> &GoalSelector;
-    fn target(&self) -> Option<EntityId>;
-    fn navigation(&self) -> &PathNavigation;
-}
-```
+#[derive(Component)]
+pub struct Velocity(pub DVec3);          // delta_movement
 
-In practice, concrete entity types are enums or structs that compose these
-capabilities via `Arc<dyn Trait>` or a flat ECS-style approach using `hecs`.
+#[derive(Component)]
+pub struct OnGround(pub bool);
 
----
+#[derive(Component)]
+pub struct WasOnGround(pub bool);
 
-## Entity Base Fields
+#[derive(Component)]
+pub struct HorizontalCollision(pub bool);
 
-From `net.minecraft.world.entity.Entity`:
+#[derive(Component)]
+pub struct VerticalCollision(pub bool);
 
-```rust
-pub struct EntityBase {
-    pub id: EntityId,           // atomic i32 counter
-    pub uuid: Uuid,
-    pub pos: Vec3,
-    pub old_pos: Vec3,          // previous tick position (for delta)
-    pub rot: (f32, f32),        // yaw, pitch
-    pub old_rot: (f32, f32),
-    pub delta_movement: Vec3,   // velocity
-    pub on_ground: bool,
-    pub was_on_ground: bool,
-    pub horizontal_collision: bool,
-    pub vertical_collision: bool,
-    pub no_physics: bool,
-    pub removed: Option<RemovalReason>,
-    pub fire_ticks: i32,        // -1 = fireproof
-    pub air_supply: i32,        // breath (max 300 = 15 sec)
-    pub portal_cooldown: i32,
-    pub invulnerable: bool,
-    pub fall_distance: f32,
-    pub no_gravity: bool,
-    pub glowing: bool,
-    pub silent: bool,
-    pub custom_name: Option<Component>,
-    pub custom_name_visible: bool,
-    pub tags: HashSet<String>,  // scoreboard tags
-    pub passengers: Vec<EntityId>,
-    pub vehicle: Option<EntityId>,
-}
+#[derive(Component)]
+pub struct NoPhysics;                    // marker — entity ignores collisions
+
+#[derive(Component)]
+pub struct Removed(pub RemovalReason);
+
+#[derive(Component)]
+pub struct FireTicks(pub i32);           // -1 = fireproof
+
+#[derive(Component)]
+pub struct AirSupply(pub i32);           // breath (max 300 = 15 sec)
+
+#[derive(Component)]
+pub struct PortalCooldown(pub i32);
+
+#[derive(Component)]
+pub struct Invulnerable;                 // marker
+
+#[derive(Component)]
+pub struct FallDistance(pub f32);
+
+#[derive(Component)]
+pub struct NoGravity;                    // marker — optional, inserted when set
+
+#[derive(Component)]
+pub struct Glowing;                      // marker
+
+#[derive(Component)]
+pub struct Silent;                       // marker
+
+#[derive(Component)]
+pub struct CustomName(pub TextComponent);
+
+#[derive(Component)]
+pub struct CustomNameVisible;            // marker
+
+#[derive(Component)]
+pub struct EntityFlags(pub u8);          // on_fire=0x01, crouching=0x02, sprinting=0x08,
+                                         // swimming=0x10, invisible=0x20, glowing=0x40,
+                                         // flying_with_elytra=0x80
+
+#[derive(Component)]
+pub struct ScoreboardTags(pub HashSet<String>);
+
+#[derive(Component)]
+pub struct Passengers(pub Vec<Entity>);
+
+#[derive(Component)]
+pub struct Vehicle(pub Entity);
+
+#[derive(Component)]
+pub struct BoundingBox(pub AABB);
+
+#[derive(Component)]
+pub struct EntityType(pub ResourceLocation);
+
+#[derive(Component)]
+pub struct TickCount(pub u32);
 ```
 
 Java reference: `net.minecraft.world.entity.Entity` fields (lines 170–280)
+
+### LivingEntity Components
+
+Added alongside `LivingEntityMarker` for all living entities:
+
+```rust
+#[derive(Component)]
+pub struct LivingEntityMarker;
+
+#[derive(Component)]
+pub struct Health {
+    pub current: f32,
+    pub max: f32,
+}
+
+#[derive(Component)]
+pub struct Equipment(pub EquipmentSlots);
+
+#[derive(Component)]
+pub struct ActiveEffects(pub HashMap<MobEffect, EffectInstance>);
+
+#[derive(Component)]
+pub struct Attributes(pub AttributeMap);
+
+#[derive(Component)]
+pub struct ArmorValue(pub f32);
+
+#[derive(Component)]
+pub struct AbsorptionAmount(pub f32);
+
+#[derive(Component)]
+pub struct DeathTime(pub u16);
+
+#[derive(Component)]
+pub struct HurtTime(pub u16);
+
+#[derive(Component)]
+pub struct LastDamageSource(pub DamageSource);
+```
+
+### Player Components
+
+Added alongside `PlayerMarker` for server-side player entities:
+
+```rust
+#[derive(Component)]
+pub struct PlayerMarker;
+
+#[derive(Component)]
+pub struct PlayerInventory { /* slots, armor, offhand, crafting */ }
+
+#[derive(Component)]
+pub struct GameMode(pub GameModeType);
+
+#[derive(Component)]
+pub struct FoodData {
+    pub food_level: i32,
+    pub saturation: f32,
+    pub exhaustion: f32,
+}
+
+#[derive(Component)]
+pub struct ExperienceData {
+    pub level: i32,
+    pub progress: f32,
+    pub total: i32,
+}
+
+#[derive(Component)]
+pub struct Abilities(pub PlayerAbilities);
+
+#[derive(Component)]
+pub struct SelectedSlot(pub u8);
+```
+
+### Mob Components
+
+Added alongside `MobMarker`:
+
+```rust
+#[derive(Component)]
+pub struct MobMarker;
+
+#[derive(Component)]
+pub struct AiGoals {
+    pub goals: Vec<PrioritizedGoal>,
+    pub active_goals: SmallVec<[usize; 4]>,
+    pub disabled_flags: GoalFlags,
+}
+
+#[derive(Component)]
+pub struct NavigationPath {
+    pub path: Option<Path>,
+    pub navigation_type: NavigationType,
+    pub max_distance: f32,
+    pub can_open_doors: bool,
+    pub can_pass_doors: bool,
+    pub can_float: bool,
+}
+
+#[derive(Component)]
+pub struct Target(pub Entity);
+```
+
+---
+
+## System Examples
+
+Systems are plain functions that declare data access via `Query<>`. `bevy_ecs`
+runs non-conflicting systems in parallel automatically.
+
+```rust
+/// Applies gravity to all entities that are not marked NoGravity.
+/// Runs in the Physics sub-phase of ENTITY_TICK.
+fn gravity_system(
+    mut query: Query<&mut Velocity, (With<EntityFlags>, Without<NoGravity>)>,
+) {
+    for mut vel in &mut query {
+        vel.0.y -= 0.08; // GRAVITY constant (vanilla)
+        vel.0.y *= 0.98; // VERTICAL_DRAG
+    }
+}
+
+/// Tracks entity position changes and queues delta-movement packets for
+/// players within tracking range. Runs in the NETWORK_SEND phase.
+fn entity_tracking_system(
+    query: Query<(&Position, &EntityType, &TrackedBy), Changed<Position>>,
+    // ... packet queue resources
+) {
+    for (pos, etype, tracked_by) in &query {
+        // Serialize ClientboundMoveEntityPacket for each tracking player
+    }
+}
+
+/// Evaluates AI goals for all mobs every tick. Runs in the AI sub-phase
+/// of ENTITY_TICK (after physics, before entity behavior).
+fn ai_goal_system(
+    mut query: Query<(Entity, &mut AiGoals, &Position, Option<&Target>), With<MobMarker>>,
+    world: &World,
+) {
+    for (entity, mut goals, pos, target) in &mut query {
+        // 1. Stop goals that can no longer continue
+        // 2. Evaluate inactive goals — start highest-priority applicable
+        // 3. Tick all active goals
+    }
+}
+```
 
 ---
 
 ## SynchedEntityData
 
-Entity metadata synced to clients via `ClientboundSetEntityDataPacket`.
+Entity metadata synced to clients via `ClientboundSetEntityDataPacket`. In vanilla
+this is a per-entity map of tracked values indexed by `EntityDataAccessor<T>` that
+flags dirty entries for network serialization.
+
+In Oxidized, `SynchedData` is a **component** containing a `SmallVec` of typed
+data entries. Each entry stores its current value and a dirty flag. When any system
+modifies a tracked value (health, pose, entity flags, custom name, etc.), it sets
+the dirty flag. The `entity_data_sync_system` runs in the NETWORK_SEND phase,
+iterates all entities with dirty `SynchedData`, serializes changed entries into
+`ClientboundSetEntityDataPacket`, and clears the dirty flags.
+
+```rust
+#[derive(Component)]
+pub struct SynchedData {
+    entries: SmallVec<[DataEntry; 8]>,
+}
+
+struct DataEntry {
+    type_id: u8,        // network type ID (see table below)
+    slot: u8,           // index within entity's metadata
+    value: DataValue,   // type-erased current value
+    dirty: bool,        // needs network sync
+}
+```
 
 Each entity type registers data slots at startup with a type ID and default value.
 Slots are identified by index (VarInt on the wire).
@@ -179,85 +437,140 @@ Java reference: `net.minecraft.world.entity.EntityDataAccessors`
 
 ## AI System
 
-### Legacy AI (GoalSelector — most mobs)
+Mob AI runs as ECS systems during the AI sub-phase of ENTITY_TICK (after physics,
+before entity behavior). See [ADR-023](../adr/adr-023-ai-pathfinding.md) for the
+full design. Two complementary AI models exist:
+
+### GoalSelector (most mobs)
+
+The `AiGoals` component holds a priority-sorted list of goals. The
+`goal_selector_system` evaluates, starts, ticks, and stops goals each tick:
 
 ```rust
-pub struct GoalSelector {
-    goals: Vec<WrappedGoal>,    // sorted by priority (lower = higher priority)
-}
-
-pub struct WrappedGoal {
-    priority: i32,
-    goal: Box<dyn PathfinderGoal>,
-    running: bool,
-}
-
-pub trait PathfinderGoal: Send + Sync {
-    fn can_use(&self) -> bool;
-    fn can_continue_to_use(&self) -> bool { self.can_use() }
-    fn is_interruptable(&self) -> bool { true }
-    fn start(&mut self);
-    fn stop(&mut self);
-    fn requires_update_every_tick(&self) -> bool { false }
-    fn tick(&mut self);
-    fn flags(&self) -> EnumSet<GoalFlag>;
+fn goal_selector_system(
+    mut query: Query<(Entity, &mut AiGoals, &Position, Option<&Target>), With<MobMarker>>,
+    world: &World,
+) {
+    for (entity, mut goals, pos, target) in &mut query {
+        // 1. Stop goals that can no longer continue
+        // 2. Evaluate inactive goals — start highest-priority applicable
+        // 3. Stop conflicting lower-priority goals (flag-based mutual exclusion)
+        // 4. Tick all active goals
+    }
 }
 ```
 
-Each tick: evaluate all goals, start the highest-priority applicable one per flag,
-tick currently running goals.
+Goals implement the `Goal` trait and declare flag-based mutual exclusion
+(MOVE, LOOK, JUMP, TARGET). Each tick, the selector starts the highest-priority
+applicable goal per flag set and preempts lower-priority conflicting goals.
 
 **Core goal implementations:**
 
-| Goal | Description | Java |
-|------|-------------|------|
-| `FloatGoal` | Swim upward in fluids | `net.minecraft.world.entity.ai.goal.FloatGoal` |
-| `MeleeAttackGoal` | Chase + melee attack target | `MeleeAttackGoal` |
-| `RangedBowAttackGoal` | Skeleton bow attack | `RangedBowAttackGoal` |
-| `WaterAvoidingRandomWalkGoal` | Random wandering | `WaterAvoidingRandomWalkingGoal` |
-| `LookAtPlayerGoal` | Face nearest player | `LookAtPlayerGoal` |
-| `RandomLookAroundGoal` | Random head rotation | `RandomLookAroundGoal` |
-| `NearestAttackableTargetGoal<T>` | Acquire T as target | `NearestAttackableTargetGoal` |
-| `BreedGoal` | Animal breeding | `BreedGoal` |
-| `TemptGoal` | Follow player with food | `TemptGoal` |
-| `PanicGoal` | Flee from attacker | `PanicGoal` |
-| `FollowParentGoal` | Baby follows parent | `FollowParentGoal` |
-| `EatBlockGoal` | Sheep eating grass | `EatBlockGoal` |
-| `OpenDoorGoal` | Villager opens doors | `OpenDoorGoal` |
+| Goal | Description | Flags | Java class |
+|------|-------------|-------|------------|
+| `FloatGoal` | Swim upward in fluids | JUMP | `FloatGoal` |
+| `MeleeAttackGoal` | Chase + melee attack target | MOVE, LOOK | `MeleeAttackGoal` |
+| `RangedBowAttackGoal` | Skeleton bow attack | MOVE, LOOK | `RangedBowAttackGoal` |
+| `WaterAvoidRandomStrollGoal` | Random wandering | MOVE | `WaterAvoidingRandomWalkingGoal` |
+| `LookAtPlayerGoal` | Face nearest player | LOOK | `LookAtPlayerGoal` |
+| `RandomLookAroundGoal` | Random head rotation | LOOK | `RandomLookAroundGoal` |
+| `NearestAttackableTargetGoal` | Acquire target by type | TARGET | `NearestAttackableTargetGoal` |
+| `HurtByTargetGoal` | Retaliate against attacker | TARGET | `HurtByTargetGoal` |
+| `BreedGoal` | Animal breeding | MOVE | `BreedGoal` |
+| `TemptGoal` | Follow player holding food | MOVE, LOOK | `TemptGoal` |
+| `PanicGoal` | Flee from attacker | MOVE | `PanicGoal` |
+| `FollowParentGoal` | Baby follows parent | MOVE | `FollowParentGoal` |
+| `EatBlockGoal` | Sheep eating grass | (none) | `EatBlockGoal` |
+| `OpenDoorGoal` | Villager opens doors | (none) | `OpenDoorGoal` |
+| `AvoidEntityGoal` | Flee from specific entity type | MOVE | `AvoidEntityGoal` |
 
-### Modern AI (Brain — villagers, piglins)
+### Brain System (villagers, piglins, wardens)
+
+Brain-based mobs use a `BrainAi` component instead of `AiGoals`. The brain
+uses activities (IDLE, WORK, REST, FIGHT), sensors, and memories:
 
 ```rust
-pub struct Brain {
-    memories: HashMap<MemoryModuleType, MemoryValue>,
-    sensors: Vec<Box<dyn Sensor>>,
-    behaviors: HashMap<Activity, Vec<BehaviorControl>>,
-    core_activities: HashSet<Activity>,
-    active_activities: HashSet<Activity>,
+#[derive(Component)]
+pub struct BrainAi {
+    pub memories: HashMap<MemoryModuleType, MemoryValue>,
+    pub sensors: Vec<Box<dyn Sensor>>,
+    pub behaviors: HashMap<Activity, Vec<BehaviorControl>>,
+    pub core_activities: HashSet<Activity>,
+    pub active_activities: HashSet<Activity>,
 }
 ```
 
-Brain-based mobs don't use `GoalSelector` — they use the `Brain::tick()` pipeline.
+A dedicated `brain_tick_system` processes brain-based mobs:
+
+```rust
+fn brain_tick_system(
+    mut query: Query<(Entity, &mut BrainAi, &Position), Without<AiGoals>>,
+    world: &World,
+) {
+    for (entity, mut brain, pos) in &mut query {
+        // 1. Tick sensors (perceive nearby entities/blocks)
+        // 2. Update memories from sensor output
+        // 3. Select active activities based on schedule + conditions
+        // 4. Run behavior controls for active activities
+    }
+}
+```
+
+### Pathfinding
+
+Both AI models use A* pathfinding on the block grid via the `NavigationPath`
+component. Path requests are evaluated by `find_path()` with a maximum node
+expansion limit (default 400). Optimizations include path caching (reuse path
+if target moved < 1 block) and async path requests for non-combat AI. See
+ADR-023 for the full A* implementation and navigation type details.
 
 ---
 
 ## Entity Tracking
 
-The server tracks which players are near each entity and sends
-spawn/despawn/update packets accordingly.
+The server tracks which players can see each entity and sends spawn/despawn/update
+packets accordingly. In the ECS model, tracking state is represented as components
+rather than a struct holding `Arc<RwLock<dyn Entity>>`.
 
 ```rust
-pub struct EntityTracker {
-    entity: Arc<RwLock<dyn Entity>>,
-    tracking_range: i32,           // blocks (varies by entity type)
-    update_interval: i32,          // ticks between delta updates
-    tracked_by: HashSet<PlayerId>, // players currently tracking this entity
-    last_sent_pos: Vec3,
-    last_sent_rot: (f32, f32),
+#[derive(Component)]
+pub struct TrackingRange(pub i32);        // blocks (varies by entity type)
+
+#[derive(Component)]
+pub struct UpdateInterval(pub i32);       // ticks between delta updates
+
+#[derive(Component)]
+pub struct TrackedBy(pub HashSet<Entity>); // player entities currently tracking
+
+#[derive(Component)]
+pub struct LastSentPosition(pub DVec3);
+
+#[derive(Component)]
+pub struct LastSentRotation {
+    pub yaw: f32,
+    pub pitch: f32,
 }
 ```
 
-**Default tracking ranges (Java `EntityType`):**
+The `entity_tracking_system` runs in the NETWORK_SEND phase
+([ADR-019](../adr/adr-019-tick-loop.md)). It uses `bevy_ecs` change detection
+(`Changed<Position>`) to only process entities whose position actually changed:
+
+```rust
+fn entity_tracking_system(
+    query: Query<
+        (&Position, &Rotation, &TrackedBy, &mut LastSentPosition, &mut LastSentRotation),
+        Or<(Changed<Position>, Changed<Rotation>)>,
+    >,
+    // ... packet queue resources
+) {
+    for (pos, rot, tracked_by, mut last_pos, mut last_rot) in &query {
+        // Compute delta from last_sent, serialize packets, update last_sent
+    }
+}
+```
+
+**Default tracking ranges (vanilla `EntityType`):**
 
 | Type | Range (blocks) |
 |------|----------------|
@@ -276,15 +589,45 @@ Java reference: `net.minecraft.server.level.ChunkMap.TrackedEntity`
 
 ---
 
-## Entity Tick Order (per ServerLevel tick)
+## Entity Tick Order
 
-1. Tick entities in `entityTickList` (loaded + tracked entities)
-2. For each entity:
-   a. `entity.tick()` (base physics, fire, air, portal)
-   b. `entity.rideTick()` if vehicle
-   c. Specific type tick (mob AI, player input, projectile flight)
-3. Remove entities flagged for removal
-4. Send `ClientboundMoveEntityPacket` deltas to tracking players
-5. Send `ClientboundSetEntityDataPacket` for dirty metadata
+Entity ticking executes within the **ENTITY_TICK** phase of the server tick loop
+(see [ADR-019](../adr/adr-019-tick-loop.md)). Within ENTITY_TICK, systems run in
+a fixed sub-phase order. `bevy_ecs` parallelizes non-conflicting systems *within*
+each sub-phase; phase barriers between sub-phases guarantee deterministic ordering.
 
-Java reference: `net.minecraft.server.level.ServerLevel.tick()` (entity section)
+| Sub-phase | Systems | Notes |
+|-----------|---------|-------|
+| **Pre-tick** | Increment `TickCount`, process pending spawns/despawns | `Commands` from previous tick applied here |
+| **Physics** | Gravity, velocity application, collision resolution, `OnGround`/`FallDistance` update | See [ADR-021](../adr/adr-021-physics.md) |
+| **AI** | `goal_selector_system`, `brain_tick_system`, pathfinding | See [ADR-023](../adr/adr-023-ai-pathfinding.md) |
+| **Entity behavior** | Type-specific logic (zombie burning, creeper fuse, breeding, projectile flight) | Queries use marker components (`With<ZombieMarker>`, etc.) |
+| **Status effects** | Apply/expire potion effects, tick poison/wither/regeneration | Operates on `ActiveEffects` component |
+| **Post-tick** | Update bounding boxes, chunk section tracking, trigger game events | Prepares state for network sync |
+
+After ENTITY_TICK completes, the NETWORK_SEND phase serializes dirty
+`SynchedData`, position deltas, and equipment changes into outbound packets.
+
+Vanilla equivalent: `net.minecraft.server.level.ServerLevel.tick()` (entity
+section) — the same logical ordering, but individual steps are now parallel ECS
+systems instead of sequential method calls on each entity object.
+
+---
+
+## Related ADRs
+
+- **[ADR-018](../adr/adr-018-entity-system.md)** — Entity System Architecture:
+  the authoritative decision to adopt `bevy_ecs`; defines component-per-field
+  mapping, marker components, and system scheduling phases
+- **[ADR-019](../adr/adr-019-tick-loop.md)** — Tick Loop Design: defines the
+  ENTITY_TICK phase (and other phases) with parallel execution and phase barriers
+- **[ADR-020](../adr/adr-020-player-session.md)** — Player Session Lifecycle:
+  player entities are ECS entities with additional components and a network bridge
+- **[ADR-021](../adr/adr-021-physics.md)** — Physics & Collision Engine: physics
+  systems (gravity, movement, collision) that operate on `Position`, `Velocity`,
+  `OnGround`, `FallDistance`, `BoundingBox` components within ENTITY_TICK
+- **[ADR-023](../adr/adr-023-ai-pathfinding.md)** — AI & Pathfinding: GoalSelector
+  and Brain as ECS components, A* pathfinding, goal evaluation systems within
+  ENTITY_TICK
+- **[ADR-024](../adr/adr-024-inventory.md)** — Inventory & Container Transactions:
+  player inventory as ECS components on the player entity

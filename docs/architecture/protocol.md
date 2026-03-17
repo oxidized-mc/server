@@ -277,3 +277,87 @@ Java reference: `net.minecraft.network.CompressionEncoder`, `CompressionDecoder`
 The Rust implementation uses a single `tokio::io::AsyncRead`/`AsyncWrite` pair
 rather than a Netty pipeline. The codec transformations are applied in sequence
 inside the connection read/write loops.
+
+---
+
+## Rust Implementation: Typestate Connection
+
+Per [ADR-008](../adr/adr-008-connection-state-machine.md), connections use the
+**typestate pattern** to enforce valid state transitions at compile time:
+
+```rust
+pub struct Connection<S: ProtocolState> {
+    reader: OwnedReadHalf,
+    writer: OwnedWriteHalf,
+    compression: Option<CompressionState>,
+    cipher: Option<CipherState>,
+    _state: PhantomData<S>,
+}
+
+// State types
+pub struct Handshaking;
+pub struct Status;
+pub struct Login;
+pub struct Configuration;
+pub struct Play;
+
+impl Connection<Handshaking> {
+    pub fn into_status(self) -> Connection<Status> { ... }
+    pub fn into_login(self) -> Connection<Login> { ... }
+}
+
+impl Connection<Login> {
+    pub fn into_configuration(self) -> Connection<Configuration> { ... }
+}
+
+impl Connection<Configuration> {
+    pub fn into_play(self) -> Connection<Play> { ... }
+}
+```
+
+Each state only exposes the packets valid for that state. A `Connection<Login>`
+cannot send play packets — the compiler prevents it.
+
+---
+
+## Per-Connection Task Pair
+
+Per [ADR-006](../adr/adr-006-network-io.md), each client connection spawns
+**two Tokio tasks** (reader + writer) communicating via bounded `mpsc` channels:
+
+```
+┌──────────────────────────────────────────────────┐
+│ Per-connection (Tokio tasks)                      │
+│                                                    │
+│  Reader task                 Writer task           │
+│  ┌─────────────┐            ┌──────────────┐      │
+│  │ TCP read     │            │ mpsc::recv   │      │
+│  │ frame decode │            │ packet encode│      │
+│  │ decompress   │──inbound──►│ compress     │      │
+│  │ decrypt      │  channel   │ encrypt      │      │
+│  │ packet parse │            │ TCP write    │      │
+│  └─────────────┘            └──────────────┘      │
+│         │                          ▲               │
+│         ▼                          │               │
+│    inbound mpsc              outbound mpsc         │
+└─────────┬──────────────────────────┬───────────────┘
+          │                          │
+          ▼                          │
+   ┌──────────────────────────────────┐
+   │       Game tick thread           │
+   │  (NETWORK_RECEIVE drains         │
+   │   inbound; NETWORK_SEND fills    │
+   │   outbound)                      │
+   └──────────────────────────────────┘
+```
+
+This separates network I/O (async, Tokio) from game logic (synchronous, tick thread).
+Bounded channels provide natural backpressure when the game loop is overloaded.
+
+---
+
+## Related ADRs
+
+- [ADR-006: Network I/O](../adr/adr-006-network-io.md) — per-connection task pair
+- [ADR-008: Connection State Machine](../adr/adr-008-connection-state-machine.md) — typestate pattern
+- [ADR-009: Encryption & Compression](../adr/adr-009-encryption-compression.md) — AES-CFB8, zlib

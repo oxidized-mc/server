@@ -5,6 +5,7 @@ members = [
     "crates/oxidized-nbt",
     "crates/oxidized-world",
     "crates/oxidized-game",
+    "crates/oxidized-macros",
 ]
 resolver = "2"
 
@@ -55,6 +56,22 @@ indexmap       = "2"
 ahash          = "0.8"
 bitflags       = "2"
 parking_lot    = "0.12"
+dashmap        = "6"
+
+# ECS
+bevy_ecs       = "0.18"
+
+# Concurrency / parallelism
+rayon          = "1.10"
+
+# Memory management
+bumpalo        = { version = "3", features = ["allocator_api"] }
+mimalloc       = { version = "0.1", default-features = false }
+
+# Proc-macro support
+syn            = { version = "2", features = ["full", "extra-traits"] }
+quote          = "1"
+proc-macro2    = "1"
 
 # Math / noise
 glam           = "0.29"
@@ -64,6 +81,7 @@ oxidized-protocol = { path = "crates/oxidized-protocol" }
 oxidized-nbt      = { path = "crates/oxidized-nbt" }
 oxidized-world    = { path = "crates/oxidized-world" }
 oxidized-game     = { path = "crates/oxidized-game" }
+oxidized-macros   = { path = "crates/oxidized-macros" }
 
 [profile.release]
 opt-level     = 3

@@ -968,6 +968,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxidized-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "oxidized-nbt"
 version = "0.1.0"
 dependencies = [

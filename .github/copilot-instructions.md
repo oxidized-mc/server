@@ -24,10 +24,11 @@
 oxidized/
 ├── crates/
 │   ├── oxidized-nbt/        # NBT binary format, SNBT, GZIP/zlib — NO deps on other crates
-│   ├── oxidized-protocol/   # Packet codec, connection states, all 185 packets
+│   ├── oxidized-macros/     # Proc-macro crate: #[derive(McPacket, McRead, McWrite)]
+│   ├── oxidized-protocol/   # Packet codec, connection states, typestate machine
 │   ├── oxidized-world/      # Chunks, blocks, Anvil I/O, lighting, world gen
-│   ├── oxidized-game/       # Entities, AI, combat, commands, crafting, advancements
-│   └── oxidized-server/     # Binary: startup, tick loop, server config
+│   ├── oxidized-game/       # ECS components/systems (bevy_ecs), AI, combat, commands
+│   └── oxidized-server/     # Binary: startup, tick loop, server config, network layer
 ├── mc-server-ref/           # (gitignored) decompiled vanilla reference
 ├── Cargo.toml               # Workspace manifest + shared dependency versions
 ├── rustfmt.toml             # Formatting rules (max_width=100)
@@ -39,8 +40,9 @@ oxidized/
 
 ```
 oxidized-nbt       ← no internal deps
-oxidized-protocol  ← oxidized-nbt only
-oxidized-world     ← oxidized-nbt only
+oxidized-macros    ← no internal deps (proc-macro crate)
+oxidized-protocol  ← oxidized-nbt, oxidized-macros
+oxidized-world     ← oxidized-nbt
 oxidized-game      ← oxidized-protocol, oxidized-world, oxidized-nbt
 oxidized-server    ← all crates
 ```
@@ -188,19 +190,26 @@ pub const TICKS_PER_SECOND: u32 = 20;
 pub const AUTOSAVE_INTERVAL_TICKS: u32 = 6000;
 ```
 
-### Async Rules
+### Async & Threading Rules
 
 - All network I/O uses `tokio::net`; all disk I/O uses `tokio::task::spawn_blocking`
-- The game loop (`ServerLevel::tick`) runs on the main Tokio task; never block it
-- CPU-bound work (chunk generation, world gen noise) runs in `spawn_blocking`
-- Use `tokio::sync::{mpsc, broadcast, RwLock, Mutex}` for shared state
+- The game tick loop runs on a **dedicated OS thread** (not a Tokio task) — see [ADR-019](docs/adr/adr-019-tick-loop.md)
+- CPU-bound work (chunk generation, noise sampling) runs on a **rayon** thread pool — see [ADR-016](docs/adr/adr-016-worldgen-pipeline.md)
+- Per-connection network uses a reader task + writer task pair with bounded `mpsc` channels — see [ADR-006](docs/adr/adr-006-network-io.md)
+- Player sessions are split: network actor (Tokio) ↔ bridge channels ↔ ECS entity (tick thread) — see [ADR-020](docs/adr/adr-020-player-session.md)
+- Use `tokio::sync::{mpsc, broadcast}` for cross-thread communication
+- Use `parking_lot::{RwLock, Mutex}` for non-async locks
+- Use `dashmap::DashMap` for concurrent read-heavy maps (e.g., chunk storage)
 
 ### Performance
 
+- **Global allocator:** `mimalloc` — see [ADR-029](docs/adr/adr-029-memory-management.md)
+- **Per-tick arena:** `bumpalo::Bump` reset every tick for temporaries — see [ADR-029](docs/adr/adr-029-memory-management.md)
 - Prefer `ahash::AHashMap` over `std::collections::HashMap` for hot paths
 - Use `parking_lot::{RwLock, Mutex}` for low-contention non-async locks
-- Avoid allocating inside the tick loop — prefer pre-allocated buffers
+- Avoid allocating inside the tick loop — prefer pre-allocated buffers and arena allocation
 - Chunk data uses compact bit-packed representation (`PalettedContainer`)
+- Block states use flat `u16` IDs with dense lookup tables — see [ADR-012](docs/adr/adr-012-block-state.md)
 
 ---
 
@@ -310,7 +319,7 @@ Every commit **must** follow [Conventional Commits](https://www.conventionalcomm
 
 ### Scopes
 
-`nbt`, `protocol`, `world`, `game`, `server`, `ci`, `deps`
+`nbt`, `macros`, `protocol`, `world`, `game`, `server`, `ci`, `deps`
 
 ### Examples
 
@@ -332,15 +341,22 @@ BREAKING CHANGE: method renamed for consistency with Rust naming conventions
 
 ## Key Design Decisions
 
-- **Async-first:** Tokio runtime, non-blocking I/O everywhere
+- **Async-first networking:** Tokio runtime for all network I/O, per-connection task pairs
+- **Dedicated tick thread:** Game loop runs on its own OS thread with 6 parallel phases
+- **ECS architecture:** `bevy_ecs` for all entity/game state — entities are opaque IDs, not trait objects
+- **Split player sessions:** Network actor (Tokio) ↔ bridge channels ↔ ECS entity (tick thread)
 - **No unsafe in libraries** unless absolutely necessary (document with `SAFETY:` comment)
+- **Memory:** `mimalloc` global allocator + `bumpalo` arena for per-tick temporaries
 - **Palette compression:** `SingleValue` → `Linear` → `HashMap` → `Global` (mirrors Java)
+- **Block state IDs:** flat `u16` with compile-time lookup table from vanilla `blocks.json`
+- **Coordinate newtypes:** `BlockPos`, `ChunkPos`, `SectionPos` — compile-time safety
+- **Chunk storage:** `DashMap<ChunkPos, Arc<ChunkColumn>>` + per-section `RwLock`
 - **Chunk sections:** 24 sections covering y=−64 to y=319 (overworld); index = `(y >> 4) + 4`
-- **Entity IDs:** atomic `i32` counter, reset on server restart
+- **Registries:** compiled core (blocks, items via `build.rs`) + runtime data-driven (data packs)
+- **NBT:** 3 representations — owned tree (`IndexMap`), arena-allocated (`bumpalo`), borrowed (zero-copy)
+- **Worldgen:** rayon thread pool for CPU-bound noise/density sampling
 - **Online mode auth:** POST to `sessionserver.mojang.com/session/minecraft/hasJoined`
 - **Offline mode UUID:** `UUID v3` from `"OfflinePlayer:<name>"`
-- **Block state IDs:** loaded from `blocks.json` (extracted from vanilla); palette maps
-  `state_id: u32` ↔ `BlockState`
 - **Tick rate:** 20 TPS default (`Duration::from_millis(50)`), configurable via server config
 - **Compression threshold:** 256 bytes default (send `ClientboundLoginCompressionPacket` during LOGIN)
 - **JSON-RPC management:** WebSocket on a separate port (disabled by default), new in 26.1
