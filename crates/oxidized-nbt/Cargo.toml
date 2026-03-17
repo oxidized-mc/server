@@ -1,0 +1,22 @@
+[package]
+name        = "oxidized-nbt"
+description = "NBT (Named Binary Tag) read/write implementation — all 13 tag types, SNBT, GZIP/zlib"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+rust-version.workspace = true
+
+[dependencies]
+serde      = { workspace = true }
+serde_json = { workspace = true }
+thiserror  = { workspace = true }
+flate2     = { workspace = true }
+bytes      = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

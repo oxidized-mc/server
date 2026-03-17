@@ -1,0 +1,63 @@
+name: Feature Request
+description: Suggest a new feature, phase implementation, or improvement
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! Check the [roadmap](../../blob/main/PHASES.md)
+        first — your feature may already be planned.
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Related roadmap phase (if any)
+      options:
+        - "Phase 1 — Bootstrap"
+        - "Phase 2 — TCP Framing"
+        - "Phase 3 — Handshake/Status"
+        - "Phase 4 — Login/Auth"
+        - "Phase 5 — NBT"
+        - "Phase 6 — Configuration"
+        - "Phase 7 — Core Types"
+        - "Phase 8 — Block/Item Registry"
+        - "Phase 9 — Chunk Structures"
+        - "Phase 10 — Anvil Loading"
+        - "Phase 11 — Server Level"
+        - "Phase 12 — Player Join"
+        - "Phase 13 — Chunk Sending"
+        - "Phase 14 — Player Movement"
+        - "Phase 15 — Entity Framework"
+        - "Phase 16 — Physics"
+        - "Phase 17 — Chat"
+        - "Phase 18 — Commands"
+        - "Phase 19 — World Ticking"
+        - "Phase 20 — World Saving"
+        - "Phase 21+ — Later phase"
+        - "Not in roadmap"
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem does this solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: reference
+    attributes:
+      label: Reference (Java source / wiki.vg / RFC)
+      description: Link to relevant vanilla Java class or protocol documentation.

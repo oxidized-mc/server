@@ -1,0 +1,321 @@
+# GitHub Copilot Instructions — Oxidized
+
+> **These instructions are authoritative.** Copilot must read this file at the start of every
+> session and follow every rule here. If you notice that any rule is outdated, a pattern is
+> missing, or the codebase has drifted from what is documented here, **update this file as
+> part of the same task** — keep it accurate and complete at all times.
+
+---
+
+## Project Overview
+
+**Oxidized** is a high-performance Minecraft Java Edition server rewritten in Rust.
+
+- **Target protocol:** Minecraft 26.1 (protocol version `1073742124`, world version `4782`)
+- **Reference source:** `mc-server-ref/decompiled/` — 4 789 decompiled Java files from
+  the vanilla 26.1-pre-3 server JAR (gitignored, regenerate with `scripts/decompile.sh`)
+- **Philosophy:** wire-protocol compatible with vanilla clients, idiomatic Rust internals
+
+---
+
+## Workspace Layout
+
+```
+oxidized/
+├── crates/
+│   ├── oxidized-nbt/        # NBT binary format, SNBT, GZIP/zlib — NO deps on other crates
+│   ├── oxidized-protocol/   # Packet codec, connection states, all 185 packets
+│   ├── oxidized-world/      # Chunks, blocks, Anvil I/O, lighting, world gen
+│   ├── oxidized-game/       # Entities, AI, combat, commands, crafting, advancements
+│   └── oxidized-server/     # Binary: startup, tick loop, server config
+├── mc-server-ref/           # (gitignored) decompiled vanilla reference
+├── Cargo.toml               # Workspace manifest + shared dependency versions
+├── rustfmt.toml             # Formatting rules (max_width=100, imports_granularity=Crate)
+├── .clippy.toml             # Lint rules
+├── deny.toml                # cargo-deny: licences + advisory config
+└── rust-toolchain.toml      # Pinned to stable
+```
+
+### Crate dependency rules (enforce strictly)
+
+```
+oxidized-nbt       ← no internal deps
+oxidized-protocol  ← oxidized-nbt only
+oxidized-world     ← oxidized-nbt only
+oxidized-game      ← oxidized-protocol, oxidized-world, oxidized-nbt
+oxidized-server    ← all crates
+```
+
+Never let a lower-layer crate import a higher-layer crate.
+
+---
+
+## Development Workflow
+
+### Task Size Gating — Plan Before Acting
+
+**Always plan first when ANY of these are true:**
+- New crate, new module, or new public trait is being added
+- Task touches more than 3 files
+- The request is ambiguous or has multiple valid approaches
+- A decision affects a public trait (breaking change for all callers)
+
+**Planning steps:**
+1. Use `explore` agent to check the decompiled Java reference + existing Rust code
+2. Write a plan to the session plan file; break into SQL `todos`
+3. Confirm the plan with the user before writing any code
+
+**Start directly (no plan needed):**
+- Single-file bug fix, typo, or doc update
+- Dependency bump in `Cargo.toml`
+
+---
+
+### Always Check the Java Reference First
+
+Before implementing anything, read the equivalent Java class in
+`mc-server-ref/decompiled/net/minecraft/`. Understand the algorithm, then
+**rewrite idiomatically in Rust** — never transliterate Java line-by-line.
+
+Key paths:
+| Concern | Java path |
+|---|---|
+| Packets | `network/protocol/game/`, `network/protocol/login/`, etc. |
+| Connection | `network/Connection.java`, `network/FriendlyByteBuf.java` |
+| Chunk | `world/level/chunk/LevelChunk.java`, `LevelChunkSection.java` |
+| Block states | `world/level/block/state/BlockBehaviour.java` |
+| Entities | `world/entity/Entity.java`, `world/entity/LivingEntity.java` |
+| Server loop | `server/MinecraftServer.java`, `server/dedicated/DedicatedServer.java` |
+| NBT | `nbt/CompoundTag.java`, `nbt/NbtIo.java` |
+| Commands | `commands/` (Brigadier dispatching) |
+
+---
+
+### Sub-Agent Dispatch
+
+| Phase | Agent | Prompt |
+|---|---|---|
+| **Explore** | `explore` | "Where is X in the Java reference? Find callers of Y." |
+| **Implement** | `general-purpose` | "Implement X in crate Y — follow Java reference at path Z." |
+| **Build & test** | `task` | `cargo test -p oxidized-nbt` — full output on failure only. |
+| **Code review** | `code-review` | Review staged changes before commit. |
+
+Parallelise independent `explore` calls. Never re-read files an agent already reported.
+
+---
+
+### TDD Cycle
+
+All logic must follow TDD:
+
+1. **Write the failing test** in `crates/<name>/src/<module>.rs` `#[cfg(test)]`
+2. **Run:** `task` agent → `cargo test -p <crate>` — confirm it **fails** (not compile-errors)
+3. **Implement** minimum code to pass
+4. **Run again** — confirm green
+5. **Refactor** + re-run
+6. **Code review** + commit test + impl together
+
+Test naming: `test_<thing>_<condition>` or `<thing>_<outcome>_when_<condition>`.
+
+---
+
+### Reference Consistency Check (before every commit)
+
+After renaming, moving, or changing behaviour, grep for stale references:
+
+```bash
+grep -r "old_name" . --include="*.rs" --include="*.toml" --include="*.md"
+```
+
+Fix every stale reference in the same commit.
+
+---
+
+## Rust Coding Standards
+
+### Language & Edition
+
+- **Rust stable**, edition 2021 (pinned in `rust-toolchain.toml`)
+- `#![deny(missing_docs)]` on all public library crates
+- `#![deny(unsafe_code)]` unless a crate explicitly needs it (document why)
+
+### Error Handling
+
+- Use `thiserror` for library errors (typed, structured)
+- Use `anyhow` for application-level errors in `oxidized-server`
+- **Never** use `unwrap()` or `expect()` in non-test production code
+- Use `?` propagation everywhere; add context with `.context("…")` (anyhow) or
+  `.map_err(|e| MyError::Thing(e))` (thiserror)
+
+### Naming Conventions
+
+| Concept | Convention | Example |
+|---|---|---|
+| Types / Traits | `PascalCase` | `LevelChunk`, `BlockGetter` |
+| Functions / methods | `snake_case` | `get_block_state`, `read_varint` |
+| Constants | `SCREAMING_SNAKE_CASE` | `PROTOCOL_VERSION`, `SECTION_SIZE` |
+| Modules | `snake_case` | `chunk`, `packet_codec` |
+| Booleans | `is_*`, `has_*`, `can_*` | `is_empty`, `has_gravity` |
+| Crate features | `kebab-case` | `serde`, `async-tokio` |
+
+### Documentation
+
+All public items require `///` doc comments:
+
+```rust
+/// Returns the [`BlockState`] at the given position, or [`BlockState::AIR`]
+/// if the position is outside loaded chunks.
+///
+/// # Errors
+///
+/// Returns [`WorldError::OutOfBounds`] if `pos` is outside the valid world height.
+pub fn get_block_state(&self, pos: BlockPos) -> Result<BlockState, WorldError> { … }
+```
+
+Private helpers may have a short `//` comment when non-obvious.
+
+### No Magic Numbers
+
+All protocol constants live in a `constants` module or are inline `const`:
+
+```rust
+pub const PROTOCOL_VERSION: i32 = 1073742124;
+pub const WORLD_VERSION: i32 = 4782;
+pub const SECTION_SIZE: usize = 16 * 16 * 16;   // 4096
+pub const SECTION_COUNT: usize = 24;             // -4..=19 (overworld)
+pub const DEFAULT_PORT: u16 = 25565;
+pub const DEFAULT_COMPRESSION_THRESHOLD: i32 = 256;
+pub const TICKS_PER_SECOND: u32 = 20;
+pub const AUTOSAVE_INTERVAL_TICKS: u32 = 6000;
+```
+
+### Async Rules
+
+- All network I/O uses `tokio::net`; all disk I/O uses `tokio::task::spawn_blocking`
+- The game loop (`ServerLevel::tick`) runs on the main Tokio task; never block it
+- CPU-bound work (chunk generation, world gen noise) runs in `spawn_blocking`
+- Use `tokio::sync::{mpsc, broadcast, RwLock, Mutex}` for shared state
+
+### Performance
+
+- Prefer `ahash::AHashMap` over `std::collections::HashMap` for hot paths
+- Use `parking_lot::{RwLock, Mutex}` for low-contention non-async locks
+- Avoid allocating inside the tick loop — prefer pre-allocated buffers
+- Chunk data uses compact bit-packed representation (`PalettedContainer`)
+
+---
+
+## Protocol Reference (26.1-pre-3)
+
+| State | Clientbound | Serverbound |
+|---|---|---|
+| Handshaking | 0 | 1 (`ClientIntentionPacket`) |
+| Status | 2 | 2 |
+| Login | 5 | 5 |
+| Configuration | 6 | 6 |
+| Play | 127 | 58 |
+
+**State machine:** `Handshaking → Status` (disconnect after pong)  
+**or** `Handshaking → Login → Configuration → Play`
+
+**Encryption:** AES-128-CFB8 (symmetric). Key exchange via RSA-1024 (server pub key sent in
+`ClientboundHelloPacket`).  
+**Compression:** zlib/deflate threshold-based (default 256 bytes, -1 = disabled).
+
+**Chunk format:** `ClientboundLevelChunkWithLightPacket` = 24× `LevelChunkSection` binary
+(each: `non_empty_block_count: i16` + `PalettedContainer<BlockState>` + `PalettedContainer<Biome>`)
++ heightmaps CompoundTag + light BitSets.
+
+---
+
+## Implementation Roadmap (38 Phases)
+
+Track via SQL `todos` table. Use the `id` prefix `p01-` through `p38-`.
+Full descriptions in the session plan file. Summary:
+
+| Phase | Milestone |
+|---|---|
+| p01–p02 | Compilable workspace, TCP + VarInt framing |
+| p03 | Server appears in multiplayer list |
+| p04 | Vanilla client authenticates |
+| p05–p07 | NBT, configuration state, core data types |
+| p08–p11 | Block registry, chunk structures, Anvil load, server level |
+| p12–p14 | Player join + spawns, chunks render, movement works |
+| p15–p18 | Entities, physics, chat, commands |
+| p19–p22 | World ticks, saves, inventory, block interaction |
+| p23–p27 | World generation (flat + noise), combat, mobs, animals |
+| p28–p32 | Redstone, crafting, block entities, advancements, scoreboards |
+| p33–p36 | RCON/Query, loot tables, enchants, structures |
+| p37 | JSON-RPC WebSocket management server (new in 26.1) |
+| p38 | Production hardening, 100+ player scale |
+
+Before starting any phase, query ready todos:
+```sql
+SELECT t.id, t.title FROM todos t
+WHERE t.status = 'pending'
+AND NOT EXISTS (
+    SELECT 1 FROM todo_deps td
+    JOIN todos dep ON td.depends_on = dep.id
+    WHERE td.todo_id = t.id AND dep.status != 'done'
+);
+```
+
+---
+
+## Conventional Commits
+
+Every commit **must** follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <short description>
+```
+
+### Types
+
+| Type | When | Version |
+|---|---|---|
+| `feat` | New user-visible feature | Minor |
+| `fix` | Bug fix | Patch |
+| `perf` | Performance improvement | Patch |
+| `refactor` | Restructure, no behaviour change | None |
+| `test` | Tests only | None |
+| `docs` | Documentation only | None |
+| `chore` | Deps, tooling, CI config | None |
+| `ci` | Workflow files | None |
+
+### Scopes
+
+`nbt`, `protocol`, `world`, `game`, `server`, `ci`, `deps`
+
+### Examples
+
+```
+feat(protocol): implement VarInt/VarLong read and write
+fix(world): correct PalettedContainer bit-packing for GlobalPalette
+perf(game): cache entity bounding boxes across ticks
+test(nbt): add round-trip fuzz tests for CompoundTag
+chore(deps): bump tokio from 1.43 to 1.44
+ci: add MSRV check job to CI workflow
+feat!: rename BlockGetter::block_state to get_block_state
+
+BREAKING CHANGE: method renamed for consistency with Rust naming conventions
+```
+
+**No `Co-authored-by:` trailers.** Keep commit messages clean.
+
+---
+
+## Key Design Decisions
+
+- **Async-first:** Tokio runtime, non-blocking I/O everywhere
+- **No unsafe in libraries** unless absolutely necessary (document with `SAFETY:` comment)
+- **Palette compression:** `SingleValue` → `Linear` → `HashMap` → `Global` (mirrors Java)
+- **Chunk sections:** 24 sections covering y=−64 to y=319 (overworld); index = `(y >> 4) + 4`
+- **Entity IDs:** atomic `i32` counter, reset on server restart
+- **Online mode auth:** POST to `sessionserver.mojang.com/session/minecraft/hasJoined`
+- **Offline mode UUID:** `UUID v3` from `"OfflinePlayer:<name>"`
+- **Block state IDs:** loaded from `blocks.json` (extracted from vanilla); palette maps
+  `state_id: u32` ↔ `BlockState`
+- **Tick rate:** 20 TPS default (`Duration::from_millis(50)`), configurable via server config
+- **Compression threshold:** 256 bytes default (send `ClientboundLoginCompressionPacket` during LOGIN)
+- **JSON-RPC management:** WebSocket on a separate port (disabled by default), new in 26.1
