@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-011: Registry System](../adr/adr-011-registry-system.md) — compiled core registries + runtime data-driven content
+
+
 ## Goal
 
 Implement the full advancement system: load advancement JSON trees from the data

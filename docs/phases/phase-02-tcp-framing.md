@@ -5,6 +5,15 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-001: Async Runtime](../adr/adr-001-async-runtime.md) — Tokio runtime selection and async patterns
+- [ADR-006: Network I/O](../adr/adr-006-network-io.md) — per-connection task pairs with mpsc channels
+- [ADR-007: Packet Codec](../adr/adr-007-packet-codec.md) — #[derive(McPacket)] macro for wire format
+
+
 ## Goal
 
 Establish the TCP listener, per-connection task architecture, and VarInt-framed

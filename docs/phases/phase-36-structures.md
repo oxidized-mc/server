@@ -10,6 +10,13 @@ in newly created worlds; the `/locate` command finds them.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-016: Worldgen Pipeline](../adr/adr-016-worldgen-pipeline.md) — Rayon thread pool with dependency-aware scheduling
+
+
 ## Goal
 
 Implement the structure generation pipeline: placement checks (where to

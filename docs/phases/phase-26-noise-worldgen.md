@@ -5,6 +5,14 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-001: Async Runtime](../adr/adr-001-async-runtime.md) — Tokio runtime selection and async patterns
+- [ADR-016: Worldgen Pipeline](../adr/adr-016-worldgen-pipeline.md) — Rayon thread pool with dependency-aware scheduling
+
+
 ## Goal
 
 Implement the full vanilla overworld generation pipeline:

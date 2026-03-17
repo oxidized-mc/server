@@ -6,6 +6,14 @@ The global palettes are correct and match vanilla.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-011: Registry System](../adr/adr-011-registry-system.md) — compiled core registries + runtime data-driven content
+- [ADR-012: Block State](../adr/adr-012-block-state.md) — flat u16 state ID with dense lookup table
+
+
 ## Goal
 
 Load the block and item registries from vanilla JSON data and provide fast

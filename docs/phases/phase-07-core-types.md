@@ -6,6 +6,13 @@ tested — the building blocks every other system depends on.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-013: Coordinate Types](../adr/adr-013-coordinate-types.md) — newtype wrappers preventing coordinate mix-ups
+
+
 ## Goal
 
 Implement the fundamental Minecraft coordinate, geometry, and game-state types

@@ -6,6 +6,16 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-006: Network I/O](../adr/adr-006-network-io.md) — per-connection task pairs with mpsc channels
+- [ADR-007: Packet Codec](../adr/adr-007-packet-codec.md) — #[derive(McPacket)] macro for wire format
+- [ADR-008: Connection State Machine](../adr/adr-008-connection-state-machine.md) — typestate pattern for protocol state transitions
+- [ADR-009: Encryption & Compression](../adr/adr-009-encryption-compression.md) — stream-level AES + frame-level zlib
+
+
 ## Goal
 
 Implement the full LOGIN protocol state including RSA key exchange, Mojang session

@@ -11,6 +11,13 @@ crate patterns)
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-031: Management API](../adr/adr-031-management-api.md) — unified management service with RCON/Query/JSON-RPC frontends
+
+
 ## Goal
 
 Implement the JSON-RPC 2.0 management server that vanilla Minecraft 26.1

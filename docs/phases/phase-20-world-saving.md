@@ -5,6 +5,15 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-015: Disk I/O](../adr/adr-015-disk-io.md) — spawn_blocking I/O with write coalescing
+- [ADR-020: Player Session](../adr/adr-020-player-session.md) — split network actor + ECS entity architecture
+- [ADR-030: Shutdown & Crash Handling](../adr/adr-030-shutdown-crash.md) — multi-layer shutdown with watchdog and crash reports
+
+
 ## Goal
 
 Serialize in-memory world state to disk in Minecraft's Anvil format (`.mca` region

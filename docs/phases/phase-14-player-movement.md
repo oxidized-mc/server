@@ -8,6 +8,15 @@ teleport.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-006: Network I/O](../adr/adr-006-network-io.md) — per-connection task pairs with mpsc channels
+- [ADR-014: Chunk Storage](../adr/adr-014-chunk-storage.md) — DashMap + per-section RwLock for concurrent access
+- [ADR-020: Player Session](../adr/adr-020-player-session.md) — split network actor + ECS entity architecture
+
+
 ## Goal
 
 Handle the four serverbound movement packets (`Pos`, `Rot`, `PosRot`,

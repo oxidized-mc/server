@@ -5,6 +5,14 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-018: Entity System](../adr/adr-018-entity-system.md) — ECS with bevy_ecs for data-oriented entity management
+- [ADR-023: AI & Pathfinding](../adr/adr-023-ai-pathfinding.md) — GoalSelector + optimized A* with path caching
+
+
 ## Goal
 
 Implement the full hostile-mob stack: `Mob` entity extension with goal-based AI,

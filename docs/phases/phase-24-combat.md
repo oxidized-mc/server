@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-018: Entity System](../adr/adr-018-entity-system.md) — ECS with bevy_ecs for data-oriented entity management
+
+
 ## Goal
 
 Implement the `LivingEntity` extension of `Entity` with health, armor, effects,

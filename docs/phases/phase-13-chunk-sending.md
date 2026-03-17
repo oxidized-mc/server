@@ -8,6 +8,15 @@ sections, heightmaps, block entities, and light data.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-006: Network I/O](../adr/adr-006-network-io.md) — per-connection task pairs with mpsc channels
+- [ADR-014: Chunk Storage](../adr/adr-014-chunk-storage.md) — DashMap + per-section RwLock for concurrent access
+- [ADR-017: Lighting](../adr/adr-017-lighting.md) — batched BFS with parallel section processing
+
+
 ## Goal
 
 Serialize `LevelChunk` → `ClientboundLevelChunkWithLightPacket` in the exact

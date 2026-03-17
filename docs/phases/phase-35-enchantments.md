@@ -10,6 +10,13 @@ mobs), Phase 29 (crafting), Phase 30 (block entities)
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-011: Registry System](../adr/adr-011-registry-system.md) — compiled core registries + runtime data-driven content
+
+
 ## Goal
 
 Implement two closely related systems: enchantments (persistent bonuses on

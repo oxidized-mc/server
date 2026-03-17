@@ -8,6 +8,13 @@ tracked so Phase 24 can apply fall damage.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-021: Physics](../adr/adr-021-physics.md) — vanilla-compatible sweep collision with shape caching
+
+
 ## Goal
 
 Implement the per-tick physics pipeline: gravity, air drag, AABB sweep

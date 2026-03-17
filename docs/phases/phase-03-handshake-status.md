@@ -6,6 +6,15 @@ with correct MOTD, player count, and version.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-006: Network I/O](../adr/adr-006-network-io.md) — per-connection task pairs with mpsc channels
+- [ADR-007: Packet Codec](../adr/adr-007-packet-codec.md) — #[derive(McPacket)] macro for wire format
+- [ADR-008: Connection State Machine](../adr/adr-008-connection-state-machine.md) — typestate pattern for protocol state transitions
+
+
 ## Goal
 
 Implement the HANDSHAKING and STATUS protocol states so that a vanilla 26.1 client

@@ -9,6 +9,13 @@ flushed each tick.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-018: Entity System](../adr/adr-018-entity-system.md) — ECS with bevy_ecs for data-oriented entity management
+
+
 ## Goal
 
 Build the entity base infrastructure: atomic ID allocation, the

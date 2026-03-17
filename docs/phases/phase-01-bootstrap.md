@@ -5,6 +5,18 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-001: Async Runtime](../adr/adr-001-async-runtime.md) — Tokio runtime selection and async patterns
+- [ADR-002: Error Handling](../adr/adr-002-error-handling.md) — thiserror for crate errors, anyhow at binary boundary
+- [ADR-003: Crate Architecture](../adr/adr-003-crate-architecture.md) — 5-crate workspace DAG and module boundaries
+- [ADR-004: Logging & Observability](../adr/adr-004-logging-observability.md) — tracing with structured spans and metrics
+- [ADR-005: Configuration](../adr/adr-005-configuration.md) — server.properties parsing and validation
+- [ADR-030: Shutdown & Crash Handling](../adr/adr-030-shutdown-crash.md) — multi-layer shutdown with watchdog and crash reports
+
+
 ## Goal
 
 Create the foundational workspace structure: logging, configuration, shared constants,

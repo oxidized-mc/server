@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-010: NBT](../adr/adr-010-nbt.md) — tree-based NBT with IndexMap and arena allocation
+
+
 ## Goal
 
 Full implementation of the Named Binary Tag (NBT) format used by Minecraft for
