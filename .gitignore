@@ -1,0 +1,46 @@
+# Compilation artifacts
+/target/
+**/target/
+
+# Cargo lock is committed for binaries, not for libraries
+# Keep Cargo.lock for the workspace
+# Cargo.lock  ← intentionally kept
+
+# Minecraft reference files (large, not needed in git)
+/mc-server-ref/server.jar
+/mc-server-ref/extracted/
+/mc-server-ref/mc-extracted/
+/mc-server-ref/decompiled/
+
+# World data / test worlds (large binary files)
+*.mca
+*.mcworld
+/worlds/
+/run/worlds/
+
+# IDE
+.idea/
+.vscode/settings.json
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Environment / secrets
+.env
+.env.*
+server.properties.local
+*.pem
+*.key
+*.p12
+*.jks
+
+# Generated
+/dist/
+*.log
+logs/
+
+# Profiling
+*.svg
+flamegraph.svg
+perf.data

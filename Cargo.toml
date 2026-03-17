@@ -1,0 +1,106 @@
+[workspace]
+members = [
+    "crates/oxidized-server",
+    "crates/oxidized-protocol",
+    "crates/oxidized-nbt",
+    "crates/oxidized-world",
+    "crates/oxidized-game",
+]
+resolver = "2"
+
+[workspace.package]
+version      = "0.1.0"
+edition      = "2021"
+authors      = ["Oxidized Contributors"]
+license      = "MIT OR Apache-2.0"
+repository   = "https://github.com/your-org/oxidized"
+homepage     = "https://github.com/your-org/oxidized"
+documentation = "https://docs.rs/oxidized"
+rust-version = "1.85"  # Keep MSRV lower than toolchain to allow older Rust installs
+
+[workspace.dependencies]
+# Async runtime
+tokio          = { version = "1", features = ["full"] }
+tokio-util     = { version = "0.7", features = ["codec"] }
+
+# Serialization
+serde          = { version = "1", features = ["derive"] }
+serde_json     = "1"
+toml           = "0.8"
+bytes          = "1"
+
+# Crypto
+aes            = "0.8"
+cfb-mode       = "0.8"
+rsa            = { version = "0.9", features = ["sha2"] }
+rand           = "0.8"
+sha1           = "0.10"
+
+# Compression
+flate2         = "1"
+
+# Logging/tracing
+tracing             = "0.1"
+tracing-subscriber  = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Networking
+reqwest        = { version = "0.12", features = ["json"] }
+uuid           = { version = "1", features = ["v3", "v4", "serde"] }
+
+# Error handling
+thiserror      = "2"
+anyhow         = "1"
+
+# Data structures
+indexmap       = "2"
+ahash          = "0.8"
+bitflags       = "2"
+parking_lot    = "0.12"
+
+# Math / noise
+glam           = "0.29"
+
+# Internal workspace crates
+oxidized-protocol = { path = "crates/oxidized-protocol" }
+oxidized-nbt      = { path = "crates/oxidized-nbt" }
+oxidized-world    = { path = "crates/oxidized-world" }
+oxidized-game     = { path = "crates/oxidized-game" }
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "debuginfo"
+
+[profile.dev]
+opt-level = 1       # faster builds while keeping some speed for game loop
+
+[profile.bench]
+inherits  = "release"
+debug     = true
+
+[workspace.lints.rust]
+missing_docs       = "warn"
+unsafe_code        = "warn"
+unused_imports     = "warn"
+
+[workspace.lints.clippy]
+# Correctness — hard errors
+correctness        = { level = "deny", priority = -1 }
+# Performance and style — warnings
+perf               = { level = "warn", priority = -1 }
+style              = { level = "warn", priority = -1 }
+complexity         = { level = "warn", priority = -1 }
+suspicious         = { level = "warn", priority = -1 }
+# Specific useful lints
+unwrap_used        = "warn"
+expect_used        = "warn"
+panic              = "warn"
+needless_pass_by_value = "warn"
+redundant_clone    = "warn"
+# Noisy lints intentionally suppressed
+module_name_repetitions = "allow"
+must_use_candidate      = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss           = "allow"
+cast_possible_wrap       = "allow"

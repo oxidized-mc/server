@@ -1,0 +1,32 @@
+[package]
+name        = "oxidized-game"
+description = "Game logic: entities, AI, combat, crafting, commands, advancements"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+rust-version.workspace = true
+
+[dependencies]
+oxidized-nbt      = { workspace = true }
+oxidized-world    = { workspace = true }
+oxidized-protocol = { workspace = true }
+
+serde        = { workspace = true }
+serde_json   = { workspace = true }
+thiserror    = { workspace = true }
+tokio        = { workspace = true }
+tracing      = { workspace = true }
+uuid         = { workspace = true }
+parking_lot  = { workspace = true }
+ahash        = { workspace = true }
+bitflags     = { workspace = true }
+glam         = { workspace = true }
+indexmap     = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
+[lints]
+workspace = true
