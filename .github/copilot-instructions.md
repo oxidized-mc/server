@@ -55,8 +55,13 @@ Never let a lower-layer crate import a higher-layer crate.
 
 All work in Oxidized follows the [Development Lifecycle](../docs/lifecycle/README.md).
 The 9 stages are: **Identify → Research → Decide (ADR) → Plan → Test First → Implement →
-Review → Integrate → Retrospect.** See [Quality Gates](../docs/lifecycle/quality-gates.md)
-for pass/fail criteria at each stage.
+Review → Integrate → Retrospect.** The lifecycle is **not linear** — it contains 5 feedback
+loops (TDD Red↔Green, Review↔Fix, CI Repair, ADR Rethink, Retrospect→Identify). See
+[Quality Gates](../docs/lifecycle/quality-gates.md) for pass/fail criteria at each stage.
+
+**CI Pipeline Rule:** After every push, **wait for all CI jobs to complete** and verify
+they pass. If any fail, fix immediately and re-push — never leave `main` broken. Check
+all workflows: CI (test matrix), cargo-deny, MSRV, security audit.
 
 ### Persistent Memories
 

@@ -8,17 +8,17 @@
 
 ## Gate Summary
 
-| Stage | Gate Name | Enforcement |
-|---|---|---|
-| 1 — Identify | Problem Clarity | Manual (plan review) |
-| 2 — Research | Understanding Depth | Manual (can explain why) |
-| 3 — Decide | ADR Completeness | Manual (review checklist) |
-| 4 — Plan | Task Decomposition | Manual (SQL todos exist) |
-| 5 — Test First | Red Tests | Automated (`cargo test` fails) |
-| 6 — Implement | Green + Clean | Automated (CI pipeline) |
-| 7 — Review | Code Review Approval | Manual + automated checks |
-| 8 — Integrate | CI Green | Automated (all CI jobs pass) |
-| 9 — Retrospect | Memories Updated | Manual (memories.md updated) |
+| Stage | Gate Name | Enforcement | Loop On Failure |
+|---|---|---|---|
+| 1 — Identify | Problem Clarity | Manual (plan review) | — |
+| 2 — Research | Understanding Depth | Manual (can explain why) | — |
+| 3 — Decide | ADR Completeness | Manual (review checklist) | — |
+| 4 — Plan | Task Decomposition | Manual (SQL todos exist) | — |
+| 5 — Test First | Red Tests | Automated (`cargo test` fails) | ⑤↔⑥ TDD loop |
+| 6 — Implement | Green + Clean | Automated (CI pipeline) | ⑤↔⑥ TDD loop |
+| 7 — Review | Code Review Approval | Manual + automated checks | ⑥↔⑦ Review↔Fix loop |
+| 8 — Integrate | All CI Pipelines Green | Automated (all CI jobs pass) | ⑧→⑧ CI Repair loop |
+| 9 — Retrospect | Memories Updated | Manual (memories.md updated) | — |
 
 ---
 
@@ -158,18 +158,34 @@ improvement opportunities.
 
 ---
 
-### Gate 8 — CI Green
+### Gate 8 — All CI Pipelines Green
 
-**Question:** Does the change work on all target platforms?
+**Question:** Does the change work on all target platforms and pass all automated checks?
 
-- [ ] Ubuntu CI job passes (fmt, clippy, build, test)
-- [ ] Windows CI job passes (fmt, clippy, build, test)
-- [ ] macOS CI job passes (fmt, clippy, build, test)
-- [ ] cargo-deny job passes (licenses, advisories)
-- [ ] MSRV check passes (Rust 1.85 compatibility)
-- [ ] Security audit has no new unignored advisories
+**Required CI jobs (all must pass):**
+- [ ] Test (Ubuntu) — fmt, clippy, build, test
+- [ ] Test (Windows) — fmt, clippy, build, test
+- [ ] Test (macOS) — fmt, clippy, build, test
+- [ ] cargo-deny — licenses + advisories
+- [ ] MSRV check — Rust 1.85 compatibility
+- [ ] Security audit — no new unignored advisories
 
-**Fail criteria:** Any CI job fails. Fix immediately — never leave `main` broken.
+**CI Repair Loop:**
+If any job fails, this loop activates:
+1. Read failure logs (use `get_job_logs` or GitHub Actions UI)
+2. Diagnose: compile error? test failure? dependency advisory? CI config issue?
+3. Fix locally, verify with `cargo test --all && cargo clippy -- -D warnings`
+4. Push fix, **wait for all CI jobs to complete again**
+5. If still failing, repeat from step 1
+6. Record the failure pattern in the session plan for retrospective
+
+**Stale failure check:**
+After integration, verify there are no failing workflow runs on the HEAD of `main`
+from any workflow (CI, Security audit, etc.). Historical failures on older commits
+are expected — only the latest commit matters.
+
+**Fail criteria:** Any CI job fails on the latest commit. Fix immediately — never
+leave `main` broken. Do not advance to Stage 9 until fully green.
 
 ---
 

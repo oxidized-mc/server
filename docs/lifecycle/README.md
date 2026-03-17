@@ -55,18 +55,53 @@ Every change flows through these 9 stages. Some stages are skipped for trivial c
 (see [Lifecycle Variants](#lifecycle-variants)), but the full lifecycle always applies to
 non-trivial work.
 
+The lifecycle is **not a waterfall.** Multiple feedback loops operate at every level,
+ensuring problems are caught early and fixed before moving forward.
+
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                                                                      │
-│  ① IDENTIFY → ② RESEARCH → ③ DECIDE → ④ PLAN → ⑤ TEST FIRST       │
-│                                              │                       │
-│                                              ↓                       │
-│  ⑨ RETROSPECT ← ⑧ INTEGRATE ← ⑦ REVIEW ← ⑥ IMPLEMENT             │
-│       │                                                              │
-│       └──→ (feed improvements back into ① for next cycle)           │
-│                                                                      │
-└──────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                                                                               │
+│  ① IDENTIFY → ② RESEARCH → ③ DECIDE → ④ PLAN → ⑤ TEST FIRST               │
+│       ↑                         ↑                      │                      │
+│       │                         │                      ↓                      │
+│       │                         │            ⑥ IMPLEMENT ←──┐                │
+│       │                         │                      │     │                │
+│       │                         │                      ↓     │                │
+│       │                    ③ᐩ ADR Rethink         ⑦ REVIEW ─┘                │
+│       │                    (if review finds          │   Issues? Loop ⑥↔⑦    │
+│       │                     better approach)         ↓                        │
+│       │                                          ⑧ INTEGRATE                 │
+│       │                                              │   ↺                    │
+│       │                                              │  CI fails? Fix → ⑧    │
+│       │                                              ↓                        │
+│       └──────────────────────────────────────── ⑨ RETROSPECT                 │
+│              (feed improvements back into next cycle)                         │
+│                                                                               │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Feedback Loops
+
+The lifecycle contains **5 feedback loops** — these are not optional, they are
+structural parts of the process:
+
+| Loop | Trigger | Action |
+|---|---|---|
+| **TDD Red↔Green** (⑤↔⑥) | Test fails → implement → re-test until green | Inner loop: runs many times per task |
+| **Review↔Fix** (⑥↔⑦) | Code review finds bugs, missing tests, or pattern violations | Fix issues, re-review — never skip re-review |
+| **CI Repair** (⑧→⑧) | CI pipeline fails after push | Fix immediately, re-push, verify all jobs green |
+| **ADR Rethink** (⑦→③) | Review reveals an ADR is outdated or a better approach exists | Create superseding ADR, re-plan, re-implement |
+| **Retrospect→Identify** (⑨→①) | Retrospective finds tech debt, missing coverage, or process gaps | Feed improvements into the next cycle's Identify stage |
+
+**Rules for loops:**
+1. **Never skip a re-check.** If you fix something found in review, the review must run
+   again — not just on the fix, but on the whole change.
+2. **CI failures are blocking.** No stage advances past Integrate until CI is green on
+   **all** platforms (Ubuntu, Windows, macOS, cargo-deny, MSRV, security audit).
+3. **Loops are bounded.** If the same issue recurs 3+ times in the Review↔Fix loop,
+   escalate — the design may need rethinking (trigger ADR Rethink loop).
+4. **Every loop iteration is logged.** Record what failed and why in the session plan
+   so patterns can be captured in retrospective.
 
 ---
 
@@ -220,6 +255,19 @@ If the answer to any question is "yes, there's a better way," pause implementati
 **This is the most important stage.** Reviews are not just about catching bugs — they are
 about ensuring the codebase is always moving toward better.
 
+### Review↔Fix Loop
+
+Review is iterative, not one-shot:
+
+1. Run the `code-review` agent on staged changes
+2. If issues are found → **fix them** (loop back to Stage 6)
+3. After fixing → **re-run the review** on the updated changes
+4. Repeat until the review finds no significant issues
+5. Only then advance to Stage 8
+
+**Never** advance past review with known unresolved issues. If a review finding
+requires rethinking the approach, trigger the **ADR Rethink loop** (back to Stage 3).
+
 ### Pre-Commit Review (every change)
 
 Run the `code-review` agent on staged changes. The review checks:
@@ -259,20 +307,39 @@ In addition to the above, PR reviews check:
 
 ## Stage 8 — Integrate
 
-**Purpose:** Merge changes cleanly and verify nothing broke.
+**Purpose:** Merge changes cleanly and verify nothing broke — including all CI pipelines.
 
 **Activities:**
 - Commit with conventional commit message (type, scope, description)
 - Push to `main` (or merge PR)
-- Verify CI passes on all platforms (Ubuntu, Windows, macOS, cargo-deny, MSRV)
-- If CI fails, fix immediately — never leave `main` broken
+- **Wait for CI to complete** — do not move to Retrospect until all jobs finish
+- Verify CI passes on **all** platforms and jobs:
+  - ✅ Test (Ubuntu, Windows, macOS)
+  - ✅ Clippy + formatting checks
+  - ✅ cargo-deny (licences + advisories)
+  - ✅ MSRV check
+  - ✅ Security audit (cargo-audit)
+- If **any** CI job fails:
+  1. Read the failure logs immediately
+  2. Diagnose root cause (compile error? test flake? CI config issue? dependency advisory?)
+  3. Fix locally, re-run affected checks, push the fix
+  4. **Loop back to this stage** — verify all jobs pass again
+  5. Record the failure and fix in the session plan for retrospective
+- Check for **stale CI failures** on `main` from previous commits — if they exist,
+  fix them as part of this integration (never leave `main` red)
+
+**CI Pipeline Health Rule:** At the end of every integration, `main` must have **zero
+failing workflow runs** for the latest commit. Historical failures from older commits
+are acceptable (they reflect the state at that point in time), but the HEAD of `main`
+must always be fully green.
 
 **Quality Gate:**
-- CI green on all platforms
+- CI green on all platforms and all jobs for the latest commit
 - No regressions in existing tests
 - Commit message follows conventional commits
+- No stale CI failures on the current HEAD
 
-**Output:** Changes on `main`, CI green.
+**Output:** Changes on `main`, all CI pipelines green.
 
 ---
 
