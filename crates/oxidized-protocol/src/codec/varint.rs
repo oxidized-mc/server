@@ -217,6 +217,7 @@ pub const fn varint_size(value: i32) -> usize {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 

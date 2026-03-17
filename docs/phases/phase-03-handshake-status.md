@@ -1,5 +1,7 @@
 # Phase 3 — Handshake + Status (Server List Ping)
 
+**Status:** ✅ Complete
+
 **Crate:** `oxidized-protocol`  
 **Reward:** 🎉 The Oxidized server appears in Minecraft's multiplayer server list
 with correct MOTD, player count, and version.
