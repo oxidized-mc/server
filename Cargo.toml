@@ -57,7 +57,7 @@ bitflags       = "2"
 parking_lot    = "0.12"
 
 # Math / noise
-glam           = "0.29"
+glam           = "0.32"
 
 # Internal workspace crates
 oxidized-protocol = { path = "crates/oxidized-protocol" }
