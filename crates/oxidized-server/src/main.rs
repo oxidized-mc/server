@@ -39,15 +39,15 @@ fn main() -> anyhow::Result<()> {
         "Protocol info",
     );
 
-    // Load (or create) server.properties.
+    // Load (or create) oxidized.toml.
     let mut config = ServerConfig::load_or_create(&args.config)?;
 
-    // CLI overrides take precedence over server.properties.
+    // CLI overrides take precedence over oxidized.toml.
     if let Some(port) = args.port {
-        config.server_port = port;
+        config.network.port = port;
     }
     if let Some(ref world) = args.world {
-        config.level_name.clone_from(world);
+        config.world.name.clone_from(world);
     }
 
     // Validate configuration.
@@ -61,15 +61,15 @@ fn main() -> anyhow::Result<()> {
     }
 
     info!(
-        port = config.server_port,
-        online_mode = config.online_mode,
-        max_players = config.max_players,
+        port = config.network.port,
+        online_mode = config.network.online_mode,
+        max_players = config.gameplay.max_players,
         "Server configuration",
     );
     info!(
-        world = %config.level_name,
-        view_distance = config.view_distance,
-        simulation_distance = config.simulation_distance,
+        world = %config.world.name,
+        view_distance = config.world.view_distance,
+        simulation_distance = config.world.simulation_distance,
         "World configuration",
     );
 

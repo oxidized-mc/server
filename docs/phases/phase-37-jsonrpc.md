@@ -56,7 +56,7 @@ implementation uses `tokio-tungstenite` and `axum` (or equivalent).
 
 ## Tasks
 
-### 37.1 — `server.properties` configuration
+### 37.1 — `oxidized.toml` configuration
 
 | Property | Default | Notes |
 |----------|---------|-------|
@@ -495,5 +495,5 @@ broadcaster.broadcast("server/stopping", json!({}));
 - [ ] Unknown method → error code `-32601`
 - [ ] Player join triggers `players/joined` notification to all connected clients
 - [ ] `rpc.discover` returns an OpenRPC document listing all methods
-- [ ] `management-server-port` absent in `server.properties` → server does not
+- [ ] `management-server-port` absent in `oxidized.toml` → server does not
       start; no error logged

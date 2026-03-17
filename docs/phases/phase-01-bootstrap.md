@@ -13,7 +13,7 @@ Before implementing this phase, review:
 - [ADR-002: Error Handling](../adr/adr-002-error-handling.md) — thiserror for crate errors, anyhow at binary boundary
 - [ADR-003: Crate Architecture](../adr/adr-003-crate-architecture.md) — 6-crate workspace DAG and module boundaries
 - [ADR-004: Logging & Observability](../adr/adr-004-logging-observability.md) — tracing with structured spans and metrics
-- [ADR-005: Configuration](../adr/adr-005-configuration.md) — server.properties parsing and validation
+- [ADR-005: Configuration](../adr/adr-005-configuration.md) — TOML config parsing and validation (superseded by ADR-033)
 - [ADR-030: Shutdown & Crash Handling](../adr/adr-030-shutdown-crash.md) — multi-layer shutdown with watchdog and crash reports
 
 
@@ -57,7 +57,7 @@ pub fn init(level: &str) {
 }
 ```
 
-### 1.3 — `server.properties` Parser (`oxidized-server/src/config.rs`)
+### 1.3 — `oxidized.toml` Parser (`oxidized-server/src/config.rs`)
 
 All keys from `DedicatedServerProperties.java`:
 
@@ -123,7 +123,7 @@ pub struct ServerConfig {
 }
 ```
 
-- Load from `server.properties` using `toml` or line-by-line `key=value` parser
+- Load from `oxidized.toml` using the `toml` crate + serde derives
 - Generate default file if missing
 - Validate values on load (e.g. port in range 1–65535)
 
@@ -157,7 +157,7 @@ oxidized [OPTIONS]
   --universe <PATH>       Set world folder parent
   --nogui                 No GUI (always true for headless)
   --log-level <LEVEL>     trace/debug/info/warn/error [default: info]
-  --config <PATH>         Path to server.properties [default: ./server.properties]
+  --config <PATH>         Path to oxidized.toml [default: ./oxidized.toml]
   --force-upgrade         Upgrade world data on startup
 ```
 

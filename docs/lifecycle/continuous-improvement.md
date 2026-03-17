@@ -10,6 +10,7 @@
 
 - [Improvement Triggers](#improvement-triggers)
 - [ADR Evolution](#adr-evolution)
+- [Assumption Challenging](#assumption-challenging)
 - [Phase Retrospectives](#phase-retrospectives)
 - [Technical Debt Management](#technical-debt-management)
 - [Refactoring Process](#refactoring-process)
@@ -86,6 +87,36 @@ During every phase retrospective, review relevant ADRs:
 - [ ] Does this ADR conflict with any other accepted ADR?
 
 Record findings in [memories.md](../../.github/memories.md) under "ADR Evolution Notes."
+
+---
+
+## Assumption Challenging
+
+Every phase implementation begins with an explicit assumption review. This is not optional — it's the mechanism that prevents the project from accumulating architectural debt.
+
+### What to Question
+
+| Category | Question | Trigger |
+|----------|----------|---------|
+| Format choices | "Is this the right serialization/config/storage format?" | Any format-related ADR |
+| Library choices | "Is this still the best crate for this job?" | Any dependency-related ADR |
+| Pattern choices | "Is this a Java pattern we're copying, or a Rust-native solution?" | Any implementation ADR |
+| Architecture choices | "Does this scale? Does this compose well with async?" | Any architecture ADR |
+
+### How to Challenge
+
+1. **State the current decision** — "ADR-005 originally chose `.properties` — this was superseded by ADR-033 which adopted TOML"
+2. **List alternatives** — "TOML, YAML, JSON, RON are alternatives"
+3. **Evaluate against drivers** — "TOML is typed, hierarchical, Rust-native, and the client doesn't care about config format"
+4. **Decide** — either confirm the existing ADR or create a superseding one
+5. **Document** — record the questioning result in the phase retrospective, even if no change is made
+
+### Anti-patterns
+
+- ❌ "The ADR says X, so we do X" — blind compliance without questioning
+- ❌ "It works, don't change it" — the bar is excellence, not adequacy
+- ❌ "We already implemented it" — sunk cost is not a reason to keep a suboptimal decision
+- ✅ "The ADR says X. I questioned it, evaluated Y and Z, and X is still the best choice because..."
 
 ---
 

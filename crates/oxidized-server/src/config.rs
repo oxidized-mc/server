@@ -3,6 +3,8 @@
 //! Uses TOML format with serde derives for type-safe deserialization.
 //! See [ADR-033](../../../docs/adr/adr-033-configuration-format.md) for rationale.
 
+use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::path::Path;
 
@@ -159,7 +161,9 @@ pub struct AdminConfig {
 }
 
 /// RCON remote console settings.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+///
+/// Implements a custom [`Debug`] that redacts `password`.
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct RconConfig {
     /// Enable the RCON remote console (default `false`).
@@ -168,6 +172,16 @@ pub struct RconConfig {
     pub port: u16,
     /// RCON password (default `""`).
     pub password: String,
+}
+
+impl fmt::Debug for RconConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RconConfig")
+            .field("enabled", &self.enabled)
+            .field("port", &self.port)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// GameSpy4 query protocol settings.
@@ -195,7 +209,9 @@ pub struct ResourcePackConfig {
 }
 
 /// Management server settings (26.1 feature).
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+///
+/// Implements a custom [`Debug`] that redacts `secret`.
+#[derive(Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(default)]
 pub struct ManagementConfig {
     /// Enable the management server (default `false`).
@@ -208,6 +224,18 @@ pub struct ManagementConfig {
     pub secret: String,
     /// Require TLS on the management server (default `false`).
     pub tls_enabled: bool,
+}
+
+impl fmt::Debug for ManagementConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ManagementConfig")
+            .field("enabled", &self.enabled)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("secret", &"[REDACTED]")
+            .field("tls_enabled", &self.tls_enabled)
+            .finish()
+    }
 }
 
 /// Data pack settings.
@@ -381,6 +409,9 @@ pub struct ServerConfig {
     pub packs: PacksConfig,
     /// Advanced / diagnostic settings.
     pub advanced: AdvancedConfig,
+    /// Unknown/future keys preserved for forward compatibility.
+    #[serde(flatten)]
+    pub extra: BTreeMap<String, toml::Value>,
 }
 
 impl ServerConfig {
@@ -639,6 +670,7 @@ mod tests {
                 enable_code_of_conduct: true,
                 bug_report_link: "https://bugs.example.com".to_string(),
             },
+            extra: BTreeMap::new(),
         };
 
         config.save(&path).expect("save should succeed");
@@ -779,6 +811,50 @@ mod tests {
         assert!(config.validate().is_ok(), "sim_distance 32 should be valid");
     }
 
+    #[test]
+    fn test_validate_rejects_rcon_port_zero_when_enabled() {
+        let mut config = ServerConfig::default();
+        config.rcon.enabled = true;
+        config.rcon.port = 0;
+        assert!(
+            matches!(config.validate(), Err(ConfigError::InvalidPort(0))),
+            "rcon port 0 with enabled=true should fail"
+        );
+    }
+
+    #[test]
+    fn test_validate_allows_rcon_port_zero_when_disabled() {
+        let mut config = ServerConfig::default();
+        config.rcon.enabled = false;
+        config.rcon.port = 0;
+        assert!(
+            config.validate().is_ok(),
+            "rcon port 0 with enabled=false should be ok"
+        );
+    }
+
+    #[test]
+    fn test_validate_rejects_query_port_zero_when_enabled() {
+        let mut config = ServerConfig::default();
+        config.query.enabled = true;
+        config.query.port = 0;
+        assert!(
+            matches!(config.validate(), Err(ConfigError::InvalidPort(0))),
+            "query port 0 with enabled=true should fail"
+        );
+    }
+
+    #[test]
+    fn test_validate_allows_query_port_zero_when_disabled() {
+        let mut config = ServerConfig::default();
+        config.query.enabled = false;
+        config.query.port = 0;
+        assert!(
+            config.validate().is_ok(),
+            "query port 0 with enabled=false should be ok"
+        );
+    }
+
     // -----------------------------------------------------------------------
     // Partial TOML tests (missing sections get defaults)
     // -----------------------------------------------------------------------
@@ -806,19 +882,29 @@ port = 19132
     }
 
     #[test]
-    fn test_unknown_keys_are_ignored_gracefully() {
+    fn test_unknown_keys_are_preserved_through_roundtrip() {
         let input = r#"
 [network]
 port = 25565
-future_setting = "hello"
 
 [unknown_section]
 key = "value"
 "#;
-        // ServerConfig does not use deny_unknown_fields, so unknown keys are
-        // silently ignored by serde.
         let config: ServerConfig = toml::from_str(input).unwrap();
         assert_eq!(config.network.port, 25565);
+        // Unknown top-level section is captured in the `extra` map
+        assert!(
+            config.extra.contains_key("unknown_section"),
+            "unknown sections should be preserved in extra"
+        );
+
+        // Roundtrip: serialize back and re-parse
+        let serialized = toml::to_string_pretty(&config).unwrap();
+        let reloaded: ServerConfig = toml::from_str(&serialized).unwrap();
+        assert!(
+            reloaded.extra.contains_key("unknown_section"),
+            "unknown sections should survive roundtrip"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -884,6 +970,40 @@ online_mode   =   false
         assert!(
             content.starts_with("# Oxidized"),
             "file should start with header comment"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Security — secret redaction in Debug output
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_debug_redacts_rcon_password() {
+        let mut rcon = RconConfig::default();
+        rcon.password = "super_secret_password".to_string();
+        let debug_output = format!("{:?}", rcon);
+        assert!(
+            !debug_output.contains("super_secret_password"),
+            "Debug output must not contain the actual password"
+        );
+        assert!(
+            debug_output.contains("[REDACTED]"),
+            "Debug output should show [REDACTED]"
+        );
+    }
+
+    #[test]
+    fn test_debug_redacts_management_secret() {
+        let mut mgmt = ManagementConfig::default();
+        mgmt.secret = "top_secret_key".to_string();
+        let debug_output = format!("{:?}", mgmt);
+        assert!(
+            !debug_output.contains("top_secret_key"),
+            "Debug output must not contain the actual secret"
+        );
+        assert!(
+            debug_output.contains("[REDACTED]"),
+            "Debug output should show [REDACTED]"
         );
     }
 }

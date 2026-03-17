@@ -12,11 +12,11 @@ use clap::Parser;
 #[command(name = "oxidized")]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// Override the server port (overrides server.properties value).
+    /// Override the server port (overrides oxidized.toml value).
     #[arg(long)]
     pub port: Option<u16>,
 
-    /// Override the world/level name (overrides server.properties value).
+    /// Override the world/level name (overrides oxidized.toml value).
     #[arg(long)]
     pub world: Option<String>,
 
@@ -32,15 +32,15 @@ pub struct Args {
     #[arg(long, default_value = "info")]
     pub log_level: String,
 
-    /// Path to server.properties configuration file.
-    #[arg(long, default_value = "server.properties")]
+    /// Path to configuration file.
+    #[arg(long, default_value = "oxidized.toml")]
     pub config: PathBuf,
 
     /// Force upgrade world data on startup.
     #[arg(long)]
     pub force_upgrade: bool,
 
-    /// Initialize server.properties and exit.
+    /// Initialize oxidized.toml and exit.
     #[arg(long)]
     pub init_settings: bool,
 
@@ -70,7 +70,7 @@ mod tests {
         assert_eq!(args.universe, PathBuf::from("."));
         assert!(!args.nogui);
         assert_eq!(args.log_level, "info");
-        assert_eq!(args.config, PathBuf::from("server.properties"));
+        assert_eq!(args.config, PathBuf::from("oxidized.toml"));
         assert!(!args.force_upgrade);
         assert!(!args.init_settings);
         assert!(!args.demo);
@@ -92,7 +92,7 @@ mod tests {
             "--log-level",
             "debug",
             "--config",
-            "/etc/oxidized/server.properties",
+            "/etc/oxidized/oxidized.toml",
             "--force-upgrade",
             "--init-settings",
             "--demo",
@@ -106,10 +106,7 @@ mod tests {
         assert_eq!(args.universe, PathBuf::from("/data/worlds"));
         assert!(args.nogui);
         assert_eq!(args.log_level, "debug");
-        assert_eq!(
-            args.config,
-            PathBuf::from("/etc/oxidized/server.properties")
-        );
+        assert_eq!(args.config, PathBuf::from("/etc/oxidized/oxidized.toml"));
         assert!(args.force_upgrade);
         assert!(args.init_settings);
         assert!(args.demo);

@@ -230,3 +230,20 @@ The `MPL-2.0` and `Unicode-DFS-2016` entries are not needed.
 - **Format edge case tests:** 0 → 6
 - **ADR gaps fixed:** 2 (structured logging, unknown key preservation)
 - **Bugs fixed:** 2 (world CLI override, trim_start spec compliance)
+
+### 2026-03-17 — Retrospective: question format choices during implementation
+**Context:** Phase 1 v3 retrospective — config format evolution.
+**Learning:** ADR-005 chose Java `.properties` for vanilla compatibility, but this was a
+Java-specific format choice copied without questioning. ADR-033 superseded it with TOML after
+applying the "Architectural Questioning" principle: the MC client never reads config files,
+so there's no compatibility requirement. Always ask "would a Rust developer choose this?"
+before implementing any decision copied from the Java reference.
+**Applies to:** Any decision based on "vanilla does it this way."
+
+### 2026-03-17 — Retrospective: serde derives eliminate 90% of parser code
+**Context:** Phase 1 v3 — replacing hand-rolled Properties parser with TOML + serde.
+**Learning:** The original config.rs was ~1800 lines with a hand-rolled parser, helpers,
+and serialization macros. The TOML + serde version is ~500 lines — all type-safe, with
+automatic (de)serialization. Prefer serde derives over hand-rolled parsers for any
+structured data format.
+**Applies to:** Any future parser (NBT reader/writer could also benefit from serde).

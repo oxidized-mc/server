@@ -140,7 +140,7 @@ pub fn set_view_distance(player: &mut ServerPlayer, distance: u8, level: &mut Se
 ```
 
 - [ ] `/view-distance <n>` command sets per-player distance (Phase 18 extension)
-- [ ] Default from `view-distance` in `server.properties`
+- [ ] Default from `view-distance` in `oxidized.toml`
 - [ ] Range: 1–32 chunks
 
 ### 38.4 — Chunk worker pool and priorities

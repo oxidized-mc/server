@@ -86,6 +86,25 @@ After every phase completion, conduct a mandatory retrospective:
 
 ---
 
+## Architectural Questioning
+
+Before implementing ANY decision from an ADR, explicitly question whether it is still the best approach:
+
+1. **Is this the right format/tool/pattern?** — Don't assume prior ADR decisions are final. Technology evolves, requirements clarify, and better options emerge.
+2. **Would a Rust developer choose this?** — If we're replicating a Java pattern just because vanilla does it, stop and evaluate Rust-native alternatives.
+3. **Does the client care?** — The Minecraft client defines the contract (protocol, packet format). Everything else is implementation detail we control.
+4. **What would we regret in 6 months?** — Choose the option that scales, not the one that's fastest to implement.
+
+If questioning reveals a better approach, **create a new ADR before proceeding**. Never implement something you suspect is suboptimal just because an existing ADR says so — ADRs are living documents that can be superseded.
+
+### Examples of Good Questioning
+
+- "ADR-005 chose `.properties` for config — but that's a Java format. TOML is Rust-native and typed. Should we supersede?"
+- "Vanilla uses NBT for everything — but is NBT the best format for disk storage, or just for network protocol?"
+- "The tick loop is single-threaded in vanilla — but should it be in a Rust server with async support?"
+
+---
+
 ## Development Workflow
 
 ### Task Size Gating — Plan Before Acting
