@@ -10,10 +10,12 @@ mod logging;
 mod network;
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use clap::Parser;
 use mimalloc::MiMalloc;
 use oxidized_protocol::constants;
+use oxidized_protocol::status::{Component, ServerStatus, StatusPlayers, StatusVersion};
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
@@ -97,10 +99,27 @@ fn main() -> anyhow::Result<()> {
             .parse()
             .map_err(|e| anyhow::anyhow!("invalid bind address: {e}"))?;
 
+        // Build the ServerStatus from config for the server list.
+        let server_status = Arc::new(ServerStatus {
+            version: StatusVersion {
+                name: constants::VERSION_NAME.to_string(),
+                protocol: constants::PROTOCOL_VERSION,
+            },
+            players: StatusPlayers {
+                max: config.gameplay.max_players,
+                online: 0,
+                sample: Vec::new(),
+            },
+            description: Component::text(&config.display.motd),
+            favicon: None, // Favicon loading deferred to Phase 18
+            enforces_secure_chat: false,
+        });
+
         // Spawn the TCP listener.
         let listener_shutdown = shutdown_tx.subscribe();
+        let status_clone = Arc::clone(&server_status);
         let listener_handle = tokio::spawn(async move {
-            if let Err(e) = network::listen(addr, listener_shutdown).await {
+            if let Err(e) = network::listen(addr, status_clone, listener_shutdown).await {
                 error!(error = %e, "Listener failed");
             }
         });

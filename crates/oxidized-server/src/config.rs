@@ -979,8 +979,10 @@ online_mode   =   false
 
     #[test]
     fn test_debug_redacts_rcon_password() {
-        let mut rcon = RconConfig::default();
-        rcon.password = "super_secret_password".to_string();
+        let rcon = RconConfig {
+            password: "super_secret_password".to_string(),
+            ..RconConfig::default()
+        };
         let debug_output = format!("{:?}", rcon);
         assert!(
             !debug_output.contains("super_secret_password"),
@@ -994,8 +996,10 @@ online_mode   =   false
 
     #[test]
     fn test_debug_redacts_management_secret() {
-        let mut mgmt = ManagementConfig::default();
-        mgmt.secret = "top_secret_key".to_string();
+        let mgmt = ManagementConfig {
+            secret: "top_secret_key".to_string(),
+            ..ManagementConfig::default()
+        };
         let debug_output = format!("{:?}", mgmt);
         assert!(
             !debug_output.contains("top_secret_key"),

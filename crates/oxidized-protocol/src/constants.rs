@@ -8,6 +8,11 @@
 /// The human-readable game version string (e.g. `"26.1-pre-3"`).
 pub const GAME_VERSION: &str = "26.1-pre-3";
 
+/// The version name sent in the server status response.
+///
+/// This is what clients display in the server list (e.g., "26.1-pre-3").
+pub const VERSION_NAME: &str = GAME_VERSION;
+
 /// Wire protocol version negotiated during the handshake.
 pub const PROTOCOL_VERSION: i32 = 1_073_742_124;
 
