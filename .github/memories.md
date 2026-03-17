@@ -130,6 +130,23 @@ action to install the specific MSRV version.
 GitHub auto-closes the Dependabot PRs. This is expected behavior — not an error.
 **Applies to:** Dependency management workflow.
 
+### 2026-03-17 — rustsec/audit-check@v2 deprecated (Node.js 20)
+**Context:** Security audit workflow failing on every push since project inception.
+**Learning:** `rustsec/audit-check@v2` uses Node.js 20 which GitHub is deprecating
+(forced Node.js 24 from June 2026). The action was consistently failing. Replaced with
+direct `cargo install cargo-audit && cargo audit` which is more reliable and doesn't
+depend on action maintenance. Always prefer running tools directly over wrapper actions
+when the tool itself is simple to invoke.
+**Applies to:** All CI workflows — prefer direct tool invocation over third-party actions.
+
+### 2026-03-17 — CI pipeline status must be verified after every push
+**Context:** Multiple phases were committed without verifying security audit was passing.
+**Learning:** The lifecycle lacked an explicit CI verification loop. Historical failures
+accumulated on `main` unnoticed because we only checked CI locally. Now Stage 8 (Integrate)
+requires waiting for **all** CI jobs to complete and verifying green, including security
+audit. Added CI Repair loop to the lifecycle.
+**Applies to:** Every integration — wait for all workflows, not just the main CI.
+
 ---
 
 ## Codebase Conventions
