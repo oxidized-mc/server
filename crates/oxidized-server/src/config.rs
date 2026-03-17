@@ -3,7 +3,7 @@
 //! Implements a hand-rolled Java Properties parser and a strongly typed
 //! [`ServerConfig`] struct whose defaults match vanilla Minecraft 26.1-pre-3.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::path::Path;
 
@@ -315,6 +315,10 @@ pub struct ServerConfig {
     pub initial_disabled_packs: String,
     /// Heartbeat interval in seconds for status polling (default `0`).
     pub status_heartbeat_interval: i32,
+
+    /// Unknown keys from the properties file, preserved for forward-compatibility.
+    /// These are written back verbatim on save so vanilla-generated files aren't truncated.
+    unknown_keys: BTreeMap<String, String>,
 }
 
 impl ServerConfig {
@@ -407,6 +411,7 @@ impl ServerConfig {
             initial_enabled_packs: "vanilla".to_string(),
             initial_disabled_packs: String::new(),
             status_heartbeat_interval: 0,
+            unknown_keys: BTreeMap::new(),
         }
     }
 
@@ -436,6 +441,81 @@ impl ServerConfig {
     /// for any missing keys.
     fn from_properties(props: &HashMap<String, String>) -> Self {
         let d = Self::default_config();
+
+        // All keys that map to a typed field — anything else is "unknown".
+        const KNOWN_KEYS: &[&str] = &[
+            "server-port",
+            "server-ip",
+            "online-mode",
+            "prevent-proxy-connections",
+            "network-compression-threshold",
+            "use-native-transport",
+            "rate-limit",
+            "gamemode",
+            "difficulty",
+            "hardcore",
+            "force-gamemode",
+            "max-players",
+            "view-distance",
+            "simulation-distance",
+            "spawn-protection",
+            "max-world-size",
+            "allow-flight",
+            "level-name",
+            "level-seed",
+            "generate-structures",
+            "max-chained-neighbor-updates",
+            "spawn-npcs",
+            "spawn-animals",
+            "spawn-monsters",
+            "allow-nether",
+            "motd",
+            "enable-status",
+            "hide-online-players",
+            "entity-broadcast-range-percentage",
+            "white-list",
+            "enforce-whitelist",
+            "op-permission-level",
+            "function-permission-level",
+            "enforce-secure-profile",
+            "log-ips",
+            "max-tick-time",
+            "player-idle-timeout",
+            "broadcast-console-to-ops",
+            "broadcast-rcon-to-ops",
+            "enable-rcon",
+            "rcon.port",
+            "rcon.password",
+            "enable-query",
+            "query.port",
+            "resource-pack",
+            "resource-pack-sha1",
+            "resource-pack-prompt",
+            "require-resource-pack",
+            "management-server-enabled",
+            "management-server-host",
+            "management-server-port",
+            "management-server-secret",
+            "management-server-tls-enabled",
+            "enable-code-of-conduct",
+            "bug-report-link",
+            "sync-chunk-writes",
+            "region-file-compression",
+            "enable-jmx-monitoring",
+            "text-filtering-config",
+            "text-filtering-version",
+            "accepts-transfers",
+            "pause-when-empty-seconds",
+            "initial-enabled-packs",
+            "initial-disabled-packs",
+            "status-heartbeat-interval",
+        ];
+
+        let unknown_keys: BTreeMap<String, String> = props
+            .iter()
+            .filter(|(k, _)| !KNOWN_KEYS.contains(&k.as_str()))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
         Self {
             // Network
@@ -620,6 +700,7 @@ impl ServerConfig {
                 "status-heartbeat-interval",
                 d.status_heartbeat_interval,
             ),
+            unknown_keys,
         }
     }
 
@@ -742,6 +823,14 @@ impl ServerConfig {
         prop!("initial-enabled-packs", self.initial_enabled_packs);
         prop!("initial-disabled-packs", self.initial_disabled_packs);
         prop!("status-heartbeat-interval", self.status_heartbeat_interval);
+
+        // Unknown keys (preserved verbatim for forward-compatibility).
+        if !self.unknown_keys.is_empty() {
+            writeln!(buf)?;
+            for (key, value) in &self.unknown_keys {
+                prop!(key, value);
+            }
+        }
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
@@ -1158,5 +1247,612 @@ mod tests {
         assert_eq!(epoch_days_to_ymd(10957), (2000, 1, 1));
         // 2025-06-15 = day 20254
         assert_eq!(epoch_days_to_ymd(20254), (2025, 6, 15));
+    }
+
+    #[test]
+    fn test_unknown_keys_preserved_through_roundtrip() {
+        let dir =
+            std::env::temp_dir().join(format!("oxidized_test_unknown_keys_{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("server.properties");
+        let _ = fs::remove_file(&path);
+
+        // Write a properties file with a known key and an unknown key.
+        let input = "server-port=19132\ncustom-setting=hello\n";
+        fs::write(&path, input).expect("write should succeed");
+
+        // Load → the unknown key should be captured internally.
+        let config = ServerConfig::load_or_create(&path).expect("load should succeed");
+        assert_eq!(config.server_port, 19132);
+
+        // Save back to disk.
+        config.save(&path).expect("save should succeed");
+
+        // Re-read the file and verify the unknown key is present.
+        let contents = fs::read_to_string(&path).expect("read should succeed");
+        assert!(
+            contents.contains("custom-setting=hello"),
+            "unknown key should be preserved in saved output, got:\n{contents}"
+        );
+
+        // Also verify a known key is still present.
+        assert!(contents.contains("server-port=19132"));
+
+        // Verify the unknown key appears after known keys (separated by blank line).
+        let known_pos = contents
+            .find("status-heartbeat-interval=")
+            .expect("last known key should exist");
+        let unknown_pos = contents
+            .find("custom-setting=hello")
+            .expect("unknown key should exist");
+        assert!(
+            unknown_pos > known_pos,
+            "unknown keys should appear after all known keys"
+        );
+
+        // Cleanup.
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir(&dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // All-keys parsing test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_all_known_keys_from_properties() {
+        // Every known key set to a non-default value.
+        let input = "\
+server-port=19132\n\
+server-ip=127.0.0.1\n\
+online-mode=false\n\
+prevent-proxy-connections=true\n\
+network-compression-threshold=512\n\
+use-native-transport=false\n\
+rate-limit=100\n\
+gamemode=creative\n\
+difficulty=hard\n\
+hardcore=true\n\
+force-gamemode=true\n\
+max-players=50\n\
+view-distance=16\n\
+simulation-distance=8\n\
+spawn-protection=0\n\
+max-world-size=1000\n\
+allow-flight=true\n\
+level-name=custom_world\n\
+level-seed=12345\n\
+generate-structures=false\n\
+max-chained-neighbor-updates=500\n\
+spawn-npcs=false\n\
+spawn-animals=false\n\
+spawn-monsters=false\n\
+allow-nether=false\n\
+motd=Custom MOTD\n\
+enable-status=false\n\
+hide-online-players=true\n\
+entity-broadcast-range-percentage=75\n\
+white-list=true\n\
+enforce-whitelist=true\n\
+op-permission-level=2\n\
+function-permission-level=4\n\
+enforce-secure-profile=false\n\
+log-ips=false\n\
+max-tick-time=30000\n\
+player-idle-timeout=15\n\
+broadcast-console-to-ops=false\n\
+broadcast-rcon-to-ops=false\n\
+enable-rcon=true\n\
+rcon.port=25576\n\
+rcon.password=secret123\n\
+enable-query=true\n\
+query.port=25567\n\
+resource-pack=https://example.com/pack.zip\n\
+resource-pack-sha1=abc123\n\
+resource-pack-prompt=Please accept\n\
+require-resource-pack=true\n\
+management-server-enabled=true\n\
+management-server-host=0.0.0.0\n\
+management-server-port=8080\n\
+management-server-secret=topsecret\n\
+management-server-tls-enabled=false\n\
+enable-code-of-conduct=true\n\
+bug-report-link=https://bugs.example.com\n\
+sync-chunk-writes=false\n\
+region-file-compression=lz4\n\
+enable-jmx-monitoring=true\n\
+text-filtering-config=/etc/filter.json\n\
+text-filtering-version=2\n\
+accepts-transfers=true\n\
+pause-when-empty-seconds=120\n\
+initial-enabled-packs=vanilla,custom\n\
+initial-disabled-packs=experimental\n\
+status-heartbeat-interval=30\n";
+
+        let props = parse_properties(input);
+        let cfg = ServerConfig::from_properties(&props);
+
+        // Network
+        assert_eq!(cfg.server_port, 19132, "server_port");
+        assert_eq!(cfg.server_ip, "127.0.0.1", "server_ip");
+        assert!(!cfg.online_mode, "online_mode should be false");
+        assert!(
+            cfg.prevent_proxy_connections,
+            "prevent_proxy_connections should be true"
+        );
+        assert_eq!(
+            cfg.network_compression_threshold, 512,
+            "network_compression_threshold"
+        );
+        assert!(
+            !cfg.use_native_transport,
+            "use_native_transport should be false"
+        );
+        assert_eq!(cfg.rate_limit, 100, "rate_limit");
+
+        // Gameplay
+        assert_eq!(cfg.gamemode, "creative", "gamemode");
+        assert_eq!(cfg.difficulty, "hard", "difficulty");
+        assert!(cfg.hardcore, "hardcore should be true");
+        assert!(cfg.force_gamemode, "force_gamemode should be true");
+        assert_eq!(cfg.max_players, 50, "max_players");
+        assert_eq!(cfg.view_distance, 16, "view_distance");
+        assert_eq!(cfg.simulation_distance, 8, "simulation_distance");
+        assert_eq!(cfg.spawn_protection, 0, "spawn_protection");
+        assert_eq!(cfg.max_world_size, 1000, "max_world_size");
+        assert!(cfg.allow_flight, "allow_flight should be true");
+
+        // World
+        assert_eq!(cfg.level_name, "custom_world", "level_name");
+        assert_eq!(cfg.level_seed, "12345", "level_seed");
+        assert!(
+            !cfg.generate_structures,
+            "generate_structures should be false"
+        );
+        assert_eq!(
+            cfg.max_chained_neighbor_updates, 500,
+            "max_chained_neighbor_updates"
+        );
+        assert!(!cfg.spawn_npcs, "spawn_npcs should be false");
+        assert!(!cfg.spawn_animals, "spawn_animals should be false");
+        assert!(!cfg.spawn_monsters, "spawn_monsters should be false");
+        assert!(!cfg.allow_nether, "allow_nether should be false");
+
+        // Display / MOTD
+        assert_eq!(cfg.motd, "Custom MOTD", "motd");
+        assert!(!cfg.enable_status, "enable_status should be false");
+        assert!(
+            cfg.hide_online_players,
+            "hide_online_players should be true"
+        );
+        assert_eq!(
+            cfg.entity_broadcast_range_percentage, 75,
+            "entity_broadcast_range_percentage"
+        );
+
+        // Admin / Security
+        assert!(cfg.white_list, "white_list should be true");
+        assert!(cfg.enforce_whitelist, "enforce_whitelist should be true");
+        assert_eq!(cfg.op_permission_level, 2, "op_permission_level");
+        assert_eq!(
+            cfg.function_permission_level, 4,
+            "function_permission_level"
+        );
+        assert!(
+            !cfg.enforce_secure_profile,
+            "enforce_secure_profile should be false"
+        );
+        assert!(!cfg.log_ips, "log_ips should be false");
+        assert_eq!(cfg.max_tick_time, 30_000, "max_tick_time");
+        assert_eq!(cfg.player_idle_timeout, 15, "player_idle_timeout");
+        assert!(
+            !cfg.broadcast_console_to_ops,
+            "broadcast_console_to_ops should be false"
+        );
+        assert!(
+            !cfg.broadcast_rcon_to_ops,
+            "broadcast_rcon_to_ops should be false"
+        );
+
+        // RCON
+        assert!(cfg.enable_rcon, "enable_rcon should be true");
+        assert_eq!(cfg.rcon_port, 25576, "rcon_port");
+        assert_eq!(cfg.rcon_password, "secret123", "rcon_password");
+
+        // Query
+        assert!(cfg.enable_query, "enable_query should be true");
+        assert_eq!(cfg.query_port, 25567, "query_port");
+
+        // Resource pack
+        assert_eq!(
+            cfg.resource_pack, "https://example.com/pack.zip",
+            "resource_pack"
+        );
+        assert_eq!(cfg.resource_pack_sha1, "abc123", "resource_pack_sha1");
+        assert_eq!(
+            cfg.resource_pack_prompt, "Please accept",
+            "resource_pack_prompt"
+        );
+        assert!(
+            cfg.require_resource_pack,
+            "require_resource_pack should be true"
+        );
+
+        // Management server
+        assert!(
+            cfg.management_server_enabled,
+            "management_server_enabled should be true"
+        );
+        assert_eq!(
+            cfg.management_server_host, "0.0.0.0",
+            "management_server_host"
+        );
+        assert_eq!(cfg.management_server_port, 8080, "management_server_port");
+        assert_eq!(
+            cfg.management_server_secret, "topsecret",
+            "management_server_secret"
+        );
+        assert!(
+            !cfg.management_server_tls_enabled,
+            "management_server_tls_enabled should be false"
+        );
+
+        // Code of conduct
+        assert!(
+            cfg.enable_code_of_conduct,
+            "enable_code_of_conduct should be true"
+        );
+        assert_eq!(
+            cfg.bug_report_link, "https://bugs.example.com",
+            "bug_report_link"
+        );
+
+        // Misc
+        assert!(!cfg.sync_chunk_writes, "sync_chunk_writes should be false");
+        assert_eq!(
+            cfg.region_file_compression, "lz4",
+            "region_file_compression"
+        );
+        assert!(
+            cfg.enable_jmx_monitoring,
+            "enable_jmx_monitoring should be true"
+        );
+        assert_eq!(
+            cfg.text_filtering_config, "/etc/filter.json",
+            "text_filtering_config"
+        );
+        assert_eq!(cfg.text_filtering_version, 2, "text_filtering_version");
+        assert!(cfg.accepts_transfers, "accepts_transfers should be true");
+        assert_eq!(
+            cfg.pause_when_empty_seconds, 120,
+            "pause_when_empty_seconds"
+        );
+        assert_eq!(
+            cfg.initial_enabled_packs, "vanilla,custom",
+            "initial_enabled_packs"
+        );
+        assert_eq!(
+            cfg.initial_disabled_packs, "experimental",
+            "initial_disabled_packs"
+        );
+        assert_eq!(
+            cfg.status_heartbeat_interval, 30,
+            "status_heartbeat_interval"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Boundary validation tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_port_accepts_min_valid() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.server_port = 1;
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_port_accepts_max_valid() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.server_port = 65535;
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_port_rejects_zero() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.server_port = 0;
+        assert!(matches!(cfg.validate(), Err(ConfigError::InvalidPort(0))));
+    }
+
+    #[test]
+    fn test_validate_view_distance_accepts_min() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.view_distance = 2;
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_view_distance_accepts_max() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.view_distance = 32;
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_view_distance_rejects_below_min() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.view_distance = 1;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::InvalidViewDistance(1))
+        ));
+    }
+
+    #[test]
+    fn test_validate_view_distance_rejects_above_max() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.view_distance = 33;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::InvalidViewDistance(33))
+        ));
+    }
+
+    #[test]
+    fn test_validate_simulation_distance_accepts_min() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.simulation_distance = 2;
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_simulation_distance_accepts_max() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.simulation_distance = 32;
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_simulation_distance_rejects_below_min() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.simulation_distance = 1;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::InvalidSimulationDistance(1))
+        ));
+    }
+
+    #[test]
+    fn test_validate_simulation_distance_rejects_above_max() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.simulation_distance = 33;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::InvalidSimulationDistance(33))
+        ));
+    }
+
+    #[test]
+    fn test_validate_max_players_accepts_one() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.max_players = 1;
+        assert!(cfg.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_max_players_rejects_zero() {
+        let mut cfg = ServerConfig::default_config();
+        cfg.max_players = 0;
+        assert!(matches!(
+            cfg.validate(),
+            Err(ConfigError::InvalidMaxPlayers(0))
+        ));
+    }
+
+    // -----------------------------------------------------------------------
+    // Properties format edge cases
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_space_only_separator() {
+        let input = "key value\n";
+        let props = parse_properties(input);
+        assert_eq!(props.get("key").map(String::as_str), Some("value"));
+    }
+
+    #[test]
+    fn test_parse_colon_separator() {
+        let input = "key:value\n";
+        let props = parse_properties(input);
+        assert_eq!(props.get("key").map(String::as_str), Some("value"));
+    }
+
+    #[test]
+    fn test_parse_multiple_line_continuations() {
+        let input = "motd=Hello \\\nbeautiful \\\nworld\n";
+        let props = parse_properties(input);
+        assert_eq!(
+            props.get("motd").map(String::as_str),
+            Some("Hello beautiful world")
+        );
+    }
+
+    #[test]
+    fn test_parse_exclamation_comment() {
+        let input = "! this is a comment\nkey=value\n";
+        let props = parse_properties(input);
+        assert_eq!(props.len(), 1);
+        assert_eq!(props.get("key").map(String::as_str), Some("value"));
+    }
+
+    #[test]
+    fn test_parse_empty_value() {
+        let input = "key=\n";
+        let props = parse_properties(input);
+        assert_eq!(props.get("key").map(String::as_str), Some(""));
+    }
+
+    #[test]
+    fn test_parse_value_with_equals() {
+        let input = "key=a=b\n";
+        let props = parse_properties(input);
+        assert_eq!(
+            props.get("key").map(String::as_str),
+            Some("a=b"),
+            "only the first = should be treated as separator"
+        );
+    }
+
+    #[test]
+    fn test_full_roundtrip_preserves_all_fields() {
+        let dir =
+            std::env::temp_dir().join(format!("oxidized_test_full_rt_{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("server.properties");
+        let _ = fs::remove_file(&path);
+
+        let mut cfg = ServerConfig::default_config();
+
+        // Set every field to a non-default value.
+        cfg.server_port = 19132;
+        cfg.server_ip = "192.168.1.1".to_string();
+        cfg.online_mode = false;
+        cfg.prevent_proxy_connections = true;
+        cfg.network_compression_threshold = 512;
+        cfg.use_native_transport = false;
+        cfg.rate_limit = 10;
+        cfg.gamemode = "creative".to_string();
+        cfg.difficulty = "hard".to_string();
+        cfg.hardcore = true;
+        cfg.force_gamemode = true;
+        cfg.max_players = 100;
+        cfg.view_distance = 16;
+        cfg.simulation_distance = 8;
+        cfg.spawn_protection = 32;
+        cfg.max_world_size = 10000;
+        cfg.allow_flight = true;
+        cfg.level_name = "custom_world".to_string();
+        cfg.level_seed = "12345".to_string();
+        cfg.generate_structures = false;
+        cfg.max_chained_neighbor_updates = 500000;
+        cfg.spawn_npcs = false;
+        cfg.spawn_animals = false;
+        cfg.spawn_monsters = false;
+        cfg.allow_nether = false;
+        cfg.motd = "Full Roundtrip Test".to_string();
+        cfg.enable_status = false;
+        cfg.hide_online_players = true;
+        cfg.entity_broadcast_range_percentage = 200;
+        cfg.white_list = true;
+        cfg.enforce_whitelist = true;
+        cfg.op_permission_level = 3;
+        cfg.function_permission_level = 3;
+        cfg.enforce_secure_profile = false;
+        cfg.log_ips = false;
+        cfg.max_tick_time = 120000;
+        cfg.player_idle_timeout = 30;
+        cfg.broadcast_console_to_ops = false;
+        cfg.broadcast_rcon_to_ops = false;
+        cfg.enable_rcon = true;
+        cfg.rcon_port = 25576;
+        cfg.rcon_password = "secret123".to_string();
+        cfg.enable_query = true;
+        cfg.query_port = 25566;
+        cfg.resource_pack = "https://example.com/pack.zip".to_string();
+        cfg.resource_pack_sha1 = "abc123def456".to_string();
+        cfg.resource_pack_prompt = "Please install".to_string();
+        cfg.require_resource_pack = true;
+        cfg.management_server_enabled = true;
+        cfg.management_server_host = "mgmt.example.com".to_string();
+        cfg.management_server_port = 8443;
+        cfg.management_server_secret = "mgmt-secret".to_string();
+        cfg.management_server_tls_enabled = true;
+        cfg.enable_code_of_conduct = true;
+        cfg.bug_report_link = "https://bugs.example.com".to_string();
+        cfg.sync_chunk_writes = false;
+        cfg.region_file_compression = "none".to_string();
+        cfg.enable_jmx_monitoring = true;
+        cfg.text_filtering_config = "filter.json".to_string();
+        cfg.text_filtering_version = 2;
+        cfg.accepts_transfers = true;
+        cfg.pause_when_empty_seconds = 120;
+        cfg.initial_enabled_packs = "vanilla,fabric".to_string();
+        cfg.initial_disabled_packs = "experimental".to_string();
+        cfg.status_heartbeat_interval = 15;
+
+        cfg.save(&path).expect("save should succeed");
+        let loaded = ServerConfig::load_or_create(&path).expect("load should succeed");
+
+        // Verify every field survived the roundtrip.
+        assert_eq!(loaded.server_port, 19132);
+        assert_eq!(loaded.server_ip, "192.168.1.1");
+        assert!(!loaded.online_mode);
+        assert!(loaded.prevent_proxy_connections);
+        assert_eq!(loaded.network_compression_threshold, 512);
+        assert!(!loaded.use_native_transport);
+        assert_eq!(loaded.rate_limit, 10);
+        assert_eq!(loaded.gamemode, "creative");
+        assert_eq!(loaded.difficulty, "hard");
+        assert!(loaded.hardcore);
+        assert!(loaded.force_gamemode);
+        assert_eq!(loaded.max_players, 100);
+        assert_eq!(loaded.view_distance, 16);
+        assert_eq!(loaded.simulation_distance, 8);
+        assert_eq!(loaded.spawn_protection, 32);
+        assert_eq!(loaded.max_world_size, 10000);
+        assert!(loaded.allow_flight);
+        assert_eq!(loaded.level_name, "custom_world");
+        assert_eq!(loaded.level_seed, "12345");
+        assert!(!loaded.generate_structures);
+        assert_eq!(loaded.max_chained_neighbor_updates, 500000);
+        assert!(!loaded.spawn_npcs);
+        assert!(!loaded.spawn_animals);
+        assert!(!loaded.spawn_monsters);
+        assert!(!loaded.allow_nether);
+        assert_eq!(loaded.motd, "Full Roundtrip Test");
+        assert!(!loaded.enable_status);
+        assert!(loaded.hide_online_players);
+        assert_eq!(loaded.entity_broadcast_range_percentage, 200);
+        assert!(loaded.white_list);
+        assert!(loaded.enforce_whitelist);
+        assert_eq!(loaded.op_permission_level, 3);
+        assert_eq!(loaded.function_permission_level, 3);
+        assert!(!loaded.enforce_secure_profile);
+        assert!(!loaded.log_ips);
+        assert_eq!(loaded.max_tick_time, 120000);
+        assert_eq!(loaded.player_idle_timeout, 30);
+        assert!(!loaded.broadcast_console_to_ops);
+        assert!(!loaded.broadcast_rcon_to_ops);
+        assert!(loaded.enable_rcon);
+        assert_eq!(loaded.rcon_port, 25576);
+        assert_eq!(loaded.rcon_password, "secret123");
+        assert!(loaded.enable_query);
+        assert_eq!(loaded.query_port, 25566);
+        assert_eq!(loaded.resource_pack, "https://example.com/pack.zip");
+        assert_eq!(loaded.resource_pack_sha1, "abc123def456");
+        assert_eq!(loaded.resource_pack_prompt, "Please install");
+        assert!(loaded.require_resource_pack);
+        assert!(loaded.management_server_enabled);
+        assert_eq!(loaded.management_server_host, "mgmt.example.com");
+        assert_eq!(loaded.management_server_port, 8443);
+        assert_eq!(loaded.management_server_secret, "mgmt-secret");
+        assert!(loaded.management_server_tls_enabled);
+        assert!(loaded.enable_code_of_conduct);
+        assert_eq!(loaded.bug_report_link, "https://bugs.example.com");
+        assert!(!loaded.sync_chunk_writes);
+        assert_eq!(loaded.region_file_compression, "none");
+        assert!(loaded.enable_jmx_monitoring);
+        assert_eq!(loaded.text_filtering_config, "filter.json");
+        assert_eq!(loaded.text_filtering_version, 2);
+        assert!(loaded.accepts_transfers);
+        assert_eq!(loaded.pause_when_empty_seconds, 120);
+        assert_eq!(loaded.initial_enabled_packs, "vanilla,fabric");
+        assert_eq!(loaded.initial_disabled_packs, "experimental");
+        assert_eq!(loaded.status_heartbeat_interval, 15);
+
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir(&dir);
     }
 }

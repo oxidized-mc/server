@@ -159,29 +159,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn section_size_is_4096() {
+    fn test_section_size_equals_4096() {
         assert_eq!(SECTION_SIZE, 4096);
     }
 
     #[test]
-    fn millis_per_tick_matches_tps() {
+    fn test_millis_per_tick_derived_from_ticks_per_second() {
         assert_eq!(MILLIS_PER_TICK, 1000 / TICKS_PER_SECOND as u64);
     }
 
     #[test]
-    fn ticks_per_minute_matches_tps() {
+    fn test_ticks_per_minute_derived_from_ticks_per_second() {
         assert_eq!(TICKS_PER_MINUTE, TICKS_PER_SECOND * 60);
     }
 
     #[test]
-    fn protocol_version_is_snapshot_range() {
+    fn test_protocol_version_has_snapshot_bit_set() {
         // Snapshot protocol versions have the 30th bit set (0x40000000).
         let version = PROTOCOL_VERSION;
         assert_ne!(version & 0x4000_0000, 0);
     }
 
     #[test]
-    fn default_port_is_standard() {
+    fn test_default_port_equals_25565() {
         assert_eq!(DEFAULT_PORT, 25565);
     }
 }

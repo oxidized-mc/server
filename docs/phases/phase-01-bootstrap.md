@@ -216,3 +216,37 @@ crates/oxidized-server/src/
 crates/oxidized-protocol/src/
 └── constants.rs
 ```
+
+---
+
+## Status: ✅ COMPLETE (with lifecycle retrofit)
+
+**Initial implementation:** 2026-03-17 — 26 tests, 6 crates, CI green  
+**Lifecycle retrofit:** 2026-03-17 — ADR audit + test audit + fixes
+
+### Actual Test Coverage (post-retrofit)
+
+| Category | Before | After |
+|----------|--------|-------|
+| Total tests | 26 | 48 |
+| Config key parsing coverage | 6/41 (15%) | 41/41 (100%) |
+| Roundtrip field coverage | 8/56 (14%) | 56/56 (100%) |
+| Boundary validation tests | 0 | 13 |
+| Format edge case tests | 0 | 6 |
+
+### ADR Compliance
+
+| ADR | Status |
+|-----|--------|
+| ADR-001 (Async Runtime) | ✅ Compliant |
+| ADR-002 (Error Handling) | ✅ Compliant |
+| ADR-003 (Crate Architecture) | ✅ Compliant |
+| ADR-004 (Logging) | ✅ Fixed — structured `key=value` fields |
+| ADR-005 (Configuration) | ✅ Fixed — unknown key preservation added |
+| ADR-030 (Shutdown) | ✅ Compliant for Phase 1 scope |
+
+### Issues Fixed During Retrofit
+
+1. **Structured logging** — format strings replaced with `key=value` fields (ADR-004)
+2. **Unknown key preservation** — `BTreeMap<String, String>` stores unrecognized keys (ADR-005)
+3. **Test naming** — 9 tests in cli.rs and constants.rs renamed to follow convention

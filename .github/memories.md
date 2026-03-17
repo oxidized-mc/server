@@ -77,6 +77,22 @@ checkout. `cargo fmt` expects LF, so `cargo fmt --check` fails. Fix: add `.gitat
 with `* text=auto eol=lf` to force LF line endings everywhere.
 **Applies to:** Any Rust project with multi-platform CI.
 
+### 2026-03-17 — Retrospective: test coverage illusion with roundtrip tests
+**Context:** Phase 1 retrospective audit found roundtrip test only covered 8 of 56 fields.
+**Learning:** A "roundtrip test" that only checks a handful of fields creates a false sense
+of security. Write explicit assertions for EVERY field. If the struct grows, the compiler
+won't warn you that the roundtrip test is stale — so use a full-field test from day one.
+**Applies to:** Any config/serialization roundtrip test.
+
+### 2026-03-17 — Retrospective: unknown keys must be preserved in config files
+**Context:** Phase 1 retrospective found ADR-005 compliance gap — unknown keys were silently
+discarded by the Properties parser. Server admins or future MC versions may add keys we
+don't recognize yet.
+**Learning:** Config parsers that write files back must preserve keys they don't understand.
+Use a `BTreeMap<String, String>` for deterministic ordering. Write unknown keys in a separate
+section at the end of the file.
+**Applies to:** Any config format that supports forward-compatibility.
+
 ### 2026-03-17 — rustsec/audit-check@v2 needs explicit permissions
 **Context:** Security audit workflow failing silently.
 **Learning:** `rustsec/audit-check@v2` creates GitHub check runs, which requires
@@ -170,3 +186,47 @@ until a stable 0.10 release. Monitor: https://github.com/RustCrypto/RSA/issues
 `CDLA-Permissive-2.0` (webpki-root-certs), `Unicode-3.0` (unicode-ident).
 The `MPL-2.0` and `Unicode-DFS-2016` entries are not needed.
 **Applies to:** Any time a new dependency is added — check its license.
+
+---
+
+## Phase 1 Retrospective (2026-03-17)
+
+### What went well
+- **Core architecture is solid.** The crate layout, ServerConfig struct, and Properties parser all
+  passed ADR compliance audit (ADR-001 through ADR-005, ADR-030 all compliant for Phase 1 scope).
+- **CI pipeline caught real issues.** Cross-platform builds exposed no OS-specific bugs.
+- **Code review found two genuine bugs** before any user encountered them (world→level_name
+  copy-paste, trim→trim_start spec violation).
+
+### What surprised us
+- **85% of config keys were untested.** The initial test suite only covered 6 of 41+ keys via
+  parsing — a dangerous blind spot. The all-keys parsing test is now the single highest-value
+  test in the module.
+- **Roundtrip test only verified 8 of 56+ fields.** Even with a "roundtrip test" in place, most
+  fields were never actually roundtrip-verified.
+- **Format strings in logging seemed fine until ADR-004 audit.** Structured `key=value` fields
+  were mandated by ADR-004 but overlooked during initial implementation.
+
+### What should change going forward
+- **Test-first is non-negotiable.** Phase 1 wrote tests after implementation, which missed the
+  85% coverage gap. Future phases must write tests before code (TDD cycle enforced by lifecycle).
+- **"One test per feature" is insufficient.** Use the pattern: one test per *behavior* —
+  parsing, validation, roundtrip, and edge cases are separate concerns requiring separate tests.
+- **ADR compliance must be checked during implementation, not after.** The lifecycle now mandates
+  this at the Review stage (Stage 7).
+
+### Technical debt acknowledged
+- **Unknown key preservation** added retroactively. This was identified as an ADR-005 gap and
+  fixed during the retrospective. Keys not recognized by the parser are now stored in a
+  `BTreeMap` and written back on save.
+- **Structured logging** retrofitted. All log calls in `main.rs` now use `key=value` fields
+  per ADR-004.
+
+### Metrics
+- **Tests:** 26 → 48 (+84.6% increase)
+- **Config key parse coverage:** 6/41 → 41/41 (100%)
+- **Roundtrip field coverage:** 8/56 → 56/56 (100%)
+- **Boundary validation tests:** 0 → 13
+- **Format edge case tests:** 0 → 6
+- **ADR gaps fixed:** 2 (structured logging, unknown key preservation)
+- **Bugs fixed:** 2 (world CLI override, trim_start spec compliance)

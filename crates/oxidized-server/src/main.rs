@@ -29,14 +29,14 @@ fn main() -> anyhow::Result<()> {
     logging::init(&args.log_level);
 
     info!(
-        "Starting Oxidized v{} (Minecraft {})",
-        env!("CARGO_PKG_VERSION"),
-        constants::GAME_VERSION,
+        version = env!("CARGO_PKG_VERSION"),
+        minecraft = constants::GAME_VERSION,
+        "Starting Oxidized",
     );
     info!(
-        "Protocol version: {} | World version: {}",
-        constants::PROTOCOL_VERSION,
-        constants::WORLD_VERSION,
+        protocol = constants::PROTOCOL_VERSION,
+        world_version = constants::WORLD_VERSION,
+        "Protocol info",
     );
 
     // Load (or create) server.properties.
@@ -56,17 +56,21 @@ fn main() -> anyhow::Result<()> {
     // If --init-settings was passed, save defaults and exit.
     if args.init_settings {
         config.save(&args.config)?;
-        info!("Initialized '{}' — exiting.", args.config.display());
+        info!(path = %args.config.display(), "Initialized settings — exiting");
         return Ok(());
     }
 
     info!(
-        "Server port: {} | Online mode: {} | Max players: {}",
-        config.server_port, config.online_mode, config.max_players,
+        port = config.server_port,
+        online_mode = config.online_mode,
+        max_players = config.max_players,
+        "Server configuration",
     );
     info!(
-        "World: '{}' | View distance: {} | Simulation distance: {}",
-        config.level_name, config.view_distance, config.simulation_distance,
+        world = %config.level_name,
+        view_distance = config.view_distance,
+        simulation_distance = config.simulation_distance,
+        "World configuration",
     );
 
     // Build the Tokio runtime for async networking and I/O.
@@ -79,14 +83,14 @@ fn main() -> anyhow::Result<()> {
         // Register Ctrl+C / SIGTERM shutdown signal.
         let shutdown = tokio::signal::ctrl_c();
 
-        info!("Server ready — press Ctrl+C to stop.");
+        info!("Server ready — press Ctrl+C to stop");
 
         // Await shutdown signal.
         if let Err(e) = shutdown.await {
-            tracing::error!("Failed to listen for shutdown signal: {e}");
+            tracing::error!(error = %e, "Failed to listen for shutdown signal");
         }
 
-        info!("Server stopped.");
+        info!("Server stopped");
         Ok(())
     })
 }

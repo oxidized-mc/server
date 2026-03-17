@@ -63,7 +63,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_defaults() {
+    fn test_cli_defaults_match_expected_values() {
         let args = Args::try_parse_from(["oxidized"]).expect("default args should parse");
         assert_eq!(args.port, None);
         assert_eq!(args.world, None);
@@ -79,7 +79,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_all_flags() {
+    fn test_cli_parses_all_flags_when_every_option_provided() {
         let args = Args::try_parse_from([
             "oxidized",
             "--port",
@@ -118,13 +118,13 @@ mod tests {
     }
 
     #[test]
-    fn reject_invalid_port() {
+    fn test_cli_rejects_port_when_value_is_non_numeric() {
         let result = Args::try_parse_from(["oxidized", "--port", "not_a_number"]);
         assert!(result.is_err(), "non-numeric port should be rejected");
     }
 
     #[test]
-    fn reject_unknown_flag() {
+    fn test_cli_rejects_parse_when_unknown_flag_provided() {
         let result = Args::try_parse_from(["oxidized", "--nonexistent"]);
         assert!(result.is_err(), "unknown flags should be rejected");
     }
