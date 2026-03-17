@@ -98,7 +98,7 @@ debug     = true
 
 [workspace.lints.rust]
 missing_docs       = "warn"
-unsafe_code        = "warn"
+unsafe_code        = "deny"
 unused_imports     = "warn"
 
 [workspace.lints.clippy]
