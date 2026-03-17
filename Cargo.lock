@@ -1673,6 +1673,7 @@ dependencies = [
  "flate2",
  "oxidized-macros",
  "oxidized-nbt",
+ "proptest",
  "rand 0.10.0",
  "reqwest",
  "rsa",
@@ -1691,6 +1692,7 @@ name = "oxidized-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
  "insta",
  "mimalloc",

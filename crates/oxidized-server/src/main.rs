@@ -2,16 +2,20 @@
 //!
 //! This is the binary entry point. It configures the global allocator,
 //! parses CLI arguments, initialises tracing, loads configuration, and
-//! launches the Tokio async runtime.
+//! launches the Tokio async runtime with the TCP listener.
 
 mod cli;
 mod config;
 mod logging;
+mod network;
+
+use std::net::SocketAddr;
 
 use clap::Parser;
 use mimalloc::MiMalloc;
 use oxidized_protocol::constants;
-use tracing::info;
+use tokio::sync::broadcast;
+use tracing::{error, info};
 
 use crate::cli::Args;
 use crate::config::ServerConfig;
@@ -80,15 +84,36 @@ fn main() -> anyhow::Result<()> {
         .build()?;
 
     runtime.block_on(async {
-        // Register Ctrl+C / SIGTERM shutdown signal.
-        let shutdown = tokio::signal::ctrl_c();
+        // Shutdown broadcast channel — all tasks listen for this signal.
+        let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-        info!("Server ready — press Ctrl+C to stop");
+        // Resolve the bind address from config.
+        let ip = if config.network.ip.is_empty() {
+            "0.0.0.0".to_string()
+        } else {
+            config.network.ip.clone()
+        };
+        let addr: SocketAddr = format!("{ip}:{}", config.network.port)
+            .parse()
+            .map_err(|e| anyhow::anyhow!("invalid bind address: {e}"))?;
 
-        // Await shutdown signal.
-        if let Err(e) = shutdown.await {
-            tracing::error!(error = %e, "Failed to listen for shutdown signal");
+        // Spawn the TCP listener.
+        let listener_shutdown = shutdown_tx.subscribe();
+        let listener_handle = tokio::spawn(async move {
+            if let Err(e) = network::listen(addr, listener_shutdown).await {
+                error!(error = %e, "Listener failed");
+            }
+        });
+
+        // Wait for Ctrl+C, then broadcast shutdown.
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            error!(error = %e, "Failed to listen for shutdown signal");
         }
+        info!("Shutdown signal received");
+        let _ = shutdown_tx.send(());
+
+        // Wait for the listener task to finish.
+        let _ = listener_handle.await;
 
         info!("Server stopped");
         Ok(())
