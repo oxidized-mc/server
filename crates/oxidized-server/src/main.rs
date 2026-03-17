@@ -15,12 +15,14 @@ use std::sync::Arc;
 use clap::Parser;
 use mimalloc::MiMalloc;
 use oxidized_protocol::constants;
+use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::{Component, ServerStatus, StatusPlayers, StatusVersion};
 use tokio::sync::broadcast;
 use tracing::{error, info};
 
 use crate::cli::Args;
 use crate::config::ServerConfig;
+use crate::network::LoginContext;
 
 /// Use mimalloc as the global allocator for improved throughput and
 /// reduced fragmentation under the server's allocation patterns.
@@ -115,11 +117,26 @@ fn main() -> anyhow::Result<()> {
             enforces_secure_chat: false,
         });
 
+        // Generate the RSA-1024 keypair for online-mode encryption.
+        info!("Generating RSA-1024 keypair...");
+        let keypair = ServerKeyPair::generate()
+            .map_err(|e| anyhow::anyhow!("RSA key generation failed: {e}"))?;
+        info!("RSA keypair generated");
+
+        // Build the shared login context.
+        let login_ctx = Arc::new(LoginContext {
+            server_status,
+            keypair: Arc::new(keypair),
+            online_mode: config.network.online_mode,
+            compression_threshold: config.network.compression_threshold,
+            prevent_proxy_connections: config.network.prevent_proxy_connections,
+            http_client: reqwest::Client::new(),
+        });
+
         // Spawn the TCP listener.
         let listener_shutdown = shutdown_tx.subscribe();
-        let status_clone = Arc::clone(&server_status);
         let listener_handle = tokio::spawn(async move {
-            if let Err(e) = network::listen(addr, status_clone, listener_shutdown).await {
+            if let Err(e) = network::listen(addr, login_ctx, listener_shutdown).await {
                 error!(error = %e, "Listener failed");
             }
         });

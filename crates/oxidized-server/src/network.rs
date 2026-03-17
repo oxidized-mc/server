@@ -1,14 +1,24 @@
 //! TCP listener and per-connection handler for the Oxidized server.
 //!
 //! Binds to the configured address, accepts incoming connections, and
-//! spawns a Tokio task per client. Handles the HANDSHAKING and STATUS
-//! protocol states so the server appears in Minecraft's multiplayer list.
+//! spawns a Tokio task per client. Handles the HANDSHAKING, STATUS, and
+//! LOGIN protocol states.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use oxidized_protocol::auth;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
+use oxidized_protocol::crypto::{
+    generate_challenge, minecraft_digest, offline_uuid, ServerKeyPair,
+};
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
+use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
+use oxidized_protocol::packets::login::{
+    ClientboundDisconnectPacket, ClientboundHelloPacket, ClientboundLoginCompressionPacket,
+    ClientboundLoginFinishedPacket, ServerboundHelloPacket, ServerboundKeyPacket,
+    ServerboundLoginAcknowledgedPacket,
+};
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
     ServerboundStatusRequestPacket,
@@ -18,17 +28,31 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
+/// Shared state for login operations, passed to each connection handler.
+pub struct LoginContext {
+    /// Pre-built server status for the multiplayer list.
+    pub server_status: Arc<ServerStatus>,
+    /// RSA-1024 keypair used for encryption handshake.
+    pub keypair: Arc<ServerKeyPair>,
+    /// Whether the server authenticates players against Mojang session servers.
+    pub online_mode: bool,
+    /// Minimum packet size (in bytes) before compression is applied. `-1` disables compression.
+    pub compression_threshold: i32,
+    /// Whether to block connections through proxies by verifying the client IP.
+    pub prevent_proxy_connections: bool,
+    /// Reusable HTTP client for Mojang session server requests.
+    pub http_client: reqwest::Client,
+}
+
 /// Starts the TCP listener and accepts connections until a shutdown signal
 /// is received.
-///
-/// `server_status` is pre-built from config and shared across all connections.
 ///
 /// # Errors
 ///
 /// Returns an error if the listener fails to bind to `addr`.
 pub async fn listen(
     addr: SocketAddr,
-    server_status: Arc<ServerStatus>,
+    ctx: Arc<LoginContext>,
     mut shutdown_rx: broadcast::Receiver<()>,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
@@ -47,9 +71,9 @@ pub async fn listen(
                 match result {
                     Ok((stream, peer_addr)) => {
                         info!(peer = %peer_addr, "New connection");
-                        let status = Arc::clone(&server_status);
+                        let ctx = Arc::clone(&ctx);
                         tokio::spawn(async move {
-                            if let Err(e) = handle_connection(stream, peer_addr, &status).await {
+                            if let Err(e) = handle_connection(stream, peer_addr, &ctx).await {
                                 debug!(peer = %peer_addr, error = %e, "Connection closed");
                             }
                         });
@@ -70,11 +94,11 @@ pub async fn listen(
 /// Dispatches packets based on the current [`ConnectionState`]:
 /// - **Handshaking** → parse [`ClientIntentionPacket`], transition state
 /// - **Status** → respond with server status JSON and pong
-/// - **Login** / other → not yet implemented (Phase 4+)
+/// - **Login** → authenticate, enable encryption/compression, finish login
 async fn handle_connection(
     stream: tokio::net::TcpStream,
     addr: SocketAddr,
-    server_status: &ServerStatus,
+    ctx: &LoginContext,
 ) -> Result<(), ConnectionError> {
     let mut conn = Connection::new(stream, addr)?;
     debug!(
@@ -99,15 +123,14 @@ async fn handle_connection(
                         handle_handshake(&mut conn, pkt).await?;
                     },
                     ConnectionState::Status => {
-                        let done = handle_status(&mut conn, pkt, server_status).await?;
+                        let done = handle_status(&mut conn, pkt, &ctx.server_status).await?;
                         if done {
                             debug!(peer = %addr, "Status exchange complete");
                             return Ok(());
                         }
                     },
                     ConnectionState::Login => {
-                        // Phase 4 will handle login
-                        debug!(peer = %addr, "Login not yet implemented");
+                        handle_login(&mut conn, pkt, ctx).await?;
                         return Ok(());
                     },
                     _ => {
@@ -163,6 +186,263 @@ async fn handle_handshake(conn: &mut Connection, pkt: RawPacket) -> Result<(), C
     };
 
     Ok(())
+}
+
+/// Handles the full login sequence for a single client connection.
+///
+/// Reads the initial [`ServerboundHelloPacket`], performs online-mode
+/// authentication (encryption + Mojang session server) or offline-mode
+/// UUID generation, optionally enables compression, sends the
+/// [`ClientboundLoginFinishedPacket`], and transitions to
+/// [`ConnectionState::Configuration`].
+///
+/// # Errors
+///
+/// Returns a [`ConnectionError`] if any I/O, decoding, or authentication
+/// step fails. On recoverable failures (bad name, failed auth) a
+/// disconnect packet is sent before returning the error.
+async fn handle_login(
+    conn: &mut Connection,
+    hello_pkt: RawPacket,
+    ctx: &LoginContext,
+) -> Result<(), ConnectionError> {
+    let addr = conn.remote_addr();
+
+    // 1. Decode ServerboundHelloPacket (the first Login packet).
+    if hello_pkt.id != ServerboundHelloPacket::PACKET_ID {
+        warn!(peer = %addr, packet_id = hello_pkt.id, "Expected login hello packet (0x00)");
+        return disconnect(conn, "Unexpected packet during login").await;
+    }
+
+    let hello = ServerboundHelloPacket::decode(hello_pkt.data).map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            e.to_string(),
+        ))
+    })?;
+
+    debug!(peer = %addr, name = %hello.name, profile_id = %hello.profile_id, "Login hello received");
+
+    // 2. Validate player name length (1–16 characters).
+    if hello.name.is_empty() || hello.name.len() > 16 {
+        warn!(peer = %addr, name = %hello.name, "Invalid player name length");
+        return disconnect(conn, "Invalid player name").await;
+    }
+
+    // 3. Authenticate (online) or generate offline UUID.
+    let (uuid, username, properties) = if ctx.online_mode {
+        authenticate_online(conn, &hello, ctx).await?
+    } else {
+        let uuid = offline_uuid(&hello.name);
+        debug!(peer = %addr, uuid = %uuid, name = %hello.name, "Offline-mode UUID generated");
+        (uuid, hello.name.clone(), Vec::new())
+    };
+
+    // 4. Enable compression if threshold >= 0.
+    if ctx.compression_threshold >= 0 {
+        let compression_pkt = ClientboundLoginCompressionPacket {
+            threshold: ctx.compression_threshold,
+        };
+        let body = compression_pkt.encode();
+        conn.send_raw(ClientboundLoginCompressionPacket::PACKET_ID, &body)
+            .await?;
+        conn.flush().await?;
+
+        #[allow(clippy::cast_sign_loss)]
+        conn.enable_compression(ctx.compression_threshold as usize);
+        debug!(peer = %addr, threshold = ctx.compression_threshold, "Compression enabled");
+    }
+
+    // 5. Send LoginFinished packet.
+    let finished = ClientboundLoginFinishedPacket {
+        uuid,
+        username: username.clone(),
+        properties,
+    };
+    let body = finished.encode();
+    conn.send_raw(ClientboundLoginFinishedPacket::PACKET_ID, &body)
+        .await?;
+    conn.flush().await?;
+
+    debug!(peer = %addr, uuid = %uuid, name = %username, "Login finished sent");
+
+    // 6. Wait for LoginAcknowledged.
+    let ack_pkt = conn.read_raw_packet().await?;
+    if ack_pkt.id != ServerboundLoginAcknowledgedPacket::PACKET_ID {
+        warn!(peer = %addr, packet_id = ack_pkt.id, "Expected login acknowledged (0x03)");
+        return disconnect(conn, "Unexpected packet — expected login acknowledged").await;
+    }
+    let _ack = ServerboundLoginAcknowledgedPacket::decode(ack_pkt.data);
+
+    // 7. Transition to Configuration state.
+    conn.state = ConnectionState::Configuration;
+    info!(peer = %addr, uuid = %uuid, name = %username, "Player login complete — entering configuration");
+
+    Ok(())
+}
+
+/// Performs online-mode authentication: encryption handshake, shared secret
+/// exchange, and Mojang session server verification.
+///
+/// Returns the authenticated player's UUID, username, and profile properties.
+///
+/// # Errors
+///
+/// Returns a [`ConnectionError`] if encryption setup, challenge verification,
+/// or session server authentication fails.
+async fn authenticate_online(
+    conn: &mut Connection,
+    hello: &ServerboundHelloPacket,
+    ctx: &LoginContext,
+) -> Result<(uuid::Uuid, String, Vec<ProfileProperty>), ConnectionError> {
+    let addr = conn.remote_addr();
+
+    // a. Generate 4-byte challenge.
+    let challenge = generate_challenge();
+
+    // b. Send ClientboundHelloPacket with encryption request.
+    let hello_response = ClientboundHelloPacket {
+        server_id: String::new(),
+        public_key: ctx.keypair.public_key_der().to_vec(),
+        challenge: challenge.to_vec(),
+        should_authenticate: true,
+    };
+    let body = hello_response.encode();
+    conn.send_raw(ClientboundHelloPacket::PACKET_ID, &body)
+        .await?;
+    conn.flush().await?;
+
+    debug!(peer = %addr, "Encryption request sent");
+
+    // c. Read ServerboundKeyPacket.
+    let key_pkt = conn.read_raw_packet().await?;
+    if key_pkt.id != ServerboundKeyPacket::PACKET_ID {
+        warn!(peer = %addr, packet_id = key_pkt.id, "Expected key response (0x01)");
+        return Err(disconnect_err(conn, "Unexpected packet — expected encryption response").await);
+    }
+
+    let key = ServerboundKeyPacket::decode(key_pkt.data).map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            e.to_string(),
+        ))
+    })?;
+
+    // d. Decrypt shared secret and challenge.
+    let shared_secret = ctx
+        .keypair
+        .decrypt_shared_secret(&key.key_bytes)
+        .map_err(|e| {
+            ConnectionError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to decrypt shared secret: {e}"),
+            ))
+        })?;
+
+    let decrypted_challenge = ctx.keypair.decrypt(&key.encrypted_challenge).map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to decrypt challenge: {e}"),
+        ))
+    })?;
+
+    // e. Verify the decrypted challenge matches the original.
+    if decrypted_challenge != challenge {
+        warn!(peer = %addr, "Challenge verification failed");
+        return Err(disconnect_err(conn, "Challenge verification failed").await);
+    }
+
+    // f. Enable encryption on the connection.
+    conn.enable_encryption(&shared_secret);
+    debug!(peer = %addr, "Encryption enabled");
+
+    // g. Compute server hash for session verification.
+    let server_hash = minecraft_digest("", &shared_secret, ctx.keypair.public_key_der());
+
+    // h. Authenticate with Mojang session servers.
+    let client_ip = if ctx.prevent_proxy_connections {
+        Some(addr.ip().to_string())
+    } else {
+        None
+    };
+
+    let profile = auth::has_joined(
+        &ctx.http_client,
+        &hello.name,
+        &server_hash,
+        client_ip.as_deref(),
+    )
+    .await
+    .map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("Authentication failed: {e}"),
+        ))
+    });
+
+    let profile = match profile {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = disconnect(conn, "Failed to verify username!").await;
+            return Err(e);
+        },
+    };
+
+    // i. Extract profile data.
+    let uuid = profile.uuid().ok_or_else(|| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Mojang returned invalid UUID",
+        ))
+    })?;
+
+    let properties = profile
+        .properties()
+        .iter()
+        .map(|p| ProfileProperty {
+            name: p.name().to_string(),
+            value: p.value().to_string(),
+            signature: p.signature().map(String::from),
+        })
+        .collect();
+
+    info!(peer = %addr, uuid = %uuid, name = %profile.name(), "Player authenticated");
+
+    Ok((uuid, profile.name().to_string(), properties))
+}
+
+/// Sends a disconnect packet to the client and returns a corresponding
+/// [`ConnectionError`].
+async fn disconnect(conn: &mut Connection, reason: &str) -> Result<(), ConnectionError> {
+    let pkt = ClientboundDisconnectPacket {
+        reason: reason.to_string(),
+    };
+    let body = pkt.encode();
+    let _ = conn
+        .send_raw(ClientboundDisconnectPacket::PACKET_ID, &body)
+        .await;
+    let _ = conn.flush().await;
+    Err(ConnectionError::Io(std::io::Error::new(
+        std::io::ErrorKind::ConnectionAborted,
+        reason.to_string(),
+    )))
+}
+
+/// Sends a disconnect packet and returns the [`ConnectionError`] directly
+/// (for use in expressions where the caller builds its own `Err`).
+async fn disconnect_err(conn: &mut Connection, reason: &str) -> ConnectionError {
+    let pkt = ClientboundDisconnectPacket {
+        reason: reason.to_string(),
+    };
+    let body = pkt.encode();
+    let _ = conn
+        .send_raw(ClientboundDisconnectPacket::PACKET_ID, &body)
+        .await;
+    let _ = conn.flush().await;
+    ConnectionError::Io(std::io::Error::new(
+        std::io::ErrorKind::ConnectionAborted,
+        reason.to_string(),
+    ))
 }
 
 /// Processes STATUS state packets. Returns `true` when the exchange is
@@ -232,6 +512,7 @@ mod tests {
     use bytes::BytesMut;
     use oxidized_protocol::codec::{frame, varint};
     use oxidized_protocol::constants;
+    use oxidized_protocol::crypto::ServerKeyPair;
     use oxidized_protocol::status::{Component, StatusPlayers, StatusVersion};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
@@ -251,6 +532,17 @@ mod tests {
             favicon: None,
             enforces_secure_chat: false,
         }
+    }
+
+    fn test_login_context() -> Arc<LoginContext> {
+        Arc::new(LoginContext {
+            server_status: Arc::new(test_server_status()),
+            keypair: Arc::new(ServerKeyPair::generate().unwrap()),
+            online_mode: false,
+            compression_threshold: -1,
+            prevent_proxy_connections: false,
+            http_client: reqwest::Client::new(),
+        })
     }
 
     /// Sends a framed packet (VarInt length + VarInt packet_id + body) over a raw stream.
@@ -275,7 +567,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_full_status_exchange() {
-        let status = Arc::new(test_server_status());
+        let ctx = test_login_context();
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
         // Bind to a random port
@@ -285,9 +577,9 @@ mod tests {
         drop(tcp_listener);
 
         let shutdown_rx = shutdown_tx.subscribe();
-        let status_clone = Arc::clone(&status);
+        let ctx_clone = Arc::clone(&ctx);
         let server = tokio::spawn(async move {
-            listen(bound_addr, status_clone, shutdown_rx).await.unwrap();
+            listen(bound_addr, ctx_clone, shutdown_rx).await.unwrap();
         });
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
@@ -356,7 +648,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_protocol_mismatch_still_responds() {
-        let status = Arc::new(test_server_status());
+        let ctx = test_login_context();
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
@@ -365,9 +657,9 @@ mod tests {
         drop(tcp_listener);
 
         let shutdown_rx = shutdown_tx.subscribe();
-        let status_clone = Arc::clone(&status);
+        let ctx_clone = Arc::clone(&ctx);
         let server = tokio::spawn(async move {
-            listen(bound_addr, status_clone, shutdown_rx).await.unwrap();
+            listen(bound_addr, ctx_clone, shutdown_rx).await.unwrap();
         });
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
@@ -408,7 +700,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_listener_graceful_shutdown() {
-        let status = Arc::new(test_server_status());
+        let ctx = test_login_context();
         let (shutdown_tx, _) = broadcast::channel::<()>(1);
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let tcp_listener = TcpListener::bind(addr).await.unwrap();
@@ -417,7 +709,7 @@ mod tests {
 
         let shutdown_rx = shutdown_tx.subscribe();
         let server = tokio::spawn(async move {
-            listen(bound_addr, status, shutdown_rx).await.unwrap();
+            listen(bound_addr, ctx, shutdown_rx).await.unwrap();
         });
 
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
