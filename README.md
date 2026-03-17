@@ -1,11 +1,11 @@
 # Oxidized 🦀
 
-> A high-performance Minecraft Java Edition server rewritten in Rust.  
+> A high-performance Minecraft Java Edition server rewritten in Rust.
 > Targets **Minecraft 26.1** (protocol `1073742124`) — the first fully unobfuscated release.
 
-[![CI](https://github.com/your-org/oxidized/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/oxidized/actions/workflows/ci.yml)
+[![CI](https://github.com/dodoflix/Oxidized/actions/workflows/ci.yml/badge.svg)](https://github.com/dodoflix/Oxidized/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
-[![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/rust-1.94%2B-orange.svg)](https://www.rust-lang.org/)
 
 ---
 
@@ -14,38 +14,41 @@
 | Goal | Detail |
 |---|---|
 | **Correctness** | Implemented against the decompiled 26.1 server source (4 789 Java files) |
-| **Performance** | Async-first with Tokio; no blocking I/O on the game thread |
+| **Performance** | Async-first with Tokio; ECS-based entity system; no blocking I/O on the game thread |
 | **Maintainability** | Clean Rust idioms, comprehensive tests, strict Clippy lints |
 | **Compatibility** | Wire-protocol compatible with the vanilla 26.1 client |
+| **Modern design** | Not a 1:1 Java port — uses data-oriented architecture, parallel tick phases, and Rust-native patterns |
 
 ---
 
 ## Status
 
-🚧 **Pre-alpha — Phase 1 (project bootstrap) in progress.**  
-See [PHASES.md](./PHASES.md) for the full 38-phase roadmap.
+🚧 **Pre-alpha — infrastructure and planning complete, implementation starting.**
 
-| Phase | Status | Description |
-|-------|--------|-------------|
-| 1 | 🔄 In Progress | Project bootstrap, workspace, config |
-| 2–38 | ⏳ Planned | See roadmap |
+See the [38-phase roadmap](./docs/phases/README.md) and
+[32 Architecture Decision Records](./docs/adr/README.md) for the full design.
 
 ---
 
 ## Project Layout
 
 ```
-oxidized/
+Oxidized/
 ├── crates/
-│   ├── oxidized-server/     # Binary — startup, server loop, tick
-│   ├── oxidized-protocol/   # Network: TCP, packet codec, all 26.1 packets
 │   ├── oxidized-nbt/        # NBT read/write, SNBT, GZIP/zlib
+│   ├── oxidized-protocol/   # Network: TCP, packet codec, all 26.1 packets
 │   ├── oxidized-world/      # World, chunks (Anvil), blocks, items, lighting
-│   └── oxidized-game/       # Entities, AI, combat, commands, crafting
-├── mc-server-ref/           # Decompiled vanilla server (reference only, gitignored)
+│   ├── oxidized-game/       # Entities, AI, combat, commands, crafting
+│   └── oxidized-server/     # Binary — startup, server loop, tick
+├── docs/
+│   ├── adr/                 # 32 Architecture Decision Records
+│   ├── architecture/        # System design documents
+│   ├── phases/              # 38 implementation phase details
+│   └── reference/           # Java class map, binary format specs
+├── mc-server-ref/           # Decompiled vanilla server (gitignored)
 ├── deny.toml                # cargo-deny licence + advisory config
 ├── rustfmt.toml             # Formatting rules
-└── .clippy.toml             # Lint rules
+└── rust-toolchain.toml      # Pinned to stable 1.94.0
 ```
 
 ---
@@ -54,74 +57,46 @@ oxidized/
 
 ### Requirements
 
-- Rust stable (see `rust-toolchain.toml`)
+- Rust stable 1.85+ (see `rust-toolchain.toml` for pinned version)
 - A vanilla Minecraft 26.1 client
 
-### Build
+### Build & Run
 
 ```bash
 cargo build --release
-```
-
-### Run
-
-```bash
 ./target/release/oxidized
 ```
 
-The server creates `server.properties` on first run. Edit it, then restart.
-
-### Development build
+### Development
 
 ```bash
-cargo run
-```
-
-### Tests
-
-```bash
-cargo test --workspace
-```
-
-### Lints
-
-```bash
-cargo fmt --check
-cargo clippy --workspace --all-targets -- -D warnings
+cargo run                    # debug build
+cargo test --workspace       # all tests
+cargo fmt --check            # formatting
+cargo clippy --workspace --all-targets -- -D warnings  # lints
 ```
 
 ---
 
-## Configuration (`server.properties`)
+## Documentation
 
-Key options (full list generated on first run):
-
-```properties
-server-ip=
-server-port=25565
-online-mode=true
-motd=An Oxidized Server
-max-players=20
-view-distance=10
-simulation-distance=10
-difficulty=normal
-gamemode=survival
-hardcore=false
-level-name=world
-enable-rcon=false
-rcon.port=25575
-rcon.password=
-enable-query=false
-compression-threshold=256
-```
+| Document | Description |
+|---|---|
+| [Architecture Overview](./docs/architecture/overview.md) | System design, threading model, data flow |
+| [Crate Layout](./docs/architecture/crate-layout.md) | 5-crate workspace, dependency rules |
+| [Protocol](./docs/architecture/protocol.md) | Wire protocol, packet states, encryption |
+| [Phases](./docs/phases/README.md) | 38-phase implementation roadmap |
+| [ADRs](./docs/adr/README.md) | 32 Architecture Decision Records |
+| [Java Class Map](./docs/reference/java-class-map.md) | 110+ vanilla Java → Rust mappings |
+| [Data Formats](./docs/reference/data-formats.md) | Binary format specs (VarInt, NBT, chunks) |
 
 ---
 
 ## Reference Code
 
-The decompiled vanilla server is at `mc-server-ref/decompiled/` (gitignored — run
-`scripts/decompile.sh` to regenerate it).  The implementation follows the Java source
-closely but uses idiomatic Rust at all times.
+The decompiled vanilla server is at `mc-server-ref/decompiled/` (gitignored).
+The implementation uses the Java source as reference but rewrites everything
+idiomatically in Rust — no line-by-line transliteration.
 
 ---
 

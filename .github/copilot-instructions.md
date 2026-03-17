@@ -13,7 +13,7 @@
 
 - **Target protocol:** Minecraft 26.1 (protocol version `1073742124`, world version `4782`)
 - **Reference source:** `mc-server-ref/decompiled/` — 4 789 decompiled Java files from
-  the vanilla 26.1-pre-3 server JAR (gitignored, regenerate with `scripts/decompile.sh`)
+  the vanilla 26.1-pre-3 server JAR (gitignored)
 - **Philosophy:** wire-protocol compatible with vanilla clients, idiomatic Rust internals
 
 ---
@@ -30,10 +30,9 @@ oxidized/
 │   └── oxidized-server/     # Binary: startup, tick loop, server config
 ├── mc-server-ref/           # (gitignored) decompiled vanilla reference
 ├── Cargo.toml               # Workspace manifest + shared dependency versions
-├── rustfmt.toml             # Formatting rules (max_width=100, imports_granularity=Crate)
-├── .clippy.toml             # Lint rules
+├── rustfmt.toml             # Formatting rules (max_width=100)
 ├── deny.toml                # cargo-deny: licences + advisory config
-└── rust-toolchain.toml      # Pinned to stable
+└── rust-toolchain.toml      # Pinned to stable 1.94.0
 ```
 
 ### Crate dependency rules (enforce strictly)

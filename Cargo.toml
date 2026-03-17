@@ -11,12 +11,11 @@ resolver = "2"
 [workspace.package]
 version      = "0.1.0"
 edition      = "2021"
-authors      = ["Oxidized Contributors"]
+authors      = ["Dogukan Metan <dogukanmetan@gmail.com>"]
 license      = "MIT OR Apache-2.0"
-repository   = "https://github.com/your-org/oxidized"
-homepage     = "https://github.com/your-org/oxidized"
-documentation = "https://docs.rs/oxidized"
-rust-version = "1.85"  # Keep MSRV lower than toolchain to allow older Rust installs
+repository   = "https://github.com/dodoflix/Oxidized"
+homepage     = "https://github.com/dodoflix/Oxidized"
+rust-version = "1.85"
 
 [workspace.dependencies]
 # Async runtime
