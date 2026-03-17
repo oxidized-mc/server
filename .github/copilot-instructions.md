@@ -228,6 +228,32 @@ pub const AUTOSAVE_INTERVAL_TICKS: u32 = 6000;
 
 ---
 
+## Architecture Decision Records (ADRs)
+
+All significant design decisions are documented in `docs/adr/`. There are **32 ADRs**
+covering every major system. Before implementing any phase, **read the linked ADRs**
+in that phase's doc file (`docs/phases/phase-NN-*.md` → "Architecture Decisions" section).
+
+**Key ADRs that affect ALL code:**
+
+| ADR | Decision | Impact |
+|-----|----------|--------|
+| [002](docs/adr/adr-002-error-handling.md) | `thiserror` in libraries, `anyhow` in binary | Every crate |
+| [007](docs/adr/adr-007-packet-codec.md) | `#[derive(McPacket)]` for wire format | All packets |
+| [008](docs/adr/adr-008-connection-state-machine.md) | Typestate pattern for connections | All protocol states |
+| [013](docs/adr/adr-013-coordinate-types.md) | Newtype wrappers for coordinates | All spatial code |
+| [018](docs/adr/adr-018-entity-system.md) | ECS with `bevy_ecs` | All entity/game logic |
+| [019](docs/adr/adr-019-tick-loop.md) | Parallel tick phases | Server core |
+
+**When to create a new ADR:**
+- Adding a new crate or public trait
+- Choosing between multiple valid approaches for a non-trivial system
+- Making a decision that would be expensive to reverse
+
+**ADR lifecycle:** Proposed → Accepted → (Superseded by ADR-NNN). Never edit accepted ADRs — create a new one that supersedes.
+
+---
+
 ## Implementation Roadmap (38 Phases)
 
 Track via SQL `todos` table. Use the `id` prefix `p01-` through `p38-`.
