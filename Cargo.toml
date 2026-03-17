@@ -76,6 +76,9 @@ proc-macro2    = "1"
 # Math / noise
 glam           = "0.32"
 
+# CLI
+clap           = { version = "4", features = ["derive"] }
+
 # Internal workspace crates
 oxidized-protocol = { path = "crates/oxidized-protocol" }
 oxidized-nbt      = { path = "crates/oxidized-nbt" }

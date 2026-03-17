@@ -30,9 +30,9 @@ We need to decompose the server into crates with a clear dependency DAG (directe
 
 Put everything in one crate, organized by `mod nbt;`, `mod protocol;`, `mod world;`, etc. This is simple to set up and avoids cross-crate friction (no `pub` visibility planning). However, it provides zero compile-time enforcement of boundaries — any module can import any other module. Incremental compilation is coarse-grained (the whole crate rebuilds). It also prevents publishing subsystems as independent libraries.
 
-### Option 2: 5-crate workspace (nbt, protocol, world, game, server)
+### Option 2: 6-crate workspace (nbt, macros, protocol, world, game, server)
 
-Five crates with a clear DAG: `nbt` is a leaf with no internal dependencies, `protocol` depends on `nbt`, `world` depends on `nbt`, `game` depends on `protocol` + `world`, and `server` is the binary that depends on all of them. Each crate owns a single domain. Boundaries are compiler-enforced. Incremental compilation works well — changing NBT recompiles protocol and world, but not the other way around.
+Six crates with a clear DAG: `nbt` is a leaf with no internal dependencies, `macros` is a proc-macro leaf, `protocol` depends on `nbt`, `world` depends on `nbt`, `game` depends on `protocol` + `world`, and `server` is the binary that depends on all of them. Each crate owns a single domain. Boundaries are compiler-enforced. Incremental compilation works well — changing NBT recompiles protocol and world, but not the other way around.
 
 ### Option 3: Fine-grained 10+ crates
 
@@ -44,10 +44,11 @@ Use `libloading` or `abi_stable` for dynamically loaded plugins. Each subsystem 
 
 ## Decision
 
-**We adopt a 5-crate Cargo workspace.** The crates and their responsibilities are:
+**We adopt a 6-crate Cargo workspace.** The crates and their responsibilities are:
 
 ```
 oxidized-nbt         (leaf — no internal deps)
+oxidized-macros      (proc-macro leaf — no internal deps)
     ↑           ↑
 oxidized-protocol   oxidized-world
     ↑           ↑       ↑
@@ -63,6 +64,12 @@ oxidized-protocol   oxidized-world
 - Provides `NbtCompound`, `NbtList`, `NbtTag` types and a `Value` enum
 - Serde integration: `#[derive(Serialize, Deserialize)]` for NBT
 - Zero Minecraft-specific knowledge — this is a pure data format library
+- Could be published to crates.io independently
+
+**`oxidized-macros`** — Proc-macro crate
+- Derive macros and attribute macros for compile-time code generation
+- Protocol packet derive macros for automatic serialization/deserialization
+- No internal dependencies — proc-macro crates are leaf nodes by nature
 - Could be published to crates.io independently
 
 **`oxidized-protocol`** — Minecraft protocol codec
@@ -132,7 +139,7 @@ All shared dependencies are declared in `[workspace.dependencies]` and reference
 
 ### Neutral
 
-- The 5-crate structure may evolve as the project grows — `oxidized-game` is the largest crate and may be split in later phases if it becomes unwieldy
+- The 6-crate structure may evolve as the project grows — `oxidized-game` is the largest crate and may be split in later phases if it becomes unwieldy
 - Workspace-level `[lints]` ensure consistent Clippy and rustc warnings across all crates
 
 ## Compliance

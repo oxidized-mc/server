@@ -349,7 +349,7 @@ pub const CONNECTION_TIMEOUT_SECS: u64 = 30;
 | ADR | Topic |
 |---|---|
 | [ADR-001](../adr/adr-001-async-runtime.md) | Tokio as async runtime (network I/O, disk I/O, timers) |
-| [ADR-003](../adr/adr-003-crate-architecture.md) | 5-crate workspace with compile-time boundary enforcement |
+| [ADR-003](../adr/adr-003-crate-architecture.md) | 6-crate workspace with compile-time boundary enforcement |
 | [ADR-006](../adr/adr-006-network-io.md) | Per-connection reader/writer task pair with bounded mpsc channels |
 | [ADR-018](../adr/adr-018-entity-system.md) | `bevy_ecs` entity system (components, systems, parallel scheduling) |
 | [ADR-019](../adr/adr-019-tick-loop.md) | 6-phase tick loop on dedicated OS thread with phase barriers |

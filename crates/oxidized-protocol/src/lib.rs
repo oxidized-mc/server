@@ -2,3 +2,5 @@
 //!
 //! Packet codec, connection state machine, encryption, compression,
 //! and all 185 packet definitions.
+
+pub mod constants;
