@@ -63,6 +63,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.100
       - name: Check MSRV
         run: cargo check --workspace --all-features
