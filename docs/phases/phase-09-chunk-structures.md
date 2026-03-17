@@ -7,6 +7,14 @@ agree with what the vanilla client expects.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-012: Block State](../adr/adr-012-block-state.md) — flat u16 state ID with dense lookup table
+- [ADR-014: Chunk Storage](../adr/adr-014-chunk-storage.md) — DashMap + per-section RwLock for concurrent access
+
+
 ## Goal
 
 Implement the in-memory representation of a Minecraft chunk: the paletted

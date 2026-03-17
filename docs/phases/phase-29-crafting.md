@@ -5,6 +5,14 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-024: Inventory](../adr/adr-024-inventory.md) — transactional slot modification with optimistic locking
+- [ADR-027: Recipe System](../adr/adr-027-recipe-system.md) — pre-indexed recipe lookup with shaped pattern matching
+
+
 ## Goal
 
 Implement the full recipe system: load JSON recipe files from the `data/` pack,

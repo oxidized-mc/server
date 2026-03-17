@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-022: Command Framework](../adr/adr-022-command-framework.md) — Brigadier-compatible command graph with Rust builder DSL
+
+
 ## Goal
 
 Reimplement the Brigadier command framework in Rust, register the full set of

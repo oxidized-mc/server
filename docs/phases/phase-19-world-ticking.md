@@ -5,6 +5,15 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-001: Async Runtime](../adr/adr-001-async-runtime.md) — Tokio runtime selection and async patterns
+- [ADR-005: Configuration](../adr/adr-005-configuration.md) — server.properties parsing and validation
+- [ADR-019: Tick Loop](../adr/adr-019-tick-loop.md) — parallel tick phases with ECS system scheduling
+
+
 ## Goal
 
 Implement the main server tick loop at exactly 20 TPS (one tick every 50 ms),

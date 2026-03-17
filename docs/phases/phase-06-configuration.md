@@ -6,6 +6,15 @@ and reaches PLAY — the final handshake before gameplay.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-007: Packet Codec](../adr/adr-007-packet-codec.md) — #[derive(McPacket)] macro for wire format
+- [ADR-008: Connection State Machine](../adr/adr-008-connection-state-machine.md) — typestate pattern for protocol state transitions
+- [ADR-011: Registry System](../adr/adr-011-registry-system.md) — compiled core registries + runtime data-driven content
+
+
 ## Goal
 
 Implement the CONFIGURATION protocol state, which sends registry data, feature

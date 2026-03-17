@@ -5,6 +5,11 @@
 
 ---
 
+## Architecture Decisions
+
+No phase-specific ADRs. See [ADR index](../adr/README.md) for general architecture decisions.
+
+
 ## Goal
 
 Implement the full scoreboard system: objectives with criteria and display slots,

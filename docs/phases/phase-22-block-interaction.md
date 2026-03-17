@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-012: Block State](../adr/adr-012-block-state.md) — flat u16 state ID with dense lookup table
+
+
 ## Goal
 
 Implement server-side block breaking (with mining speed calculation and damage

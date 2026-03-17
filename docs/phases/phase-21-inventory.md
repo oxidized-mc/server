@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-024: Inventory](../adr/adr-024-inventory.md) — transactional slot modification with optimistic locking
+
+
 ## Goal
 
 Implement the full player inventory model (36 main slots + armor + offhand),

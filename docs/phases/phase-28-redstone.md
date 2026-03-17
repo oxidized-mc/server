@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-025: Redstone](../adr/adr-025-redstone.md) — vanilla-compatible update propagation preserving all quirks
+
+
 ## Goal
 
 Implement the full redstone signal propagation model: direct power, soft power,

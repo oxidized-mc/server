@@ -7,6 +7,14 @@ read `.mca` region files, decompress chunk NBT, deserialize each
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-010: NBT](../adr/adr-010-nbt.md) — tree-based NBT with IndexMap and arena allocation
+- [ADR-015: Disk I/O](../adr/adr-015-disk-io.md) — spawn_blocking I/O with write coalescing
+
+
 ## Goal
 
 Implement the Anvil storage format reader: region file header parsing,

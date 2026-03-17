@@ -9,6 +9,14 @@ fishing gives varied catches.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-011: Registry System](../adr/adr-011-registry-system.md) — compiled core registries + runtime data-driven content
+- [ADR-026: Loot Tables](../adr/adr-026-loot-tables.md) — enum-based loot tree with pre-validated structure
+
+
 ## Goal
 
 Implement the full loot table engine that Minecraft uses for all randomized item

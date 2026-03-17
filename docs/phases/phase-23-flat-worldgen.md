@@ -5,6 +5,13 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-016: Worldgen Pipeline](../adr/adr-016-worldgen-pipeline.md) — Rayon thread pool with dependency-aware scheduling
+
+
 ## Goal
 
 Implement an on-demand flat world generator: when a chunk is requested and not

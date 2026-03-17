@@ -5,6 +5,14 @@
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-020: Player Session](../adr/adr-020-player-session.md) — split network actor + ECS entity architecture
+- [ADR-028: Chat Components](../adr/adr-028-chat-components.md) — enum-based component tree with shared Style
+
+
 ## Goal
 
 Implement the full chat pipeline: receive `ServerboundChatPacket`, validate and

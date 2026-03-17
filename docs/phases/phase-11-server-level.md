@@ -7,6 +7,13 @@ returns the correct `BlockState`, loading the chunk on demand if necessary.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-014: Chunk Storage](../adr/adr-014-chunk-storage.md) — DashMap + per-section RwLock for concurrent access
+
+
 ## Goal
 
 Build `ServerLevel`: the runtime world representation that wraps the chunk map,

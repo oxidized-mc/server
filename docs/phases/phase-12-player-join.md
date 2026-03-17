@@ -7,6 +7,14 @@ in the world at the correct spawn position with their saved data loaded.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-008: Connection State Machine](../adr/adr-008-connection-state-machine.md) — typestate pattern for protocol state transitions
+- [ADR-020: Player Session](../adr/adr-020-player-session.md) — split network actor + ECS entity architecture
+
+
 ## Goal
 
 Implement `ServerPlayer`, `PlayerList`, and the complete PLAY-state login

@@ -9,6 +9,20 @@ hardens, instruments, and optimises the entire stack.
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-001: Async Runtime](../adr/adr-001-async-runtime.md) — Tokio runtime selection and async patterns
+- [ADR-004: Logging & Observability](../adr/adr-004-logging-observability.md) — tracing with structured spans and metrics
+- [ADR-006: Network I/O](../adr/adr-006-network-io.md) — per-connection task pairs with mpsc channels
+- [ADR-014: Chunk Storage](../adr/adr-014-chunk-storage.md) — DashMap + per-section RwLock for concurrent access
+- [ADR-019: Tick Loop](../adr/adr-019-tick-loop.md) — parallel tick phases with ECS system scheduling
+- [ADR-029: Memory Management](../adr/adr-029-memory-management.md) — mimalloc + arena allocation + buffer pooling
+- [ADR-030: Shutdown & Crash Handling](../adr/adr-030-shutdown-crash.md) — multi-layer shutdown with watchdog and crash reports
+- [ADR-032: Scalability](../adr/adr-032-scalability.md) — multi-layered scalability: DOD, parallel ECS, smart scheduling
+
+
 ## Goal
 
 Take a functionally complete server and make it production-ready for 100+

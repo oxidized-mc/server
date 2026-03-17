@@ -6,6 +6,13 @@ list tools (e.g. MCStat, minequery).
 
 ---
 
+## Architecture Decisions
+
+Before implementing this phase, review:
+
+- [ADR-031: Management API](../adr/adr-031-management-api.md) — unified management service with RCON/Query/JSON-RPC frontends
+
+
 ## Goal
 
 Implement two server management protocols that have been part of Minecraft's
