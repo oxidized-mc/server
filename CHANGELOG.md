@@ -10,8 +10,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
-- Cargo workspace with five crates: `oxidized-server`, `oxidized-protocol`,
-  `oxidized-nbt`, `oxidized-world`, `oxidized-game`
+- Cargo workspace with six crates: `oxidized-server`, `oxidized-protocol`,
+  `oxidized-nbt`, `oxidized-world`, `oxidized-game`, `oxidized-macros`
 - Repository scaffolding: README, licenses (MIT/Apache-2.0), CONTRIBUTING,
   CODE_OF_CONDUCT, SECURITY, CI workflow
 - Rust tooling: `rustfmt.toml`, `deny.toml`, `rust-toolchain.toml`
@@ -19,9 +19,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - 38 detailed implementation phase documents (`docs/phases/`)
 - 32 Architecture Decision Records (`docs/adr/`)
 - Architecture documentation: system overview, crate layout, protocol, world format,
-  entity system (`docs/architecture/`)
-- Reference documentation: Java class map (110+ mappings), binary format specs
-  (`docs/reference/`)
+  entity system (`docs/architecture/`) — aligned with all 32 ADRs
+- Reference documentation: Java class map (110+ mappings), binary format specs,
+  protocol packet listing (`docs/reference/`)
+- Server binary bootstrap: mimalloc global allocator, Tokio runtime, structured logging
 - GitHub issue templates (bug report, feature request, question)
 - Pull request template
 - Dependabot configuration for Cargo and GitHub Actions

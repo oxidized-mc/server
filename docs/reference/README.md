@@ -11,6 +11,7 @@ implementation phases. They are static lookup documents, not design documents.
 |------|-------------|
 | [java-class-map.md](java-class-map.md) | Maps every major Java class in the vanilla server to its planned Rust type and module. Use this to find the authoritative Java implementation of any feature. |
 | [data-formats.md](data-formats.md) | Binary format reference: VarInt/VarLong, NBT, region files, chunk wire format, BlockPos encoding, entity metadata, UUID, login encryption sequence. |
+| [protocol-packets.md](protocol-packets.md) | Complete listing of all Minecraft 26.1-pre-3 packets: handshaking, status, login, configuration, and play (127 clientbound + 58 serverbound). |
 
 ---
 

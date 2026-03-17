@@ -193,23 +193,23 @@ pub const AUTOSAVE_INTERVAL_TICKS: u32 = 6000;
 ### Async & Threading Rules
 
 - All network I/O uses `tokio::net`; all disk I/O uses `tokio::task::spawn_blocking`
-- The game tick loop runs on a **dedicated OS thread** (not a Tokio task) — see [ADR-019](docs/adr/adr-019-tick-loop.md)
-- CPU-bound work (chunk generation, noise sampling) runs on a **rayon** thread pool — see [ADR-016](docs/adr/adr-016-worldgen-pipeline.md)
-- Per-connection network uses a reader task + writer task pair with bounded `mpsc` channels — see [ADR-006](docs/adr/adr-006-network-io.md)
-- Player sessions are split: network actor (Tokio) ↔ bridge channels ↔ ECS entity (tick thread) — see [ADR-020](docs/adr/adr-020-player-session.md)
+- The game tick loop runs on a **dedicated OS thread** (not a Tokio task) — see [ADR-019](../docs/adr/adr-019-tick-loop.md)
+- CPU-bound work (chunk generation, noise sampling) runs on a **rayon** thread pool — see [ADR-016](../docs/adr/adr-016-worldgen-pipeline.md)
+- Per-connection network uses a reader task + writer task pair with bounded `mpsc` channels — see [ADR-006](../docs/adr/adr-006-network-io.md)
+- Player sessions are split: network actor (Tokio) ↔ bridge channels ↔ ECS entity (tick thread) — see [ADR-020](../docs/adr/adr-020-player-session.md)
 - Use `tokio::sync::{mpsc, broadcast}` for cross-thread communication
 - Use `parking_lot::{RwLock, Mutex}` for non-async locks
 - Use `dashmap::DashMap` for concurrent read-heavy maps (e.g., chunk storage)
 
 ### Performance
 
-- **Global allocator:** `mimalloc` — see [ADR-029](docs/adr/adr-029-memory-management.md)
-- **Per-tick arena:** `bumpalo::Bump` reset every tick for temporaries — see [ADR-029](docs/adr/adr-029-memory-management.md)
+- **Global allocator:** `mimalloc` — see [ADR-029](../docs/adr/adr-029-memory-management.md)
+- **Per-tick arena:** `bumpalo::Bump` reset every tick for temporaries — see [ADR-029](../docs/adr/adr-029-memory-management.md)
 - Prefer `ahash::AHashMap` over `std::collections::HashMap` for hot paths
 - Use `parking_lot::{RwLock, Mutex}` for low-contention non-async locks
 - Avoid allocating inside the tick loop — prefer pre-allocated buffers and arena allocation
 - Chunk data uses compact bit-packed representation (`PalettedContainer`)
-- Block states use flat `u16` IDs with dense lookup tables — see [ADR-012](docs/adr/adr-012-block-state.md)
+- Block states use flat `u16` IDs with dense lookup tables — see [ADR-012](../docs/adr/adr-012-block-state.md)
 
 ---
 
@@ -246,12 +246,12 @@ in that phase's doc file (`docs/phases/phase-NN-*.md` → "Architecture Decision
 
 | ADR | Decision | Impact |
 |-----|----------|--------|
-| [002](docs/adr/adr-002-error-handling.md) | `thiserror` in libraries, `anyhow` in binary | Every crate |
-| [007](docs/adr/adr-007-packet-codec.md) | `#[derive(McPacket)]` for wire format | All packets |
-| [008](docs/adr/adr-008-connection-state-machine.md) | Typestate pattern for connections | All protocol states |
-| [013](docs/adr/adr-013-coordinate-types.md) | Newtype wrappers for coordinates | All spatial code |
-| [018](docs/adr/adr-018-entity-system.md) | ECS with `bevy_ecs` | All entity/game logic |
-| [019](docs/adr/adr-019-tick-loop.md) | Parallel tick phases | Server core |
+| [002](../docs/adr/adr-002-error-handling.md) | `thiserror` in libraries, `anyhow` in binary | Every crate |
+| [007](../docs/adr/adr-007-packet-codec.md) | `#[derive(McPacket)]` for wire format | All packets |
+| [008](../docs/adr/adr-008-connection-state-machine.md) | Typestate pattern for connections | All protocol states |
+| [013](../docs/adr/adr-013-coordinate-types.md) | Newtype wrappers for coordinates | All spatial code |
+| [018](../docs/adr/adr-018-entity-system.md) | ECS with `bevy_ecs` | All entity/game logic |
+| [019](../docs/adr/adr-019-tick-loop.md) | Parallel tick phases | Server core |
 
 **When to create a new ADR:**
 - Adding a new crate or public trait
