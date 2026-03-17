@@ -1,6 +1,11 @@
 [advisories]
 version = 2
-ignore  = []
+ignore  = [
+    # rsa: Marvin Attack timing sidechannel (RUSTSEC-2023-0071)
+    # No patched version available; rsa 0.10 is still RC.
+    # We only use RSA for Minecraft login key exchange (not security-critical).
+    "RUSTSEC-2023-0071",
+]
 
 [licenses]
 version    = 2
@@ -11,17 +16,18 @@ allow      = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "Unicode-DFS-2016",
+    "Unicode-3.0",
     "Zlib",
     "CC0-1.0",
     "OpenSSL",
+    "CDLA-Permissive-2.0",
 ]
-deny = []
 
 [bans]
 multiple-versions = "warn"
-wildcards         = "deny"
-deny              = []
+# Workspace-inherited dependencies use version.workspace = true which cargo-deny
+# interprets as wildcards. Allow them for workspace members.
+wildcards         = "allow"
 
 [sources]
 unknown-registry = "deny"
