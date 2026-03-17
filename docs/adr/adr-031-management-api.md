@@ -288,7 +288,7 @@ Subscribable events: `player_join`, `player_leave`, `player_chat`, `player_death
 `player_advancement`, `server_tps_change`, `command_executed`.
 
 **TLS Configuration**:
-- Certificate and key files specified in `server.properties`:
+- Certificate and key files specified in `oxidized.toml`:
   `management-api.tls-cert=/path/to/cert.pem`, `management-api.tls-key=/path/to/key.pem`.
 - If TLS is not configured, the WebSocket runs unencrypted (with a warning in the log).
 - TLS is provided by `rustls` (no OpenSSL dependency).
@@ -358,7 +358,7 @@ principle of least privilege and matches vanilla's default configuration.
   most complex adapter. Connection lifecycle management (reconnection, subscription cleanup)
   adds code.
 - **Configuration surface**: Three protocols means three sets of ports, toggles, and auth
-  settings in `server.properties`. Documentation must clearly explain each.
+  settings in `oxidized.toml`. Documentation must clearly explain each.
 
 ### Neutral
 

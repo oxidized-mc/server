@@ -25,7 +25,7 @@ Columns:
 | `ConnectionProtocol` | `net.minecraft.network` | `ProtocolState` | `oxidized-protocol::state` | enum: Handshake/Status/Login/Config/Play |
 | `ProtocolInfo` | `net.minecraft.network` | — | — | Packet ID ↔ type registry (const arrays) |
 | `CompressionDecoder` | `net.minecraft.network` | `CompressionLayer` | `oxidized-protocol::compress` | zlib via `flate2` |
-| `CompressionEncoder` | `net.minecraft.network` | `CompressionLayer` | `oxidized-protocol::compress` | threshold from server.properties |
+| `CompressionEncoder` | `net.minecraft.network` | `CompressionLayer` | `oxidized-protocol::compress` | threshold from oxidized.toml |
 | `CipherDecoder` | `net.minecraft.network` | `CipherLayer` | `oxidized-protocol::cipher` | AES/CFB8 via `aes` crate |
 | `CipherEncoder` | `net.minecraft.network` | `CipherLayer` | `oxidized-protocol::cipher` | same key, different IV state |
 | `FriendlyByteBuf` | `net.minecraft.network` | `PacketBuf` | `oxidized-protocol::buf` | Trait impls over `bytes::Buf/BufMut` |
@@ -168,7 +168,7 @@ Columns:
 |---|---|---|---|---|
 | `MinecraftServer` | `net.minecraft.server` | `MinecraftServer` | `oxidized-server::server` | Top-level; owns all systems |
 | `DedicatedServer` | `net.minecraft.server.dedicated` | `DedicatedServer` | `oxidized-server::server` | Dedicated (headless) impl |
-| `DedicatedServerProperties` | `net.minecraft.server.dedicated` | `ServerProperties` | `oxidized-server::config` | server.properties parsing |
+| `DedicatedServerProperties` | `net.minecraft.server.dedicated` | `ServerProperties` | `oxidized-server::config` | TOML config parsing |
 | `Main` | `net.minecraft.server` | `main()` | `oxidized-server::main` | Entry point |
 | `ServerInterface` | `net.minecraft.server` | `ServerInterface` (trait) | `oxidized-server::api` | Command execution + status |
 | `ServerTickRateManager` | `net.minecraft.server` | `TickRateManager` | `oxidized-server::tick_rate` | TPS control + sprint mode |

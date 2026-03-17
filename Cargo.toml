@@ -79,6 +79,11 @@ glam           = "0.32"
 # CLI
 clap           = { version = "4", features = ["derive"] }
 
+# Testing
+proptest       = "1"
+insta          = { version = "1", features = ["toml"] }
+tempfile       = "3"
+
 # Internal workspace crates
 oxidized-protocol = { path = "crates/oxidized-protocol" }
 oxidized-nbt      = { path = "crates/oxidized-nbt" }

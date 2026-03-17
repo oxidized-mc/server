@@ -183,6 +183,15 @@ non-trivial work.
 
 **Purpose:** Write the minimum correct implementation.
 
+#### 6.0 — Question Assumptions
+
+Before writing any code, review the ADRs that govern this phase and explicitly ask:
+- Is this still the best approach given what we know now?
+- Are we replicating a Java/vanilla pattern that has a better Rust-native alternative?
+- Has the ecosystem changed since the ADR was written?
+
+If the answer to any question is "yes, there's a better way," pause implementation and create a superseding ADR first. This step prevents accumulating technical debt from outdated decisions.
+
 **Activities:**
 - Implement the minimum code to make failing tests pass
 - Follow all coding standards (see [copilot-instructions](../../.github/copilot-instructions.md))

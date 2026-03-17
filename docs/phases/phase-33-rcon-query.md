@@ -184,7 +184,7 @@ pub async fn handle_rcon_client(
 - [ ] Bind to `0.0.0.0:rcon.port` (default 25575) when `enable-rcon = true`
 - [ ] Accept up to 4 concurrent connections (vanilla maximum); log a warning and
       drop the socket when at capacity
-- [ ] Read `rcon.password` from `server.properties`; refuse to start with an
+- [ ] Read `rcon.password` from `oxidized.toml`; refuse to start with an
       empty password
 - [ ] Each accepted connection spawns `tokio::spawn(handle_rcon_client(...))`
 - [ ] `command_sender` forwards commands to the main tick thread; output is
@@ -260,14 +260,14 @@ Required key/value fields (in order):
 
 | Key | Value source |
 |-----|-------------|
-| `hostname` | `motd` from server.properties (stripped of color codes) |
+| `hostname` | `motd` from oxidized.toml (stripped of color codes) |
 | `gametype` | `"SMP"` |
 | `game_id` | `"MINECRAFT"` |
 | `version` | server version string |
 | `plugins` | `""` (or mod list if applicable) |
 | `map` | name of the default world |
 | `numplayers` | current online player count |
-| `maxplayers` | `max-players` from server.properties |
+| `maxplayers` | `max-players` from oxidized.toml |
 | `hostport` | game port (ASCII decimal) |
 | `hostip` | bound server IP |
 
@@ -309,7 +309,7 @@ pub async fn run_query_server(port: u16, stats: Arc<QueryStats>) -> anyhow::Resu
 }
 ```
 
-### 33.5 — `server.properties` knobs
+### 33.5 — `oxidized.toml` configuration
 
 | Property | Default | Notes |
 |----------|---------|-------|

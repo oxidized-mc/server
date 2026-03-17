@@ -2,10 +2,15 @@
 
 | Field | Value |
 |-------|-------|
-| Status | Accepted |
+| Status | **Superseded by [ADR-033](adr-033-configuration-format.md)** (format decision) |
 | Date | 2026-03-17 |
 | Phases | P01, P19 |
 | Deciders | Oxidized Core Team |
+
+> **Note:** The format decision in this ADR (Java `.properties`) has been superseded by
+> [ADR-033: Configuration Format Evolution](adr-033-configuration-format.md), which adopts
+> TOML as the sole configuration format. The remaining decisions (validation on load,
+> environment variable overrides, CLI precedence, hot-reload architecture) remain in effect.
 
 ## Context
 

@@ -243,7 +243,7 @@ Java reference: `net.minecraft.network.CipherBase`, `CipherEncoder`, `CipherDeco
 ## Compression Details
 
 **Algorithm:** Deflate (RFC 1951) via Java `Deflater`/`Inflater`
-**Threshold:** Default 256 bytes. Configurable in `server.properties`.
+**Threshold:** Default 256 bytes. Configurable in `oxidized.toml`.
 
 ```
 Packet format with compression:

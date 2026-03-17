@@ -205,7 +205,7 @@ Java reference: `net.minecraft.server.*`, `net.minecraft.world.entity.*`,
 Responsible for:
 - Binary entry point (`main.rs`)
 - CLI argument parsing
-- `server.properties` loading (`DedicatedServerProperties`)
+- `oxidized.toml` loading (`DedicatedServerProperties`)
 - `MinecraftServer` / `DedicatedServer`: main server struct, startup sequence
 - Tick loop: `tokio::time::interval(50ms)` driving `ServerLevel::tick()`
 - RCON server (TCP, port 25575)
@@ -336,7 +336,7 @@ crates/
 └── oxidized-server/src/
     ├── main.rs
     ├── server.rs         # MinecraftServer / DedicatedServer
-    ├── config.rs         # server.properties
+    ├── config.rs         # oxidized.toml
     ├── tick.rs           # ServerTickRateManager
     ├── rcon.rs
     ├── query.rs

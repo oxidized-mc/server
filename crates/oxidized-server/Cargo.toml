@@ -29,5 +29,10 @@ uuid              = { workspace = true }
 mimalloc          = { workspace = true }
 clap              = { workspace = true }
 
+[dev-dependencies]
+proptest  = { workspace = true }
+insta     = { workspace = true }
+tempfile  = { workspace = true }
+
 [lints]
 workspace = true
