@@ -7,6 +7,39 @@
 
 ---
 
+## Required Reading — Before Any Task
+
+**You MUST read every file in this list before writing any code, running any command, or
+making any decision.** Do not skip this step — even for "simple" tasks. Context prevents
+mistakes.
+
+| # | File | Why |
+|---|------|-----|
+| 1 | **`.github/copilot-instructions.md`** (this file) | Project rules, coding standards, workflow |
+| 2 | **[`.github/memories.md`](memories.md)** | Prior learnings, gotchas, patterns discovered in earlier sessions |
+| 3 | **Relevant ADRs** (`docs/adr/adr-NNN-*.md`) | Design decisions that constrain implementation |
+| 4 | **Relevant phase doc** (`docs/phases/phase-NN-*.md`) | Scope, acceptance criteria, and linked ADRs for the current phase |
+
+### How to determine "relevant"
+
+- **ADRs:** Read the [Key ADRs table](#architecture-decision-records-adrs) below — those
+  6 ADRs apply to *every* task. Then read any additional ADRs linked from the phase doc or
+  touching the crate you are modifying.
+- **Phase doc:** If the task belongs to a numbered phase (p01–p38), read that phase's doc.
+  If the task is ad-hoc (bug fix, refactor), read any phase doc whose scope overlaps.
+
+### Verification
+
+After reading, mentally confirm:
+1. Do I know which crate(s) this task touches?
+2. Have I checked memories.md for prior learnings about those crates?
+3. Have I read every ADR that constrains my implementation?
+4. Do I understand the acceptance criteria from the phase doc (if applicable)?
+
+If the answer to any question is **no**, go back and read before proceeding.
+
+---
+
 ## Project Overview
 
 **Oxidized** is a high-performance Minecraft Java Edition server rewritten in Rust.
