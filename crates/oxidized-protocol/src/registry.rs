@@ -187,7 +187,7 @@ fn json_to_nbt_tag(value: &serde_json::Value) -> Result<NbtTag, RegistryError> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
 
