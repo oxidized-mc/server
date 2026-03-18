@@ -13,9 +13,17 @@ pub enum RegistryError {
     #[error("failed to parse registry JSON: {0}")]
     Json(#[from] serde_json::Error),
 
-    /// A block state ID was out of the valid range.
-    #[error("block state ID {0} out of range")]
-    InvalidStateId(u32),
+    /// A block state ID was out of the valid u16 range.
+    #[error("block state ID {0} exceeds u16 range")]
+    InvalidStateId(u64),
+
+    /// A state entry in the JSON is missing a required "id" field.
+    #[error("block state missing 'id' field in block {0}")]
+    MissingStateId(String),
+
+    /// An item property value exceeded the valid range.
+    #[error("item '{0}' has invalid {1} value: {2}")]
+    InvalidItemProperty(String, &'static str, u64),
 
     /// The requested block name was not found in the registry.
     #[error("unknown block: {0}")]

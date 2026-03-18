@@ -41,15 +41,21 @@ impl ItemRegistry {
         let mut by_name = AHashMap::with_capacity(obj.len());
 
         for (name, value) in obj {
-            let max_stack_size = value
+            let raw_stack = value
                 .get("max_stack_size")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(64) as u8;
+                .unwrap_or(64);
+            let max_stack_size = u8::try_from(raw_stack).map_err(|_| {
+                RegistryError::InvalidItemProperty(name.clone(), "max_stack_size", raw_stack)
+            })?;
 
-            let max_damage = value
+            let raw_damage = value
                 .get("max_damage")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u16;
+                .unwrap_or(0);
+            let max_damage = u16::try_from(raw_damage).map_err(|_| {
+                RegistryError::InvalidItemProperty(name.clone(), "max_damage", raw_damage)
+            })?;
 
             let idx = items.len();
             by_name.insert(name.clone(), idx);
