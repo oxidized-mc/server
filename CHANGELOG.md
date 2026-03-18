@@ -41,6 +41,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Zlib compression with configurable threshold (Phase 4)
 - Login packet structs: Hello, Key, Compression, LoginFinished, Disconnect (Phase 4)
 - Full encrypted + compressed connection pipeline with transparent I/O (Phase 4)
+- Complete NBT library: all 13 tag types, binary codec, Modified UTF-8, NbtAccounter,
+  GZIP/zlib I/O, SNBT parser+formatter, serde integration (Phase 5)
 
 ### Changed
 - Configuration format from Java `.properties` to TOML (ADR-033 supersedes ADR-005)
