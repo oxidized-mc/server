@@ -25,6 +25,7 @@ ahash        = { workspace = true }
 bitflags     = { workspace = true }
 glam         = { workspace = true }
 indexmap      = { workspace = true }
+lru           = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

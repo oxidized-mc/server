@@ -22,6 +22,6 @@ pub use chunk_cache::ChunkCache;
 pub use dimension::DimensionType;
 pub use dimension_manager::DimensionManager;
 pub use error::LevelError;
-pub use flags::BlockFlags;
+pub use flags::{BlockFlags, UPDATE_LIMIT};
 pub use server_level::ServerLevel;
 pub use traits::{AIR_STATE_ID, BlockGetter, LevelWriter};

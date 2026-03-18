@@ -1,9 +1,9 @@
 //! [`ChunkCache`] — LRU cache for loaded chunks.
 //!
-//! Wraps a `HashMap<ChunkPos, Arc<RwLock<LevelChunk>>>` with LRU eviction.
-//! When the cache exceeds `max_size`, the least-recently-used chunk is evicted.
+//! Uses the `lru` crate for O(1) get/insert/evict operations.
+//! Entries are `Arc<RwLock<LevelChunk>>` for concurrent read access.
 
-use std::collections::{HashMap, VecDeque};
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -15,33 +15,30 @@ use oxidized_world::chunk::{ChunkPos, LevelChunk};
 /// Entries are wrapped in `Arc<RwLock<LevelChunk>>` to allow concurrent
 /// reads from multiple systems (chunk sending, entity ticking, etc.)
 /// while permitting exclusive writes (block placement, lighting updates).
+///
+/// All operations (get, peek, insert, remove) are O(1).
 pub struct ChunkCache {
-    chunks: HashMap<ChunkPos, Arc<RwLock<LevelChunk>>>,
-    /// Access order for LRU eviction (most-recent at back).
-    lru: VecDeque<ChunkPos>,
-    max_size: usize,
+    inner: lru::LruCache<ChunkPos, Arc<RwLock<LevelChunk>>>,
 }
 
 impl ChunkCache {
     /// Creates a new chunk cache with the given maximum capacity.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `max_size` is 0.
     #[must_use]
+    #[allow(clippy::expect_used)]
     pub fn new(max_size: usize) -> Self {
+        let cap = NonZeroUsize::new(max_size).expect("cache max_size must be > 0");
         Self {
-            chunks: HashMap::with_capacity(max_size),
-            lru: VecDeque::with_capacity(max_size),
-            max_size,
+            inner: lru::LruCache::new(cap),
         }
     }
 
-    /// Returns the chunk at `pos` if it is cached, updating the LRU order.
+    /// Returns the chunk at `pos` if cached, promoting it to most-recently-used.
     pub fn get(&mut self, pos: ChunkPos) -> Option<Arc<RwLock<LevelChunk>>> {
-        if self.chunks.contains_key(&pos) {
-            self.lru.retain(|p| *p != pos);
-            self.lru.push_back(pos);
-            self.chunks.get(&pos).map(Arc::clone)
-        } else {
-            None
-        }
+        self.inner.get(&pos).map(Arc::clone)
     }
 
     /// Returns the chunk at `pos` without updating LRU order.
@@ -49,52 +46,39 @@ impl ChunkCache {
     /// Useful for read-only access patterns that should not affect eviction.
     #[must_use]
     pub fn peek(&self, pos: &ChunkPos) -> Option<Arc<RwLock<LevelChunk>>> {
-        self.chunks.get(pos).map(Arc::clone)
+        self.inner.peek(pos).map(Arc::clone)
     }
 
     /// Inserts a chunk into the cache, evicting the oldest entry if at capacity.
     ///
     /// Returns the `Arc<RwLock<LevelChunk>>` for the inserted chunk.
     pub fn insert(&mut self, pos: ChunkPos, chunk: LevelChunk) -> Arc<RwLock<LevelChunk>> {
-        if self.chunks.len() >= self.max_size && !self.chunks.contains_key(&pos) {
-            self.evict_oldest();
-        }
         let arc = Arc::new(RwLock::new(chunk));
-        self.chunks.insert(pos, Arc::clone(&arc));
-        self.lru.retain(|p| *p != pos);
-        self.lru.push_back(pos);
+        self.inner.put(pos, Arc::clone(&arc));
         arc
     }
 
     /// Removes a chunk from the cache by position.
     pub fn remove(&mut self, pos: &ChunkPos) -> Option<Arc<RwLock<LevelChunk>>> {
-        self.lru.retain(|p| p != pos);
-        self.chunks.remove(pos)
+        self.inner.pop(pos)
     }
 
     /// Returns `true` if the cache contains a chunk at `pos`.
     #[must_use]
     pub fn contains(&self, pos: &ChunkPos) -> bool {
-        self.chunks.contains_key(pos)
+        self.inner.contains(pos)
     }
 
     /// Returns the number of cached chunks.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.chunks.len()
+        self.inner.len()
     }
 
     /// Returns `true` if the cache is empty.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.chunks.is_empty()
-    }
-
-    /// Evicts the least-recently-used entry.
-    fn evict_oldest(&mut self) {
-        if let Some(oldest) = self.lru.pop_front() {
-            self.chunks.remove(&oldest);
-        }
+        self.inner.is_empty()
     }
 }
 
