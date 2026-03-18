@@ -120,6 +120,10 @@ impl CompressionState {
         let data_length = i32::try_from(data.len())
             .map_err(|_| CompressionError::UncompressedTooLarge(data.len()))?;
 
+        if self.buf.len() > MAXIMUM_COMPRESSED_LENGTH {
+            return Err(CompressionError::CompressedTooLarge(self.buf.len()));
+        }
+
         Ok((data_length, std::mem::take(&mut self.buf)))
     }
 
