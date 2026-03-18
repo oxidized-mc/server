@@ -463,7 +463,9 @@ async fn handle_configuration(
     debug!(peer = %addr, "Sent SelectKnownPacks");
 
     // 2. Receive serverbound packets until we get SelectKnownPacks.
-    //    The client may send ClientInformation (0x00) before responding.
+    //    The client may send ClientInformation (0x00) or CustomPayload
+    //    (0x02, e.g. minecraft:brand) before responding.
+    const SB_CUSTOM_PAYLOAD: i32 = 0x02;
     loop {
         let pkt = conn.read_raw_packet().await?;
         match pkt.id {
@@ -482,6 +484,9 @@ async fn handle_configuration(
                     "Received client information",
                 );
                 client_info = Some(info_pkt.information);
+            },
+            SB_CUSTOM_PAYLOAD => {
+                debug!(peer = %addr, "Received custom payload (ignored)");
             },
             ServerboundSelectKnownPacksPacket::PACKET_ID => {
                 let _client_packs =
@@ -589,7 +594,7 @@ async fn handle_configuration(
     debug!(peer = %addr, "Sent finish configuration");
 
     // 7. Wait for client FinishConfiguration acknowledgement.
-    //    The client may send ClientInformation again if settings changed.
+    //    The client may send ClientInformation or CustomPayload again.
     loop {
         let finish_pkt = conn.read_raw_packet().await?;
         match finish_pkt.id {
@@ -608,6 +613,9 @@ async fn handle_configuration(
                     "Received updated client information",
                 );
                 client_info = Some(info_pkt.information);
+            },
+            SB_CUSTOM_PAYLOAD => {
+                debug!(peer = %addr, "Received custom payload (ignored)");
             },
             ServerboundFinishConfigurationPacket::PACKET_ID => {
                 break;
