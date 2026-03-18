@@ -499,3 +499,32 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 - **Tests:** 412 protocol tests (up from 381), 613 total workspace
 - **Review iterations:** 2 (overflow fix required re-review)
 - **Types added:** Direction, Axis, AxisDirection, Vec3i, Vec3, Vec2, BlockPos, ChunkPos, SectionPos, Aabb, GameType, Difficulty
+
+---
+
+### Phase 8 — Block & Item Registry (2025-07)
+
+#### What Went Well
+- **Vanilla data extraction worked perfectly:** `java -DbundlerMainClass=net.minecraft.data.Main -jar server.jar --reports` generated accurate `blocks.json` (1168 blocks, 29873 states) and items data.
+- **Embedded compressed data approach is clean:** `include_bytes!` on `.json.gz` files keeps the binary small and avoids runtime file I/O for registry initialization.
+- **Tests caught real correctness issues:** AIR=0, STONE=1 verified against vanilla; block counts, state counts, and property parsing all validated.
+
+#### What Surprised Us
+- **Code review found 5 silent truncation bugs** across 3 review iterations. All used `as u16`/`as u8` casts that silently truncate — a pattern that's easy to write but dangerous. Every `as` cast should be questioned.
+- **One bug was a silent data drop** — out-of-bounds state IDs were silently skipped instead of returning an error. This would have been extremely hard to debug in production.
+- **Item registry had inconsistent error handling** compared to block registry — clamping to `MAX` instead of erroring. Consistency matters.
+
+#### Patterns Established
+- **Never use `as` for narrowing casts in data loading.** Always use `u16::try_from()` / `u8::try_from()` with proper error propagation. This applies to all registry/data loading code.
+- **Review→Fix→Re-review loop is essential.** Each review pass caught a different class of issue. The loop terminated after 3 passes with zero findings.
+- **Error types should distinguish failure modes:** `InvalidStateId(u64)`, `MissingStateId(String)`, `InvalidItemProperty(String, &'static str, u64)` each tell you exactly what went wrong.
+
+#### Gotchas
+- **Git-tracked binary data:** `.json.gz` files in `src/data/` must be explicitly `git add`ed — they're not matched by default patterns. First CI run failed because they weren't committed.
+- **`as` casts compile silently** even when they truncate. Clippy's `cast_possible_truncation` lint would catch these, but it's not enabled by default. Consider enabling it workspace-wide.
+
+#### Metrics
+- **Files:** 10 changed, 676 insertions (+ 35 fix insertions)
+- **Tests:** 19 registry tests, 632 total workspace
+- **Review iterations:** 3 (truncation bugs → out-of-bounds drop → item clamping)
+- **Blocks:** 1168, **States:** 29873, **Items:** 1506
