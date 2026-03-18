@@ -134,9 +134,10 @@ pub fn build_tags_packet() -> ClientboundUpdateTagsPacket {
     let mut registries = Vec::with_capacity(tags.len());
 
     for (registry_name, tag_map) in tags {
-        // Filter out registries where all tags are empty (matches vanilla behavior)
-        let has_entries = tag_map.values().any(|entries| !entries.is_empty());
-        if !has_entries {
+        // Only skip registries with zero tags (vanilla's NetworkPayload.isEmpty()).
+        // Tags with empty entry lists are still sent — the client needs them for
+        // registry freezing (e.g. minecraft:dialog has tags with no entries).
+        if tag_map.is_empty() {
             continue;
         }
 
