@@ -47,6 +47,27 @@ pub struct GameProfile {
 }
 
 impl GameProfile {
+    /// Creates a new `GameProfile` from a UUID and display name.
+    ///
+    /// The UUID is stored as a hex string without dashes, matching the
+    /// Mojang session server response format.
+    pub fn new(uuid: Uuid, name: String) -> Self {
+        Self {
+            id: uuid.as_simple().to_string(),
+            name,
+            properties: Vec::new(),
+        }
+    }
+
+    /// Creates a new `GameProfile` with the given profile properties.
+    pub fn with_properties(uuid: Uuid, name: String, properties: Vec<ProfileProperty>) -> Self {
+        Self {
+            id: uuid.as_simple().to_string(),
+            name,
+            properties,
+        }
+    }
+
     /// Returns the player's UUID parsed from the hex string.
     ///
     /// # Errors
@@ -68,7 +89,7 @@ impl GameProfile {
 }
 
 /// A single property in a player profile.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct ProfileProperty {
     /// Property name (e.g. "textures").
     name: String,
@@ -79,6 +100,15 @@ pub struct ProfileProperty {
 }
 
 impl ProfileProperty {
+    /// Creates a new `ProfileProperty`.
+    pub fn new(name: String, value: String, signature: Option<String>) -> Self {
+        Self {
+            name,
+            value,
+            signature,
+        }
+    }
+
     /// Returns the property name.
     pub fn name(&self) -> &str {
         &self.name
