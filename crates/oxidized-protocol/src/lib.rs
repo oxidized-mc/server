@@ -10,4 +10,6 @@ pub mod connection;
 pub mod constants;
 pub mod crypto;
 pub mod packets;
+pub mod registry;
 pub mod status;
+pub mod types;
