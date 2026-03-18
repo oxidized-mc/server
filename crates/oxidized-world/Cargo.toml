@@ -19,6 +19,7 @@ tracing      = { workspace = true }
 uuid         = { workspace = true }
 bytes        = { workspace = true }
 flate2       = { workspace = true }
+lz4_flex     = { workspace = true }
 ahash        = { workspace = true }
 parking_lot  = { workspace = true }
 bitflags     = { workspace = true }
