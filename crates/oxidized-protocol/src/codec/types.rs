@@ -179,6 +179,46 @@ pub fn write_uuid(buf: &mut BytesMut, uuid: &uuid::Uuid) {
     buf.put_u64(lsb);
 }
 
+/// Reads a big-endian `f32` from `buf`.
+///
+/// # Errors
+///
+/// Returns [`TypeError::UnexpectedEof`] if fewer than 4 bytes remain.
+pub fn read_f32(buf: &mut Bytes) -> Result<f32, TypeError> {
+    if buf.remaining() < 4 {
+        return Err(TypeError::UnexpectedEof {
+            need: 4,
+            have: buf.remaining(),
+        });
+    }
+    Ok(buf.get_f32())
+}
+
+/// Writes a big-endian `f32` to `buf`.
+pub fn write_f32(buf: &mut BytesMut, value: f32) {
+    buf.put_f32(value);
+}
+
+/// Reads a big-endian `f64` from `buf`.
+///
+/// # Errors
+///
+/// Returns [`TypeError::UnexpectedEof`] if fewer than 8 bytes remain.
+pub fn read_f64(buf: &mut Bytes) -> Result<f64, TypeError> {
+    if buf.remaining() < 8 {
+        return Err(TypeError::UnexpectedEof {
+            need: 8,
+            have: buf.remaining(),
+        });
+    }
+    Ok(buf.get_f64())
+}
+
+/// Writes a big-endian `f64` to `buf`.
+pub fn write_f64(buf: &mut BytesMut, value: f64) {
+    buf.put_f64(value);
+}
+
 /// Reads a VarInt-length-prefixed byte array from `buf`.
 ///
 /// # Errors
