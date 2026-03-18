@@ -75,6 +75,7 @@ pub struct RawPacket {
 
 /// Errors that can occur on a [`Connection`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ConnectionError {
     /// A frame-level error (bad length prefix, oversized packet, etc.).
     #[error("frame error: {0}")]

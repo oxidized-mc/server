@@ -9,6 +9,7 @@ use crate::codec::types::{self, TypeError};
 
 /// Errors from decoding a [`ServerboundPingRequestPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PingError {
     /// Type decode failure.
     #[error("type error: {0}")]

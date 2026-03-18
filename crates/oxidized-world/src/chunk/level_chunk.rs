@@ -24,6 +24,7 @@ pub const OVERWORLD_HEIGHT: u32 = 384;
 
 /// Errors that can occur during chunk operations.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ChunkError {
     /// Block position is outside the valid world bounds.
     #[error("position out of bounds: ({x}, {y}, {z})")]
@@ -61,6 +62,13 @@ pub struct LevelChunk {
 }
 
 /// Chunk position in chunk coordinates.
+///
+/// # Note
+///
+/// TODO: This type is duplicated in `oxidized-protocol`. Both crates need
+/// `ChunkPos` but `oxidized-world` cannot depend on `oxidized-protocol` per
+/// crate layering rules. A shared `oxidized-types` crate should be created
+/// to consolidate coordinate types (BlockPos, ChunkPos, SectionPos).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkPos {
     /// Chunk X coordinate.

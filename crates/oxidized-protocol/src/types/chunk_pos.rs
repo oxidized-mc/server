@@ -17,6 +17,13 @@ use super::block_pos::BlockPos;
 ///
 /// A single big-endian `i64` (8 bytes):
 /// `x` in the lower 32 bits, `z` in the upper 32 bits.
+///
+/// # Note
+///
+/// TODO: This type is duplicated in `oxidized-world`. Both crates need
+/// `ChunkPos` but `oxidized-world` cannot depend on `oxidized-protocol` per
+/// crate layering rules. A shared `oxidized-types` crate should be created
+/// to consolidate coordinate types (BlockPos, ChunkPos, SectionPos).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkPos {
     /// The chunk X coordinate.

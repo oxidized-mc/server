@@ -11,6 +11,7 @@ use crate::packets::configuration::clientbound_select_known_packs::{KnownPack, K
 
 /// Errors from decoding a [`ServerboundSelectKnownPacksPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ServerboundKnownPacksError {
     /// Inner decode failure.
     #[error("{0}")]

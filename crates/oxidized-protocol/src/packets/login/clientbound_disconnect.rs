@@ -10,6 +10,7 @@ use crate::codec::types::{self, TypeError};
 
 /// Errors from decoding a [`ClientboundDisconnectPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum DisconnectError {
     /// Type decode failure.
     #[error("type error: {0}")]

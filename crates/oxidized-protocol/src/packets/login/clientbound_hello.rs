@@ -10,6 +10,7 @@ use crate::codec::types::{self, TypeError};
 
 /// Errors from decoding a [`ClientboundHelloPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum HelloError {
     /// Type decode failure.
     #[error("type error: {0}")]

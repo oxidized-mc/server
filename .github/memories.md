@@ -675,3 +675,45 @@ against the Rust `read_header()` implementation.
 
 - **Tests:** 120 → 123 (3 new: sector_count_zero, header_overlap, payload_overflow)
 - **Review iterations:** 2 (unused import + comment accuracy → fixed → clean)
+
+---
+
+### Architectural Audit — Phases 1–10 (Session 2)
+
+**Date:** 2026-03-18
+**Scope:** Full architectural review of all code through Phase 10
+
+#### Lifecycle Process Improvement
+
+Promoted "Architectural Questioning" from a soft sub-step (Stage 6.0 — during implementation)
+to a **hard gate** (Stage 2.5 — between Research and Decide). This ensures ADRs are validated
+*before* planning and test writing, preventing wasted work when an ADR needs superseding.
+
+Updated: `docs/lifecycle/README.md` and `.github/copilot-instructions.md`.
+
+#### Key Findings
+
+1. **ChunkPos duplication (CRITICAL, deferred):** Defined in both `oxidized-protocol` and
+   `oxidized-world`. Cannot fix without a shared `oxidized-types` crate (needs ADR). Both
+   definitions have TODO comments. Must resolve before Phase 13 (chunk sending).
+
+2. **#[non_exhaustive] added to all 31 public error enums:** Prevents breaking changes when
+   adding error variants. Affects: oxidized-nbt (1), oxidized-protocol (23), oxidized-world (6),
+   oxidized-server (1).
+
+3. **Typestate NOT implemented (ADR-008):** Connection uses runtime enum, not compile-time
+   `Connection<State>`. Known deviation — acceptable for current phase count but should be
+   addressed before Play state packets proliferate.
+
+4. **Zero-copy NBT (ADR-010 partial):** Only the owned tree is implemented. Arena and borrowed
+   reader are deferred until chunk sending at scale (Phase 13+).
+
+5. **DashMap chunk storage (ADR-014):** Not yet needed — only data structures exist. Required
+   at Phase 11 (Server Level).
+
+#### Patterns
+
+- The crate layering rules (`oxidized-world ← oxidized-nbt` only) prevent sharing coordinate
+  types between protocol and world. A shared `oxidized-types` crate is the right solution.
+- All 31 error enums were missing `#[non_exhaustive]` — add it to every new public enum.
+- Stage 2.5 (Architectural Review Gate) should be followed for every phase going forward.

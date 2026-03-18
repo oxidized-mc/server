@@ -21,6 +21,7 @@ pub const VARLONG_MAX_BYTES: usize = 10;
 
 /// Errors that can occur during VarInt/VarLong decoding.
 #[derive(Debug, Error, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum VarIntError {
     /// The encoded value exceeds the maximum byte length.
     #[error("VarInt is too large (exceeded {max_bytes} bytes)")]

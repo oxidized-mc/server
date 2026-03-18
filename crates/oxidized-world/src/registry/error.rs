@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Errors that can occur when loading or querying registries.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum RegistryError {
     /// Failed to decompress gzipped registry data.
     #[error("failed to decompress registry data: {0}")]

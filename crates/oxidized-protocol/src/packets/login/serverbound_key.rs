@@ -10,6 +10,7 @@ use crate::codec::types::{self, TypeError};
 
 /// Errors from decoding a [`ServerboundKeyPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum KeyError {
     /// Type decode failure.
     #[error("type error: {0}")]

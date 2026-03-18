@@ -84,6 +84,7 @@ pub const SYNCHRONIZED_REGISTRIES: &[&str] = &[
 
 /// Errors that can occur when working with registry data.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum RegistryError {
     /// The requested registry name is not in the bundled data.
     #[error("unknown registry: {0}")]

@@ -12,6 +12,7 @@ use thiserror::Error;
 
 /// Errors from palette operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PaletteError {
     /// Palette is full and cannot accept more values.
     #[error("palette full: capacity {capacity}, tried to add value {value}")]

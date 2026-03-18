@@ -13,6 +13,7 @@
 - [Lifecycle Overview](#lifecycle-overview)
 - [Stage 1 — Identify](#stage-1--identify)
 - [Stage 2 — Research](#stage-2--research)
+- [Stage 2.5 — Architectural Review Gate](#stage-25--architectural-review-gate)
 - [Stage 3 — Decide (ADR)](#stage-3--decide-adr)
 - [Stage 4 — Plan](#stage-4--plan)
 - [Stage 5 — Test First (TDD Red)](#stage-5--test-first-tdd-red)
@@ -61,20 +62,23 @@ ensuring problems are caught early and fixed before moving forward.
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
 │                                                                               │
-│  ① IDENTIFY → ② RESEARCH → ③ DECIDE → ④ PLAN → ⑤ TEST FIRST               │
-│       ↑                         ↑                      │                      │
-│       │                         │                      ↓                      │
-│       │                         │            ⑥ IMPLEMENT ←──┐                │
-│       │                         │                      │     │                │
-│       │                         │                      ↓     │                │
-│       │                    ③ᐩ ADR Rethink         ⑦ REVIEW ─┘                │
-│       │                    (if review finds          │   Issues? Loop ⑥↔⑦    │
-│       │                     better approach)         ↓                        │
-│       │                                          ⑧ INTEGRATE                 │
-│       │                                              │   ↺                    │
-│       │                                              │  CI fails? Fix → ⑧    │
-│       │                                              ↓                        │
-│       └──────────────────────────────────────── ⑨ RETROSPECT                 │
+│  ① IDENTIFY → ② RESEARCH → ②ᐩ ARCH REVIEW → ③ DECIDE → ④ PLAN             │
+│       ↑              ↑       (question ADRs          │                        │
+│       │              │        before planning)       ↓                        │
+│       │              │                         ⑤ TEST FIRST                   │
+│       │              │                               │                        │
+│       │         Supersede ADR?                       ↓                        │
+│       │         Loop ②↔②ᐩ↔③            ⑥ IMPLEMENT ←──┐                    │
+│       │                                        │     │                        │
+│       │                                        ↓     │                        │
+│       │                    ③ᐩ ADR Rethink  ⑦ REVIEW ─┘                      │
+│       │                    (if review finds     │   Issues? Loop ⑥↔⑦         │
+│       │                     better approach)    ↓                             │
+│       │                                     ⑧ INTEGRATE                      │
+│       │                                         │   ↺                         │
+│       │                                         │  CI fails? Fix → ⑧         │
+│       │                                         ↓                             │
+│       └─────────────────────────────────── ⑨ RETROSPECT                      │
 │              (feed improvements back into next cycle)                         │
 │                                                                               │
 └───────────────────────────────────────────────────────────────────────────────┘
@@ -82,11 +86,12 @@ ensuring problems are caught early and fixed before moving forward.
 
 ### Feedback Loops
 
-The lifecycle contains **5 feedback loops** — these are not optional, they are
+The lifecycle contains **6 feedback loops** — these are not optional, they are
 structural parts of the process:
 
 | Loop | Trigger | Action |
 |---|---|---|
+| **Arch Review** (②↔②ᐩ↔③) | Research reveals ADR may be outdated or suboptimal | Question all constraining ADRs; supersede before planning |
 | **TDD Red↔Green** (⑤↔⑥) | Test fails → implement → re-test until green | Inner loop: runs many times per task |
 | **Review↔Fix** (⑥↔⑦) | Code review finds bugs, missing tests, or pattern violations | Fix issues, re-review — never skip re-review |
 | **CI Repair** (⑧→⑧) | CI pipeline fails after push | Fix immediately, re-push, verify all jobs green |
@@ -140,6 +145,50 @@ structural parts of the process:
 3. What alternatives you considered
 
 **Output:** Research notes — either in the session plan or as an ADR context section.
+
+---
+
+## Stage 2.5 — Architectural Review Gate
+
+**Purpose:** Question all constraining ADRs *before* planning or writing tests, so that
+outdated decisions are caught before any implementation work begins.
+
+> **This is a hard gate, not a suggestion.** Do not proceed to Plan (Stage 4) or Test
+> First (Stage 5) until every constraining ADR has been explicitly reviewed and confirmed
+> as still-valid.
+
+**When Required:**
+- Every phase implementation (Stages 1–9 lifecycle)
+- Every improvement lifecycle that touches architecture
+- Whenever the Research stage reveals new information that may invalidate prior decisions
+
+**When Skipped:**
+- Bug fixes within established patterns
+- Dependency bumps, typos, CI config
+- Changes that don't touch any ADR-governed system
+
+**Activities:**
+1. **List all constraining ADRs** for the current phase (from the phase doc's
+   "Architecture Decisions" section)
+2. **For each ADR, ask the 4 questions:**
+   - Is this still the right format/tool/pattern?
+   - Would a Rust developer choose this today?
+   - Does the client care, or is this purely our implementation detail?
+   - What would we regret in 6 months?
+3. **Check for cross-crate implications** — does this ADR's decision create coupling,
+   duplication, or layering violations across crate boundaries?
+4. **Compare with ecosystem state** — have relevant Rust crates, patterns, or best
+   practices evolved since this ADR was written?
+5. **If any ADR fails questioning:** pause, create a superseding ADR (Stage 3), then
+   return here to re-validate
+
+**Quality Gate:**
+- Every constraining ADR has been explicitly reviewed (not assumed valid)
+- No ADR is known to be suboptimal without a superseding ADR created
+- Cross-crate implications are documented
+- Reviewer can state: "All architectural decisions still hold for this phase"
+
+**Output:** Confirmation that all ADRs are current, OR new/superseding ADRs created.
 
 ---
 
@@ -218,14 +267,10 @@ structural parts of the process:
 
 **Purpose:** Write the minimum correct implementation.
 
-#### 6.0 — Question Assumptions
-
-Before writing any code, review the ADRs that govern this phase and explicitly ask:
-- Is this still the best approach given what we know now?
-- Are we replicating a Java/vanilla pattern that has a better Rust-native alternative?
-- Has the ecosystem changed since the ADR was written?
-
-If the answer to any question is "yes, there's a better way," pause implementation and create a superseding ADR first. This step prevents accumulating technical debt from outdated decisions.
+> **Note:** Architectural questioning has already been completed in
+> [Stage 2.5](#stage-25--architectural-review-gate). If you discover during
+> implementation that an ADR is wrong, trigger the **ADR Rethink loop** (back to
+> Stage 3) — do not continue implementing a known-bad design.
 
 **Activities:**
 - Implement the minimum code to make failing tests pass

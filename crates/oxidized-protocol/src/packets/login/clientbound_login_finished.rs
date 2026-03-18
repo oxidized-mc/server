@@ -11,6 +11,7 @@ use crate::codec::varint::{self, VarIntError};
 
 /// Errors from decoding a [`ClientboundLoginFinishedPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum LoginFinishedError {
     /// VarInt decode failure.
     #[error("varint error: {0}")]

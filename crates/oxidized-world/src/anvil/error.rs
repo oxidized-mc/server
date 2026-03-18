@@ -6,6 +6,7 @@ use thiserror::Error;
 
 /// Errors that can occur during Anvil file operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AnvilError {
     /// I/O error reading or writing a file.
     #[error("I/O error at {path}: {source}")]

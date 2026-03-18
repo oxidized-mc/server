@@ -7,6 +7,7 @@ use thiserror::Error;
 
 /// Errors from [`BitStorage`] operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum BitStorageError {
     /// The requested bits-per-entry is out of range.
     #[error("bits per entry must be 1..=32, got {0}")]
