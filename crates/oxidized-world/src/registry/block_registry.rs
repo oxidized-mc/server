@@ -46,7 +46,8 @@ impl BlockRegistry {
             if let Some(states_arr) = block_value.get("states").and_then(|s| s.as_array()) {
                 for state_val in states_arr {
                     if let Some(id) = state_val.get("id").and_then(|v| v.as_u64()) {
-                        let id16 = id as u16;
+                        let id16 = u16::try_from(id)
+                            .map_err(|_| RegistryError::InvalidStateId(id))?;
                         if id16 > max_id {
                             max_id = id16;
                         }
@@ -60,7 +61,8 @@ impl BlockRegistry {
         let mut by_name: AHashMap<String, u16> = AHashMap::with_capacity(obj.len());
 
         for (block_name, block_value) in obj {
-            let block_index = blocks.len() as u16;
+            let block_index = u16::try_from(blocks.len())
+                .map_err(|_| RegistryError::InvalidStateId(blocks.len() as u64))?;
 
             // Parse properties.
             let properties = parse_properties(block_value);
@@ -71,7 +73,12 @@ impl BlockRegistry {
 
             if let Some(states_arr) = block_value.get("states").and_then(|s| s.as_array()) {
                 for state_val in states_arr {
-                    let id = state_val.get("id").and_then(|v| v.as_u64()).unwrap_or(0) as u16;
+                    let raw_id = state_val
+                        .get("id")
+                        .and_then(|v| v.as_u64())
+                        .ok_or_else(|| RegistryError::MissingStateId(block_name.clone()))?;
+                    let id = u16::try_from(raw_id)
+                        .map_err(|_| RegistryError::InvalidStateId(raw_id))?;
                     let is_default = state_val
                         .get("default")
                         .and_then(|v| v.as_bool())
@@ -93,9 +100,11 @@ impl BlockRegistry {
                         properties: state_props,
                     };
 
-                    if (id as usize) < states.len() {
-                        states[id as usize] = Some(block_state);
+                    let idx = id as usize;
+                    if idx >= states.len() {
+                        return Err(RegistryError::InvalidStateId(id as u64));
                     }
+                    states[idx] = Some(block_state);
                 }
             }
 
