@@ -636,3 +636,42 @@ Configurations, but the Configuration fields are what actually control wire form
 - **New files:** 9 (anvil: 5, storage: 4, including mod.rs files)
 - **Modified files:** 6 (lib.rs, section.rs, paletted_container.rs, 2× Cargo.toml, Cargo.lock)
 - **Lines added:** ~1,738
+
+---
+
+### 2026-03-18 — Phase 10 Re-run: Header Validation Bugs
+
+**Context:** Full lifecycle re-run of Phase 10 comparing Java `RegionFile.java` constructor
+against the Rust `read_header()` implementation.
+
+#### Bugs Found
+
+1. **Missing header entry sanitization (critical):** Java's `RegionFile` constructor validates
+   all 1024 offset entries during header read and zeros out invalid ones: `sector_number < 2`
+   (overlaps header), `sector_count == 0`, or `end_sector > file_sectors`. The Rust code stored
+   raw entries without validation. A `sector_count == 0` entry with `sector_number != 0` would
+   pass `is_present()` and attempt to read from an arbitrary offset, potentially returning
+   garbage data. Fixed by sanitizing entries during `read_header()`.
+
+2. **Missing payload-vs-sector bounds check (medium):** After reading the 4-byte `payload_len`,
+   Java validates it doesn't exceed `numSectors * SECTOR_BYTES`. A corrupted `payload_len` (but
+   under 16 MiB) would cause reads past the chunk's allocated sectors into adjacent chunks' data.
+   Fixed by checking `payload_len + 4 <= sector_count * SECTOR_BYTES`.
+
+3. **Error variant misuse (low):** `AnvilError::Decompression` was abused for mutex poisoning
+   and `JoinError` in `AsyncChunkLoader`. Added `AnvilError::Internal(String)`.
+
+#### Lessons
+
+- **Always validate untrusted data at parse time**, not at use time. Java sanitizes during
+  header read; deferring validation to `read_chunk_data` missed the `sector_count == 0` case.
+- **Error types are semantic contracts.** Using `Decompression` for internal errors confuses
+  callers who might retry decompression failures but should not retry mutex poisoning.
+- **Our validation is intentionally stricter than Java's** for the EOF edge case: Java checks
+  `sectorStart > fileSize` while Rust checks `sectorEnd > fileSize`. Both reject clearly invalid
+  entries; Rust additionally rejects sectors that start at EOF (which would fail to read anyway).
+
+#### Metrics
+
+- **Tests:** 120 → 123 (3 new: sector_count_zero, header_overlap, payload_overflow)
+- **Review iterations:** 2 (unused import + comment accuracy → fixed → clean)
