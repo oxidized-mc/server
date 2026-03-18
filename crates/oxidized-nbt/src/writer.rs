@@ -25,8 +25,30 @@ fn write_mutf8_str<W: Write>(writer: &mut W, s: &str) -> Result<(), NbtError> {
     Ok(())
 }
 
+/// Maximum nesting depth for writing (matches reader and parser).
+const WRITE_MAX_DEPTH: usize = crate::error::MAX_DEPTH;
+
+/// Validates that writing at the given depth is within limits.
+fn check_write_depth(depth: usize) -> Result<(), NbtError> {
+    if depth > WRITE_MAX_DEPTH {
+        Err(NbtError::DepthLimit {
+            depth,
+            max: WRITE_MAX_DEPTH,
+        })
+    } else {
+        Ok(())
+    }
+}
+
+/// Safely converts a `usize` length to `i32` for the NBT wire format.
+fn len_to_i32(len: usize) -> Result<i32, NbtError> {
+    i32::try_from(len).map_err(|_| {
+        NbtError::InvalidFormat(format!("length {len} exceeds i32::MAX"))
+    })
+}
+
 /// Writes the payload for a single tag (no type ID, no name).
-fn write_payload<W: Write>(writer: &mut W, tag: &NbtTag) -> Result<(), NbtError> {
+fn write_payload<W: Write>(writer: &mut W, tag: &NbtTag, depth: usize) -> Result<(), NbtError> {
     match tag {
         NbtTag::Byte(v) => writer.write_all(&v.to_be_bytes())?,
         NbtTag::Short(v) => writer.write_all(&v.to_be_bytes())?,
@@ -36,7 +58,7 @@ fn write_payload<W: Write>(writer: &mut W, tag: &NbtTag) -> Result<(), NbtError>
         NbtTag::Double(v) => writer.write_all(&v.to_be_bytes())?,
 
         NbtTag::ByteArray(arr) => {
-            writer.write_all(&(arr.len() as i32).to_be_bytes())?;
+            writer.write_all(&len_to_i32(arr.len())?.to_be_bytes())?;
             for &b in arr {
                 writer.write_all(&[b as u8])?;
             }
@@ -45,24 +67,30 @@ fn write_payload<W: Write>(writer: &mut W, tag: &NbtTag) -> Result<(), NbtError>
         NbtTag::String(s) => write_mutf8_str(writer, s)?,
 
         NbtTag::List(list) => {
+            let next_depth = depth + 1;
+            check_write_depth(next_depth)?;
             writer.write_all(&[list.element_type()])?;
-            writer.write_all(&(list.len() as i32).to_be_bytes())?;
+            writer.write_all(&len_to_i32(list.len())?.to_be_bytes())?;
             for element in list.iter() {
-                write_payload(writer, element)?;
+                write_payload(writer, element, next_depth)?;
             }
         },
 
-        NbtTag::Compound(compound) => write_compound_payload(writer, compound)?,
+        NbtTag::Compound(compound) => {
+            let next_depth = depth + 1;
+            check_write_depth(next_depth)?;
+            write_compound_payload(writer, compound, next_depth)?;
+        },
 
         NbtTag::IntArray(arr) => {
-            writer.write_all(&(arr.len() as i32).to_be_bytes())?;
+            writer.write_all(&len_to_i32(arr.len())?.to_be_bytes())?;
             for &v in arr {
                 writer.write_all(&v.to_be_bytes())?;
             }
         },
 
         NbtTag::LongArray(arr) => {
-            writer.write_all(&(arr.len() as i32).to_be_bytes())?;
+            writer.write_all(&len_to_i32(arr.len())?.to_be_bytes())?;
             for &v in arr {
                 writer.write_all(&v.to_be_bytes())?;
             }
@@ -75,11 +103,25 @@ fn write_payload<W: Write>(writer: &mut W, tag: &NbtTag) -> Result<(), NbtError>
 fn write_compound_payload<W: Write>(
     writer: &mut W,
     compound: &NbtCompound,
+    depth: usize,
 ) -> Result<(), NbtError> {
     for (name, tag) in compound.iter() {
-        write_named_tag(writer, name, tag)?;
+        write_named_tag_inner(writer, name, tag, depth)?;
     }
     writer.write_all(&[TAG_END])?;
+    Ok(())
+}
+
+/// Writes a single named tag: `[type_id: u8][name: mutf8][payload]`.
+fn write_named_tag_inner<W: Write>(
+    writer: &mut W,
+    name: &str,
+    tag: &NbtTag,
+    depth: usize,
+) -> Result<(), NbtError> {
+    writer.write_all(&[tag.type_id()])?;
+    write_mutf8_str(writer, name)?;
+    write_payload(writer, tag, depth)?;
     Ok(())
 }
 
@@ -90,10 +132,7 @@ fn write_compound_payload<W: Write>(
 /// Returns an error on I/O failure or if the name exceeds the u16 length
 /// limit for Modified UTF-8.
 pub fn write_named_tag<W: Write>(writer: &mut W, name: &str, tag: &NbtTag) -> Result<(), NbtError> {
-    writer.write_all(&[tag.type_id()])?;
-    write_mutf8_str(writer, name)?;
-    write_payload(writer, tag)?;
-    Ok(())
+    write_named_tag_inner(writer, name, tag, 0)
 }
 
 /// Writes a root compound in the unnamed-tag format:
@@ -108,7 +147,7 @@ pub fn write_nbt<W: Write>(writer: &mut W, compound: &NbtCompound) -> Result<(),
     writer.write_all(&[TAG_COMPOUND])?;
     // Empty root name
     writer.write_all(&0u16.to_be_bytes())?;
-    write_compound_payload(writer, compound)?;
+    write_compound_payload(writer, compound, 1)?;
     Ok(())
 }
 
@@ -193,5 +232,21 @@ mod tests {
 
         assert_eq!(result.get_string("msg"), Some("hello"));
         assert_eq!(result.get_int("num"), Some(42));
+    }
+
+    #[test]
+    fn test_write_depth_limit() {
+        // Build a compound nested beyond MAX_DEPTH.
+        let mut compound = NbtCompound::new();
+        compound.put_byte("leaf", 1);
+        for _ in 0..crate::error::MAX_DEPTH {
+            let mut outer = NbtCompound::new();
+            outer.put("n", NbtTag::Compound(compound));
+            compound = outer;
+        }
+
+        let mut buf = Vec::new();
+        let result = write_nbt(&mut buf, &compound);
+        assert!(result.is_err(), "should reject deeply nested compound");
     }
 }
