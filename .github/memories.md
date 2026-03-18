@@ -419,8 +419,25 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
   real chunk data to benchmark against (Phase 9–10).
 
 ### Metrics
-- **Tests:** 163 total (160 unit + 3 doc-tests)
+- **Tests:** 166 total (163 unit + 3 doc-tests)
 - **Lines of code:** ~4,650 (12 source files)
 - **Modules:** error, mutf8, tag, compound, list, accounter, reader, writer, io, snbt, serde
-- **Security bugs found in review:** 1 (integer overflow in size accounting)
+- **Security bugs found in review:** 4 across 4 iterations
+  1. Integer overflow in reader size accounting (checked arithmetic fix)
+  2. SNBT parser unbounded recursion → stack overflow DoS (depth parameter fix)
+  3. Writer unbounded recursion → stack overflow DoS (depth check fix)
+  4. Writer `len() as i32` silent truncation (i32::try_from fix)
+- **Review iterations:** 4 (R1: overflow found → R2: 3 new issues → R3: depth leak on error paths → R4: clean)
 - **ADR compliance:** ADR-010 followed (quota values corrected from ADR)
+
+### Review↔Fix Loop Learnings
+- **Mutable depth state is error-prone.** Review #3 caught that `push_depth`/`pop_depth` on
+  a mutable field leaks depth on early `?` returns. Passing depth as an immutable parameter
+  through recursive calls makes leaks impossible by construction. Prefer parameter-passing
+  over mutable state for recursion depth tracking.
+- **Review iteration #1 missed the writer.** The first review focused on the reader and found
+  the overflow. But the same class of bug (unchecked arithmetic, unbounded recursion) existed
+  in the writer and SNBT formatter. Lesson: when fixing a bug class, grep for ALL instances
+  across the entire crate, not just the file where it was found.
+- **The loop works.** 4 iterations caught 4 distinct security issues that would have shipped
+  without the Review↔Fix loop enforcement.
