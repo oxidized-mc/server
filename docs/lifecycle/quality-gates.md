@@ -130,6 +130,11 @@
 
 **Question:** Would you be proud to maintain this code?
 
+**CRITICAL: Review is a loop, not a checkpoint.**
+If the review finds issues and you fix them, you **must** re-run the review on the
+updated code. Never advance to Stage 8 after fixing review findings without a clean
+re-review pass. The loop terminates only when a review finds zero significant issues.
+
 #### Standard Checks
 - [ ] Code is correct and handles edge cases
 - [ ] No stale references (renamed items, moved files, changed APIs)
@@ -146,6 +151,11 @@
 - [ ] **Checked:** Are there missing tests for existing code exposed by this change?
 - [ ] **Checked:** Are there performance opportunities?
 - [ ] Any identified improvements are recorded (memories.md or new issue/ADR)
+
+#### Review Loop Enforcement
+- [ ] If issues were found and fixed, a **re-review** was performed
+- [ ] The final review pass found **zero** significant issues
+- [ ] The review iteration count is recorded in the session plan
 
 #### PR-Specific Checks (for pull requests)
 - [ ] Conventional commit messages
@@ -213,7 +223,7 @@ These gates are enforced automatically and cannot be bypassed:
 - `cargo test --workspace` (tests)
 - `cargo-deny check` (licenses + advisories)
 - MSRV check (Rust 1.85 compatibility)
-- `rustsec/audit-check` (security vulnerabilities)
+- `cargo-audit` (security vulnerabilities)
 
 ### Manual (Review Process)
 These gates require human judgment:

@@ -171,6 +171,11 @@ Parallelise independent `explore` calls. Never re-read files an agent already re
 4. Stale references
 5. **Improvement opportunities** (outdated ADRs, better patterns, missing tests)
 
+**Review↔Fix loop (mandatory):**
+If the code review finds issues → fix them → **re-run the code-review agent** on the
+updated code. Never commit after fixing review findings without a clean re-review pass.
+The loop terminates only when a review pass finds zero significant issues.
+
 ---
 
 ### TDD Cycle
