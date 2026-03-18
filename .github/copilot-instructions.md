@@ -242,7 +242,7 @@ Fix every stale reference in the same commit.
 
 ### Language & Edition
 
-- **Rust stable**, edition 2021 (pinned in `rust-toolchain.toml`)
+- **Rust stable**, edition 2024 (pinned in `rust-toolchain.toml`)
 - `#![warn(missing_docs)]` on all public library crates (enforced via workspace lints)
 - `#![deny(unsafe_code)]` unless a crate explicitly needs it (document why with `SAFETY:` comment)
 
