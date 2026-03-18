@@ -475,3 +475,27 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 - **Files:** 16 changed, 1871 insertions
 - **Tests:** 381 total (180 protocol, 163 NBT, 35 server, 3 doc-tests)
 - **Review iterations:** 1 (clean pass)
+
+### Phase 7 — Core Data Types
+
+#### What Went Well
+- **Tier 1/Tier 2 decomposition worked perfectly.** Implementing independent types first (Direction, Vec3i, Vec3, Vec2, GameType, Difficulty) then dependent types (BlockPos, ChunkPos, SectionPos, Aabb) avoided any circular dependency issues.
+- **Code review caught real bugs:** integer overflow in `dist_manhattan()`, `dist_chessboard()`, `offset()`, `multiply()`, `cross()`, `relative_steps()`, and Add/Sub traits. All fixed before merge.
+- **Java reference guided bit-packing exactly right** — BlockPos 26/26/12 layout and SectionPos 22/22/20 layout match vanilla perfectly, with sign extension via arithmetic right shift.
+
+#### Patterns Established
+- **Distance calculations widen to i64** to avoid overflow: `i64::from(self.x) - i64::from(other.x)`. This is safe because i32 differences always fit in i64.
+- **Spatial arithmetic uses wrapping** (`wrapping_add`, `wrapping_mul`) to match Java's default overflow behavior. In practice, Minecraft world coordinates are bounded by ±30M so overflow can't occur with valid game data.
+- **Wire format helpers pattern**: `read_f32`/`write_f32`/`read_f64`/`write_f64` added to `codec/types.rs` following existing `read_i32`/`write_i32` pattern.
+- **Newtype coordinate wrappers** (BlockPos, ChunkPos, SectionPos) enforce compile-time safety per ADR-013.
+
+#### Gotchas
+- **Unicode box-drawing characters in Rust source**: section separator comments like `// ── Distances ──` are safe inside comments, but edit operations can accidentally place them outside comments, causing "unknown start of token" compile errors. Always verify edits near decorated comments.
+- **BlockPos sign extension trick**: Rust's `>>` on `i64` is arithmetic (preserves sign), same as Java. The pattern `((packed << N) >> M) as i32` correctly sign-extends packed fields.
+- **Aabb auto-correction**: Constructor must swap min/max if inverted — matches `AABB.java`'s behavior.
+
+#### Metrics
+- **Files:** 12 changed, 4234 insertions
+- **Tests:** 412 protocol tests (up from 381), 613 total workspace
+- **Review iterations:** 2 (overflow fix required re-review)
+- **Types added:** Direction, Axis, AxisDirection, Vec3i, Vec3, Vec2, BlockPos, ChunkPos, SectionPos, Aabb, GameType, Difficulty
