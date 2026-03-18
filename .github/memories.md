@@ -441,3 +441,37 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
   across the entire crate, not just the file where it was found.
 - **The loop works.** 4 iterations caught 4 distinct security issues that would have shipped
   without the Review↔Fix loop enforcement.
+
+---
+
+### 2026-03-18 — Phase 6: Configuration State
+
+**Context:** Implementing the Configuration protocol state (LOGIN → CONFIGURATION → PLAY).
+
+#### Key Decisions
+- **Registry data embedding:** Bundled 28 synchronized registries as a single `registries.json`
+  (382 entries, ~254 KB) via `tools/bundle_registries.py`. Included at compile time with
+  `include_str!`. Runtime JSON→NBT conversion on first access via `LazyLock`. Startup cost
+  is negligible (~ms) and avoids complex build.rs dependencies on oxidized-nbt.
+- **Tags deferred:** Sent empty `UpdateTagsPacket`. Full tag support requires block/item
+  registries (Phase 8+) since tags reference entries by integer ID.
+- **Known pack negotiation simplified:** Always send full registry data regardless of client
+  response. Known-pack optimization deferred — marginal benefit until data packs are supported.
+
+#### Gotchas
+- **NBT type ambiguity from JSON:** JSON loses int/float distinction. Heuristic: no fractional
+  part → `Int`; fractional → `Float`. The vanilla client uses DynamicOps which is type-flexible,
+  so `Int` vs `Long` and `Float` vs `Double` both work if the value fits.
+- **Registry order matters:** The 28 registries must be sent in the order defined by
+  `RegistryDataLoader.SYNCHRONIZED_REGISTRIES`. This order is preserved in `SYNCHRONIZED_REGISTRIES`
+  constant.
+- **handle_login() return bug:** The Login arm in `handle_connection()` returned `Ok(())`
+  after `handle_login()`, closing the connection before configuration could run. The fix is
+  to call `handle_configuration()` immediately after login succeeds.
+- **Version string for KnownPack:** 26.1-pre-3 maps to version "1.21.6" for the vanilla core
+  pack in `SelectKnownPacks`.
+
+#### Metrics
+- **Files:** 16 changed, 1871 insertions
+- **Tests:** 381 total (180 protocol, 163 NBT, 35 server, 3 doc-tests)
+- **Review iterations:** 1 (clean pass)
