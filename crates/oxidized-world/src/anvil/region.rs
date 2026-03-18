@@ -372,7 +372,7 @@ mod tests {
 
         // Pad to sector boundary
         let total = file_data.len();
-        let padded = ((total + SECTOR_BYTES - 1) / SECTOR_BYTES) * SECTOR_BYTES;
+        let padded = total.div_ceil(SECTOR_BYTES) * SECTOR_BYTES;
         file_data.resize(padded, 0);
 
         std::fs::write(&path, &file_data).unwrap();
@@ -396,7 +396,7 @@ mod tests {
     fn test_region_file_too_small() {
         let dir = std::env::temp_dir();
         let path = dir.join("oxidized_test_region_small.mca");
-        std::fs::write(&path, &[0u8; 100]).unwrap();
+        std::fs::write(&path, [0u8; 100]).unwrap();
 
         let result = RegionFile::open(&path);
         assert!(result.is_err());
