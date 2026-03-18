@@ -87,7 +87,7 @@ impl ServerLevel {
             Ok(Some(chunk)) => {
                 let arc = self.chunk_cache.lock().insert(pos, chunk);
                 Ok(Some(arc))
-            }
+            },
             Err(e) => Err(LevelError::Io(e.to_string())),
         }
     }
@@ -101,12 +101,10 @@ impl ServerLevel {
     pub fn get_block_state_loaded(&self, pos: BlockPos) -> Result<u32, LevelError> {
         let cpos = ChunkPos::from_block(pos.x, pos.z);
         let cache = self.chunk_cache.lock();
-        let arc = cache
-            .peek(&cpos)
-            .ok_or(LevelError::ChunkNotLoaded {
-                chunk_x: cpos.x,
-                chunk_z: cpos.z,
-            })?;
+        let arc = cache.peek(&cpos).ok_or(LevelError::ChunkNotLoaded {
+            chunk_x: cpos.x,
+            chunk_z: cpos.z,
+        })?;
         let chunk = arc.read();
         Ok(chunk.get_block_state(pos.x, pos.y, pos.z)?)
     }
@@ -125,12 +123,10 @@ impl ServerLevel {
     ) -> Result<u32, LevelError> {
         let cpos = ChunkPos::from_block(pos.x, pos.z);
         let cache = self.chunk_cache.lock();
-        let arc = cache
-            .peek(&cpos)
-            .ok_or(LevelError::ChunkNotLoaded {
-                chunk_x: cpos.x,
-                chunk_z: cpos.z,
-            })?;
+        let arc = cache.peek(&cpos).ok_or(LevelError::ChunkNotLoaded {
+            chunk_x: cpos.x,
+            chunk_z: cpos.z,
+        })?;
         let mut chunk = arc.write();
         let old = chunk.set_block_state(pos.x, pos.y, pos.z, state)?;
         drop(chunk);
@@ -194,10 +190,7 @@ impl ServerLevel {
 
     /// Creates a new empty chunk with dimensions matching this level's
     /// [`DimensionType`] and inserts it into the cache.
-    pub fn create_empty_chunk(
-        &self,
-        pos: ChunkPos,
-    ) -> Arc<parking_lot::RwLock<LevelChunk>> {
+    pub fn create_empty_chunk(&self, pos: ChunkPos) -> Arc<parking_lot::RwLock<LevelChunk>> {
         let chunk = LevelChunk::with_dimensions(
             pos,
             self.dimension_type.min_y,
@@ -236,8 +229,7 @@ mod tests {
 
     fn test_level() -> ServerLevel {
         let registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader =
-            AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
+        let loader = AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
         let async_loader = AsyncChunkLoader::new(loader);
         let level_data = PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap();
 
@@ -338,8 +330,7 @@ mod tests {
     #[should_panic(expected = "chunk min_y mismatch")]
     fn insert_chunk_dimension_mismatch_panics() {
         let registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader =
-            AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
+        let loader = AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
         let async_loader = AsyncChunkLoader::new(loader);
         let level_data = PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap();
 
@@ -357,8 +348,7 @@ mod tests {
     #[test]
     fn create_empty_chunk_matches_dimension() {
         let registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader =
-            AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
+        let loader = AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
         let async_loader = AsyncChunkLoader::new(loader);
         let level_data = PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap();
 

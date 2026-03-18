@@ -138,8 +138,7 @@ impl ResourceLocation {
     #[must_use]
     #[allow(clippy::expect_used)]
     pub fn minecraft(path: impl Into<String>) -> Self {
-        Self::new(DEFAULT_NAMESPACE, path)
-            .expect("invalid minecraft resource location path")
+        Self::new(DEFAULT_NAMESPACE, path).expect("invalid minecraft resource location path")
     }
 
     /// Reads a `ResourceLocation` from a wire buffer.

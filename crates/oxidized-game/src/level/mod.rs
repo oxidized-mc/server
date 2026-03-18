@@ -24,4 +24,4 @@ pub use dimension_manager::DimensionManager;
 pub use error::LevelError;
 pub use flags::BlockFlags;
 pub use server_level::ServerLevel;
-pub use traits::{BlockGetter, LevelWriter, AIR_STATE_ID};
+pub use traits::{AIR_STATE_ID, BlockGetter, LevelWriter};
