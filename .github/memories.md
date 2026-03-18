@@ -594,3 +594,45 @@ Configurations, but the Configuration fields are what actually control wire form
 - **Tests:** 83 → 87 (4 new: global roundtrip, get_and_set ×2, bits_per_entry)
 - **Files changed:** 4 (`bit_storage.rs`, `paletted_container.rs`, `section.rs`, `heightmap.rs`)
 - **Review iterations:** 2 (initial review found biome bits issue → fixed → clean)
+
+---
+
+### Phase 10 — Anvil World Loading (2025-07)
+
+#### What Went Well
+
+- Straightforward implementation — the Anvil format is well-documented
+- `thiserror` error handling kept all error cases typed and clear
+- Reusing existing `PalettedContainer`/`BitStorage`/`DataLayer` types worked cleanly
+- All 120 tests pass (added ~30 new tests for anvil + storage modules)
+
+#### Key Design Decisions
+
+- **`PrimaryLevelData` uses raw `i32`/`i8` for game_type/difficulty** — `oxidized-world` cannot
+  depend on `oxidized-protocol` (lower-layer rule). Conversion to `GameType`/`Difficulty` enums
+  happens at the server layer.
+- **`PalettedContainer::from_nbt_data()`** — new constructor for disk palette format (NBT
+  palette + i64 LongArray) vs wire format (VarInt palette + network bytes). Disk format
+  uses variable-length palettes stored as NBT compounds.
+- **External `.mcc` chunks are logged and skipped** — extremely rare edge case, not worth
+  implementing in this phase.
+- **Region file I/O is synchronous** — called from `tokio::task::spawn_blocking` via
+  `AsyncChunkLoader`.
+
+#### Gotchas
+
+- `oxidized_nbt` re-exports `read_bytes`, `read_file`, `write_file` at crate root — don't
+  use `oxidized_nbt::io::*` (the `io` module is private)
+- NBT `NbtCompound` getters return `Option<T>`, not `Result` — need `.ok_or_else()` wrapping
+- `NbtList` has `compounds()` iterator but no `strings()` — use `iter()` + `NbtTag::as_str()`
+- Clippy denies `expect()` in production code — use `match`/`let-else` instead
+- Disk palette for biomes uses `List<String>` (resource IDs), blocks use `List<Compound>`
+  (Name + Properties) — different deserialization paths needed
+- LZ4 on disk uses block mode (`lz4_flex::decompress_size_prepended`), not framed mode
+
+#### Metrics
+
+- **Tests:** 87 → 120 (33 new tests across anvil and storage modules)
+- **New files:** 9 (anvil: 5, storage: 4, including mod.rs files)
+- **Modified files:** 6 (lib.rs, section.rs, paletted_container.rs, 2× Cargo.toml, Cargo.lock)
+- **Lines added:** ~1,738
