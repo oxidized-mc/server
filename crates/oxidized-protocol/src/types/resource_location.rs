@@ -126,6 +126,22 @@ impl ResourceLocation {
         &self.path
     }
 
+    /// Creates a `ResourceLocation` with the `minecraft` namespace.
+    ///
+    /// This is a convenience constructor for the common case of creating
+    /// resource locations in the default `minecraft` namespace.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `path` contains invalid characters or is empty. Only use
+    /// with compile-time-known valid paths.
+    #[must_use]
+    #[allow(clippy::expect_used)]
+    pub fn minecraft(path: impl Into<String>) -> Self {
+        Self::new(DEFAULT_NAMESPACE, path)
+            .expect("invalid minecraft resource location path")
+    }
+
     /// Reads a `ResourceLocation` from a wire buffer.
     ///
     /// # Errors
@@ -162,6 +178,26 @@ mod tests {
         let rl = ResourceLocation::new("minecraft", "stone").unwrap();
         assert_eq!(rl.namespace(), "minecraft");
         assert_eq!(rl.path(), "stone");
+    }
+
+    #[test]
+    fn test_minecraft_convenience() {
+        let rl = ResourceLocation::minecraft("overworld");
+        assert_eq!(rl.namespace(), "minecraft");
+        assert_eq!(rl.path(), "overworld");
+        assert_eq!(rl.to_string(), "minecraft:overworld");
+    }
+
+    #[test]
+    fn test_minecraft_nested_path() {
+        let rl = ResourceLocation::minecraft("worldgen/biome");
+        assert_eq!(rl.path(), "worldgen/biome");
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid minecraft resource location path")]
+    fn test_minecraft_invalid_path_panics() {
+        let _ = ResourceLocation::minecraft("Invalid Path");
     }
 
     #[test]
