@@ -476,6 +476,18 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 - **Tests:** 381 total (180 protocol, 163 NBT, 35 server, 3 doc-tests)
 - **Review iterations:** 1 (clean pass)
 
+#### Phase 6.6 Completion — ServerboundClientInformationPacket (2026-03-18)
+- **What went well:** Existing enum patterns (GameType, Difficulty) made new enum types
+  trivial — copy the structure, change the variants. TDD cycle was smooth; all 35 new tests
+  passed on first implementation.
+- **Gotcha — client info arrives before SelectKnownPacks response:** The vanilla client
+  sends `ServerboundClientInformationPacket` (0x00) *before* responding to `SelectKnownPacks`
+  (0x02). A rigid "read next packet, expect X" approach would reject valid clients. The fix:
+  read packets in a loop, accepting 0x00 at any point during configuration and breaking
+  when the expected packet arrives.
+- **Metrics:** 7 files changed, 952 insertions, 35 new tests (20 enum + 15 packet), 1 review
+  iteration (clean pass). Total test count: 447 protocol, 35 server.
+
 ### Phase 7 — Core Data Types
 
 #### What Went Well

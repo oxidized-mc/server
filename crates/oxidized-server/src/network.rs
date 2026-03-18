@@ -15,9 +15,8 @@ use oxidized_protocol::crypto::{
 use oxidized_protocol::packets::configuration::{
     ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
     ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket,
-    ClientboundUpdateTagsPacket, KnownPack, RegistryEntry,
-    ServerboundClientInformationPacket, ServerboundFinishConfigurationPacket,
-    ServerboundSelectKnownPacksPacket,
+    ClientboundUpdateTagsPacket, KnownPack, RegistryEntry, ServerboundClientInformationPacket,
+    ServerboundFinishConfigurationPacket, ServerboundSelectKnownPacksPacket,
 };
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
 use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
@@ -469,8 +468,8 @@ async fn handle_configuration(
         let pkt = conn.read_raw_packet().await?;
         match pkt.id {
             ServerboundClientInformationPacket::PACKET_ID => {
-                let info_pkt = ServerboundClientInformationPacket::decode(pkt.data)
-                    .map_err(|e| {
+                let info_pkt =
+                    ServerboundClientInformationPacket::decode(pkt.data).map_err(|e| {
                         ConnectionError::Io(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
                             e.to_string(),
@@ -483,7 +482,7 @@ async fn handle_configuration(
                     "Received client information",
                 );
                 client_info = Some(info_pkt.information);
-            }
+            },
             ServerboundSelectKnownPacksPacket::PACKET_ID => {
                 let _client_packs =
                     ServerboundSelectKnownPacksPacket::decode(pkt.data).map_err(|e| {
@@ -494,11 +493,11 @@ async fn handle_configuration(
                     })?;
                 debug!(peer = %addr, "Received client known packs response");
                 break;
-            }
+            },
             _ => {
                 warn!(peer = %addr, id = pkt.id, "Unexpected packet during configuration");
                 return disconnect(conn, "Unexpected packet during configuration").await;
-            }
+            },
         }
     }
 
@@ -609,18 +608,14 @@ async fn handle_configuration(
                     "Received updated client information",
                 );
                 client_info = Some(info_pkt.information);
-            }
+            },
             ServerboundFinishConfigurationPacket::PACKET_ID => {
                 break;
-            }
+            },
             _ => {
                 warn!(peer = %addr, id = finish_pkt.id, "Expected FinishConfiguration");
-                return disconnect(
-                    conn,
-                    "Unexpected packet — expected finish configuration",
-                )
-                .await;
-            }
+                return disconnect(conn, "Unexpected packet — expected finish configuration").await;
+            },
         }
     }
 
