@@ -3,4 +3,5 @@
 //! Handles block/item registries, chunk storage, lighting engine,
 //! and world generation.
 
+pub mod chunk;
 pub mod registry;
