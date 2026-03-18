@@ -177,21 +177,33 @@ impl Vec3 {
     pub fn x_rot(self, radians: f64) -> Self {
         let cos = radians.cos();
         let sin = radians.sin();
-        Self::new(self.x, self.y * cos + self.z * sin, self.z * cos - self.y * sin)
+        Self::new(
+            self.x,
+            self.y * cos + self.z * sin,
+            self.z * cos - self.y * sin,
+        )
     }
 
     /// Rotates this vector around the Y axis by `radians`.
     pub fn y_rot(self, radians: f64) -> Self {
         let cos = radians.cos();
         let sin = radians.sin();
-        Self::new(self.x * cos + self.z * sin, self.y, self.z * cos - self.x * sin)
+        Self::new(
+            self.x * cos + self.z * sin,
+            self.y,
+            self.z * cos - self.x * sin,
+        )
     }
 
     /// Rotates this vector around the Z axis by `radians`.
     pub fn z_rot(self, radians: f64) -> Self {
         let cos = radians.cos();
         let sin = radians.sin();
-        Self::new(self.x * cos + self.y * sin, self.y * cos - self.x * sin, self.z)
+        Self::new(
+            self.x * cos + self.y * sin,
+            self.y * cos - self.x * sin,
+            self.z,
+        )
     }
 
     /// Converts an integer position to its lower corner in double coordinates.

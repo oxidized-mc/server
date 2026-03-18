@@ -97,10 +97,7 @@ impl GameType {
     /// out of range.
     pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
         let id = varint::read_varint_buf(buf)?;
-        GameType::by_id(id).ok_or(TypeError::UnexpectedEof {
-            need: 1,
-            have: 0,
-        })
+        GameType::by_id(id).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
     }
 
     /// Writes this [`GameType`] to a wire buffer as a VarInt.

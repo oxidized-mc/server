@@ -103,10 +103,9 @@ impl SectionPos {
     /// Sign extension is applied to recover negative coordinates.
     pub const fn from_long(packed: i64) -> Self {
         let x = (packed >> X_OFFSET) as i32;
-        let z = ((packed << PACKED_XZ_LENGTH as i64) >> (PACKED_XZ_LENGTH + Z_OFFSET) as i64)
-            as i32;
-        let y = ((packed << (64 - PACKED_Y_LENGTH) as i64) >> (64 - PACKED_Y_LENGTH) as i64)
-            as i32;
+        let z =
+            ((packed << PACKED_XZ_LENGTH as i64) >> (PACKED_XZ_LENGTH + Z_OFFSET) as i64) as i32;
+        let y = ((packed << (64 - PACKED_Y_LENGTH) as i64) >> (64 - PACKED_Y_LENGTH) as i64) as i32;
         Self { x, y, z }
     }
 
