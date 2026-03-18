@@ -18,8 +18,6 @@ pub use clientbound_registry_data::{ClientboundRegistryDataPacket, RegistryEntry
 pub use clientbound_select_known_packs::{ClientboundSelectKnownPacksPacket, KnownPack};
 pub use clientbound_update_enabled_features::ClientboundUpdateEnabledFeaturesPacket;
 pub use clientbound_update_tags::{ClientboundUpdateTagsPacket, TagEntry, TagRegistry};
-pub use serverbound_client_information::{
-    ClientInformation, ServerboundClientInformationPacket,
-};
+pub use serverbound_client_information::{ClientInformation, ServerboundClientInformationPacket};
 pub use serverbound_finish_configuration::ServerboundFinishConfigurationPacket;
 pub use serverbound_select_known_packs::ServerboundSelectKnownPacksPacket;

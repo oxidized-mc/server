@@ -359,10 +359,7 @@ mod tests {
         types::write_bool(&mut buf, false);
         varint::write_varint_buf(0, &mut buf);
         let err = ServerboundClientInformationPacket::decode(buf.freeze()).unwrap_err();
-        assert!(matches!(
-            err,
-            ClientInformationError::InvalidMainHand(42)
-        ));
+        assert!(matches!(err, ClientInformationError::InvalidMainHand(42)));
     }
 
     #[test]
