@@ -1,8 +1,8 @@
 //! TCP listener and per-connection handler for the Oxidized server.
 //!
 //! Binds to the configured address, accepts incoming connections, and
-//! spawns a Tokio task per client. Handles the HANDSHAKING, STATUS, and
-//! LOGIN protocol states.
+//! spawns a Tokio task per client. Handles the HANDSHAKING, STATUS,
+//! LOGIN, and CONFIGURATION protocol states.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -11,6 +11,12 @@ use oxidized_protocol::auth;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
 use oxidized_protocol::crypto::{
     generate_challenge, minecraft_digest, offline_uuid, ServerKeyPair,
+};
+use oxidized_protocol::packets::configuration::{
+    ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
+    ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket,
+    ClientboundUpdateTagsPacket, KnownPack, RegistryEntry, ServerboundFinishConfigurationPacket,
+    ServerboundSelectKnownPacksPacket,
 };
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
 use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
@@ -23,7 +29,9 @@ use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
     ServerboundStatusRequestPacket,
 };
+use oxidized_protocol::registry;
 use oxidized_protocol::status::ServerStatus;
+use oxidized_protocol::types::resource_location::ResourceLocation;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
@@ -131,9 +139,13 @@ async fn handle_connection(
                     },
                     ConnectionState::Login => {
                         handle_login(&mut conn, pkt, ctx).await?;
+                        // Login transitions to Configuration — handle it immediately
+                        // (server drives the configuration flow, not client)
+                        handle_configuration(&mut conn, ctx).await?;
+                        info!(peer = %addr, "Configuration complete — entering play");
                         return Ok(());
                     },
-                    _ => {
+                    ConnectionState::Configuration | ConnectionState::Play => {
                         debug!(peer = %addr, state = %conn.state, "Unhandled state");
                         return Ok(());
                     },
@@ -409,6 +421,159 @@ async fn authenticate_online(
     info!(peer = %addr, uuid = %uuid, name = %profile.name(), "Player authenticated");
 
     Ok((uuid, profile.name().to_string(), properties))
+}
+
+/// Handles the CONFIGURATION state — sends registry data, tags, features,
+/// and transitions the client to PLAY.
+///
+/// The configuration flow is server-driven:
+/// 1. Send `ClientboundSelectKnownPacksPacket`
+/// 2. Receive `ServerboundSelectKnownPacksPacket`
+/// 3. Send `ClientboundRegistryDataPacket` × N (one per synchronized registry)
+/// 4. Send `ClientboundUpdateTagsPacket` (empty — no block/item registries yet)
+/// 5. Send `ClientboundUpdateEnabledFeaturesPacket` (vanilla features)
+/// 6. Send `ClientboundFinishConfigurationPacket`
+/// 7. Receive `ServerboundFinishConfigurationPacket`
+/// 8. Transition to PLAY state
+///
+/// # Errors
+///
+/// Returns a [`ConnectionError`] if any I/O, decoding, or protocol step fails.
+async fn handle_configuration(
+    conn: &mut Connection,
+    _ctx: &LoginContext,
+) -> Result<(), ConnectionError> {
+    let addr = conn.remote_addr();
+
+    // 1. Send SelectKnownPacks — we claim to have the vanilla core pack
+    let known_packs = ClientboundSelectKnownPacksPacket {
+        packs: vec![KnownPack {
+            namespace: "minecraft".to_string(),
+            id: "core".to_string(),
+            version: "1.21.6".to_string(),
+        }],
+    };
+    conn.send_raw(
+        ClientboundSelectKnownPacksPacket::PACKET_ID,
+        &known_packs.encode(),
+    )
+    .await?;
+    conn.flush().await?;
+    debug!(peer = %addr, "Sent SelectKnownPacks");
+
+    // 2. Receive ServerboundSelectKnownPacks
+    let pkt = conn.read_raw_packet().await?;
+    if pkt.id != ServerboundSelectKnownPacksPacket::PACKET_ID {
+        warn!(peer = %addr, id = pkt.id, "Expected SelectKnownPacks response");
+        return disconnect(conn, "Unexpected packet during configuration").await;
+    }
+    let _client_packs = ServerboundSelectKnownPacksPacket::decode(pkt.data).map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            e.to_string(),
+        ))
+    })?;
+    debug!(peer = %addr, "Received client known packs response");
+
+    // 3. Send all synchronized registries (full data, ignoring known-pack
+    //    optimisation for now)
+    for registry_name in registry::SYNCHRONIZED_REGISTRIES {
+        let entries = registry::get_registry_entries(registry_name).map_err(|e| {
+            ConnectionError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                e.to_string(),
+            ))
+        })?;
+
+        let registry_loc = ResourceLocation::from_string(registry_name).map_err(|e| {
+            ConnectionError::Io(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                e.to_string(),
+            ))
+        })?;
+
+        let reg_entries: Vec<RegistryEntry> = entries
+            .into_iter()
+            .map(|(name, compound)| {
+                let id = ResourceLocation::from_string(&name).map_err(|e| {
+                    ConnectionError::Io(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        e.to_string(),
+                    ))
+                })?;
+                Ok(RegistryEntry {
+                    id,
+                    data: Some(compound),
+                })
+            })
+            .collect::<Result<Vec<_>, ConnectionError>>()?;
+
+        let packet = ClientboundRegistryDataPacket {
+            registry: registry_loc,
+            entries: reg_entries,
+        };
+
+        let body = packet.encode();
+        conn.send_raw(ClientboundRegistryDataPacket::PACKET_ID, &body)
+            .await?;
+    }
+    conn.flush().await?;
+    debug!(
+        peer = %addr,
+        count = registry::SYNCHRONIZED_REGISTRIES.len(),
+        "Sent all registry data",
+    );
+
+    // 4. Send empty tags (full tag support requires block/item registries)
+    let tags_packet = ClientboundUpdateTagsPacket { tags: vec![] };
+    conn.send_raw(
+        ClientboundUpdateTagsPacket::PACKET_ID,
+        &tags_packet.encode(),
+    )
+    .await?;
+    conn.flush().await?;
+    debug!(peer = %addr, "Sent empty tags");
+
+    // 5. Send enabled features (vanilla feature set)
+    let vanilla_feature = ResourceLocation::from_string("minecraft:vanilla").map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            e.to_string(),
+        ))
+    })?;
+    let features_packet = ClientboundUpdateEnabledFeaturesPacket {
+        features: vec![vanilla_feature],
+    };
+    conn.send_raw(
+        ClientboundUpdateEnabledFeaturesPacket::PACKET_ID,
+        &features_packet.encode(),
+    )
+    .await?;
+    conn.flush().await?;
+    debug!(peer = %addr, "Sent enabled features");
+
+    // 6. Send FinishConfiguration
+    let finish = ClientboundFinishConfigurationPacket;
+    conn.send_raw(
+        ClientboundFinishConfigurationPacket::PACKET_ID,
+        &finish.encode(),
+    )
+    .await?;
+    conn.flush().await?;
+    debug!(peer = %addr, "Sent finish configuration");
+
+    // 7. Wait for client FinishConfiguration acknowledgement
+    let finish_pkt = conn.read_raw_packet().await?;
+    if finish_pkt.id != ServerboundFinishConfigurationPacket::PACKET_ID {
+        warn!(peer = %addr, id = finish_pkt.id, "Expected FinishConfiguration");
+        return disconnect(conn, "Unexpected packet — expected finish configuration").await;
+    }
+
+    // 8. Transition to Play
+    conn.state = ConnectionState::Play;
+    info!(peer = %addr, "Configuration complete — client entering PLAY state");
+
+    Ok(())
 }
 
 /// Sends a disconnect packet to the client and returns a corresponding
