@@ -137,7 +137,7 @@ pub fn write_named_tag<W: Write>(writer: &mut W, name: &str, tag: &NbtTag) -> Re
 /// Writes a root compound in the unnamed-tag format:
 /// `[TAG_COMPOUND][empty name][compound payload]`.
 ///
-/// This is the format used for both disk files and network packets.
+/// This is the format used for disk files (level.dat, etc.).
 ///
 /// # Errors
 ///
@@ -146,6 +146,23 @@ pub fn write_nbt<W: Write>(writer: &mut W, compound: &NbtCompound) -> Result<(),
     writer.write_all(&[TAG_COMPOUND])?;
     // Empty root name
     writer.write_all(&0u16.to_be_bytes())?;
+    write_compound_payload(writer, compound, 1)?;
+    Ok(())
+}
+
+/// Writes a root compound in the network protocol format:
+/// `[TAG_COMPOUND][compound payload]` — **no root name**.
+///
+/// This is the format used for Minecraft protocol packets (1.20.2+).
+///
+/// # Errors
+///
+/// Returns an error on I/O failure.
+pub fn write_network_nbt<W: Write>(
+    writer: &mut W,
+    compound: &NbtCompound,
+) -> Result<(), NbtError> {
+    writer.write_all(&[TAG_COMPOUND])?;
     write_compound_payload(writer, compound, 1)?;
     Ok(())
 }

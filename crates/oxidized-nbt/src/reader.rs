@@ -159,6 +159,33 @@ pub fn read_nbt<R: Read>(
     Ok(compound)
 }
 
+/// Reads a root compound from the network protocol format:
+/// `[TAG_COMPOUND][compound payload]` — **no root name**.
+///
+/// This is the format used for Minecraft protocol packets (1.20.2+).
+///
+/// # Errors
+///
+/// Returns an error if the root tag is not a compound, or on any I/O or
+/// accounting failure.
+pub fn read_network_nbt<R: Read>(
+    reader: &mut R,
+    accounter: &mut NbtAccounter,
+) -> Result<NbtCompound, NbtError> {
+    let type_id = read_u8(reader)?;
+    if type_id != TAG_COMPOUND {
+        return Err(NbtError::InvalidFormat(format!(
+            "expected root compound tag ({}), got {}",
+            TAG_COMPOUND, type_id
+        )));
+    }
+    accounter.account_bytes(48)?;
+    accounter.push_depth()?;
+    let compound = read_compound_payload(reader, accounter)?;
+    accounter.pop_depth();
+    Ok(compound)
+}
+
 /// Reads the payload for a specific tag type.
 ///
 /// The `type_id` must be in the range `TAG_BYTE..=TAG_LONG_ARRAY`.
