@@ -717,3 +717,47 @@ Updated: `docs/lifecycle/README.md` and `.github/copilot-instructions.md`.
   types between protocol and world. A shared `oxidized-types` crate is the right solution.
 - All 31 error enums were missing `#[non_exhaustive]` — add it to every new public enum.
 - Stage 2.5 (Architectural Review Gate) should be followed for every phase going forward.
+
+---
+
+### 2026-03-18 — Phase 11 Re-run: Vanilla Data Verification
+
+**Context:** Full lifecycle re-run of Phase 11 (Server Level + Block Access) comparing
+implementation against Java Block.java, DimensionType.java, and vanilla generated data.
+
+#### Bugs Found
+
+1. **BlockFlags too narrow (critical):** Java's `Block.java` defines 11 flag constants with
+   values up to 512 (bit 9). The Rust `BlockFlags` used `u8` (max 255), which cannot represent
+   `UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS` (256) or `UPDATE_SKIP_ON_PLACE` (512). Widened to `u16`.
+   Missing flags: UPDATE_IMMEDIATE, UPDATE_MOVE_BY_PISTON, UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE,
+   UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS, UPDATE_SKIP_ON_PLACE. Missing composites: UPDATE_NONE(260),
+   UPDATE_ALL(3), UPDATE_ALL_IMMEDIATE(11), UPDATE_SKIP_ALL_SIDEEFFECTS(816). Missing UPDATE_LIMIT(512).
+
+2. **End dimension wrong values (medium):** Vanilla 26.1 generated data shows End has
+   `has_skylight: true` and `ambient_light: 0.25` — the Rust code had `false` and `0.0`.
+
+3. **Overworld logical_height wrong (medium):** Vanilla data shows 384, not 320 as the phase
+   doc specified. The phase doc was wrong — always verify against generated data.
+
+4. **DimensionType missing fields (medium):** Java 26.1 DimensionType record has
+   `has_fixed_time`, `has_ender_dragon_fight`, `coordinate_scale` fields not present in Rust.
+
+5. **LRU cache O(n) performance (medium):** Hand-rolled VecDeque-based LRU used `retain()`
+   (O(n)) on every get(). Replaced with `lru` crate for O(1) operations.
+
+#### Lessons
+
+- **Always verify dimension values against vanilla generated data** (`mc-server-ref/generated/data/
+  minecraft/dimension_type/*.json`), not against the phase doc or Java source alone. The generated
+  data is the ground truth.
+- **Check Java constant ranges before choosing a Rust backing type.** BlockFlags needed `u16` not
+  `u8` — a quick scan of Block.java would have caught this during initial implementation.
+- **The `lru` crate is O(1) and well-maintained** — prefer it over hand-rolled LRU implementations
+  using VecDeque+HashMap.
+
+#### Metrics
+
+- **Tests:** 31 → 42 (11 new)
+- **Files changed:** 7
+- **Review iterations:** 2 (doc comment fixes → clean)
