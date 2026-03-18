@@ -70,6 +70,10 @@ pub enum AnvilError {
     /// Bit storage error.
     #[error("bit storage error: {0}")]
     BitStorage(#[from] crate::chunk::bit_storage::BitStorageError),
+
+    /// Internal error (mutex poison, task join failure, etc).
+    #[error("internal error: {0}")]
+    Internal(String),
 }
 
 impl AnvilError {
