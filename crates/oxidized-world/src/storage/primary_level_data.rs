@@ -50,6 +50,8 @@ pub struct PrimaryLevelData {
     pub allow_commands: bool,
     /// Whether the world has been initialized (initial chunks generated).
     pub initialized: bool,
+    /// Sea level height (default 63).
+    pub sea_level: i32,
 }
 
 impl PrimaryLevelData {
@@ -79,7 +81,16 @@ impl PrimaryLevelData {
             difficulty: data.get_byte("Difficulty").unwrap_or(2) as i32,
             allow_commands: data.get_byte("allowCommands").unwrap_or(0) != 0,
             initialized: data.get_byte("initialized").unwrap_or(1) != 0,
+            sea_level: data.get_int("SeaLevel").unwrap_or(63),
         })
+    }
+
+    /// Returns the world spawn position as a tuple `(x, y, z)`.
+    ///
+    /// Returns a tuple rather than `BlockPos` because `oxidized-world`
+    /// does not depend on `oxidized-protocol`.
+    pub fn spawn_pos(&self) -> (i32, i32, i32) {
+        (self.spawn_x, self.spawn_y, self.spawn_z)
     }
 
     /// Loads level data from a `level.dat` file (GZip-compressed NBT).

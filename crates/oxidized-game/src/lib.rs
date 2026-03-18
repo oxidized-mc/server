@@ -4,3 +4,4 @@
 //! design for cache-friendly tick processing.
 
 pub mod level;
+pub mod player;
