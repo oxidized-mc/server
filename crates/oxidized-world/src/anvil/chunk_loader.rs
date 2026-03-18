@@ -466,7 +466,7 @@ mod tests {
         // 4096 entries at 4 bits = 256 longs
         // All zeros = all air. We'll create a simple data array.
         let values_per_long = 64 / 4;
-        let num_longs = (4096 + values_per_long - 1) / values_per_long;
+        let num_longs = 4096_usize.div_ceil(values_per_long);
         let data_longs: Vec<i64> = vec![0i64; num_longs];
 
         block_states.put("palette", NbtTag::List(palette));
