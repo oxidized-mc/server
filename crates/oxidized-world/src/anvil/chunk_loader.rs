@@ -360,11 +360,11 @@ impl AsyncChunkLoader {
         tokio::task::spawn_blocking(move || {
             let mut loader = inner
                 .lock()
-                .map_err(|_| AnvilError::Decompression("mutex poisoned".into()))?;
+                .map_err(|_| AnvilError::Internal("chunk loader mutex poisoned".into()))?;
             loader.load_chunk(chunk_x, chunk_z)
         })
         .await
-        .map_err(|e| AnvilError::Decompression(format!("spawn_blocking failed: {e}")))?
+        .map_err(|e| AnvilError::Internal(format!("spawn_blocking failed: {e}")))?
     }
 }
 

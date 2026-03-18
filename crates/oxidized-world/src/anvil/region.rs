@@ -177,6 +177,19 @@ impl RegionFile {
             });
         }
 
+        // Validate payload doesn't exceed allocated sectors
+        let max_payload = entry.sector_count as usize * SECTOR_BYTES - 4; // subtract length prefix
+        if payload_len > max_payload {
+            tracing::warn!(
+                chunk_x,
+                chunk_z,
+                payload_len,
+                max_payload,
+                "payload length exceeds allocated sectors, skipping chunk"
+            );
+            return Ok(None);
+        }
+
         // Read 1-byte compression type
         let mut codec_byte = [0u8; 1];
         self.reader
@@ -225,19 +238,45 @@ impl RegionFile {
         &self.path
     }
 
-    /// Reads and parses the 8 KiB header.
+    /// Reads and parses the 8 KiB header, sanitizing invalid entries.
     fn read_header(&mut self) -> Result<(), AnvilError> {
         self.reader
             .seek(SeekFrom::Start(0))
             .map_err(|e| AnvilError::io(&self.path, e))?;
 
+        let file_sectors = self.file_len / SECTOR_BYTES as u64;
+
         // Read offset table (4096 bytes = 1024 × 4-byte entries)
         let mut buf = [0u8; 4];
-        for offset in &mut self.offsets {
+        for (i, offset) in self.offsets.iter_mut().enumerate() {
             self.reader
                 .read_exact(&mut buf)
                 .map_err(|e| AnvilError::io(&self.path, e))?;
-            *offset = OffsetEntry::from_u32(u32::from_be_bytes(buf));
+            let entry = OffsetEntry::from_u32(u32::from_be_bytes(buf));
+
+            // Validate entry: zero out if sector overlaps header,
+            // sector_count is zero, or sectors extend beyond file.
+            // Stricter than Java (which only checks start offset > file size)
+            // — we verify the entire sector range fits.
+            if entry.is_present() {
+                let end_sector = entry.sector_number as u64 + entry.sector_count as u64;
+                if entry.sector_number < 2 || entry.sector_count == 0 || end_sector > file_sectors {
+                    tracing::warn!(
+                        slot = i,
+                        sector = entry.sector_number,
+                        count = entry.sector_count,
+                        file_sectors,
+                        path = %self.path.display(),
+                        "invalid offset entry in region header, zeroing"
+                    );
+                    *offset = OffsetEntry {
+                        sector_number: 0,
+                        sector_count: 0,
+                    };
+                    continue;
+                }
+            }
+            *offset = entry;
         }
 
         // Read timestamp table (4096 bytes = 1024 × 4-byte entries)
@@ -418,7 +457,90 @@ mod tests {
         std::fs::write(&path, &file_data).unwrap();
 
         let mut region = RegionFile::open(&path).unwrap();
-        // Should return None (skip invalid sector) rather than error
+        // Should return None (sanitized during header read) rather than error
+        let result = region.read_chunk_data(0, 0).unwrap();
+        assert!(result.is_none());
+        // The entry should have been zeroed during header parse
+        assert!(!region.has_chunk(0, 0));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_region_file_sector_count_zero_sanitized() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_region_zero_count.mca");
+
+        // Build a file with 3 sectors (header + 1 data sector)
+        let mut file_data = vec![0u8; SECTOR_BYTES * 3];
+
+        // Slot 0: sector_number=2, sector_count=0 — invalid
+        let raw: u32 = 2 << 8; // sector_count = 0
+        file_data[0..4].copy_from_slice(&raw.to_be_bytes());
+
+        std::fs::write(&path, &file_data).unwrap();
+
+        let region = RegionFile::open(&path).unwrap();
+        // Entry should be sanitized to absent during header read
+        assert!(!region.has_chunk(0, 0));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_region_file_sector_number_overlaps_header_sanitized() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_region_header_overlap.mca");
+
+        // Build a file with enough sectors
+        let mut file_data = vec![0u8; SECTOR_BYTES * 4];
+
+        // Slot 0: sector_number=1 (overlaps header), sector_count=1
+        let raw: u32 = (1 << 8) | 1;
+        file_data[0..4].copy_from_slice(&raw.to_be_bytes());
+
+        // Slot 1: sector_number=0 (also invalid), sector_count=1
+        let raw2: u32 = (0 << 8) | 1;
+        file_data[4..8].copy_from_slice(&raw2.to_be_bytes());
+
+        std::fs::write(&path, &file_data).unwrap();
+
+        let region = RegionFile::open(&path).unwrap();
+        // Both should be sanitized
+        assert!(!region.has_chunk(0, 0));
+        assert!(!region.has_chunk(1, 0));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_region_file_payload_exceeds_sectors() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_region_payload_overflow.mca");
+
+        // Build a region with 1 sector of data for chunk at slot 0
+        let mut file_data = vec![0u8; HEADER_BYTES];
+
+        // Slot 0: sector_number=2, sector_count=1 (4096 bytes max)
+        let raw: u32 = (2 << 8) | 1;
+        file_data[0..4].copy_from_slice(&raw.to_be_bytes());
+
+        // Pad to sector 2
+        file_data.resize(SECTOR_BYTES * 2, 0);
+
+        // Write a payload_len that claims to be larger than 1 sector
+        // max_payload = 1 * 4096 - 4 = 4092 bytes
+        let fake_payload_len: u32 = 4093; // exceeds max_payload
+        file_data.extend_from_slice(&fake_payload_len.to_be_bytes());
+        file_data.push(2); // Zlib codec byte
+
+        // Pad to 3 sectors to not trigger file-length validation
+        file_data.resize(SECTOR_BYTES * 3, 0);
+
+        std::fs::write(&path, &file_data).unwrap();
+
+        let mut region = RegionFile::open(&path).unwrap();
+        // Should return None due to payload exceeding sector allocation
         let result = region.read_chunk_data(0, 0).unwrap();
         assert!(result.is_none());
 
