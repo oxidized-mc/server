@@ -389,7 +389,7 @@ impl PalettedContainer {
         match &self.data {
             PaletteData::Single(palette) => {
                 buf.push(0); // 0 bits per entry
-                             // Palette: single VarInt
+                // Palette: single VarInt
                 write_varint(&mut buf, palette.value().unwrap_or(0) as i32);
                 // Data: 0 longs
                 write_varint(&mut buf, 0);

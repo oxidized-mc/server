@@ -17,8 +17,8 @@
 //! See [ADR-009](../../docs/adr/adr-009-encryption-compression.md) for
 //! design rationale.
 
-use flate2::bufread::{ZlibDecoder, ZlibEncoder};
 use flate2::Compression;
+use flate2::bufread::{ZlibDecoder, ZlibEncoder};
 use std::io::Read;
 use thiserror::Error;
 

@@ -4,7 +4,7 @@
 //! preventing denial-of-service via pathologically large or deeply nested
 //! payloads. The quotas and depth limits match the vanilla Minecraft server.
 
-use crate::error::{NbtError, DEFAULT_QUOTA, MAX_DEPTH, UNCOMPRESSED_QUOTA};
+use crate::error::{DEFAULT_QUOTA, MAX_DEPTH, NbtError, UNCOMPRESSED_QUOTA};
 
 /// Tracks cumulative memory usage and nesting depth during NBT parsing.
 ///

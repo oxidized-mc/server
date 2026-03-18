@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use super::compression::{decompress, CompressionType};
+use super::compression::{CompressionType, decompress};
 use super::error::AnvilError;
 
 /// Size of one sector in bytes (4 KiB).

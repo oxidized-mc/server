@@ -5,9 +5,9 @@
 
 use std::fmt;
 
+use serde::Serialize;
 use serde::de::{self, DeserializeSeed, IntoDeserializer, MapAccess, SeqAccess, Visitor};
 use serde::ser::{self, SerializeMap, SerializeSeq, SerializeStruct};
-use serde::Serialize;
 
 use crate::compound::NbtCompound;
 use crate::error::NbtError;
