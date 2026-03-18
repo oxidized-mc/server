@@ -91,8 +91,7 @@ mod tests {
 
     fn test_level(dim: DimensionType) -> ServerLevel {
         let registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader =
-            AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
+        let loader = AnvilChunkLoader::new(Path::new("/tmp/oxidized_test_nonexistent"), registry);
         let async_loader = AsyncChunkLoader::new(loader);
         let level_data = PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap();
         ServerLevel::new(
@@ -113,7 +112,10 @@ mod tests {
 
         assert_eq!(mgr.len(), 1);
         assert!(mgr.get(&ResourceLocation::minecraft("overworld")).is_some());
-        assert!(mgr.get(&ResourceLocation::minecraft("the_nether")).is_none());
+        assert!(
+            mgr.get(&ResourceLocation::minecraft("the_nether"))
+                .is_none()
+        );
     }
 
     #[test]
