@@ -540,3 +540,57 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 - **Tests:** 19 registry tests, 632 total workspace
 - **Review iterations:** 3 (truncation bugs → out-of-bounds drop → item clamping)
 - **Blocks:** 1168, **States:** 29873, **Items:** 1506
+
+---
+
+### 2026-07-14 — Phase 9 Review: Global palette bit width is registry-derived
+
+**Context:** Lifecycle re-run of Phase 9 (Chunk Data Structures). Full Java-vs-Rust comparison
+of `Strategy.java`, `Configuration.java`, `PalettedContainer.java`, `SimpleBitStorage.java`.
+
+#### Critical Discovery — Global Palette Bit Width
+
+The most dangerous bug found: the Rust `upgrade_and_set` was using `bits_for_count(distinct_values)`
+(e.g. 9 bits for 257 distinct block states) for Global palette BitStorage creation. Vanilla uses
+`globalPaletteBitsInMemory = ceillog2(registry.size())` — 15 bits for 29,873 block states, 7 bits
+for 65 biomes. This caused a **wire format mismatch**: the Rust server would write 586 longs
+(9-bit packing) but the vanilla client expects 1024 longs (15-bit packing), causing a crash.
+
+**Key insight:** Java `Configuration.java` has two distinct bit values:
+- `bitsInMemory` — used for BitStorage allocation (the number of bits per entry in the long array)
+- `bitsInStorage` — written as the wire format byte (palette type discriminator)
+
+For Global palette: `bitsInStorage` can be anything ≥ threshold (client ignores the exact value,
+only uses it to determine palette TYPE). But `bitsInMemory` **must** be `ceillog2(registry_size)`.
+
+**Rule:** Always read `Configuration.java` alongside `Strategy.java` — the Strategy creates
+Configurations, but the Configuration fields are what actually control wire format.
+
+#### Biome vs Block Palette Differences
+
+- Block states: SingleValue (0) → Linear 4-bit (1–4) → HashMap (5–8) → Global 15-bit (9+)
+- Biomes: SingleValue (0) → Linear 1/2/3-bit (1–3) → Global 7-bit (4+). **No HashMap palette!**
+- Biome registry has 65 entries (vanilla 26.1-pre-3), needing 7 bits not 6
+
+#### Other Fixes Applied
+
+- Added `get_and_set()` to `BitStorage` and `PalettedContainer` (vanilla uses for atomic get+set)
+- Added `ticking_block_count` / `ticking_fluid_count` to `LevelChunkSection` (in-memory only)
+- Added `WorldSurfaceWg` and `OceanFloorWg` heightmap types
+- Improved `PalettedContainerError` with `InsufficientData` and `MalformedVarInt` variants
+- Optimized `upgrade_and_set` distinct counting with `HashSet` instead of clone+sort+dedup
+- Added `bits_per_entry()` accessor
+
+#### Lessons
+
+- **Global palette bits are NOT the same as the palette threshold** — they are `ceillog2(registry_size)`
+- **Always verify wire format against vanilla client expectations**, not just server encoding logic
+- **Biome count matters:** 65 biomes need 7 bits. If data packs add biomes, this must be dynamic.
+  Consider making `global_palette_bits` runtime-configurable in a future phase.
+- **Code review catches real bugs** — the biome bits issue (6 vs 7) was caught by the review agent
+
+#### Metrics
+
+- **Tests:** 83 → 87 (4 new: global roundtrip, get_and_set ×2, bits_per_entry)
+- **Files changed:** 4 (`bit_storage.rs`, `paletted_container.rs`, `section.rs`, `heightmap.rs`)
+- **Review iterations:** 2 (initial review found biome bits issue → fixed → clean)

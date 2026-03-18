@@ -151,6 +151,33 @@ impl BitStorage {
         Ok(())
     }
 
+    /// Sets the value at the given index and returns the previous value.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `index` is out of bounds or `value` exceeds the bit width.
+    pub fn get_and_set(&mut self, index: usize, value: u64) -> Result<u64, BitStorageError> {
+        if index >= self.size {
+            return Err(BitStorageError::OutOfBounds {
+                index,
+                size: self.size,
+            });
+        }
+        if value > self.mask {
+            return Err(BitStorageError::ValueTooLarge {
+                value,
+                max: self.mask,
+                bits: self.bits,
+            });
+        }
+        let long_index = index / self.values_per_long;
+        let bit_offset = (index % self.values_per_long) * self.bits as usize;
+        let old = (self.data[long_index] >> bit_offset) & self.mask;
+        self.data[long_index] &= !(self.mask << bit_offset);
+        self.data[long_index] |= value << bit_offset;
+        Ok(old)
+    }
+
     /// Returns the bits per entry.
     #[must_use]
     pub fn bits(&self) -> u8 {
@@ -340,5 +367,17 @@ mod tests {
         assert_eq!(bs.get(1).unwrap(), 255);
         bs.set(1, 42).unwrap();
         assert_eq!(bs.get(1).unwrap(), 42);
+    }
+
+    #[test]
+    fn test_get_and_set() {
+        let mut bs = BitStorage::new(4, 16).unwrap();
+        let old = bs.get_and_set(0, 5).unwrap();
+        assert_eq!(old, 0);
+        let old = bs.get_and_set(0, 10).unwrap();
+        assert_eq!(old, 5);
+        assert_eq!(bs.get(0).unwrap(), 10);
+        // Other values unchanged
+        assert_eq!(bs.get(1).unwrap(), 0);
     }
 }

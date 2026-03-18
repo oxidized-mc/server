@@ -5,6 +5,7 @@
 
 use super::bit_storage::{BitStorage, BitStorageError};
 use super::palette::{HashMapPalette, LinearPalette, PaletteAddResult, SingleValuePalette};
+use std::collections::HashSet;
 use thiserror::Error;
 
 /// Errors from [`PalettedContainer`] operations.
@@ -30,6 +31,19 @@ pub enum PalettedContainerError {
     /// Invalid palette type on wire.
     #[error("invalid bits per entry on wire: {0}")]
     InvalidBitsPerEntry(u8),
+
+    /// Not enough data to deserialize.
+    #[error("insufficient data: expected at least {expected} bytes, got {actual}")]
+    InsufficientData {
+        /// Minimum bytes expected.
+        expected: usize,
+        /// Bytes available.
+        actual: usize,
+    },
+
+    /// Malformed VarInt encoding.
+    #[error("malformed VarInt: exceeded 5-byte limit")]
+    MalformedVarInt,
 }
 
 /// Strategy configuration for a paletted container.
@@ -68,6 +82,22 @@ impl Strategy {
         match self {
             Self::BlockStates => 9,
             Self::Biomes => 4,
+        }
+    }
+
+    /// The bits-per-entry to use for the Global palette's [`BitStorage`].
+    ///
+    /// Vanilla computes this as `ceillog2(registry.size())`:
+    /// - Block states: 15 bits for 29,873 states
+    /// - Biomes: 7 bits for 65 biomes
+    ///
+    /// The wire format byte and the actual long packing must both use this
+    /// value so vanilla clients can reconstruct the correct `BitStorage`.
+    #[must_use]
+    pub const fn global_palette_bits(self) -> u8 {
+        match self {
+            Self::BlockStates => 15,
+            Self::Biomes => 7,
         }
     }
 
@@ -182,6 +212,29 @@ impl PalettedContainer {
         self.set_by_index(index, value)
     }
 
+    /// Sets the value at coordinates `(x, y, z)` and returns the previous value.
+    ///
+    /// More efficient than calling `get()` then `set()` separately, as it
+    /// avoids redundant index calculation and storage access.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if coordinates are out of bounds.
+    pub fn get_and_set(
+        &mut self,
+        x: usize,
+        y: usize,
+        z: usize,
+        value: u32,
+    ) -> Result<u32, PalettedContainerError> {
+        let index = self.index(x, y, z)?;
+        let old = self.get_by_index(index);
+        if old != value {
+            self.set_by_index(index, value)?;
+        }
+        Ok(old)
+    }
+
     /// Sets the value at a flat index.
     fn set_by_index(&mut self, index: usize, value: u32) -> Result<(), PalettedContainerError> {
         match &mut self.data {
@@ -236,29 +289,33 @@ impl PalettedContainer {
         values[set_index] = set_value;
 
         // Count distinct values to determine the right palette tier
-        let mut distinct: Vec<u32> = values.clone();
-        distinct.sort_unstable();
-        distinct.dedup();
-        let bits_needed = bits_for_count(distinct.len());
+        let distinct_count = {
+            let mut seen = HashSet::new();
+            for &v in &values {
+                seen.insert(v);
+            }
+            seen.len()
+        };
+        let bits_needed = bits_for_count(distinct_count);
 
         // Build the new palette data
         self.data = if bits_needed >= self.strategy.global_bits_threshold() {
-            let storage_bits = bits_needed.max(self.strategy.global_bits_threshold());
-            let mut storage = BitStorage::new(storage_bits, size)?;
+            // Global palette: use registry-derived bits, not bits_needed
+            let global_bits = self.strategy.global_palette_bits();
+            let mut storage = BitStorage::new(global_bits, size)?;
             for (i, &v) in values.iter().enumerate() {
                 storage.set(i, u64::from(v))?;
             }
             PaletteData::Global(storage)
         } else if bits_needed >= self.strategy.hashmap_bits_threshold() {
-            let mut palette = HashMapPalette::new(bits_needed);
             let storage_bits = self.strategy.storage_bits(bits_needed);
+            let mut palette = HashMapPalette::new(storage_bits);
             let mut storage = BitStorage::new(storage_bits, size)?;
             for (i, &v) in values.iter().enumerate() {
                 let result = palette.index_or_insert(v);
                 let idx = match result {
                     PaletteAddResult::Existing(idx) | PaletteAddResult::New(idx) => idx,
                     PaletteAddResult::NeedsResize => {
-                        // This shouldn't happen since we computed bits_needed
                         return Err(PalettedContainerError::InvalidBitsPerEntry(bits_needed));
                     },
                 };
@@ -355,7 +412,7 @@ impl PalettedContainer {
                 write_longs(&mut buf, storage.raw());
             },
             PaletteData::Global(storage) => {
-                buf.push(storage.bits());
+                buf.push(self.strategy.global_palette_bits());
                 // Global palette: no palette data on wire
                 // Data longs
                 write_longs(&mut buf, storage.raw());
@@ -385,8 +442,9 @@ impl PalettedContainer {
                 data: PaletteData::Single(SingleValuePalette::with_value(value)),
             })
         } else if bits_per_entry >= strategy.global_bits_threshold() {
-            // Global palette (no palette entries on wire)
-            let storage = read_bit_storage(bits_per_entry, size, data)?;
+            // Global palette — use registry-derived bits for BitStorage, not wire byte
+            let global_bits = strategy.global_palette_bits();
+            let storage = read_bit_storage(global_bits, size, data)?;
             Ok(Self {
                 strategy,
                 data: PaletteData::Global(storage),
@@ -424,6 +482,22 @@ impl PalettedContainer {
     #[must_use]
     pub fn strategy(&self) -> Strategy {
         self.strategy
+    }
+
+    /// Returns the bits per entry for the current palette variant.
+    ///
+    /// - `0` for single-value palette
+    /// - `4..=8` for linear/hashmap palettes (block states)
+    /// - `1..=3` for linear palettes (biomes)
+    /// - `global_palette_bits()` for global palette
+    #[must_use]
+    pub fn bits_per_entry(&self) -> u8 {
+        match &self.data {
+            PaletteData::Single(_) => 0,
+            PaletteData::Linear(_, storage)
+            | PaletteData::HashMap(_, storage)
+            | PaletteData::Global(storage) => storage.bits(),
+        }
     }
 
     /// Counts distinct non-zero values (useful for `non_empty_block_count`).
@@ -477,7 +551,10 @@ fn write_longs(buf: &mut Vec<u8>, longs: &[u64]) {
 
 fn read_u8(data: &mut &[u8]) -> Result<u8, PalettedContainerError> {
     if data.is_empty() {
-        return Err(PalettedContainerError::InvalidBitsPerEntry(0));
+        return Err(PalettedContainerError::InsufficientData {
+            expected: 1,
+            actual: 0,
+        });
     }
     let b = data[0];
     *data = &data[1..];
@@ -488,7 +565,10 @@ fn read_varint(data: &mut &[u8]) -> Result<i32, PalettedContainerError> {
     let mut result = 0i32;
     for i in 0..5 {
         if data.is_empty() {
-            return Err(PalettedContainerError::InvalidBitsPerEntry(0));
+            return Err(PalettedContainerError::InsufficientData {
+                expected: 1,
+                actual: 0,
+            });
         }
         let byte = data[0];
         *data = &data[1..];
@@ -497,7 +577,7 @@ fn read_varint(data: &mut &[u8]) -> Result<i32, PalettedContainerError> {
             return Ok(result);
         }
     }
-    Err(PalettedContainerError::InvalidBitsPerEntry(0))
+    Err(PalettedContainerError::MalformedVarInt)
 }
 
 fn read_bit_storage(
@@ -508,7 +588,10 @@ fn read_bit_storage(
     let num_longs = read_varint(data)? as usize;
     let byte_len = num_longs * 8;
     if data.len() < byte_len {
-        return Err(PalettedContainerError::InvalidBitsPerEntry(bits));
+        return Err(PalettedContainerError::InsufficientData {
+            expected: byte_len,
+            actual: data.len(),
+        });
     }
     let mut longs = Vec::with_capacity(num_longs);
     for _ in 0..num_longs {
@@ -686,5 +769,56 @@ mod tests {
             let y = (i / 4) as usize;
             assert_eq!(c2.get(x, y, 0).unwrap(), i + 1);
         }
+    }
+
+    #[test]
+    fn test_block_states_global_palette_roundtrip() {
+        // Block states use Global palette at 9+ bits (>256 distinct values).
+        // After the fix, Global palette uses global_palette_bits (15 for blocks).
+        let mut c = PalettedContainer::empty(Strategy::BlockStates);
+        // Insert 257 distinct values to trigger Global palette (>8 bits)
+        for i in 0..257u32 {
+            let x = (i % 16) as usize;
+            let y = ((i / 16) % 16) as usize;
+            let z = (i / 256) as usize;
+            c.set(x, y, z, i + 1).unwrap();
+        }
+
+        assert_eq!(c.bits_per_entry(), 15); // global_palette_bits for blocks
+
+        let bytes = c.write_to_bytes();
+        let mut cursor = bytes.as_slice();
+        let c2 = PalettedContainer::read_from_bytes(Strategy::BlockStates, &mut cursor).unwrap();
+        for i in 0..257u32 {
+            let x = (i % 16) as usize;
+            let y = ((i / 16) % 16) as usize;
+            let z = (i / 256) as usize;
+            assert_eq!(c2.get(x, y, z).unwrap(), i + 1);
+        }
+    }
+
+    #[test]
+    fn test_get_and_set() {
+        let mut c = PalettedContainer::empty(Strategy::BlockStates);
+        let old = c.get_and_set(0, 0, 0, 42).unwrap();
+        assert_eq!(old, 0);
+        let old = c.get_and_set(0, 0, 0, 99).unwrap();
+        assert_eq!(old, 42);
+        // Same value returns it without modification
+        let old = c.get_and_set(0, 0, 0, 99).unwrap();
+        assert_eq!(old, 99);
+    }
+
+    #[test]
+    fn test_bits_per_entry() {
+        let c = PalettedContainer::empty(Strategy::BlockStates);
+        assert_eq!(c.bits_per_entry(), 0); // SingleValue
+
+        let mut c = PalettedContainer::empty(Strategy::BlockStates);
+        c.set(0, 0, 0, 1).unwrap();
+        assert_eq!(c.bits_per_entry(), 4); // Linear (clamped to 4 for blocks)
+
+        let c = PalettedContainer::empty(Strategy::Biomes);
+        assert_eq!(c.bits_per_entry(), 0); // SingleValue
     }
 }

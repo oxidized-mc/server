@@ -15,6 +15,10 @@ pub struct LevelChunkSection {
     non_empty_block_count: i16,
     /// Number of fluid-containing blocks (used for random ticking).
     fluid_count: i16,
+    /// Number of randomly tickable blocks (e.g. grass, crops).
+    ticking_block_count: i16,
+    /// Number of randomly tickable fluids.
+    ticking_fluid_count: i16,
     /// Block states (4096 entries, 16³).
     states: PalettedContainer,
     /// Biome data (64 entries, 4³ — biomes are sampled at 4-block resolution).
@@ -28,6 +32,8 @@ impl LevelChunkSection {
         Self {
             non_empty_block_count: 0,
             fluid_count: 0,
+            ticking_block_count: 0,
+            ticking_fluid_count: 0,
             states: PalettedContainer::empty(Strategy::BlockStates),
             biomes: PalettedContainer::empty(Strategy::Biomes),
         }
@@ -41,6 +47,8 @@ impl LevelChunkSection {
         Self {
             non_empty_block_count: non_empty,
             fluid_count: 0,
+            ticking_block_count: 0,
+            ticking_fluid_count: 0,
             states,
             biomes: PalettedContainer::empty(Strategy::Biomes),
         }
@@ -76,16 +84,16 @@ impl LevelChunkSection {
         z: usize,
         state_id: u32,
     ) -> Result<u32, PalettedContainerError> {
-        let old = self.states.get(x, y, z)?;
-        if old == state_id {
-            return Ok(old);
+        let old = self.states.get_and_set(x, y, z, state_id)?;
+        if old != state_id {
+            if old == 0 && state_id != 0 {
+                self.non_empty_block_count += 1;
+            } else if old != 0 && state_id == 0 {
+                self.non_empty_block_count -= 1;
+            }
+            // TODO: update fluid_count, ticking_block_count, ticking_fluid_count
+            // once block property lookups are available
         }
-        if old == 0 && state_id != 0 {
-            self.non_empty_block_count += 1;
-        } else if old != 0 && state_id == 0 {
-            self.non_empty_block_count -= 1;
-        }
-        self.states.set(x, y, z, state_id)?;
         Ok(old)
     }
 
@@ -147,7 +155,10 @@ impl LevelChunkSection {
     /// Returns an error if the data is malformed.
     pub fn read_from_bytes(data: &mut &[u8]) -> Result<Self, PalettedContainerError> {
         if data.len() < 4 {
-            return Err(PalettedContainerError::InvalidBitsPerEntry(0));
+            return Err(PalettedContainerError::InsufficientData {
+                expected: 4,
+                actual: data.len(),
+            });
         }
         let non_empty_block_count = i16::from_be_bytes([data[0], data[1]]);
         let fluid_count = i16::from_be_bytes([data[2], data[3]]);
@@ -159,14 +170,37 @@ impl LevelChunkSection {
         Ok(Self {
             non_empty_block_count,
             fluid_count,
+            ticking_block_count: 0,
+            ticking_fluid_count: 0,
             states,
             biomes,
         })
     }
 
     /// Recalculates `non_empty_block_count` by scanning all 4096 positions.
+    ///
+    /// Note: `fluid_count`, `ticking_block_count`, and `ticking_fluid_count` require
+    /// block property lookups and are not recalculated here.
     pub fn recalculate_counts(&mut self) {
         self.non_empty_block_count = self.states.count_non_zero() as i16;
+    }
+
+    /// Returns the fluid count.
+    #[must_use]
+    pub fn fluid_count(&self) -> i16 {
+        self.fluid_count
+    }
+
+    /// Returns the ticking block count.
+    #[must_use]
+    pub fn ticking_block_count(&self) -> i16 {
+        self.ticking_block_count
+    }
+
+    /// Returns the ticking fluid count.
+    #[must_use]
+    pub fn ticking_fluid_count(&self) -> i16 {
+        self.ticking_fluid_count
     }
 }
 
