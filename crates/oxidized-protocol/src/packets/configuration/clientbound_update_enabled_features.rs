@@ -11,6 +11,7 @@ use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundUpdateEnabledFeaturesPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum UpdateEnabledFeaturesError {
     /// VarInt decode failure.
     #[error("varint error: {0}")]

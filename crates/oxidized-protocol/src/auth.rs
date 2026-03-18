@@ -19,6 +19,7 @@ const SESSION_SERVER_URL: &str = "https://sessionserver.mojang.com/session/minec
 
 /// Errors from Mojang authentication.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum AuthError {
     /// The Mojang session server did not verify the player.
     #[error("authentication failed for player '{0}'")]

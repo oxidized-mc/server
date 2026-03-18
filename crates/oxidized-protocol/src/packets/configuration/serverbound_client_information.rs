@@ -16,6 +16,7 @@ const MAX_LANGUAGE_LENGTH: usize = 16;
 
 /// Errors from decoding a [`ServerboundClientInformationPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ClientInformationError {
     /// A wire type could not be decoded.
     #[error("{0}")]

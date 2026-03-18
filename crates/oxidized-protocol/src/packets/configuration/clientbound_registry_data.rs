@@ -12,6 +12,7 @@ use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundRegistryDataPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum RegistryDataError {
     /// VarInt decode failure.
     #[error("varint error: {0}")]

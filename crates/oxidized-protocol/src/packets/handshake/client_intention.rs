@@ -24,6 +24,7 @@ pub enum ClientIntent {
 
 /// Errors from decoding a [`ClientIntentionPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum IntentionError {
     /// Unknown `next_state` value.
     #[error("unknown client intent: {0}")]

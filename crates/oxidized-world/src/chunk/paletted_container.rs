@@ -10,6 +10,7 @@ use thiserror::Error;
 
 /// Errors from [`PalettedContainer`] operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PalettedContainerError {
     /// Coordinate out of bounds.
     #[error("coordinate ({x}, {y}, {z}) out of bounds for size {size}")]

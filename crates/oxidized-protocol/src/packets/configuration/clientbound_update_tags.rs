@@ -14,6 +14,7 @@ use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundUpdateTagsPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum UpdateTagsError {
     /// VarInt decode failure.
     #[error("varint error: {0}")]

@@ -17,6 +17,7 @@ pub const MAX_PACKET_SIZE: usize = 2 * 1024 * 1024;
 
 /// Errors that can occur during frame decoding.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum FrameError {
     /// The packet exceeds the maximum allowed size.
     #[error("packet too large: {size} bytes (max {max})")]

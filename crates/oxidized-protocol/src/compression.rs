@@ -30,6 +30,7 @@ const MAXIMUM_COMPRESSED_LENGTH: usize = 2_097_152;
 
 /// Errors from compression and decompression operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum CompressionError {
     /// Uncompressed data exceeds the maximum allowed size.
     #[error("uncompressed data too large: {0} bytes (max {MAXIMUM_UNCOMPRESSED_LENGTH})")]

@@ -500,7 +500,7 @@ mod tests {
         file_data[0..4].copy_from_slice(&raw.to_be_bytes());
 
         // Slot 1: sector_number=0 (also invalid), sector_count=1
-        let raw2: u32 = (0 << 8) | 1;
+        let raw2: u32 = 1; // sector_number=0, sector_count=1
         file_data[4..8].copy_from_slice(&raw2.to_be_bytes());
 
         std::fs::write(&path, &file_data).unwrap();

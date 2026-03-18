@@ -10,6 +10,7 @@ use crate::codec::varint::{self, VarIntError};
 
 /// Errors from decoding a [`ClientboundLoginCompressionPacket`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum LoginCompressionError {
     /// VarInt decode failure.
     #[error("varint error: {0}")]

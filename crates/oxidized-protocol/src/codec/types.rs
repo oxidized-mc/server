@@ -10,6 +10,7 @@ use super::varint;
 
 /// Errors from reading typed protocol values.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum TypeError {
     /// String exceeds the maximum allowed length.
     #[error("string too long: {len} chars (max {max})")]

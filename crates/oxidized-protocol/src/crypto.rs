@@ -20,6 +20,7 @@ use thiserror::Error;
 
 /// Errors from cryptographic operations.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum CryptoError {
     /// RSA key generation failed.
     #[error("RSA key generation failed: {0}")]

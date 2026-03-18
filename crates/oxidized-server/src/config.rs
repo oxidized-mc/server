@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 /// Errors that can occur when validating server configuration.
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::enum_variant_names)]
+#[non_exhaustive]
 pub enum ConfigError {
     /// Port number is out of valid range (1-65535).
     #[error("invalid port: {0} (must be 1-65535)")]

@@ -11,6 +11,7 @@ use crate::codec::varint::{self, VarIntError};
 
 /// Errors from decoding a known-packs packet.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum KnownPacksError {
     /// VarInt decode failure.
     #[error("varint error: {0}")]

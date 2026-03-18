@@ -38,6 +38,7 @@ pub const MAX_DEPTH: usize = 512;
 
 /// Errors that can occur during NBT reading, writing, or manipulation.
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum NbtError {
     /// The tag type ID is not in the valid range 0–12.
     #[error("invalid tag type ID: {0}")]

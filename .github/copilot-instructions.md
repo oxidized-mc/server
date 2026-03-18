@@ -87,10 +87,15 @@ Never let a lower-layer crate import a higher-layer crate.
 ## Development Lifecycle
 
 All work in Oxidized follows the [Development Lifecycle](../docs/lifecycle/README.md).
-The 9 stages are: **Identify → Research → Decide (ADR) → Plan → Test First → Implement →
-Review → Integrate → Retrospect.** The lifecycle is **not linear** — it contains 5 feedback
-loops (TDD Red↔Green, Review↔Fix, CI Repair, ADR Rethink, Retrospect→Identify). See
-[Quality Gates](../docs/lifecycle/quality-gates.md) for pass/fail criteria at each stage.
+The stages are: **Identify → Research → Architectural Review Gate → Decide (ADR) → Plan →
+Test First → Implement → Review → Integrate → Retrospect.** The lifecycle is **not linear**
+— it contains 6 feedback loops (Arch Review, TDD Red↔Green, Review↔Fix, CI Repair, ADR
+Rethink, Retrospect→Identify). See [Quality Gates](../docs/lifecycle/quality-gates.md) for
+pass/fail criteria at each stage.
+
+**Architectural Review Gate (Stage 2.5):** Before planning or writing tests, explicitly
+question every constraining ADR. If any decision is outdated, create a superseding ADR
+*before* proceeding. This prevents implementing known-suboptimal designs.
 
 **CI Pipeline Rule:** After every push, **wait for all CI jobs to complete** and verify
 they pass. If any fail, fix immediately and re-push — never leave `main` broken. Check
@@ -125,6 +130,11 @@ After every phase completion, conduct a mandatory retrospective:
 ---
 
 ## Architectural Questioning
+
+> **This is a hard gate (Stage 2.5), not a soft suggestion.** Every phase must pass the
+> Architectural Review Gate before any planning or test-writing begins. See
+> [Stage 2.5](../docs/lifecycle/README.md#stage-25--architectural-review-gate) for the
+> full process.
 
 Before implementing ANY decision from an ADR, explicitly question whether it is still the best approach:
 
@@ -190,6 +200,7 @@ Key paths:
 | Phase | Agent | Prompt |
 |---|---|---|
 | **Explore** | `explore` | "Where is X in the Java reference? Find callers of Y." |
+| **Arch Review** | `explore` | "Review ADRs N,M,P — are they still optimal for phase X?" |
 | **Write tests (TDD)** | `general-purpose` | "Write failing tests for X in crate Y." |
 | **Implement** | `general-purpose` | "Implement X in crate Y — follow Java reference at path Z." |
 | **Build & test** | `task` | `cargo test -p oxidized-nbt` — full output on failure only. |

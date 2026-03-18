@@ -19,6 +19,7 @@ const MAX_RESOURCE_LOCATION_LENGTH: usize = 32767;
 
 /// Errors that can occur when constructing or parsing a [`ResourceLocation`].
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ResourceLocationError {
     /// The namespace contains invalid characters.
     #[error("invalid namespace '{0}': must match [a-z0-9_.-] and not contain \"..\"")]
