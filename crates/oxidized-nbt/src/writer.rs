@@ -158,10 +158,7 @@ pub fn write_nbt<W: Write>(writer: &mut W, compound: &NbtCompound) -> Result<(),
 /// # Errors
 ///
 /// Returns an error on I/O failure.
-pub fn write_network_nbt<W: Write>(
-    writer: &mut W,
-    compound: &NbtCompound,
-) -> Result<(), NbtError> {
+pub fn write_network_nbt<W: Write>(writer: &mut W, compound: &NbtCompound) -> Result<(), NbtError> {
     writer.write_all(&[TAG_COMPOUND])?;
     write_compound_payload(writer, compound, 1)?;
     Ok(())
