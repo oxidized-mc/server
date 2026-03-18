@@ -78,10 +78,7 @@ impl Difficulty {
     /// out of range.
     pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
         let id = varint::read_varint_buf(buf)?;
-        Difficulty::by_id(id).ok_or(TypeError::UnexpectedEof {
-            need: 1,
-            have: 0,
-        })
+        Difficulty::by_id(id).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
     }
 
     /// Writes this [`Difficulty`] to a wire buffer as a VarInt.

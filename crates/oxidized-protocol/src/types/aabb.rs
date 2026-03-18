@@ -261,7 +261,12 @@ impl Aabb {
     /// Touching (sharing an edge or face) is **not** considered overlapping.
     pub fn intersects(&self, other: &Aabb) -> bool {
         self.intersects_range(
-            other.min_x, other.min_y, other.min_z, other.max_x, other.max_y, other.max_z,
+            other.min_x,
+            other.min_y,
+            other.min_z,
+            other.max_x,
+            other.max_y,
+            other.max_z,
         )
     }
 

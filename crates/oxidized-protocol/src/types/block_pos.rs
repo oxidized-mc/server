@@ -92,8 +92,7 @@ impl BlockPos {
         // Arithmetic right shift on i64 sign-extends.
         let x = (packed >> X_OFFSET) as i32;
         let z = ((packed << PACKED_X_LENGTH as i64) >> (PACKED_X_LENGTH + Z_OFFSET) as i64) as i32;
-        let y = ((packed << (64 - PACKED_Y_LENGTH) as i64) >> (64 - PACKED_Y_LENGTH) as i64)
-            as i32;
+        let y = ((packed << (64 - PACKED_Y_LENGTH) as i64) >> (64 - PACKED_Y_LENGTH) as i64) as i32;
         Self { x, y, z }
     }
 

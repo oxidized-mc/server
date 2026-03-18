@@ -234,10 +234,7 @@ impl Direction {
     /// out of range.
     pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
         let id = varint::read_varint_buf(buf)?;
-        Direction::from_3d_data_value(id as u8).ok_or(TypeError::UnexpectedEof {
-            need: 1,
-            have: 0,
-        })
+        Direction::from_3d_data_value(id as u8).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
     }
 
     /// Writes this [`Direction`] to a wire buffer as a VarInt.
@@ -465,11 +462,19 @@ mod tests {
     #[test]
     fn test_direction_step_vectors() {
         assert_eq!(
-            (Direction::Down.step_x(), Direction::Down.step_y(), Direction::Down.step_z()),
+            (
+                Direction::Down.step_x(),
+                Direction::Down.step_y(),
+                Direction::Down.step_z()
+            ),
             (0, -1, 0)
         );
         assert_eq!(
-            (Direction::Up.step_x(), Direction::Up.step_y(), Direction::Up.step_z()),
+            (
+                Direction::Up.step_x(),
+                Direction::Up.step_y(),
+                Direction::Up.step_z()
+            ),
             (0, 1, 0)
         );
         assert_eq!(
@@ -489,11 +494,19 @@ mod tests {
             (0, 0, 1)
         );
         assert_eq!(
-            (Direction::West.step_x(), Direction::West.step_y(), Direction::West.step_z()),
+            (
+                Direction::West.step_x(),
+                Direction::West.step_y(),
+                Direction::West.step_z()
+            ),
             (-1, 0, 0)
         );
         assert_eq!(
-            (Direction::East.step_x(), Direction::East.step_y(), Direction::East.step_z()),
+            (
+                Direction::East.step_x(),
+                Direction::East.step_y(),
+                Direction::East.step_z()
+            ),
             (1, 0, 0)
         );
     }

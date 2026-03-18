@@ -100,9 +100,15 @@ impl Vec3i {
     /// with small direction/normal vectors where overflow cannot occur.
     pub const fn cross(self, other: Vec3i) -> Self {
         Self::new(
-            self.y.wrapping_mul(other.z).wrapping_sub(self.z.wrapping_mul(other.y)),
-            self.z.wrapping_mul(other.x).wrapping_sub(self.x.wrapping_mul(other.z)),
-            self.x.wrapping_mul(other.y).wrapping_sub(self.y.wrapping_mul(other.x)),
+            self.y
+                .wrapping_mul(other.z)
+                .wrapping_sub(self.z.wrapping_mul(other.y)),
+            self.z
+                .wrapping_mul(other.x)
+                .wrapping_sub(self.x.wrapping_mul(other.z)),
+            self.x
+                .wrapping_mul(other.y)
+                .wrapping_sub(self.y.wrapping_mul(other.x)),
         )
     }
 

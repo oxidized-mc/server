@@ -203,10 +203,7 @@ mod tests {
 
     #[test]
     fn test_chunk_pos_from_block_coords() {
-        assert_eq!(
-            ChunkPos::from_block_coords(32, 48),
-            ChunkPos::new(2, 3)
-        );
+        assert_eq!(ChunkPos::from_block_coords(32, 48), ChunkPos::new(2, 3));
     }
 
     // ── Pack / unpack roundtrip ─────────────────────────────────────
