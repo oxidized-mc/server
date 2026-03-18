@@ -13,6 +13,8 @@
 /mc-server-ref/mc-extracted/
 /mc-server-ref/decompiled/
 /mc-server-ref/generated/
+/mc-server-ref/libraries/
+/mc-server-ref/versions/
 
 # World data / test worlds (large binary files)
 *.mca
