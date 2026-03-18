@@ -1,6 +1,7 @@
 # Phase 5 — NBT Implementation
 
 **Crate:** `oxidized-nbt`  
+**Status:** ✅ Complete  
 **Reward:** Read and write any Minecraft `.dat`, `.mca`, or `.nbt` file correctly.
 
 ---

@@ -379,3 +379,48 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 - **Security bugs found in review:** 1 (URL injection in auth.rs)
 - **Crate incompatibilities worked around:** 2 (cfb8, RSA+rand)
 - **ADR compliance:** ADR-006, ADR-007, ADR-008, ADR-009 — all followed (ADR-009 updated)
+
+---
+
+## Phase 5 Retrospective (2026-03-17)
+
+### What went well
+- **NBT crate is fully self-contained.** Zero internal deps, clean public API. The crate can
+  be used independently of the rest of the project.
+- **Comprehensive test coverage.** 160 unit tests + 3 doc tests covering all 13 tag types,
+  roundtrip binary codec, Modified UTF-8 edge cases, SNBT parsing, serde integration.
+- **Code review caught integer overflow vulnerability.** Array size accounting used unchecked
+  multiplication (`4 * len`) which could wrap on 32-bit platforms, bypassing NbtAccounter
+  memory limits. Fixed with checked arithmetic before merge.
+- **Serde integration is ergonomic.** `to_compound`/`from_compound` provide type-safe struct
+  access to NBT data, eliminating manual tag-by-tag extraction for typed use cases.
+
+### What surprised us
+- **ADR-010 had wrong quota values.** ADR says 64 MiB limit; vanilla actually uses 2 MB
+  (network) / 100 MB (disk). Must always cross-reference ADRs against Java source.
+- **Modified UTF-8 supplementary character handling is non-trivial.** Supplementary Unicode
+  chars (> U+FFFF) use surrogate pair encoding in CESU-8 format, not standard UTF-8 4-byte
+  sequences. Required careful encoding/decoding logic.
+- **Agent left stray test binaries.** The general-purpose agent ran `cargo test` with
+  `--test-threads=1` which left compiled test binaries in the repo root. Added cleanup step.
+
+### What should change going forward
+- **Always check for stray files after agent work.** Run `git status` and clean up any
+  untracked files before committing.
+- **Cross-reference ADR values against Java source.** ADR-010's quota values were incorrect.
+  Any numeric constants in ADRs should be verified against the decompiled reference.
+
+### Technical debt acknowledged
+- **Arena-allocated NBT deferred.** ADR-010 specifies a `BumpNbt` arena variant for hot-path
+  chunk loading. Deferred to Phase 10 when chunk loading actually needs it.
+- **Borrowed/zero-copy NBT deferred.** `BorrowedNbtCompound<'a>` for lazy parsing also
+  deferred to Phase 10.
+- **No benchmark suite yet.** ADR-010 calls for criterion benchmarks. Will add when we have
+  real chunk data to benchmark against (Phase 9–10).
+
+### Metrics
+- **Tests:** 163 total (160 unit + 3 doc-tests)
+- **Lines of code:** ~4,650 (12 source files)
+- **Modules:** error, mutf8, tag, compound, list, accounter, reader, writer, io, snbt, serde
+- **Security bugs found in review:** 1 (integer overflow in size accounting)
+- **ADR compliance:** ADR-010 followed (quota values corrected from ADR)
