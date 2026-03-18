@@ -10,7 +10,7 @@ use std::sync::Arc;
 use oxidized_protocol::auth;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
 use oxidized_protocol::crypto::{
-    generate_challenge, minecraft_digest, offline_uuid, ServerKeyPair,
+    ServerKeyPair, generate_challenge, minecraft_digest, offline_uuid,
 };
 use oxidized_protocol::packets::configuration::{
     ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,

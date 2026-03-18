@@ -14,8 +14,8 @@ use std::net::SocketAddr;
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpStream;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 use crate::codec::frame::{self, FrameError, MAX_PACKET_SIZE};
 use crate::codec::varint::{self, VarIntError};

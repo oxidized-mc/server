@@ -12,7 +12,7 @@ use oxidized_nbt::{NbtCompound, NbtTag};
 
 use super::error::AnvilError;
 use super::region::RegionFile;
-use crate::chunk::data_layer::{DataLayer, DATA_LAYER_SIZE};
+use crate::chunk::data_layer::{DATA_LAYER_SIZE, DataLayer};
 use crate::chunk::heightmap::{Heightmap, HeightmapType};
 use crate::chunk::level_chunk::{
     ChunkPos, LevelChunk, OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT,

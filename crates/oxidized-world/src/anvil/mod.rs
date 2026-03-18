@@ -12,4 +12,4 @@ mod region;
 pub use chunk_loader::{AnvilChunkLoader, AsyncChunkLoader};
 pub use compression::CompressionType;
 pub use error::AnvilError;
-pub use region::{OffsetEntry, RegionFile, HEADER_BYTES, REGION_SIZE, SECTOR_BYTES, SECTOR_INTS};
+pub use region::{HEADER_BYTES, OffsetEntry, REGION_SIZE, RegionFile, SECTOR_BYTES, SECTOR_INTS};

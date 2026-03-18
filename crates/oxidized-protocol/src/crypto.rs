@@ -6,10 +6,10 @@
 //!
 //! See [ADR-009](../../docs/adr/adr-009-encryption-compression.md) for design rationale.
 
-use aes::cipher::{BlockEncrypt, KeyInit};
 use aes::Aes128;
-use rsa::pkcs8::EncodePublicKey;
+use aes::cipher::{BlockEncrypt, KeyInit};
 use rsa::Pkcs1v15Encrypt;
+use rsa::pkcs8::EncodePublicKey;
 use rsa::{RsaPrivateKey, RsaPublicKey};
 use sha1::{Digest, Sha1};
 use thiserror::Error;
