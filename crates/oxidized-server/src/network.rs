@@ -430,7 +430,7 @@ async fn authenticate_online(
 /// 1. Send `ClientboundSelectKnownPacksPacket`
 /// 2. Receive `ServerboundSelectKnownPacksPacket`
 /// 3. Send `ClientboundRegistryDataPacket` × N (one per synchronized registry)
-/// 4. Send `ClientboundUpdateTagsPacket` (empty — no block/item registries yet)
+/// 4. Send `ClientboundUpdateTagsPacket` (all tag registries with entries)
 /// 5. Send `ClientboundUpdateEnabledFeaturesPacket` (vanilla features)
 /// 6. Send `ClientboundFinishConfigurationPacket`
 /// 7. Receive `ServerboundFinishConfigurationPacket`
@@ -555,15 +555,16 @@ async fn handle_configuration(
         "Sent all registry data",
     );
 
-    // 4. Send empty tags (full tag support requires block/item registries)
-    let tags_packet = ClientboundUpdateTagsPacket { tags: vec![] };
+    // 4. Send tags (block, item, fluid, entity_type, enchantment, etc.)
+    let tags_packet = registry::build_tags_packet();
+    let tag_count = tags_packet.tags.len();
     conn.send_raw(
         ClientboundUpdateTagsPacket::PACKET_ID,
         &tags_packet.encode(),
     )
     .await?;
     conn.flush().await?;
-    debug!(peer = %addr, "Sent empty tags");
+    debug!(peer = %addr, registries = tag_count, "Sent tags");
 
     // 5. Send enabled features (vanilla feature set)
     let vanilla_feature = ResourceLocation::from_string("minecraft:vanilla").map_err(|e| {
