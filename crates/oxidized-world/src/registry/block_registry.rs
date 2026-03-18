@@ -46,8 +46,8 @@ impl BlockRegistry {
             if let Some(states_arr) = block_value.get("states").and_then(|s| s.as_array()) {
                 for state_val in states_arr {
                     if let Some(id) = state_val.get("id").and_then(|v| v.as_u64()) {
-                        let id16 = u16::try_from(id)
-                            .map_err(|_| RegistryError::InvalidStateId(id))?;
+                        let id16 =
+                            u16::try_from(id).map_err(|_| RegistryError::InvalidStateId(id))?;
                         if id16 > max_id {
                             max_id = id16;
                         }
@@ -77,8 +77,8 @@ impl BlockRegistry {
                         .get("id")
                         .and_then(|v| v.as_u64())
                         .ok_or_else(|| RegistryError::MissingStateId(block_name.clone()))?;
-                    let id = u16::try_from(raw_id)
-                        .map_err(|_| RegistryError::InvalidStateId(raw_id))?;
+                    let id =
+                        u16::try_from(raw_id).map_err(|_| RegistryError::InvalidStateId(raw_id))?;
                     let is_default = state_val
                         .get("default")
                         .and_then(|v| v.as_bool())
