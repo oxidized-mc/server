@@ -500,6 +500,63 @@ impl PalettedContainer {
         }
     }
 
+    /// Creates a container from NBT disk data: a list of palette entry IDs
+    /// and a packed `i64` long array.
+    ///
+    /// This mirrors the Anvil on-disk format where the palette is stored as
+    /// NBT and the data is a `LongArray` of packed indices.
+    ///
+    /// If `palette_ids` has exactly one entry and `data_longs` is empty, a
+    /// single-value palette is used. Otherwise, the appropriate palette tier
+    /// is selected based on palette size.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data is malformed or palette IDs are invalid.
+    pub fn from_nbt_data(
+        strategy: Strategy,
+        palette_ids: Vec<u32>,
+        data_longs: &[i64],
+    ) -> Result<Self, PalettedContainerError> {
+        let size = strategy.size();
+
+        if palette_ids.len() == 1 && data_longs.is_empty() {
+            return Ok(Self {
+                strategy,
+                data: PaletteData::Single(SingleValuePalette::with_value(palette_ids[0])),
+            });
+        }
+
+        let bits = bits_for_count(palette_ids.len());
+        let storage_bits = strategy.storage_bits(bits);
+
+        // Convert i64 longs to u64
+        let raw: Vec<u64> = data_longs.iter().map(|&l| l as u64).collect();
+        let storage = BitStorage::from_raw(storage_bits, size, raw)?;
+
+        let data = if storage_bits >= strategy.global_bits_threshold() {
+            // Global palette — entries ARE the registry IDs, stored directly.
+            // Remap from palette indices to actual registry IDs.
+            let global_bits = strategy.global_palette_bits();
+            let mut global_storage = BitStorage::new(global_bits, size)?;
+            for i in 0..size {
+                #[allow(clippy::cast_possible_truncation)]
+                let palette_idx = storage.get(i)? as usize;
+                let registry_id = palette_ids.get(palette_idx).copied().unwrap_or(0);
+                global_storage.set(i, u64::from(registry_id))?;
+            }
+            PaletteData::Global(global_storage)
+        } else if storage_bits >= strategy.hashmap_bits_threshold() {
+            let palette = HashMapPalette::from_entries(storage_bits, palette_ids);
+            PaletteData::HashMap(palette, storage)
+        } else {
+            let palette = LinearPalette::from_entries(storage_bits, palette_ids);
+            PaletteData::Linear(palette, storage)
+        };
+
+        Ok(Self { strategy, data })
+    }
+
     /// Counts distinct non-zero values (useful for `non_empty_block_count`).
     #[must_use]
     pub fn count_non_zero(&self) -> u16 {

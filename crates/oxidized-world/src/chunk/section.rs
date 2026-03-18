@@ -54,6 +54,22 @@ impl LevelChunkSection {
         }
     }
 
+    /// Creates a section from pre-built palette containers.
+    ///
+    /// Recalculates `non_empty_block_count` by scanning the states container.
+    #[must_use]
+    pub fn from_parts(states: PalettedContainer, biomes: PalettedContainer) -> Self {
+        let non_empty_block_count = states.count_non_zero() as i16;
+        Self {
+            non_empty_block_count,
+            fluid_count: 0,
+            ticking_block_count: 0,
+            ticking_fluid_count: 0,
+            states,
+            biomes,
+        }
+    }
+
     /// Returns the block state ID at the given section-local coordinates.
     ///
     /// Coordinates must be in 0..16.
@@ -183,6 +199,18 @@ impl LevelChunkSection {
     /// block property lookups and are not recalculated here.
     pub fn recalculate_counts(&mut self) {
         self.non_empty_block_count = self.states.count_non_zero() as i16;
+    }
+
+    /// Returns a clone of the block states container.
+    #[must_use]
+    pub fn states_clone(&self) -> PalettedContainer {
+        self.states.clone()
+    }
+
+    /// Returns a clone of the biomes container.
+    #[must_use]
+    pub fn biomes_clone(&self) -> PalettedContainer {
+        self.biomes.clone()
     }
 
     /// Returns the fluid count.
