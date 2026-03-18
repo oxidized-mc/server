@@ -2,10 +2,13 @@
 
 pub mod aabb;
 pub mod block_pos;
+pub mod chat_visibility;
 pub mod chunk_pos;
 pub mod difficulty;
 pub mod direction;
 pub mod game_type;
+pub mod humanoid_arm;
+pub mod particle_status;
 pub mod resource_location;
 pub mod section_pos;
 pub mod vec2;
@@ -14,10 +17,13 @@ pub mod vec3i;
 
 pub use aabb::Aabb;
 pub use block_pos::BlockPos;
+pub use chat_visibility::ChatVisibility;
 pub use chunk_pos::ChunkPos;
 pub use difficulty::Difficulty;
 pub use direction::{Axis, AxisDirection, Direction};
 pub use game_type::GameType;
+pub use humanoid_arm::HumanoidArm;
+pub use particle_status::ParticleStatus;
 pub use resource_location::ResourceLocation;
 pub use section_pos::SectionPos;
 pub use vec2::Vec2;

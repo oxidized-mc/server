@@ -13,9 +13,10 @@ use oxidized_protocol::crypto::{
     generate_challenge, minecraft_digest, offline_uuid, ServerKeyPair,
 };
 use oxidized_protocol::packets::configuration::{
-    ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
+    ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
     ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket,
-    ClientboundUpdateTagsPacket, KnownPack, RegistryEntry, ServerboundFinishConfigurationPacket,
+    ClientboundUpdateTagsPacket, KnownPack, RegistryEntry,
+    ServerboundClientInformationPacket, ServerboundFinishConfigurationPacket,
     ServerboundSelectKnownPacksPacket,
 };
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
@@ -444,6 +445,7 @@ async fn handle_configuration(
     _ctx: &LoginContext,
 ) -> Result<(), ConnectionError> {
     let addr = conn.remote_addr();
+    let mut client_info: Option<ClientInformation> = None;
 
     // 1. Send SelectKnownPacks — we claim to have the vanilla core pack
     let known_packs = ClientboundSelectKnownPacksPacket {
@@ -461,19 +463,44 @@ async fn handle_configuration(
     conn.flush().await?;
     debug!(peer = %addr, "Sent SelectKnownPacks");
 
-    // 2. Receive ServerboundSelectKnownPacks
-    let pkt = conn.read_raw_packet().await?;
-    if pkt.id != ServerboundSelectKnownPacksPacket::PACKET_ID {
-        warn!(peer = %addr, id = pkt.id, "Expected SelectKnownPacks response");
-        return disconnect(conn, "Unexpected packet during configuration").await;
+    // 2. Receive serverbound packets until we get SelectKnownPacks.
+    //    The client may send ClientInformation (0x00) before responding.
+    loop {
+        let pkt = conn.read_raw_packet().await?;
+        match pkt.id {
+            ServerboundClientInformationPacket::PACKET_ID => {
+                let info_pkt = ServerboundClientInformationPacket::decode(pkt.data)
+                    .map_err(|e| {
+                        ConnectionError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            e.to_string(),
+                        ))
+                    })?;
+                debug!(
+                    peer = %addr,
+                    language = %info_pkt.information.language,
+                    view_distance = info_pkt.information.view_distance,
+                    "Received client information",
+                );
+                client_info = Some(info_pkt.information);
+            }
+            ServerboundSelectKnownPacksPacket::PACKET_ID => {
+                let _client_packs =
+                    ServerboundSelectKnownPacksPacket::decode(pkt.data).map_err(|e| {
+                        ConnectionError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            e.to_string(),
+                        ))
+                    })?;
+                debug!(peer = %addr, "Received client known packs response");
+                break;
+            }
+            _ => {
+                warn!(peer = %addr, id = pkt.id, "Unexpected packet during configuration");
+                return disconnect(conn, "Unexpected packet during configuration").await;
+            }
+        }
     }
-    let _client_packs = ServerboundSelectKnownPacksPacket::decode(pkt.data).map_err(|e| {
-        ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e.to_string(),
-        ))
-    })?;
-    debug!(peer = %addr, "Received client known packs response");
 
     // 3. Send all synchronized registries (full data, ignoring known-pack
     //    optimisation for now)
@@ -562,12 +589,43 @@ async fn handle_configuration(
     conn.flush().await?;
     debug!(peer = %addr, "Sent finish configuration");
 
-    // 7. Wait for client FinishConfiguration acknowledgement
-    let finish_pkt = conn.read_raw_packet().await?;
-    if finish_pkt.id != ServerboundFinishConfigurationPacket::PACKET_ID {
-        warn!(peer = %addr, id = finish_pkt.id, "Expected FinishConfiguration");
-        return disconnect(conn, "Unexpected packet — expected finish configuration").await;
+    // 7. Wait for client FinishConfiguration acknowledgement.
+    //    The client may send ClientInformation again if settings changed.
+    loop {
+        let finish_pkt = conn.read_raw_packet().await?;
+        match finish_pkt.id {
+            ServerboundClientInformationPacket::PACKET_ID => {
+                let info_pkt = ServerboundClientInformationPacket::decode(finish_pkt.data)
+                    .map_err(|e| {
+                        ConnectionError::Io(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            e.to_string(),
+                        ))
+                    })?;
+                debug!(
+                    peer = %addr,
+                    language = %info_pkt.information.language,
+                    view_distance = info_pkt.information.view_distance,
+                    "Received updated client information",
+                );
+                client_info = Some(info_pkt.information);
+            }
+            ServerboundFinishConfigurationPacket::PACKET_ID => {
+                break;
+            }
+            _ => {
+                warn!(peer = %addr, id = finish_pkt.id, "Expected FinishConfiguration");
+                return disconnect(
+                    conn,
+                    "Unexpected packet — expected finish configuration",
+                )
+                .await;
+            }
+        }
     }
+
+    // Use client_info (or defaults) for this session
+    let _client_info = client_info.unwrap_or_else(ClientInformation::create_default);
 
     // 8. Transition to Play
     conn.state = ConnectionState::Play;
