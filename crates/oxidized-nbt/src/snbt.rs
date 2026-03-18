@@ -26,7 +26,7 @@ use crate::tag::NbtTag;
 /// Returns [`NbtError::SnbtParse`] if the input is not valid SNBT.
 pub fn parse_snbt(input: &str) -> Result<NbtTag, NbtError> {
     let mut parser = SnbtParser::new(input);
-    let tag = parser.parse_value()?;
+    let tag = parser.parse_value(0)?;
     parser.skip_whitespace();
     if parser.pos < parser.input.len() {
         return Err(parser.error("unexpected trailing characters"));
@@ -45,7 +45,7 @@ pub fn parse_snbt(input: &str) -> Result<NbtTag, NbtError> {
 /// ```
 pub fn format_snbt(tag: &NbtTag) -> String {
     let mut out = String::new();
-    write_snbt(&mut out, tag);
+    write_snbt(&mut out, tag, 0);
     out
 }
 
@@ -71,7 +71,7 @@ pub fn format_snbt_pretty(tag: &NbtTag, indent: usize) -> String {
 
 // ── Parser ──────────────────────────────────────────────────────────────
 
-/// Recursive-descent SNBT parser.
+/// Recursive-descent SNBT parser with depth tracking.
 struct SnbtParser<'a> {
     input: &'a str,
     pos: usize,
@@ -80,6 +80,18 @@ struct SnbtParser<'a> {
 impl<'a> SnbtParser<'a> {
     fn new(input: &'a str) -> Self {
         Self { input, pos: 0 }
+    }
+
+    /// Returns an error if the given depth exceeds MAX_DEPTH.
+    fn check_depth(depth: usize) -> Result<(), NbtError> {
+        if depth > crate::error::MAX_DEPTH {
+            Err(NbtError::DepthLimit {
+                depth,
+                max: crate::error::MAX_DEPTH,
+            })
+        } else {
+            Ok(())
+        }
     }
 
     /// Creates an [`NbtError::SnbtParse`] at the current position.
@@ -118,13 +130,13 @@ impl<'a> SnbtParser<'a> {
         }
     }
 
-    /// Parses a single SNBT value.
-    fn parse_value(&mut self) -> Result<NbtTag, NbtError> {
+    /// Parses a single SNBT value at the given nesting depth.
+    fn parse_value(&mut self, depth: usize) -> Result<NbtTag, NbtError> {
         self.skip_whitespace();
         match self.peek() {
             None => Err(self.error("unexpected end of input")),
-            Some(b'{') => self.parse_compound(),
-            Some(b'[') => self.parse_list_or_array(),
+            Some(b'{') => self.parse_compound(depth),
+            Some(b'[') => self.parse_list_or_array(depth),
             Some(b'"') => {
                 let s = self.parse_quoted_string(b'"')?;
                 Ok(NbtTag::String(s))
@@ -138,7 +150,9 @@ impl<'a> SnbtParser<'a> {
     }
 
     /// Parses a compound tag: `{key: value, ...}`.
-    fn parse_compound(&mut self) -> Result<NbtTag, NbtError> {
+    fn parse_compound(&mut self, depth: usize) -> Result<NbtTag, NbtError> {
+        let next_depth = depth + 1;
+        Self::check_depth(next_depth)?;
         self.expect(b'{')?;
         let mut compound = NbtCompound::new();
         self.skip_whitespace();
@@ -152,7 +166,7 @@ impl<'a> SnbtParser<'a> {
             self.skip_whitespace();
             let key = self.parse_key()?;
             self.expect(b':')?;
-            let value = self.parse_value()?;
+            let value = self.parse_value(next_depth)?;
             compound.put(key, value);
 
             self.skip_whitespace();
@@ -182,7 +196,7 @@ impl<'a> SnbtParser<'a> {
     }
 
     /// Parses a `[` that starts a list or typed array.
-    fn parse_list_or_array(&mut self) -> Result<NbtTag, NbtError> {
+    fn parse_list_or_array(&mut self, depth: usize) -> Result<NbtTag, NbtError> {
         self.expect(b'[')?;
         self.skip_whitespace();
 
@@ -206,7 +220,7 @@ impl<'a> SnbtParser<'a> {
             }
         }
 
-        self.parse_list()
+        self.parse_list(depth)
     }
 
     /// Parses a typed array after the `[X;` prefix has been consumed.
@@ -280,7 +294,9 @@ impl<'a> SnbtParser<'a> {
     }
 
     /// Parses a generic list `[v1, v2, ...]`.
-    fn parse_list(&mut self) -> Result<NbtTag, NbtError> {
+    fn parse_list(&mut self, depth: usize) -> Result<NbtTag, NbtError> {
+        let next_depth = depth + 1;
+        Self::check_depth(next_depth)?;
         let mut list = NbtList::empty();
         self.skip_whitespace();
 
@@ -291,7 +307,7 @@ impl<'a> SnbtParser<'a> {
 
         loop {
             self.skip_whitespace();
-            let value = self.parse_value()?;
+            let value = self.parse_value(next_depth)?;
             list.push(value).map_err(|e| NbtError::SnbtParse {
                 pos: self.pos,
                 message: e.to_string(),
@@ -512,7 +528,13 @@ fn is_unquoted_char(b: u8) -> bool {
 
 // ── Compact formatter ───────────────────────────────────────────────────
 
-fn write_snbt(out: &mut String, tag: &NbtTag) {
+fn write_snbt(out: &mut String, tag: &NbtTag, depth: usize) {
+    // Depth protection: if we exceed MAX_DEPTH, emit a placeholder instead
+    // of risking stack overflow. This mirrors the parser's depth limit.
+    if depth > crate::error::MAX_DEPTH {
+        out.push_str("<too deep>");
+        return;
+    }
     match tag {
         NbtTag::Byte(v) => {
             let _ = write!(out, "{v}b");
@@ -549,7 +571,7 @@ fn write_snbt(out: &mut String, tag: &NbtTag) {
                 if i > 0 {
                     out.push(',');
                 }
-                write_snbt(out, elem);
+                write_snbt(out, elem, depth + 1);
             }
             out.push(']');
         },
@@ -561,7 +583,7 @@ fn write_snbt(out: &mut String, tag: &NbtTag) {
                 }
                 write_key(out, key);
                 out.push(':');
-                write_snbt(out, value);
+                write_snbt(out, value, depth + 1);
             }
             out.push('}');
         },
@@ -673,7 +695,7 @@ fn write_snbt_pretty(out: &mut String, tag: &NbtTag, depth: usize, indent: usize
             out.push(']');
         },
         // Simple lists and all other types use compact format
-        _ => write_snbt(out, tag),
+        _ => write_snbt(out, tag, depth),
     }
 }
 
@@ -1079,5 +1101,36 @@ mod tests {
         let compound = tag.as_compound().unwrap();
         assert_eq!(compound.get_int("key"), Some(42));
         assert_eq!(compound.get_string("name"), Some("hi"));
+    }
+
+    #[test]
+    fn test_parse_depth_limit() {
+        // Build an SNBT string with nesting deeper than MAX_DEPTH.
+        let depth = crate::error::MAX_DEPTH + 10;
+        let mut input = String::new();
+        for _ in 0..depth {
+            input.push_str("{x:");
+        }
+        input.push_str("1b");
+        for _ in 0..depth {
+            input.push('}');
+        }
+        let result = parse_snbt(&input);
+        assert!(result.is_err(), "should reject deeply nested SNBT compound");
+    }
+
+    #[test]
+    fn test_parse_list_depth_limit() {
+        let depth = crate::error::MAX_DEPTH + 10;
+        let mut input = String::new();
+        for _ in 0..depth {
+            input.push('[');
+        }
+        input.push_str("1b");
+        for _ in 0..depth {
+            input.push(']');
+        }
+        let result = parse_snbt(&input);
+        assert!(result.is_err(), "should reject deeply nested SNBT list");
     }
 }

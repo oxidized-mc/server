@@ -543,17 +543,28 @@ mod tests {
 
     #[test]
     fn test_depth_limit_enforcement() {
-        // Create a deeply nested compound exceeding MAX_DEPTH.
-        let mut compound = NbtCompound::new();
-        compound.put_byte("leaf", 1);
-        for _ in 0..MAX_DEPTH {
-            let mut outer = NbtCompound::new();
-            outer.put("nested", NbtTag::Compound(compound));
-            compound = outer;
-        }
-
+        // Build binary data that exceeds MAX_DEPTH directly, bypassing the
+        // writer's own depth checks.
         let mut buf = Vec::new();
-        write_nbt(&mut buf, &compound).unwrap();
+        // Root: TAG_COMPOUND + empty name
+        buf.push(TAG_COMPOUND);
+        buf.extend_from_slice(&0u16.to_be_bytes());
+        // Nest MAX_DEPTH + 1 compounds (each named "n")
+        for _ in 0..=MAX_DEPTH {
+            // TAG_COMPOUND + name "n"
+            buf.push(TAG_COMPOUND);
+            buf.extend_from_slice(&1u16.to_be_bytes());
+            buf.push(b'n');
+        }
+        // Leaf byte at the deepest level
+        buf.push(TAG_BYTE);
+        buf.extend_from_slice(&1u16.to_be_bytes());
+        buf.push(b'v');
+        buf.push(1);
+        // Close all compounds
+        for _ in 0..=MAX_DEPTH + 1 {
+            buf.push(TAG_END);
+        }
 
         let mut reader = buf.as_slice();
         let mut acc = NbtAccounter::unlimited();
