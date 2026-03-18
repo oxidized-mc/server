@@ -562,9 +562,7 @@ mod tests {
         buf.push(b'v');
         buf.push(1);
         // Close all compounds
-        for _ in 0..=MAX_DEPTH + 1 {
-            buf.push(TAG_END);
-        }
+        buf.extend(std::iter::repeat_n(TAG_END, MAX_DEPTH + 2));
 
         let mut reader = buf.as_slice();
         let mut acc = NbtAccounter::unlimited();
