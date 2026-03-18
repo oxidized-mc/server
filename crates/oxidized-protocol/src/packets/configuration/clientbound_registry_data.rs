@@ -59,7 +59,7 @@ pub struct ClientboundRegistryDataPacket {
 
 impl ClientboundRegistryDataPacket {
     /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x02;
+    pub const PACKET_ID: i32 = 0x07;
 
     /// Decodes from the raw packet body.
     ///

@@ -58,7 +58,7 @@ pub struct ClientboundUpdateTagsPacket {
 
 impl ClientboundUpdateTagsPacket {
     /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x03;
+    pub const PACKET_ID: i32 = 0x0d;
 
     /// Decodes from the raw packet body.
     ///

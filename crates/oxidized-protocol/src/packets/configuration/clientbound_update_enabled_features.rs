@@ -37,7 +37,7 @@ pub struct ClientboundUpdateEnabledFeaturesPacket {
 
 impl ClientboundUpdateEnabledFeaturesPacket {
     /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x05;
+    pub const PACKET_ID: i32 = 0x0c;
 
     /// Decodes from the raw packet body.
     ///
