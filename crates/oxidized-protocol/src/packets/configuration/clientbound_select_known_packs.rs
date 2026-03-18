@@ -73,7 +73,7 @@ pub struct ClientboundSelectKnownPacksPacket {
 
 impl ClientboundSelectKnownPacksPacket {
     /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x04;
+    pub const PACKET_ID: i32 = 0x0e;
 
     /// Decodes from the raw packet body.
     ///

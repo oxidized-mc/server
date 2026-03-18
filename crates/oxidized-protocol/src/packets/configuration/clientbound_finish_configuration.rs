@@ -15,7 +15,7 @@ pub struct ClientboundFinishConfigurationPacket;
 
 impl ClientboundFinishConfigurationPacket {
     /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x01;
+    pub const PACKET_ID: i32 = 0x03;
 
     /// Decodes from the raw packet body.
     ///
