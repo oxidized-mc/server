@@ -42,9 +42,8 @@ fn check_write_depth(depth: usize) -> Result<(), NbtError> {
 
 /// Safely converts a `usize` length to `i32` for the NBT wire format.
 fn len_to_i32(len: usize) -> Result<i32, NbtError> {
-    i32::try_from(len).map_err(|_| {
-        NbtError::InvalidFormat(format!("length {len} exceeds i32::MAX"))
-    })
+    i32::try_from(len)
+        .map_err(|_| NbtError::InvalidFormat(format!("length {len} exceeds i32::MAX")))
 }
 
 /// Writes the payload for a single tag (no type ID, no name).
