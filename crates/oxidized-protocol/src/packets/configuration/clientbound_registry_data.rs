@@ -82,7 +82,7 @@ impl ClientboundRegistryDataPacket {
             let nbt_data = if has_data {
                 let mut reader = data.reader();
                 let mut acc = oxidized_nbt::NbtAccounter::unlimited();
-                let compound = oxidized_nbt::read_nbt(&mut reader, &mut acc)?;
+                let compound = oxidized_nbt::read_network_nbt(&mut reader, &mut acc)?;
                 data = reader.into_inner();
                 Some(compound)
             } else {
@@ -109,7 +109,7 @@ impl ClientboundRegistryDataPacket {
                 let mut nbt_buf = Vec::new();
                 // NBT write cannot fail for valid compounds written to a Vec.
                 #[allow(clippy::expect_used)]
-                oxidized_nbt::write_nbt(&mut nbt_buf, compound)
+                oxidized_nbt::write_network_nbt(&mut nbt_buf, compound)
                     .expect("NBT write to Vec should not fail");
                 buf.extend_from_slice(&nbt_buf);
             }
