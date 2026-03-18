@@ -8,14 +8,18 @@ use super::bit_storage::{BitStorage, BitStorageError};
 /// The different heightmap types tracked by the server.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HeightmapType {
+    /// Highest non-air block (world generation variant).
+    WorldSurfaceWg,
     /// Highest non-air block.
     WorldSurface,
+    /// Highest solid block (world generation variant).
+    OceanFloorWg,
+    /// Highest solid block (ocean floor).
+    OceanFloor,
     /// Highest motion-blocking block (solids + fluids).
     MotionBlocking,
     /// Like `MotionBlocking` but excludes leaves.
     MotionBlockingNoLeaves,
-    /// Highest solid block (ocean floor).
-    OceanFloor,
 }
 
 impl HeightmapType {
@@ -23,10 +27,12 @@ impl HeightmapType {
     #[must_use]
     pub const fn nbt_key(self) -> &'static str {
         match self {
+            Self::WorldSurfaceWg => "WORLD_SURFACE_WG",
             Self::WorldSurface => "WORLD_SURFACE",
+            Self::OceanFloorWg => "OCEAN_FLOOR_WG",
+            Self::OceanFloor => "OCEAN_FLOOR",
             Self::MotionBlocking => "MOTION_BLOCKING",
             Self::MotionBlockingNoLeaves => "MOTION_BLOCKING_NO_LEAVES",
-            Self::OceanFloor => "OCEAN_FLOOR",
         }
     }
 
