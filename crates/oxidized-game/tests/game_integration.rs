@@ -406,7 +406,7 @@ fn test_chunk_tracker_large_jump() {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 14 — Movement validation integration tests
+// Movement validation integration tests
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -478,7 +478,7 @@ fn test_movement_validation_preserves_unchanged_fields() {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 14 — Entity movement encoding integration tests
+// Entity movement encoding integration tests
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -548,7 +548,7 @@ fn test_degree_packing_known_angles() {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 14 — Teleport confirmation integration tests
+// Teleport confirmation integration tests
 // ---------------------------------------------------------------------------
 
 #[test]

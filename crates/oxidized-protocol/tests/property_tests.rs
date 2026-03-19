@@ -150,7 +150,7 @@ proptest! {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 13 — Chunk packet roundtrips
+// Chunk packet roundtrips
 // ---------------------------------------------------------------------------
 
 use oxidized_protocol::packets::play::{
@@ -233,7 +233,7 @@ proptest! {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 14 — Movement packet roundtrips
+// Movement packet roundtrips
 // ---------------------------------------------------------------------------
 
 use oxidized_protocol::packets::play::{
