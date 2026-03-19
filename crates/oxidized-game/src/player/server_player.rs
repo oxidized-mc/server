@@ -63,6 +63,8 @@ pub struct ServerPlayer {
     pub view_distance: i32,
     /// Entity simulation distance (in chunks).
     pub simulation_distance: i32,
+    /// Client-requested chunk receive rate (chunks per tick).
+    pub chunk_send_rate: f32,
 
     // -- Teleport confirmation --
     /// Pending teleport IDs the client has not yet confirmed.
@@ -111,6 +113,7 @@ impl ServerPlayer {
             inventory: PlayerInventory::new(),
             view_distance: 10,
             simulation_distance: 10,
+            chunk_send_rate: 25.0,
             pending_teleports: VecDeque::new(),
             teleport_id_counter: 0,
             dimension,

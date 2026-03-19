@@ -8,6 +8,8 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
+use oxidized_game::chunk::view_distance::spiral_chunks;
+use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_game::player::{
     GameMode, PlayerList, ServerPlayer, build_login_sequence, handle_accept_teleportation,
 };
@@ -29,7 +31,11 @@ use oxidized_protocol::packets::login::{
     ClientboundLoginFinishedPacket, ServerboundHelloPacket, ServerboundKeyPacket,
     ServerboundLoginAcknowledgedPacket,
 };
-use oxidized_protocol::packets::play::ServerboundAcceptTeleportationPacket;
+use oxidized_protocol::packets::play::{
+    ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
+    ClientboundLevelChunkWithLightPacket, ClientboundSetChunkCacheRadiusPacket,
+    ServerboundAcceptTeleportationPacket, ServerboundChunkBatchReceivedPacket,
+};
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
     ServerboundStatusRequestPacket,
@@ -37,6 +43,7 @@ use oxidized_protocol::packets::status::{
 use oxidized_protocol::registry;
 use oxidized_protocol::status::ServerStatus;
 use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::chunk::{ChunkPos, LevelChunk};
 use oxidized_world::storage::PrimaryLevelData;
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
@@ -740,6 +747,9 @@ async fn handle_play_entry(
     player.pending_teleports.push_back(teleport_id);
 
     let player_name = player.name.clone();
+    let player_view_distance = player.view_distance;
+    let player_chunk_x = player.pos.x.floor() as i32;
+    let player_chunk_z = player.pos.z.floor() as i32;
 
     // Build the 8-packet login sequence.
     let dimension_type_id = 0; // overworld = 0 in registry order
@@ -762,6 +772,28 @@ async fn handle_play_entry(
     }
     conn.flush().await?;
 
+    // Send chunk cache radius to the client.
+    let cache_radius = ClientboundSetChunkCacheRadiusPacket {
+        radius: player_view_distance,
+    };
+    conn.send_raw(
+        ClientboundSetChunkCacheRadiusPacket::PACKET_ID,
+        &cache_radius.encode(),
+    )
+    .await?;
+
+    // Send initial chunk batch — empty air chunks in a spiral pattern.
+    // Real chunk loading (from disk/worldgen) comes in later phases.
+    let chunk_center = ChunkPos::from_block(player_chunk_x, player_chunk_z);
+    let chunk_count = send_initial_chunks(conn, chunk_center, player_view_distance).await?;
+
+    info!(
+        peer = %addr,
+        uuid = %uuid,
+        chunks = chunk_count,
+        "Initial chunk batch sent",
+    );
+
     // Add player to the server player list (only after successful send).
     let player_arc = server_ctx.player_list.write().add(player);
 
@@ -774,8 +806,8 @@ async fn handle_play_entry(
         "PLAY login sequence sent",
     );
 
-    // Minimal PLAY read loop — handles teleport confirmations and logs
-    // other packets. Full PLAY handling is Phase 14+.
+    // Minimal PLAY read loop — handles teleport confirmations, chunk batch
+    // rate feedback, and logs other packets. Full PLAY handling is Phase 14+.
     loop {
         match conn.read_raw_packet().await {
             Ok(pkt) => {
@@ -794,6 +826,25 @@ async fn handle_play_entry(
                         },
                         Err(e) => {
                             debug!(peer = %addr, error = %e, "Failed to decode teleport ack");
+                        },
+                    }
+                } else if pkt.id == ServerboundChunkBatchReceivedPacket::PACKET_ID {
+                    match ServerboundChunkBatchReceivedPacket::decode(pkt.data) {
+                        Ok(batch_ack) => {
+                            let rate = batch_ack.desired_chunks_per_tick;
+                            if rate.is_finite() && rate > 0.0 {
+                                player_arc.write().chunk_send_rate = rate.clamp(0.1, 100.0);
+                                debug!(peer = %addr, rate, "Chunk batch rate update");
+                            } else {
+                                debug!(
+                                    peer = %addr,
+                                    invalid_rate = rate,
+                                    "Ignored invalid chunk send rate",
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode chunk batch ack");
                         },
                     }
                 } else {
@@ -821,6 +872,53 @@ async fn handle_play_entry(
     info!(peer = %addr, name = %player_name, "Player removed from player list");
 
     Ok(())
+}
+
+/// Sends the initial chunk batch for a player joining the world.
+///
+/// Creates empty air chunks in a spiral pattern around the player and sends
+/// them wrapped in `ChunkBatchStart` / `ChunkBatchFinished` framing.
+///
+/// Real chunk loading from disk or worldgen is not yet implemented — this
+/// sends purely air so the client has valid chunk data and renders the world.
+///
+/// Returns the number of chunks sent.
+async fn send_initial_chunks(
+    conn: &mut Connection,
+    center: ChunkPos,
+    view_distance: i32,
+) -> Result<i32, ConnectionError> {
+    // Start the chunk batch.
+    conn.send_raw(
+        ClientboundChunkBatchStartPacket::PACKET_ID,
+        &ClientboundChunkBatchStartPacket.encode(),
+    )
+    .await?;
+
+    let mut count: i32 = 0;
+    for chunk_pos in spiral_chunks(center, view_distance) {
+        let chunk = LevelChunk::new(chunk_pos);
+        let pkt = build_chunk_packet(&chunk);
+        conn.send_raw(
+            ClientboundLevelChunkWithLightPacket::PACKET_ID,
+            &pkt.encode(),
+        )
+        .await?;
+        count += 1;
+    }
+
+    // Finish the chunk batch.
+    let finished = ClientboundChunkBatchFinishedPacket {
+        batch_size: count,
+    };
+    conn.send_raw(
+        ClientboundChunkBatchFinishedPacket::PACKET_ID,
+        &finished.encode(),
+    )
+    .await?;
+    conn.flush().await?;
+
+    Ok(count)
 }
 
 /// Sends a disconnect packet to the client and returns a corresponding

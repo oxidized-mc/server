@@ -1,0 +1,73 @@
+//! Serverbound chunk batch received packet.
+//!
+//! Sent by the client in response to `ClientboundChunkBatchFinishedPacket`.
+//! Contains the client's desired chunk receive rate for adaptive streaming.
+//!
+//! Corresponds to `net.minecraft.network.protocol.game.ServerboundChunkBatchReceivedPacket`.
+
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+
+/// Client response to a chunk batch.
+///
+/// Wire format: `desired_chunks_per_tick: f32`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerboundChunkBatchReceivedPacket {
+    /// The client's preferred chunks-per-tick receive rate.
+    pub desired_chunks_per_tick: f32,
+}
+
+impl ServerboundChunkBatchReceivedPacket {
+    /// Packet ID in the PLAY state.
+    pub const PACKET_ID: i32 = 0x0B; // 11
+
+    /// Decodes from the raw packet body.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data is too short.
+    pub fn decode(mut data: Bytes) -> Result<Self, std::io::Error> {
+        if data.remaining() < 4 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "not enough data for f32",
+            ));
+        }
+        let desired_chunks_per_tick = data.get_f32();
+        Ok(Self {
+            desired_chunks_per_tick,
+        })
+    }
+
+    /// Encodes the packet body (without packet ID).
+    pub fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(4);
+        buf.put_f32(self.desired_chunks_per_tick);
+        buf
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_roundtrip() {
+        let pkt = ServerboundChunkBatchReceivedPacket {
+            desired_chunks_per_tick: 7.5,
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
+        assert!((decoded.desired_chunks_per_tick - 7.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_zero_rate() {
+        let pkt = ServerboundChunkBatchReceivedPacket {
+            desired_chunks_per_tick: 0.0,
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
+        assert!((decoded.desired_chunks_per_tick).abs() < f32::EPSILON);
+    }
+}
