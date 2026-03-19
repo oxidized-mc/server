@@ -6,7 +6,7 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket`.
 
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 
 use crate::codec::varint;
 
@@ -38,7 +38,15 @@ impl ClientboundRemoveEntitiesPacket {
                 "negative entity count: {count}"
             )));
         }
-        let mut entity_ids = Vec::with_capacity(count as usize);
+        let count = count as usize;
+        // Each VarInt is at least 1 byte, so count cannot exceed remaining data.
+        if count > data.remaining() {
+            return Err(PlayPacketError::InvalidData(format!(
+                "entity count {count} exceeds available data ({} bytes)",
+                data.remaining()
+            )));
+        }
+        let mut entity_ids = Vec::with_capacity(count);
         for _ in 0..count {
             entity_ids.push(varint::read_varint_buf(&mut data)?);
         }
@@ -94,5 +102,17 @@ mod tests {
         pkt.encode(&mut buf);
         let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         assert!(decoded.entity_ids.is_empty());
+    }
+
+    #[test]
+    fn test_decode_rejects_bogus_count() {
+        // VarInt count = 1_000_000 but only 0 bytes of entity data follow.
+        let mut buf = BytesMut::new();
+        varint::write_varint_buf(1_000_000, &mut buf);
+        let err = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap_err();
+        assert!(
+            format!("{err:?}").contains("exceeds available data"),
+            "expected bounds error, got: {err:?}"
+        );
     }
 }

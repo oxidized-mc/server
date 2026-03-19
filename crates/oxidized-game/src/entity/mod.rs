@@ -145,13 +145,23 @@ impl Entity {
     }
 
     /// Returns the value of a shared flag bit.
+    ///
+    /// # Panics
+    ///
+    /// Debug-asserts that `bit < 8`.
     pub fn get_flag(&self, bit: u8) -> bool {
+        debug_assert!(bit < 8, "flag bit index {bit} out of range 0..8");
         let flags: u8 = self.synched_data.get(DATA_SHARED_FLAGS);
         flags & (1 << bit) != 0
     }
 
     /// Sets a shared flag bit.
+    ///
+    /// # Panics
+    ///
+    /// Debug-asserts that `bit < 8`.
     pub fn set_flag(&mut self, bit: u8, value: bool) {
+        debug_assert!(bit < 8, "flag bit index {bit} out of range 0..8");
         let mut flags: u8 = self.synched_data.get(DATA_SHARED_FLAGS);
         if value {
             flags |= 1 << bit;
