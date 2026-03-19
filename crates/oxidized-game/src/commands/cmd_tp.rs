@@ -5,7 +5,7 @@
 //! per-player packet sending which is not yet available through `ServerHandle`.
 
 use crate::commands::arguments::ArgumentType;
-use crate::commands::context::{CommandContext, get_string, get_vec3};
+use crate::commands::context::{CommandContext, get_entity, get_vec3};
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
@@ -47,14 +47,14 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     },
                 )
                 .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                    let dest = get_string(ctx, "destination")?;
+                    let dest = get_entity(ctx, "destination")?;
                     // TODO: Resolve entity selector, get target position, teleport
                     ctx.source.send_success(
                         &Component::translatable(
                             "commands.teleport.success.entity.single",
                             vec![
                                 Component::text(&ctx.source.display_name),
-                                Component::text(dest),
+                                Component::text(&dest.name),
                             ],
                         ),
                         true,
@@ -97,14 +97,14 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     },
                 )
                 .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                    let dest = get_string(ctx, "destination")?;
+                    let dest = get_entity(ctx, "destination")?;
                     // TODO: Resolve entity selector, get target position, teleport
                     ctx.source.send_success(
                         &Component::translatable(
                             "commands.teleport.success.entity.single",
                             vec![
                                 Component::text(&ctx.source.display_name),
-                                Component::text(dest),
+                                Component::text(&dest.name),
                             ],
                         ),
                         true,

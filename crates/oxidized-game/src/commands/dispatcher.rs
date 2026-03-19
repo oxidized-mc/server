@@ -288,6 +288,19 @@ fn collect_child_suggestions<S>(
             },
             CommandNode::Argument(arg) => match &arg.argument_type {
                 ArgumentType::Entity { .. } | ArgumentType::GameProfile => {
+                    // Suggest entity selectors when input starts with '@'
+                    if current_word.starts_with('@') || current_word.is_empty() {
+                        for sel in &["@a", "@e", "@p", "@r", "@s", "@n"] {
+                            if sel.starts_with(current_word) {
+                                suggestions.push(Suggestion {
+                                    range: StringRange::new(range_start, range_end),
+                                    text: (*sel).to_string(),
+                                    tooltip: None,
+                                });
+                            }
+                        }
+                    }
+                    // Also suggest player names
                     for name in player_names {
                         if name
                             .to_lowercase()
@@ -773,9 +786,18 @@ mod tests {
         let src = make_source(4);
         let names = vec!["Alice".to_string()];
         // "kick " — trailing space, empty argument at offset 5
+        // Should suggest entity selectors (@a, @e, @p, @r, @s, @n) plus
+        // the online player name "Alice".
         let completions = d.get_completions("kick ", &src, &names);
-        assert_eq!(completions.len(), 1);
-        assert_eq!(completions[0].text, "Alice");
+        assert_eq!(completions.len(), 7);
+        let texts: Vec<&str> = completions.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"@a"));
+        assert!(texts.contains(&"@e"));
+        assert!(texts.contains(&"@p"));
+        assert!(texts.contains(&"@r"));
+        assert!(texts.contains(&"@s"));
+        assert!(texts.contains(&"@n"));
+        assert!(texts.contains(&"Alice"));
         assert_eq!(completions[0].range.start, 5);
         assert_eq!(completions[0].range.end, 5);
     }

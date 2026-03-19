@@ -7,7 +7,7 @@
 //! connection with a disconnect packet.
 
 use crate::commands::arguments::{ArgumentType, StringKind};
-use crate::commands::context::{CommandContext, get_string};
+use crate::commands::context::{CommandContext, get_entities, get_string};
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
@@ -29,27 +29,29 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                 )
                 // /kick <targets>
                 .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                    let targets = get_string(ctx, "targets")?;
-                    let kicked = ctx
-                        .source
-                        .server
-                        .kick_player(targets, "Kicked by an operator");
-                    if kicked {
-                        ctx.source.send_success(
-                            &Component::translatable(
-                                "commands.kick.success",
-                                vec![
-                                    Component::text(targets),
-                                    Component::text("Kicked by an operator"),
-                                ],
-                            ),
-                            true,
-                        );
-                    } else {
-                        ctx.source.send_failure(&Component::translatable(
-                            "argument.entity.notfound.player",
-                            vec![],
-                        ));
+                    let targets = get_entities(ctx, "targets")?;
+                    for target in &targets {
+                        let kicked = ctx
+                            .source
+                            .server
+                            .kick_player(&target.name, "Kicked by an operator");
+                        if kicked {
+                            ctx.source.send_success(
+                                &Component::translatable(
+                                    "commands.kick.success",
+                                    vec![
+                                        Component::text(&target.name),
+                                        Component::text("Kicked by an operator"),
+                                    ],
+                                ),
+                                true,
+                            );
+                        } else {
+                            ctx.source.send_failure(&Component::translatable(
+                                "argument.entity.notfound.player",
+                                vec![],
+                            ));
+                        }
                     }
                     Ok(1)
                 })
@@ -57,22 +59,28 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                 .then(
                     argument("reason", ArgumentType::String(StringKind::GreedyPhrase)).executes(
                         |ctx: &CommandContext<CommandSourceStack>| {
-                            let targets = get_string(ctx, "targets")?;
+                            let targets = get_entities(ctx, "targets")?;
                             let reason = get_string(ctx, "reason")?;
-                            let kicked = ctx.source.server.kick_player(targets, reason);
-                            if kicked {
-                                ctx.source.send_success(
-                                    &Component::translatable(
-                                        "commands.kick.success",
-                                        vec![Component::text(targets), Component::text(reason)],
-                                    ),
-                                    true,
-                                );
-                            } else {
-                                ctx.source.send_failure(&Component::translatable(
-                                    "argument.entity.notfound.player",
-                                    vec![],
-                                ));
+                            for target in &targets {
+                                let kicked =
+                                    ctx.source.server.kick_player(&target.name, reason);
+                                if kicked {
+                                    ctx.source.send_success(
+                                        &Component::translatable(
+                                            "commands.kick.success",
+                                            vec![
+                                                Component::text(&target.name),
+                                                Component::text(reason),
+                                            ],
+                                        ),
+                                        true,
+                                    );
+                                } else {
+                                    ctx.source.send_failure(&Component::translatable(
+                                        "argument.entity.notfound.player",
+                                        vec![],
+                                    ));
+                                }
                             }
                             Ok(1)
                         },

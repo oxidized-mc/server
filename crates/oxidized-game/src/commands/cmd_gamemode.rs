@@ -5,7 +5,7 @@
 //! `ClientboundGameEventPacket` to the client. Not yet available.
 
 use crate::commands::arguments::ArgumentType;
-use crate::commands::context::{CommandContext, get_gamemode, get_string};
+use crate::commands::context::{CommandContext, get_entities, get_gamemode};
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
@@ -44,18 +44,23 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         .executes(
                             |ctx: &CommandContext<CommandSourceStack>| {
                                 let gm = get_gamemode(ctx, "gamemode")?;
-                                let target = get_string(ctx, "target")?;
+                                let targets = get_entities(ctx, "target")?;
                                 // TODO: Actually set gamemode on the target player(s)
-                                ctx.source.send_success(
-                                    &Component::translatable(
-                                        "commands.gamemode.success.other",
-                                        vec![
-                                            Component::text(target),
-                                            Component::translatable(gm.translation_key(), vec![]),
-                                        ],
-                                    ),
-                                    true,
-                                );
+                                for target in &targets {
+                                    ctx.source.send_success(
+                                        &Component::translatable(
+                                            "commands.gamemode.success.other",
+                                            vec![
+                                                Component::text(&target.name),
+                                                Component::translatable(
+                                                    gm.translation_key(),
+                                                    vec![],
+                                                ),
+                                            ],
+                                        ),
+                                        true,
+                                    );
+                                }
                                 Ok(1)
                             },
                         ),
