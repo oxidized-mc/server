@@ -4,7 +4,7 @@
 //! light data, player list management, login packet sequencing, and
 //! view-distance chunk iteration.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::collections::HashSet;
 
