@@ -233,11 +233,11 @@ The `MPL-2.0` and `Unicode-DFS-2016` entries are not needed.
   this at the Review stage (Stage 7).
 
 ### Technical debt acknowledged
-- **Unknown key preservation** added retroactively. This was identified as an ADR-005 gap and
+- ✅ **Unknown key preservation** added retroactively. This was identified as an ADR-005 gap and
   fixed during the retrospective. Keys not recognized by the parser are now stored in a
-  `BTreeMap` and written back on save.
-- **Structured logging** retrofitted. All log calls in `main.rs` now use `key=value` fields
-  per ADR-004.
+  `BTreeMap` and written back on save. *(Resolved in Phase 1 retrospective.)*
+- ✅ **Structured logging** retrofitted. All log calls in `main.rs` now use `key=value` fields
+  per ADR-004. *(Resolved in Phase 1 retrospective.)*
 
 ### Metrics
 - **Tests:** 26 → 48 (+84.6% increase)
@@ -294,8 +294,8 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 ### What surprised us
 - **MC client retries aggressively.** 4+ connection attempts when no status response — important
   for Phase 3 to handle connections quickly or the client gives up.
-- **CI failure on this commit was expected.** Phase 2 added types used by Phase 3; the commit
-  compiled but CI ran clippy which flagged unused code. Fixed in Phase 3 commit.
+- ✅ **CI failure on this commit was expected.** Phase 2 added types used by Phase 3; the commit
+  compiled but CI ran clippy which flagged unused code. *(Resolved in Phase 3 commit.)*
 
 ### Metrics
 - **Tests:** 73 total (48 Phase 1 + 25 new: VarInt/VarLong, frame codec, connection)
@@ -361,17 +361,18 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
   per-packet and independent. This distinction is critical for correct implementation.
 
 ### What should change going forward
-- **ADR-009 referenced `cfb8` crate but we couldn't use it.** ADRs should note implementation
-  caveats when the chosen approach doesn't work. Updated ADR-009 with actual implementation.
-- **URL-encode all external API parameters by default.** The auth URL injection was subtle —
-  make encoding the default pattern for any URL construction.
+- ✅ **ADR-009 referenced `cfb8` crate but we couldn't use it.** ADRs should note implementation
+  caveats when the chosen approach doesn't work. *(Resolved — ADR-009 updated with actual implementation.)*
+- ✅ **URL-encode all external API parameters by default.** The auth URL injection was subtle —
+  make encoding the default pattern for any URL construction. *(Resolved — `urlencoding::encode()`
+  applied in auth.rs.)*
 
 ### Technical debt acknowledged
-- **No real client testing yet.** The login flow is tested with unit/integration tests but not
-  against a real Minecraft 26.1-pre-3 client. The server transitions to Configuration state
-  but Configuration packets are not implemented — client will hang.
+- ✅ **No real client testing yet.** The login flow is tested with unit/integration tests but not
+  against a real Minecraft 26.1-pre-3 client. *(Superseded — real client testing done in Phase 6+.
+  Configuration, Play states, and chunk rendering all verified against vanilla 26.1-pre-3 client.)*
 - **`reqwest` is a heavy dependency.** Consider whether a lighter HTTP client would suffice
-  for the single Mojang auth endpoint.
+  for the single Mojang auth endpoint. *(Still open — reqwest 0.13 remains in use.)*
 
 ### Metrics
 - **Tests:** 158 total (98 prior + 60 new: crypto 17, compression 10, auth 4, login packets 11,
@@ -412,11 +413,13 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 
 ### Technical debt acknowledged
 - **Arena-allocated NBT deferred.** ADR-010 specifies a `BumpNbt` arena variant for hot-path
-  chunk loading. Deferred to Phase 10 when chunk loading actually needs it.
+  chunk loading. Deferred to when chunk loading at scale needs it. *(Still open — Phase 10
+  completed without it; revisit when profiling shows NBT allocation as a bottleneck.)*
 - **Borrowed/zero-copy NBT deferred.** `BorrowedNbtCompound<'a>` for lazy parsing also
-  deferred to Phase 10.
-- **No benchmark suite yet.** ADR-010 calls for criterion benchmarks. Will add when we have
-  real chunk data to benchmark against (Phase 9–10).
+  deferred. *(Still open — same rationale as arena NBT.)*
+- **No benchmark suite yet.** ADR-010 calls for criterion benchmarks. *(Still open —
+  `[profile.bench]` configured in Cargo.toml but no criterion benchmarks or `benches/` dirs
+  created yet.)*
 
 ### Metrics
 - **Tests:** 166 total (163 unit + 3 doc-tests)
@@ -527,13 +530,13 @@ confirms roundtrip correctness. The `varint_size()` helper is useful for pre-cal
 - **Item registry had inconsistent error handling** compared to block registry — clamping to `MAX` instead of erroring. Consistency matters.
 
 #### Patterns Established
-- **Never use `as` for narrowing casts in data loading.** Always use `u16::try_from()` / `u8::try_from()` with proper error propagation. This applies to all registry/data loading code.
-- **Review→Fix→Re-review loop is essential.** Each review pass caught a different class of issue. The loop terminated after 3 passes with zero findings.
-- **Error types should distinguish failure modes:** `InvalidStateId(u64)`, `MissingStateId(String)`, `InvalidItemProperty(String, &'static str, u64)` each tell you exactly what went wrong.
+- ✅ **Never use `as` for narrowing casts in data loading.** Always use `u16::try_from()` / `u8::try_from()` with proper error propagation. This applies to all registry/data loading code. *(Convention established and followed.)*
+- ✅ **Review→Fix→Re-review loop is essential.** Each review pass caught a different class of issue. The loop terminated after 3 passes with zero findings. *(Process adopted in lifecycle.)*
+- ✅ **Error types should distinguish failure modes:** `InvalidStateId(u64)`, `MissingStateId(String)`, `InvalidItemProperty(String, &'static str, u64)` each tell you exactly what went wrong. *(Pattern established.)*
 
 #### Gotchas
 - **Git-tracked binary data:** `.json.gz` files in `src/data/` must be explicitly `git add`ed — they're not matched by default patterns. First CI run failed because they weren't committed.
-- **`as` casts compile silently** even when they truncate. Clippy's `cast_possible_truncation` lint would catch these, but it's not enabled by default. Consider enabling it workspace-wide.
+- **`as` casts compile silently** even when they truncate. Clippy's `cast_possible_truncation` lint would catch these, but it's not enabled by default. *(Decision made: lint kept as `allow` in workspace `Cargo.toml` — team uses `try_from()` by convention instead of relying on the lint. See Cargo.toml line 132.)*
 
 #### Metrics
 - **Files:** 10 changed, 676 insertions (+ 35 fix insertions)
@@ -572,7 +575,7 @@ Configurations, but the Configuration fields are what actually control wire form
 - Biomes: SingleValue (0) → Linear 1/2/3-bit (1–3) → Global 7-bit (4+). **No HashMap palette!**
 - Biome registry has 65 entries (vanilla 26.1-pre-3), needing 7 bits not 6
 
-#### Other Fixes Applied
+#### Other Fixes Applied (all ✅ resolved)
 
 - Added `get_and_set()` to `BitStorage` and `PalettedContainer` (vanilla uses for atomic get+set)
 - Added `ticking_block_count` / `ticking_fluid_count` to `LevelChunkSection` (in-memory only)
@@ -646,20 +649,17 @@ against the Rust `read_header()` implementation.
 
 #### Bugs Found
 
-1. **Missing header entry sanitization (critical):** Java's `RegionFile` constructor validates
+1. ✅ **Missing header entry sanitization (critical):** Java's `RegionFile` constructor validates
    all 1024 offset entries during header read and zeros out invalid ones: `sector_number < 2`
    (overlaps header), `sector_count == 0`, or `end_sector > file_sectors`. The Rust code stored
-   raw entries without validation. A `sector_count == 0` entry with `sector_number != 0` would
-   pass `is_present()` and attempt to read from an arbitrary offset, potentially returning
-   garbage data. Fixed by sanitizing entries during `read_header()`.
+   raw entries without validation. *(Resolved — sanitization added to `read_header()`.)*
 
-2. **Missing payload-vs-sector bounds check (medium):** After reading the 4-byte `payload_len`,
-   Java validates it doesn't exceed `numSectors * SECTOR_BYTES`. A corrupted `payload_len` (but
-   under 16 MiB) would cause reads past the chunk's allocated sectors into adjacent chunks' data.
-   Fixed by checking `payload_len + 4 <= sector_count * SECTOR_BYTES`.
+2. ✅ **Missing payload-vs-sector bounds check (medium):** After reading the 4-byte `payload_len`,
+   Java validates it doesn't exceed `numSectors * SECTOR_BYTES`. *(Resolved — bounds check
+   added: `payload_len + 4 <= sector_count * SECTOR_BYTES`.)*
 
-3. **Error variant misuse (low):** `AnvilError::Decompression` was abused for mutex poisoning
-   and `JoinError` in `AsyncChunkLoader`. Added `AnvilError::Internal(String)`.
+3. ✅ **Error variant misuse (low):** `AnvilError::Decompression` was abused for mutex poisoning
+   and `JoinError` in `AsyncChunkLoader`. *(Resolved — `AnvilError::Internal(String)` added.)*
 
 #### Lessons
 
@@ -695,21 +695,22 @@ Updated: `docs/lifecycle/README.md` and `.github/copilot-instructions.md`.
 
 1. **ChunkPos duplication (CRITICAL, deferred):** Defined in both `oxidized-protocol` and
    `oxidized-world`. Cannot fix without a shared `oxidized-types` crate (needs ADR). Both
-   definitions have TODO comments. Must resolve before Phase 13 (chunk sending).
+   definitions have TODO comments. *(Still open — workaround in place. Separate definitions
+   coexist; no data is shared across the crate boundary yet.)*
 
-2. **#[non_exhaustive] added to all 31 public error enums:** Prevents breaking changes when
+2. ✅ **#[non_exhaustive] added to all 31 public error enums:** Prevents breaking changes when
    adding error variants. Affects: oxidized-nbt (1), oxidized-protocol (23), oxidized-world (6),
    oxidized-server (1).
 
 3. **Typestate NOT implemented (ADR-008):** Connection uses runtime enum, not compile-time
    `Connection<State>`. Known deviation — acceptable for current phase count but should be
-   addressed before Play state packets proliferate.
+   addressed before Play state packets proliferate. *(Still open — acceptable technical debt.)*
 
 4. **Zero-copy NBT (ADR-010 partial):** Only the owned tree is implemented. Arena and borrowed
-   reader are deferred until chunk sending at scale (Phase 13+).
+   reader are deferred until chunk sending at scale (Phase 13+). *(Still open — not yet needed.)*
 
 5. **DashMap chunk storage (ADR-014):** Not yet needed — only data structures exist. Required
-   at Phase 11 (Server Level).
+   at Phase 11 (Server Level). *(Still open.)*
 
 #### Patterns
 
@@ -727,24 +728,26 @@ implementation against Java Block.java, DimensionType.java, and vanilla generate
 
 #### Bugs Found
 
-1. **BlockFlags too narrow (critical):** Java's `Block.java` defines 11 flag constants with
+1. ✅ **BlockFlags too narrow (critical):** Java's `Block.java` defines 11 flag constants with
    values up to 512 (bit 9). The Rust `BlockFlags` used `u8` (max 255), which cannot represent
    `UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS` (256) or `UPDATE_SKIP_ON_PLACE` (512). Widened to `u16`.
-   Missing flags: UPDATE_IMMEDIATE, UPDATE_MOVE_BY_PISTON, UPDATE_SKIP_SHAPE_UPDATE_ON_WIRE,
-   UPDATE_SKIP_BLOCK_ENTITY_SIDEEFFECTS, UPDATE_SKIP_ON_PLACE. Missing composites: UPDATE_NONE(260),
-   UPDATE_ALL(3), UPDATE_ALL_IMMEDIATE(11), UPDATE_SKIP_ALL_SIDEEFFECTS(816). Missing UPDATE_LIMIT(512).
+   *(Resolved — `flags.rs` now uses `u16` backing type with all 11 flags.)*
 
-2. **End dimension wrong values (medium):** Vanilla 26.1 generated data shows End has
+2. ✅ **End dimension wrong values (medium):** Vanilla 26.1 generated data shows End has
    `has_skylight: true` and `ambient_light: 0.25` — the Rust code had `false` and `0.0`.
+   *(Resolved — `dimension.rs` now has correct End values.)*
 
-3. **Overworld logical_height wrong (medium):** Vanilla data shows 384, not 320 as the phase
+3. ✅ **Overworld logical_height wrong (medium):** Vanilla data shows 384, not 320 as the phase
    doc specified. The phase doc was wrong — always verify against generated data.
+   *(Resolved — `dimension.rs` now has `logical_height: 384`.)*
 
-4. **DimensionType missing fields (medium):** Java 26.1 DimensionType record has
+4. ✅ **DimensionType missing fields (medium):** Java 26.1 DimensionType record has
    `has_fixed_time`, `has_ender_dragon_fight`, `coordinate_scale` fields not present in Rust.
+   *(Resolved — all three fields now present in `dimension.rs`.)*
 
-5. **LRU cache O(n) performance (medium):** Hand-rolled VecDeque-based LRU used `retain()`
+5. ✅ **LRU cache O(n) performance (medium):** Hand-rolled VecDeque-based LRU used `retain()`
    (O(n)) on every get(). Replaced with `lru` crate for O(1) operations.
+   *(Resolved — `lru` crate v0.16 integrated as workspace dependency.)*
 
 #### Lessons
 
@@ -792,9 +795,10 @@ implementation against Java Block.java, DimensionType.java, and vanilla generate
 - Test helpers: `make_test_player(id, name)` and `make_player_with_id(list, name)` patterns
 
 #### Technical Debt
-- PlayerInventory is a stub (Phase 22)
-- No ECS component integration yet (Phase 14+ per ADR-020)
-- Minimal PLAY read loop only handles teleport confirmations — full PLAY handling is Phase 14+
+- PlayerInventory is a stub (Phase 22) *(Still open — by design.)*
+- No ECS component integration yet (Phase 14+ per ADR-020) *(Still open — by design.)*
+- ✅ Minimal PLAY read loop only handles teleport confirmations — full PLAY handling is Phase 14+
+  *(Superseded — Phase 14 implemented full movement, input, and player command handling.)*
 
 #### Metrics
 - **Tests:** 75 game + 471 protocol = 546 total (all pass, 0 warnings)
@@ -824,9 +828,11 @@ implementation against Java Block.java, DimensionType.java, and vanilla generate
 - `map_err(|e| anyhow::anyhow!("context: {e}"))?` for infallible-in-practice calls in main.rs (no expect)
 
 #### Technical Debt
-- PLAY read loop is minimal (teleport confirmations only) — full handling Phase 14+
+- ✅ PLAY read loop is minimal (teleport confirmations only) — full handling Phase 14+
+  *(Superseded — Phase 14 added movement, input, player commands, chunk tracking.)*
 - No player removal from PlayerList on disconnect (cleanup is best-effort log + remove)
-- PlayerConnection bridge channels (ADR-020) not yet implemented
+  *(Still open.)*
+- PlayerConnection bridge channels (ADR-020) not yet implemented *(Still open.)*
 
 ---
 
@@ -864,9 +870,9 @@ The fluid count was added in 26.1-pre-3 — older protocol docs may not show it.
 - `spiral_chunks()` — closest-first iteration for chunk sending order
 
 #### Technical Debt
-- Chunks are empty air (no worldgen/disk loading) — real chunks in later phases
-- No per-tick chunk throttling — all chunks sent in one batch during login
-- Block entities always VarInt(0) — no block entity support yet
+- Chunks are empty air (no worldgen/disk loading) — real chunks in later phases *(Still open.)*
+- No per-tick chunk throttling — all chunks sent in one batch during login *(Still open.)*
+- Block entities always VarInt(0) — no block entity support yet *(Still open.)*
 
 ### 2026-03-19 — Testing Infrastructure: ADR-034 Compliance
 
@@ -901,20 +907,21 @@ The fluid count was added in 26.1-pre-3 — older protocol docs may not show it.
 
 #### What's Missing (Still Needed)
 - **Connection state tests** — `Connection::new()` requires real TcpStream; needs refactoring
-  to extract state logic for unit-level testing
-- **Fuzz tests** — need `cargo-fuzz` infrastructure setup
-- **Benchmarks** — need `criterion` setup in `benches/` dirs
-- **View distance capping** — server uses client's view_distance (16) uncapped instead of
-  config max (10), sending 1089 chunks instead of 441
+  to extract state logic for unit-level testing *(Still open.)*
+- **Fuzz tests** — need `cargo-fuzz` infrastructure setup *(Still open.)*
+- **Benchmarks** — need `criterion` setup in `benches/` dirs *(Still open.)*
+- ✅ **View distance capping** — *(Resolved — server now caps client view_distance to config
+  max via `i32::from(client_info.view_distance).min(server_ctx.max_view_distance)` in network.rs.)*
 
-#### Heightmap CLIENT_TYPES Fix
+#### ✅ Heightmap CLIENT_TYPES Fix
 Phase 13 was missing `MotionBlockingNoLeaves` (type_id=5) in CLIENT_TYPES.
 Java sends 3 client types: WORLD_SURFACE(1), MOTION_BLOCKING(4), MOTION_BLOCKING_NO_LEAVES(5).
-Fixed in commit 478d145.
+*(Resolved in commit 478d145.)*
 
-#### LEVEL_CHUNKS_LOAD_START Fix
+#### ✅ LEVEL_CHUNKS_LOAD_START Fix
 Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client to exit
-"Loading Terrain" screen. We were missing this packet entirely. Fixed in commit 8315483.
+"Loading Terrain" screen. We were missing this packet entirely.
+*(Resolved in commit 8315483.)*
 
 ### Phase 14 — Player Movement (2025-07)
 
