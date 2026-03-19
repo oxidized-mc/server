@@ -147,4 +147,41 @@ mod tests {
         // OCEAN_FLOOR should not appear
         assert!(pkt.chunk_data.heightmaps.is_empty());
     }
+
+    #[test]
+    fn test_all_three_client_heightmaps() {
+        let mut chunk = LevelChunk::new(ChunkPos::new(0, 0));
+        for &htype in HeightmapType::CLIENT_TYPES {
+            let hm = Heightmap::new(htype, OVERWORLD_HEIGHT).unwrap();
+            chunk.set_heightmap(hm);
+        }
+
+        let pkt = build_chunk_packet(&chunk);
+        assert_eq!(pkt.chunk_data.heightmaps.len(), 3);
+
+        let type_ids: Vec<i32> = pkt
+            .chunk_data
+            .heightmaps
+            .iter()
+            .map(|e| e.type_id)
+            .collect();
+        assert!(type_ids.contains(&HEIGHTMAP_TYPE_ID_WORLD_SURFACE));
+        assert!(type_ids.contains(&HEIGHTMAP_TYPE_ID_MOTION_BLOCKING));
+        assert!(type_ids.contains(&HEIGHTMAP_TYPE_ID_MOTION_BLOCKING_NO_LEAVES));
+    }
+
+    #[test]
+    fn test_heightmap_entry_data_is_non_empty() {
+        let mut chunk = LevelChunk::new(ChunkPos::new(0, 0));
+        let hm = Heightmap::new(HeightmapType::MotionBlocking, OVERWORLD_HEIGHT).unwrap();
+        chunk.set_heightmap(hm);
+
+        let pkt = build_chunk_packet(&chunk);
+        assert_eq!(pkt.chunk_data.heightmaps.len(), 1);
+        // Heightmap data should contain packed longs
+        assert!(
+            !pkt.chunk_data.heightmaps[0].data.is_empty(),
+            "heightmap entry data should have packed longs"
+        );
+    }
 }

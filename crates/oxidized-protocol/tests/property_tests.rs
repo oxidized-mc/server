@@ -148,3 +148,86 @@ proptest! {
         prop_assert_eq!(decoded, uuid);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 13 — Chunk packet roundtrips
+// ---------------------------------------------------------------------------
+
+use oxidized_protocol::packets::play::{
+    ClientboundChunkBatchFinishedPacket, ClientboundForgetLevelChunkPacket,
+    ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
+    ServerboundChunkBatchReceivedPacket,
+};
+
+proptest! {
+    /// ForgetLevelChunk encode → decode roundtrip for any chunk coordinates.
+    #[test]
+    fn proptest_forget_level_chunk_roundtrip(x: i32, z: i32) {
+        let pkt = ClientboundForgetLevelChunkPacket { chunk_x: x, chunk_z: z };
+        let encoded = pkt.encode();
+        let decoded = ClientboundForgetLevelChunkPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.chunk_x, x);
+        prop_assert_eq!(decoded.chunk_z, z);
+    }
+
+    /// ChunkBatchFinished encode → decode roundtrip for any VarInt batch size.
+    #[test]
+    fn proptest_chunk_batch_finished_roundtrip(batch_size: i32) {
+        let pkt = ClientboundChunkBatchFinishedPacket { batch_size };
+        let encoded = pkt.encode();
+        let decoded = ClientboundChunkBatchFinishedPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.batch_size, batch_size);
+    }
+
+    /// ChunkBatchReceived encode → decode roundtrip for finite f32 values.
+    #[test]
+    fn proptest_chunk_batch_received_roundtrip(
+        rate in prop::num::f32::NORMAL | prop::num::f32::POSITIVE | prop::num::f32::NEGATIVE | prop::num::f32::ZERO
+    ) {
+        let pkt = ServerboundChunkBatchReceivedPacket { desired_chunks_per_tick: rate };
+        let encoded = pkt.encode();
+        let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.desired_chunks_per_tick.to_bits(), rate.to_bits());
+    }
+
+    /// SetChunkCacheCenter encode → decode roundtrip for any coordinates.
+    #[test]
+    fn proptest_set_chunk_cache_center_roundtrip(x: i32, z: i32) {
+        let pkt = ClientboundSetChunkCacheCenterPacket { chunk_x: x, chunk_z: z };
+        let encoded = pkt.encode();
+        let decoded = ClientboundSetChunkCacheCenterPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.chunk_x, x);
+        prop_assert_eq!(decoded.chunk_z, z);
+    }
+
+    /// SetChunkCacheRadius encode → decode roundtrip for any radius.
+    #[test]
+    fn proptest_set_chunk_cache_radius_roundtrip(radius: i32) {
+        let pkt = ClientboundSetChunkCacheRadiusPacket { radius };
+        let encoded = pkt.encode();
+        let decoded = ClientboundSetChunkCacheRadiusPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.radius, radius);
+    }
+
+    /// LevelChunkWithLight: encoded bytes always start with chunk coordinates.
+    #[test]
+    fn proptest_level_chunk_with_light_coordinates(x: i32, z: i32) {
+        use oxidized_protocol::packets::play::{
+            ChunkPacketData, ClientboundLevelChunkWithLightPacket, LightUpdateData,
+        };
+        let pkt = ClientboundLevelChunkWithLightPacket {
+            chunk_x: x,
+            chunk_z: z,
+            chunk_data: ChunkPacketData {
+                heightmaps: vec![],
+                buffer: vec![],
+            },
+            light_data: LightUpdateData::empty(),
+        };
+        let encoded = pkt.encode();
+        let decoded_x = i32::from_be_bytes(encoded[0..4].try_into().unwrap());
+        let decoded_z = i32::from_be_bytes(encoded[4..8].try_into().unwrap());
+        prop_assert_eq!(decoded_x, x);
+        prop_assert_eq!(decoded_z, z);
+    }
+}
