@@ -946,3 +946,48 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
   detailed 26.1-pre-3 analysis and may contain pre-26.1 information
 - Sprint state is redundantly sent in BOTH PlayerCommand and PlayerInput packets —
   server handles both to stay in sync
+
+### Phase 15 — Entity Framework + Tracking
+
+#### What Went Well
+- TDD cycle worked smoothly — 20 new tests including property-based tests for AABB, 
+  tracker, serializer types, and all 3 entity packets
+- Java source verification prevented 3 major implementation errors from the phase doc
+- Entity module structure is clean: id, synched_data, data_slots, aabb, tracker, mod.rs
+
+#### What Surprised Us
+1. **43 serializers, not 31**: Phase doc listed 31 `EntityDataSerializers` (IDs 0–30). 
+   Java `EntityDataSerializers.java` static block registers 43 (IDs 0–42). New 26.1 types 
+   include CatSoundVariant, CowVariant, PigVariant, ChickenVariant, ZombieNautilusVariant, 
+   CopperGolemState, WeatheringCopperState, HumanoidArm, etc. Order diverges from phase 
+   doc at ID 13 (OptionalLivingEntityReference, not OptUuid).
+2. **LpVec3 velocity encoding**: Phase doc said `i16 * 8000`. Actually uses 
+   `net.minecraft.network.LpVec3` — a complex bit-packed format with 15-bit quantization, 
+   shared scale factor, and optional VarInt continuation. Zero vectors = single byte 0x00.
+3. **Tracking ranges in chunks**: Java's `EntityType.clientTrackingRange()` returns chunk 
+   counts (×16 for blocks). Default = 5 chunks = 80 blocks. Player = 10 chunks = 160 blocks.
+4. **SetEntityData decode limitation**: Without a codec registry, full decode of multi-entry 
+   packets is impossible — each serializer type has different byte-length values. Current 
+   decode handles single-entry packets correctly; multi-entry needs registry-aware decoder.
+
+#### Technical Decisions
+- `DataSerializerType` uses `#[repr(u32)]` with exhaustive `match` for `from_id()` — no 
+  unsafe transmute since `#![deny(unsafe_code)]` is enforced
+- `SynchedEntityData` uses `Box<dyn Any + Send + Sync>` for type-erased storage — allows 
+  any Rust type to be stored while maintaining dirty tracking
+- Entity struct is monolithic (not ECS Components yet) — will decompose when bevy_ecs 
+  World/systems are introduced in later phases (per ADR-018)
+- `ClientboundRemoveEntitiesPacket::decode()` validates negative VarInt counts to prevent 
+  DoS via massive allocation
+
+#### Verified Packet IDs (26.1-pre-3)
+- ClientboundAddEntityPacket = 0x01
+- ClientboundRemoveEntitiesPacket = 0x4D (77)
+- ClientboundSetEntityDataPacket = 0x63 (99)
+
+#### What to Remember
+- Phase doc serializer lists are WRONG for 26.1-pre-3 — always count IDs from 
+  EntityDataSerializers.java static block
+- LpVec3 is the velocity encoding, NOT i16*8000 — see net.minecraft.network.LpVec3
+- Always validate VarInt counts before allocating (negative VarInt → huge usize on cast)
+- Test entity packets with proptest for encode/decode roundtrips
