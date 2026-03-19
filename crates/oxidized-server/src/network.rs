@@ -7,6 +7,7 @@
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
@@ -38,12 +39,13 @@ use oxidized_protocol::packets::login::{
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
     ClientboundDisguisedChatPacket, ClientboundForgetLevelChunkPacket,
-    ClientboundGameEventPacket,
+    ClientboundGameEventPacket, ClientboundKeepAlivePacket,
     ClientboundLevelChunkWithLightPacket, ClientboundPlayerPositionPacket,
     ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
     ClientboundSystemChatPacket, GameEventType, PlayerCommandAction, RelativeFlags,
     ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket, ServerboundChatPacket,
-    ServerboundChunkBatchReceivedPacket, ServerboundMovePlayerPacket,
+    ServerboundChunkBatchReceivedPacket, ServerboundKeepAlivePacket,
+    ServerboundMovePlayerPacket,
     ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
 };
 use oxidized_protocol::packets::status::{
@@ -95,6 +97,8 @@ pub struct ServerContext {
     pub max_simulation_distance: i32,
     /// Broadcast channel for chat messages sent to all connected players.
     pub chat_tx: broadcast::Sender<ChatBroadcastMessage>,
+    /// Alternate color code prefix character, or `None` if disabled.
+    pub color_char: Option<char>,
 }
 
 /// A chat message broadcast to all connected players.
@@ -855,10 +859,51 @@ async fn handle_play_entry(
         "PLAY login sequence sent",
     );
 
+    // Keepalive state — send a ping every 15 seconds, timeout after 30.
+    const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
+    const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(30);
+    let mut keepalive_timer = tokio::time::interval(KEEPALIVE_INTERVAL);
+    keepalive_timer.tick().await; // consume the immediate first tick
+    let mut keepalive_pending = false;
+    let mut keepalive_challenge: i64 = 0;
+    let mut keepalive_sent_at = Instant::now();
+
     // PLAY read loop — handles movement, teleport confirmations, chunk batch
-    // rate feedback, sprint/sneak state, chat messages, and logs other packets.
+    // rate feedback, sprint/sneak state, chat messages, keepalive, and logs
+    // other packets.
     loop {
         tokio::select! {
+            // Keepalive timer — send a ping every 15 seconds.
+            _ = keepalive_timer.tick() => {
+                if keepalive_pending {
+                    // Client didn't respond to the last keepalive in time.
+                    let elapsed = keepalive_sent_at.elapsed();
+                    if elapsed >= KEEPALIVE_TIMEOUT {
+                        info!(peer = %addr, name = %player_name, "Keepalive timeout — disconnecting");
+                        break;
+                    }
+                    // Not yet timed out, just skip this tick.
+                } else {
+                    keepalive_challenge = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as i64;
+                    keepalive_pending = true;
+                    keepalive_sent_at = Instant::now();
+                    let pkt = ClientboundKeepAlivePacket { id: keepalive_challenge };
+                    if let Err(e) = conn.send_raw(
+                        ClientboundKeepAlivePacket::PACKET_ID,
+                        &pkt.encode(),
+                    ).await {
+                        debug!(peer = %addr, error = %e, "Failed to send keepalive");
+                        break;
+                    }
+                    if let Err(e) = conn.flush().await {
+                        debug!(peer = %addr, error = %e, "Failed to flush keepalive");
+                        break;
+                    }
+                }
+            },
             // Receive broadcast chat messages from other players.
             broadcast_result = chat_rx.recv() => {
                 match broadcast_result {
@@ -885,7 +930,28 @@ async fn handle_play_entry(
             packet_result = conn.read_raw_packet() => {
         match packet_result {
             Ok(pkt) => {
-                if pkt.id == ServerboundAcceptTeleportationPacket::PACKET_ID {
+                if pkt.id == ServerboundKeepAlivePacket::PACKET_ID {
+                    match ServerboundKeepAlivePacket::decode(pkt.data) {
+                        Ok(ka) => {
+                            if keepalive_pending && ka.id == keepalive_challenge {
+                                keepalive_pending = false;
+                                let latency = keepalive_sent_at.elapsed().as_millis();
+                                debug!(peer = %addr, latency_ms = latency, "Keepalive response");
+                            } else {
+                                debug!(
+                                    peer = %addr,
+                                    expected = keepalive_challenge,
+                                    got = ka.id,
+                                    pending = keepalive_pending,
+                                    "Unexpected keepalive response",
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode keepalive");
+                        },
+                    }
+                } else if pkt.id == ServerboundAcceptTeleportationPacket::PACKET_ID {
                     match ServerboundAcceptTeleportationPacket::decode(pkt.data) {
                         Ok(ack) => {
                             let mut p = player_arc.write();
@@ -1121,11 +1187,15 @@ async fn handle_play_entry(
                                 ).await;
                                 let _ = conn.flush().await;
                             } else {
+                                let message_component = match server_ctx.color_char {
+                                    Some(ch) => Component::from_legacy_with_char(&chat_pkt.message, ch),
+                                    None => Component::from_legacy(&chat_pkt.message),
+                                };
                                 let decorated = Component::translatable(
                                     "chat.type.text".to_string(),
                                     vec![
                                         Component::text(&player_name),
-                                        Component::text(&chat_pkt.message),
+                                        message_component,
                                     ],
                                 );
                                 let sys_pkt = ClientboundSystemChatPacket {
@@ -1216,9 +1286,10 @@ async fn handle_chat_command(
             if args.is_empty() {
                 return;
             }
+            let message_component = parse_colors(args, server_ctx.color_char);
             // /say broadcasts via DisguisedChatPacket with SAY_COMMAND (registry id 1).
             let pkt = ClientboundDisguisedChatPacket {
-                message: Component::text(args),
+                message: message_component,
                 chat_type_id: 1, // minecraft:say_command
                 sender_name: Component::text(player_name),
                 target_name: None,
@@ -1235,9 +1306,10 @@ async fn handle_chat_command(
             if args.is_empty() {
                 return;
             }
+            let message_component = parse_colors(args, server_ctx.color_char);
             // /me broadcasts via DisguisedChatPacket with EMOTE_COMMAND (registry id 6).
             let pkt = ClientboundDisguisedChatPacket {
-                message: Component::text(args),
+                message: message_component,
                 chat_type_id: 6, // minecraft:emote_command
                 sender_name: Component::text(player_name),
                 target_name: None,
@@ -1262,6 +1334,17 @@ async fn handle_chat_command(
             let _ = conn.flush().await;
             debug!(player = %player_name, command = %command, "Unknown command");
         },
+    }
+}
+
+/// Parses color codes from text using the configured color character.
+///
+/// If `color_char` is `Some(ch)`, recognizes both `§` and `ch` as color
+/// prefixes. If `None`, only recognizes `§`.
+fn parse_colors(text: &str, color_char: Option<char>) -> Component {
+    match color_char {
+        Some(ch) => Component::from_legacy_with_char(text, ch),
+        None => Component::from_legacy(text),
     }
 }
 
@@ -1448,6 +1531,7 @@ mod tests {
                 max_view_distance: 10,
                 max_simulation_distance: 10,
                 chat_tx: broadcast::channel(256).0,
+                color_char: Some('&'),
             }),
         })
     }

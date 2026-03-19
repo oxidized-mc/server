@@ -35,6 +35,10 @@ pub enum ConfigError {
     /// Max players must be positive.
     #[error("invalid max players: {0} (must be 1+)")]
     InvalidMaxPlayers(u32),
+
+    /// Color char must be a single non-alphanumeric ASCII character (or empty to disable).
+    #[error("invalid color_char: \"{0}\" (must be a single non-alphanumeric ASCII char or empty)")]
+    InvalidColorChar(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +135,25 @@ pub struct DisplayConfig {
     pub entity_broadcast_range_percentage: i32,
     /// Heartbeat interval in seconds for status polling (default `5`).
     pub status_heartbeat_interval: i32,
+}
+
+/// Chat formatting settings.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ChatConfig {
+    /// Alternate color code prefix character (default `'&'`).
+    ///
+    /// Players and config strings (MOTD, etc.) can use this character
+    /// instead of the standard `§` to apply color and formatting codes.
+    /// Set to `""` to disable alternate color codes.
+    pub color_char: String,
+}
+
+impl ChatConfig {
+    /// Returns the configured color char, or `None` if disabled (empty string).
+    pub fn color_char(&self) -> Option<char> {
+        self.color_char.chars().next()
+    }
 }
 
 /// Admin and security settings.
@@ -340,6 +363,14 @@ impl std::default::Default for DisplayConfig {
     }
 }
 
+impl std::default::Default for ChatConfig {
+    fn default() -> Self {
+        Self {
+            color_char: "&".to_string(),
+        }
+    }
+}
+
 impl std::default::Default for AdminConfig {
     fn default() -> Self {
         Self {
@@ -396,6 +427,8 @@ pub struct ServerConfig {
     pub world: WorldConfig,
     /// Display and MOTD settings.
     pub display: DisplayConfig,
+    /// Chat formatting settings.
+    pub chat: ChatConfig,
     /// Admin and security settings.
     pub admin: AdminConfig,
     /// RCON remote console settings.
@@ -483,6 +516,15 @@ impl ServerConfig {
         }
         if self.gameplay.max_players == 0 {
             return Err(ConfigError::InvalidMaxPlayers(self.gameplay.max_players));
+        }
+        // color_char must be empty (disabled) or a single non-alphanumeric ASCII char
+        if !self.chat.color_char.is_empty() {
+            let chars: Vec<char> = self.chat.color_char.chars().collect();
+            if chars.len() != 1 || !chars[0].is_ascii() || chars[0].is_ascii_alphanumeric() {
+                return Err(ConfigError::InvalidColorChar(
+                    self.chat.color_char.clone(),
+                ));
+            }
         }
         Ok(())
     }
@@ -624,6 +666,9 @@ mod tests {
                 hide_online_players: true,
                 entity_broadcast_range_percentage: 200,
                 status_heartbeat_interval: 15,
+            },
+            chat: ChatConfig {
+                color_char: "&".to_string(),
             },
             admin: AdminConfig {
                 white_list: true,
@@ -1010,5 +1055,61 @@ online_mode   =   false
             debug_output.contains("[REDACTED]"),
             "Debug output should show [REDACTED]"
         );
+    }
+
+    // ── ChatConfig / color_char validation ───────────────────────────
+
+    #[test]
+    fn test_color_char_default_is_ampersand() {
+        let chat = ChatConfig::default();
+        assert_eq!(chat.color_char, "&");
+        assert_eq!(chat.color_char(), Some('&'));
+    }
+
+    #[test]
+    fn test_color_char_empty_means_disabled() {
+        let chat = ChatConfig {
+            color_char: String::new(),
+        };
+        assert_eq!(chat.color_char(), None);
+    }
+
+    #[test]
+    fn test_color_char_valid_symbols() {
+        for ch in ['&', '#', '!', '@', '$', '%', '^', '~'] {
+            let mut cfg = ServerConfig::default();
+            cfg.chat.color_char = ch.to_string();
+            cfg.validate().unwrap_or_else(|e| panic!("'{ch}' should be valid: {e}"));
+        }
+    }
+
+    #[test]
+    fn test_color_char_rejects_alphanumeric() {
+        for ch in ['a', 'Z', '0', '9'] {
+            let mut cfg = ServerConfig::default();
+            cfg.chat.color_char = ch.to_string();
+            assert!(cfg.validate().is_err(), "'{ch}' should be rejected");
+        }
+    }
+
+    #[test]
+    fn test_color_char_rejects_multi_char() {
+        let mut cfg = ServerConfig::default();
+        cfg.chat.color_char = "&&".to_string();
+        assert!(cfg.validate().is_err(), "multi-char should be rejected");
+    }
+
+    #[test]
+    fn test_color_char_rejects_non_ascii() {
+        let mut cfg = ServerConfig::default();
+        cfg.chat.color_char = "§".to_string();
+        assert!(cfg.validate().is_err(), "non-ASCII should be rejected");
+    }
+
+    #[test]
+    fn test_color_char_empty_passes_validation() {
+        let mut cfg = ServerConfig::default();
+        cfg.chat.color_char = String::new();
+        cfg.validate().unwrap();
     }
 }

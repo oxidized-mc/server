@@ -1,6 +1,6 @@
 ---
 source: crates/oxidized-server/src/config.rs
-assertion_line: 738
+assertion_line: 820
 expression: toml_str
 ---
 [network]
@@ -44,6 +44,9 @@ enable_status = true
 hide_online_players = false
 entity_broadcast_range_percentage = 100
 status_heartbeat_interval = 5
+
+[chat]
+color_char = "&"
 
 [admin]
 white_list = false
