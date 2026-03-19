@@ -33,8 +33,9 @@ use oxidized_protocol::packets::login::{
 };
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
-    ClientboundLevelChunkWithLightPacket, ClientboundSetChunkCacheRadiusPacket,
-    ServerboundAcceptTeleportationPacket, ServerboundChunkBatchReceivedPacket,
+    ClientboundGameEventPacket, ClientboundLevelChunkWithLightPacket,
+    ClientboundSetChunkCacheRadiusPacket, GameEventType, ServerboundAcceptTeleportationPacket,
+    ServerboundChunkBatchReceivedPacket,
 };
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
@@ -786,6 +787,19 @@ async fn handle_play_entry(
     // Real chunk loading (from disk/worldgen) comes in later phases.
     let chunk_center = ChunkPos::from_block(player_chunk_x, player_chunk_z);
     let chunk_count = send_initial_chunks(conn, chunk_center, player_view_distance).await?;
+
+    // Signal the client that initial chunks have been sent. Without this
+    // event the client stays on the "Loading Terrain" screen indefinitely.
+    let chunks_load_start = ClientboundGameEventPacket {
+        event: GameEventType::LevelChunksLoadStart,
+        param: 0.0,
+    };
+    conn.send_raw(
+        ClientboundGameEventPacket::PACKET_ID,
+        &chunks_load_start.encode(),
+    )
+    .await?;
+    conn.flush().await?;
 
     info!(
         peer = %addr,
