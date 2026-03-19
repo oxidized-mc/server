@@ -5,8 +5,8 @@
 use bytes::Bytes;
 
 use oxidized_protocol::codec::varint::{
-    decode_varlong, decode_varint, encode_varlong, encode_varint, VARLONG_MAX_BYTES,
-    VARINT_MAX_BYTES,
+    VARINT_MAX_BYTES, VARLONG_MAX_BYTES, decode_varint, decode_varlong, encode_varint,
+    encode_varlong,
 };
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
 
@@ -68,10 +68,7 @@ const VARLONG_VECTORS: &[(i64, &[u8])] = &[
     (1, &[0x01]),
     (127, &[0x7f]),
     (128, &[0x80, 0x01]),
-    (
-        2_147_483_647,
-        &[0xff, 0xff, 0xff, 0xff, 0x07],
-    ),
+    (2_147_483_647, &[0xff, 0xff, 0xff, 0xff, 0x07]),
     (
         9_223_372_036_854_775_807,
         &[0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f],
@@ -147,5 +144,9 @@ fn test_handshake_status_packet_encoding() {
     assert_eq!(decoded.next_state, ClientIntent::Status);
 
     // The last byte of the body should be 0x01 (Status intent).
-    assert_eq!(*cursor.last().unwrap(), 0x01, "last byte should be Status intent (1)");
+    assert_eq!(
+        *cursor.last().unwrap(),
+        0x01,
+        "last byte should be Status intent (1)"
+    );
 }

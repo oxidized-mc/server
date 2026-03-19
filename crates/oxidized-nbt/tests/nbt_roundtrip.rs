@@ -4,8 +4,8 @@ use std::io::Cursor;
 
 use oxidized_nbt::{
     NbtAccounter, NbtCompound, NbtError, NbtList, NbtTag, format_snbt, format_snbt_pretty,
-    parse_snbt, read_gzip, read_network_nbt, read_nbt, write_gzip, write_network_nbt, write_nbt,
-    write_zlib, read_zlib,
+    parse_snbt, read_gzip, read_nbt, read_network_nbt, read_zlib, write_gzip, write_nbt,
+    write_network_nbt, write_zlib,
 };
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -58,7 +58,10 @@ fn test_binary_roundtrip_complex_compound() {
     assert_eq!(result.get_long("long"), Some(9_000_000_000));
     assert_eq!(result.get_float("float"), Some(3.14));
     assert_eq!(result.get_double("double"), Some(2.718281828));
-    assert_eq!(result.get_byte_array("byte_array"), Some(&[1i8, 2, 3, -1][..]));
+    assert_eq!(
+        result.get_byte_array("byte_array"),
+        Some(&[1i8, 2, 3, -1][..])
+    );
     assert_eq!(result.get_string("string"), Some("Hello, NBT!"));
 
     let list = result.get_list("list").unwrap();
@@ -69,7 +72,10 @@ fn test_binary_roundtrip_complex_compound() {
     let inner = result.get_compound("compound").unwrap();
     assert_eq!(inner.get_int("nested_val"), Some(42));
 
-    assert_eq!(result.get_int_array("int_array"), Some(&[100, 200, 300][..]));
+    assert_eq!(
+        result.get_int_array("int_array"),
+        Some(&[100, 200, 300][..])
+    );
     assert_eq!(
         result.get_long_array("long_array"),
         Some(&[1_000i64, 2_000, 3_000][..])
@@ -168,7 +174,9 @@ fn test_nested_compounds_deep() {
     // Walk 50 levels to reach the leaf
     let mut current = &result;
     for _ in 0..50 {
-        current = current.get_compound("inner").expect("missing 'inner' compound");
+        current = current
+            .get_compound("inner")
+            .expect("missing 'inner' compound");
     }
     assert_eq!(current.get_int("leaf"), Some(12345));
 }
@@ -180,7 +188,13 @@ fn test_list_type_enforcement() {
 
     let err = list.push(NbtTag::String("oops".into())).unwrap_err();
     assert!(
-        matches!(err, NbtError::ListTypeMismatch { expected: 3, got: 8 }),
+        matches!(
+            err,
+            NbtError::ListTypeMismatch {
+                expected: 3,
+                got: 8
+            }
+        ),
         "expected ListTypeMismatch, got: {err:?}"
     );
 }

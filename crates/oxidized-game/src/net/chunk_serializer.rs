@@ -6,8 +6,8 @@
 use oxidized_protocol::packets::play::{
     ChunkPacketData, ClientboundLevelChunkWithLightPacket, HeightmapEntry,
 };
-use oxidized_world::chunk::heightmap::HeightmapType;
 use oxidized_world::chunk::LevelChunk;
+use oxidized_world::chunk::heightmap::HeightmapType;
 
 use super::light_serializer::build_light_data;
 
@@ -49,7 +49,7 @@ fn build_heightmap_entries(chunk: &LevelChunk) -> Vec<HeightmapEntry> {
                 HeightmapType::MotionBlocking => HEIGHTMAP_TYPE_ID_MOTION_BLOCKING,
                 HeightmapType::MotionBlockingNoLeaves => {
                     HEIGHTMAP_TYPE_ID_MOTION_BLOCKING_NO_LEAVES
-                }
+                },
                 _ => continue,
             };
             entries.push(HeightmapEntry {
@@ -95,7 +95,12 @@ mod tests {
         assert_eq!(pkt.chunk_data.heightmaps.len(), 2);
 
         // Check type IDs
-        let type_ids: Vec<i32> = pkt.chunk_data.heightmaps.iter().map(|e| e.type_id).collect();
+        let type_ids: Vec<i32> = pkt
+            .chunk_data
+            .heightmaps
+            .iter()
+            .map(|e| e.type_id)
+            .collect();
         assert!(type_ids.contains(&HEIGHTMAP_TYPE_ID_MOTION_BLOCKING));
         assert!(type_ids.contains(&HEIGHTMAP_TYPE_ID_WORLD_SURFACE));
     }
@@ -127,14 +132,8 @@ mod tests {
         // Should at minimum have chunk coords (8 bytes) + data
         assert!(encoded.len() > 8);
         // Verify coordinates
-        assert_eq!(
-            i32::from_be_bytes(encoded[0..4].try_into().unwrap()),
-            10
-        );
-        assert_eq!(
-            i32::from_be_bytes(encoded[4..8].try_into().unwrap()),
-            -20
-        );
+        assert_eq!(i32::from_be_bytes(encoded[0..4].try_into().unwrap()), 10);
+        assert_eq!(i32::from_be_bytes(encoded[4..8].try_into().unwrap()), -20);
     }
 
     #[test]

@@ -922,9 +922,7 @@ async fn send_initial_chunks(
     }
 
     // Finish the chunk batch.
-    let finished = ClientboundChunkBatchFinishedPacket {
-        batch_size: count,
-    };
+    let finished = ClientboundChunkBatchFinishedPacket { batch_size: count };
     conn.send_raw(
         ClientboundChunkBatchFinishedPacket::PACKET_ID,
         &finished.encode(),

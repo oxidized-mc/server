@@ -42,8 +42,8 @@ impl ClientboundForgetLevelChunkPacket {
     /// Encodes the packet body (without packet ID).
     pub fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(8);
-        let packed = (self.chunk_x as i64 & 0xFFFF_FFFF)
-            | ((self.chunk_z as i64 & 0xFFFF_FFFF) << 32);
+        let packed =
+            (self.chunk_x as i64 & 0xFFFF_FFFF) | ((self.chunk_z as i64 & 0xFFFF_FFFF) << 32);
         buf.put_i64(packed);
         buf
     }

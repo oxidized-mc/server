@@ -35,10 +35,10 @@ pub fn build_light_data(
             Some(layer) if !layer.is_empty() => {
                 sky_mask |= 1u64 << i;
                 sky_updates.push(layer.as_bytes().to_vec());
-            }
+            },
             _ => {
                 empty_sky |= 1u64 << i;
-            }
+            },
         }
 
         if i < block_light.len() {
@@ -46,10 +46,10 @@ pub fn build_light_data(
                 Some(layer) if !layer.is_empty() => {
                     block_mask |= 1u64 << i;
                     block_updates.push(layer.as_bytes().to_vec());
-                }
+                },
                 _ => {
                     empty_block |= 1u64 << i;
-                }
+                },
             }
         } else {
             empty_block |= 1u64 << i;
