@@ -972,7 +972,7 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
    `net.minecraft.network.LpVec3` — a complex bit-packed format with 15-bit quantization, 
    shared scale factor, and optional VarInt continuation. Zero vectors = single byte 0x00.
 3. **Tracking ranges in chunks**: Java's `EntityType.clientTrackingRange()` returns chunk 
-   counts (×16 for blocks). Default = 5 chunks = 80 blocks. Player = 10 chunks = 160 blocks.
+   counts (×16 for blocks). Default = 5 chunks = 80 blocks. Player = 32 chunks = 512 blocks.
 4. **SetEntityData decode limitation**: Without a codec registry, full decode of multi-entry 
    packets is impossible — each serializer type has different byte-length values. Current 
    decode handles single-entry packets correctly; multi-entry needs registry-aware decoder.
@@ -997,4 +997,24 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
   EntityDataSerializers.java static block
 - LpVec3 is the velocity encoding, NOT i16*8000 — see net.minecraft.network.LpVec3
 - Always validate VarInt counts before allocating (negative VarInt → huge usize on cast)
+- Also validate count against `data.remaining()` — prevents allocation DoS even with positive counts
 - Test entity packets with proptest for encode/decode roundtrips
+
+### Phase 15 — Verification Pass (Re-run)
+
+#### Findings
+- **Tracking range constants were wrong**: Player was 10 chunks (should be 32), Animal was
+  8 chunks (should be 10), Misc was 5 chunks (should be 6). Corrected in tracker.rs.
+- **Missing allocation upper-bound**: `ClientboundRemoveEntitiesPacket::decode` only checked
+  for negative counts but not inflated positive counts. Added `count > data.remaining()`
+  bounds check to prevent DoS via buffer over-allocation.
+- **Missing debug_assert on flag bit index**: `Entity::get_flag`/`set_flag` accepted any
+  `u8` but only bits 0-7 are valid. Added `debug_assert!(bit < 8)`.
+- **Integration test hardcoded old constant value**: Test used `80.0`/`80.01` instead of
+  deriving from the `TRACKING_RANGE_MISC` constant. Fixed to use `range` variable.
+
+#### Key Learning
+- Java `EntityType.clientTrackingRange()` returns CHUNKS, not blocks. Player = 32 chunks
+  (512 blocks), not 10 chunks. Always multiply by 16 to get block distance.
+- Bounds-checking Vec allocation against remaining buffer bytes is essential safety hardening
+  beyond just checking for negative counts.
