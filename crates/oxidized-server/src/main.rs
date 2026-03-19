@@ -14,15 +14,19 @@ use std::sync::Arc;
 
 use clap::Parser;
 use mimalloc::MiMalloc;
+use oxidized_game::player::PlayerList;
+use oxidized_nbt::NbtCompound;
 use oxidized_protocol::constants;
 use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::{Component, ServerStatus, StatusPlayers, StatusVersion};
+use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::storage::PrimaryLevelData;
 use tokio::sync::broadcast;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::cli::Args;
 use crate::config::ServerConfig;
-use crate::network::LoginContext;
+use crate::network::{LoginContext, ServerContext};
 
 /// Use mimalloc as the global allocator for improved throughput and
 /// reduced fragmentation under the server's allocation patterns.
@@ -123,6 +127,44 @@ fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("RSA key generation failed: {e}"))?;
         info!("RSA keypair generated");
 
+        // Load world metadata from level.dat (or use defaults for new worlds).
+        let level_dat_path = format!("{}/level.dat", config.world.name);
+        let level_data = if std::path::Path::new(&level_dat_path).exists() {
+            match PrimaryLevelData::load(std::path::Path::new(&level_dat_path)) {
+                Ok(data) => {
+                    info!(world = %data.level_name, "Loaded level.dat");
+                    data
+                },
+                Err(e) => {
+                    warn!(error = %e, "Failed to load level.dat — using defaults");
+                    PrimaryLevelData::from_nbt(&NbtCompound::new())
+                        .map_err(|e| anyhow::anyhow!("failed to create default level data: {e}"))?
+                },
+            }
+        } else {
+            info!("No level.dat found — using default world metadata");
+            PrimaryLevelData::from_nbt(&NbtCompound::new())
+                .map_err(|e| anyhow::anyhow!("failed to create default level data: {e}"))?
+        };
+
+        // Build the shared server context for PLAY-state operations.
+        let dimensions = vec![
+            ResourceLocation::from_string("minecraft:overworld")
+                .map_err(|e| anyhow::anyhow!("invalid dimension resource location: {e}"))?,
+            ResourceLocation::from_string("minecraft:the_nether")
+                .map_err(|e| anyhow::anyhow!("invalid dimension resource location: {e}"))?,
+            ResourceLocation::from_string("minecraft:the_end")
+                .map_err(|e| anyhow::anyhow!("invalid dimension resource location: {e}"))?,
+        ];
+
+        let server_ctx = Arc::new(ServerContext {
+            player_list: parking_lot::RwLock::new(
+                PlayerList::new(config.gameplay.max_players as usize),
+            ),
+            level_data,
+            dimensions,
+        });
+
         // Build the shared login context.
         let login_ctx = Arc::new(LoginContext {
             server_status,
@@ -131,6 +173,7 @@ fn main() -> anyhow::Result<()> {
             compression_threshold: config.network.compression_threshold,
             prevent_proxy_connections: config.network.prevent_proxy_connections,
             http_client: reqwest::Client::new(),
+            server_ctx,
         });
 
         // Spawn the TCP listener.

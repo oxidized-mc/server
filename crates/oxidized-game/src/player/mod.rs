@@ -7,11 +7,13 @@
 pub mod abilities;
 pub mod game_mode;
 pub mod inventory;
+pub mod login;
 pub mod player_list;
 pub mod server_player;
 
 pub use abilities::PlayerAbilities;
 pub use game_mode::GameMode;
 pub use inventory::PlayerInventory;
+pub use login::{EncodedPacket, build_login_sequence, handle_accept_teleportation};
 pub use player_list::PlayerList;
 pub use server_player::ServerPlayer;
