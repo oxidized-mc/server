@@ -827,3 +827,43 @@ implementation against Java Block.java, DimensionType.java, and vanilla generate
 - PLAY read loop is minimal (teleport confirmations only) — full handling Phase 14+
 - No player removal from PlayerList on disconnect (cleanup is best-effort log + remove)
 - PlayerConnection bridge channels (ADR-020) not yet implemented
+
+---
+
+### 2025-07-25 — Phase 13: Chunk Sending
+
+**Context:** Implementing the full chunk sending pipeline so vanilla clients render chunks.
+
+#### Key Discovery: Heightmap Wire Format Changed in 26.1-pre-3
+The phase doc describes heightmaps as NBT-encoded, but **26.1-pre-3 uses a binary map format**:
+`VarInt(map_size) [VarInt(type_id) VarInt(longs_count) i64[]]...`
+
+This was discovered by tracing `ClientboundLevelChunkWithLightPacket` → `ChunkData` →
+`ByteBufCodecs.map()` in the decompiled Java reference. Always verify wire formats against
+the actual Java source, not just phase docs.
+
+#### Heightmap Type IDs (Java enum ordinals)
+- `WORLD_SURFACE_WG` = 0, `WORLD_SURFACE` = 1, `OCEAN_FLOOR_WG` = 2
+- `OCEAN_FLOOR` = 3, `MOTION_BLOCKING` = 4, `MOTION_BLOCKING_NO_LEAVES` = 5
+- Client receives only `WORLD_SURFACE`(1) and `MOTION_BLOCKING`(4)
+
+#### Chunk Batch Protocol
+- Server sends: `BatchStart` → N × `LevelChunkWithLight` → `BatchFinished(count)`
+- Client responds: `ChunkBatchReceived(desired_chunks_per_tick: f32)`
+- **Validate client rate** — clamp to (0.1, 100.0) and reject NaN/infinity
+
+#### LevelChunkSection Wire Format
+Each section writes: `i16(non_empty_block_count)` + `i16(fluid_count)` +
+`PalettedContainer(block_states)` + `PalettedContainer(biomes)`.
+The fluid count was added in 26.1-pre-3 — older protocol docs may not show it.
+
+#### Patterns Established
+- `send_initial_chunks()` — sends empty air chunks in spiral order for initial join
+- `build_chunk_packet()` in `oxidized-game::net::chunk_serializer` — bridge between world and protocol
+- `build_light_data()` — converts DataLayer arrays to BitSet masks + 2048-byte arrays
+- `spiral_chunks()` — closest-first iteration for chunk sending order
+
+#### Technical Debt
+- Chunks are empty air (no worldgen/disk loading) — real chunks in later phases
+- No per-tick chunk throttling — all chunks sent in one batch during login
+- Block entities always VarInt(0) — no block entity support yet
