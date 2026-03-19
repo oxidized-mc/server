@@ -5,7 +5,7 @@
 //! Also needs `ClientboundUpdateMobEffectPacket` / `ClientboundRemoveMobEffectPacket`.
 
 use crate::commands::arguments::ArgumentType;
-use crate::commands::context::{CommandContext, get_integer, get_string};
+use crate::commands::context::{CommandContext, get_entities, get_integer, get_string};
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
@@ -72,15 +72,17 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         )
                         .executes(
                             |ctx: &CommandContext<CommandSourceStack>| {
-                                let targets = get_string(ctx, "targets")?;
+                                let targets = get_entities(ctx, "targets")?;
                                 // TODO: Clear all effects from targets
-                                ctx.source.send_success(
-                                    &Component::translatable(
-                                        "commands.effect.clear.everything.success.single",
-                                        vec![Component::text(targets)],
-                                    ),
-                                    true,
-                                );
+                                for target in &targets {
+                                    ctx.source.send_success(
+                                        &Component::translatable(
+                                            "commands.effect.clear.everything.success.single",
+                                            vec![Component::text(&target.name)],
+                                        ),
+                                        true,
+                                    );
+                                }
                                 Ok(1)
                             },
                         ),
@@ -92,21 +94,23 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 fn effect_give(
     ctx: &CommandContext<CommandSourceStack>,
 ) -> Result<i32, crate::commands::CommandError> {
-    let targets = get_string(ctx, "targets")?;
+    let targets = get_entities(ctx, "targets")?;
     let effect = get_string(ctx, "effect")?;
     let seconds = get_integer(ctx, "seconds").unwrap_or(30);
     // TODO: Apply status effect to targets
     // Vanilla arg order: effect name, target name, duration in seconds
-    ctx.source.send_success(
-        &Component::translatable(
-            "commands.effect.give.success.single",
-            vec![
-                Component::text(effect),
-                Component::text(targets),
-                Component::text(seconds.to_string()),
-            ],
-        ),
-        true,
-    );
+    for target in &targets {
+        ctx.source.send_success(
+            &Component::translatable(
+                "commands.effect.give.success.single",
+                vec![
+                    Component::text(effect),
+                    Component::text(&target.name),
+                    Component::text(seconds.to_string()),
+                ],
+            ),
+            true,
+        );
+    }
     Ok(1)
 }

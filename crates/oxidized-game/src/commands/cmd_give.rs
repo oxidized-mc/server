@@ -5,7 +5,7 @@
 //! to sync the slot to the client.
 
 use crate::commands::arguments::ArgumentType;
-use crate::commands::context::{CommandContext, get_integer, get_string};
+use crate::commands::context::{CommandContext, get_entities, get_integer, get_string};
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
@@ -48,20 +48,22 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 fn give_exec(
     ctx: &CommandContext<CommandSourceStack>,
 ) -> Result<i32, crate::commands::CommandError> {
-    let targets = get_string(ctx, "targets")?;
+    let targets = get_entities(ctx, "targets")?;
     let item = get_string(ctx, "item")?;
     let count = get_integer(ctx, "count").unwrap_or(1);
     // TODO: Actually give items to target players
-    ctx.source.send_success(
-        &Component::translatable(
-            "commands.give.success.single",
-            vec![
-                Component::text(count.to_string()),
-                Component::text(format!("[{item}]")),
-                Component::text(targets),
-            ],
-        ),
-        true,
-    );
+    for target in &targets {
+        ctx.source.send_success(
+            &Component::translatable(
+                "commands.give.success.single",
+                vec![
+                    Component::text(count.to_string()),
+                    Component::text(format!("[{item}]")),
+                    Component::text(&target.name),
+                ],
+            ),
+            true,
+        );
+    }
     Ok(count)
 }

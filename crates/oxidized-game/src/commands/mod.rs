@@ -10,6 +10,7 @@ pub mod context;
 pub mod dispatcher;
 pub mod nodes;
 pub mod pagination;
+pub mod selector;
 pub mod serializer;
 pub mod source;
 
@@ -37,6 +38,7 @@ pub use dispatcher::CommandDispatcher;
 pub use nodes::{ArgumentCommandNode, CommandNode, LiteralCommandNode, RootCommandNode};
 pub use pagination::PaginatedMessage;
 pub use serializer::{CommandNodeData, CommandTreeData};
+pub use selector::{SelectorKind, SelectorTarget};
 pub use source::{CommandSourceKind, CommandSourceStack};
 
 /// The command system hub: registers all commands, provides dispatch and

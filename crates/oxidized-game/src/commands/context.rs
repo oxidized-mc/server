@@ -3,6 +3,7 @@
 use crate::commands::CommandError;
 use crate::commands::arguments::{ArgumentType, StringKind};
 use crate::commands::nodes::CommandFn;
+use crate::commands::source::CommandSourceStack;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::types::game_type::GameType;
 use std::collections::HashMap;
@@ -533,6 +534,41 @@ pub fn get_block_pos<S>(
             "Argument '{name}' is not a block position"
         ))),
     }
+}
+
+/// Gets resolved entity targets from a string argument, handling selectors.
+pub fn get_entities(
+    ctx: &CommandContext<CommandSourceStack>,
+    name: &str,
+) -> Result<Vec<crate::commands::selector::SelectorTarget>, CommandError> {
+    let input = get_string(ctx, name)?;
+    crate::commands::selector::resolve_entities(input, &ctx.source)
+}
+
+/// Gets a single entity target from a string argument.
+pub fn get_entity(
+    ctx: &CommandContext<CommandSourceStack>,
+    name: &str,
+) -> Result<crate::commands::selector::SelectorTarget, CommandError> {
+    let targets = get_entities(ctx, name)?;
+    if targets.len() != 1 {
+        return Err(CommandError::Parse(format!(
+            "Expected exactly one entity, got {}",
+            targets.len()
+        )));
+    }
+    let mut iter = targets.into_iter();
+    iter.next().ok_or_else(|| {
+        CommandError::Parse("Expected exactly one entity, got 0".to_string())
+    })
+}
+
+/// Gets a player name from a string argument (for `GameProfile` args).
+pub fn get_game_profile(
+    ctx: &CommandContext<CommandSourceStack>,
+    name: &str,
+) -> Result<crate::commands::selector::SelectorTarget, CommandError> {
+    get_entity(ctx, name)
 }
 
 /// Gets a vec3 argument by name.
