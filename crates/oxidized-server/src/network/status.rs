@@ -3,6 +3,7 @@
 //! Responds to server list ping requests with the server's current status
 //! (player count, version, MOTD) and echoes pong packets.
 
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, RawPacket};
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
@@ -12,6 +13,7 @@ use oxidized_protocol::status::ServerStatus;
 use tracing::{debug, warn};
 
 use super::LoginContext;
+use super::helpers::decode_packet;
 
 /// Processes STATUS state packets.
 ///
@@ -64,10 +66,7 @@ pub async fn handle_status(
                     .to_json()
                     .map_err(|e| ConnectionError::Io(std::io::Error::other(e.to_string())))?,
             };
-            let body = response.encode();
-            conn.send_raw(ClientboundStatusResponsePacket::PACKET_ID, &body)
-                .await?;
-            conn.flush().await?;
+            conn.send_packet(&response).await?;
 
             debug!(
                 peer = %conn.remote_addr(),
@@ -78,18 +77,11 @@ pub async fn handle_status(
             Ok(false)
         },
         ServerboundPingRequestPacket::PACKET_ID => {
-            let ping = ServerboundPingRequestPacket::decode(pkt.data).map_err(|e| {
-                ConnectionError::Io(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    e.to_string(),
-                ))
-            })?;
+            let ping: ServerboundPingRequestPacket =
+                decode_packet(pkt.data, conn.remote_addr(), "", "Ping")?;
 
             let pong = ClientboundPongResponsePacket { time: ping.time };
-            let body = pong.encode();
-            conn.send_raw(ClientboundPongResponsePacket::PACKET_ID, &body)
-                .await?;
-            conn.flush().await?;
+            conn.send_packet(&pong).await?;
 
             debug!(
                 peer = %conn.remote_addr(),

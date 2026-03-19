@@ -4,9 +4,12 @@
 //! connection to either [`ConnectionState::Status`] or
 //! [`ConnectionState::Login`].
 
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
 use tracing::{debug, warn};
+
+use super::helpers::decode_packet;
 
 /// Processes the handshake packet and transitions to the requested state.
 pub async fn handle_handshake(
@@ -22,12 +25,8 @@ pub async fn handle_handshake(
         return Ok(());
     }
 
-    let intention = ClientIntentionPacket::decode(pkt.data).map_err(|e| {
-        ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e.to_string(),
-        ))
-    })?;
+    let intention: ClientIntentionPacket =
+        decode_packet(pkt.data, conn.remote_addr(), "", "Handshake")?;
 
     conn.protocol_version = intention.protocol_version;
 

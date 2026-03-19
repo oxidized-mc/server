@@ -18,10 +18,11 @@ use oxidized_game::player::{
     GameMode, ServerPlayer, build_login_sequence, handle_accept_teleportation,
 };
 use oxidized_protocol::auth;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundCommandsPacket, ClientboundGameEventPacket, ClientboundKeepAlivePacket,
+    ClientboundGameEventPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
     ClientboundSetChunkCacheRadiusPacket, GameEventType, PlayerCommandAction, PlayerInfoActions,
     PlayerInfoEntry, ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
@@ -164,19 +165,14 @@ pub async fn handle_play_entry(
     let cache_radius = ClientboundSetChunkCacheRadiusPacket {
         radius: player_view_distance,
     };
-    conn.send_raw(
-        ClientboundSetChunkCacheRadiusPacket::PACKET_ID,
-        &cache_radius.encode(),
-    )
-    .await?;
+    conn.send_packet(&cache_radius).await?;
 
     // Send the command tree so the client can offer tab-completion.
     {
         let cmd_source = commands::make_command_source(&player_name, uuid, &player, server_ctx);
         let tree = server_ctx.commands.serialize_tree(&cmd_source);
         let cmd_pkt = commands::commands_packet_from_tree(&tree);
-        conn.send_raw(ClientboundCommandsPacket::PACKET_ID, &cmd_pkt.encode())
-            .await?;
+        conn.send_packet(&cmd_pkt).await?;
     }
 
     // Send initial chunk batch — empty air chunks in a spiral pattern.
@@ -189,12 +185,7 @@ pub async fn handle_play_entry(
         event: GameEventType::LevelChunksLoadStart,
         param: 0.0,
     };
-    conn.send_raw(
-        ClientboundGameEventPacket::PACKET_ID,
-        &chunks_load_start.encode(),
-    )
-    .await?;
-    conn.flush().await?;
+    conn.send_packet(&chunks_load_start).await?;
 
     info!(
         peer = %addr,
@@ -297,15 +288,8 @@ pub async fn handle_play_entry(
                     keepalive_pending = true;
                     keepalive_sent_at = Instant::now();
                     let pkt = ClientboundKeepAlivePacket { id: keepalive_challenge };
-                    if let Err(e) = play_ctx.conn.send_raw(
-                        ClientboundKeepAlivePacket::PACKET_ID,
-                        &pkt.encode(),
-                    ).await {
+                    if let Err(e) = play_ctx.conn.send_packet(&pkt).await {
                         debug!(peer = %addr, name = %player_name, error = %e, "Failed to send keepalive");
-                        break;
-                    }
-                    if let Err(e) = play_ctx.conn.flush().await {
-                        debug!(peer = %addr, name = %player_name, error = %e, "Failed to flush keepalive");
                         break;
                     }
                 }
@@ -339,7 +323,7 @@ pub async fn handle_play_entry(
                         match pkt.id {
                             ServerboundKeepAlivePacket::PACKET_ID => {
                                 handle_keepalive(
-                                    &pkt.data, addr, &player_name,
+                                    pkt.data, addr, &player_name,
                                     &mut keepalive_pending, keepalive_challenge, &keepalive_sent_at,
                                 );
                             },
@@ -361,8 +345,8 @@ pub async fn handle_play_entry(
                                 handle_player_input(&play_ctx, pkt.data);
                             },
                             ServerboundChatPacket::PACKET_ID => {
-                                if let Ok(chat_pkt) = decode_packet(
-                                    ServerboundChatPacket::decode(pkt.data),
+                                if let Ok(chat_pkt) = decode_packet::<ServerboundChatPacket>(
+                                    pkt.data,
                                     addr, &player_name, "Chat",
                                 ) {
                                     let msg = chat_pkt.message.clone();
@@ -370,8 +354,8 @@ pub async fn handle_play_entry(
                                 }
                             },
                             ServerboundChatCommandPacket::PACKET_ID => {
-                                if let Ok(cmd_pkt) = decode_packet(
-                                    ServerboundChatCommandPacket::decode(pkt.data),
+                                if let Ok(cmd_pkt) = decode_packet::<ServerboundChatCommandPacket>(
+                                    pkt.data,
                                     addr, &player_name, "ChatCommand",
                                 ) {
                                     if !play_ctx.rate_limiter.try_acquire(std::time::Instant::now()) {
@@ -394,8 +378,8 @@ pub async fn handle_play_entry(
                                 }
                             },
                             ServerboundChatCommandSignedPacket::PACKET_ID => {
-                                if let Ok(cmd_pkt) = decode_packet(
-                                    ServerboundChatCommandSignedPacket::decode(pkt.data),
+                                if let Ok(cmd_pkt) = decode_packet::<ServerboundChatCommandSignedPacket>(
+                                    pkt.data,
                                     addr, &player_name, "ChatCommandSigned",
                                 ) {
                                     if !play_ctx.rate_limiter.try_acquire(std::time::Instant::now()) {
@@ -471,15 +455,15 @@ pub async fn handle_play_entry(
 
 /// Handles a keepalive response from the client.
 fn handle_keepalive(
-    data: &bytes::Bytes,
+    data: bytes::Bytes,
     addr: SocketAddr,
     player_name: &str,
     keepalive_pending: &mut bool,
     keepalive_challenge: i64,
     keepalive_sent_at: &Instant,
 ) {
-    if let Ok(ka) = decode_packet(
-        ServerboundKeepAlivePacket::decode(data.clone()),
+    if let Ok(ka) = decode_packet::<ServerboundKeepAlivePacket>(
+        data,
         addr,
         player_name,
         "KeepAlive",
@@ -503,8 +487,8 @@ fn handle_keepalive(
 
 /// Handles a teleport confirmation from the client.
 fn handle_accept_teleport(ctx: &PlayContext<'_>, data: bytes::Bytes) {
-    if let Ok(ack) = decode_packet(
-        ServerboundAcceptTeleportationPacket::decode(data),
+    if let Ok(ack) = decode_packet::<ServerboundAcceptTeleportationPacket>(
+        data,
         ctx.addr,
         ctx.player_name,
         "AcceptTeleportation",
@@ -524,8 +508,8 @@ fn handle_accept_teleport(ctx: &PlayContext<'_>, data: bytes::Bytes) {
 
 /// Handles a chunk batch acknowledgement from the client.
 fn handle_chunk_batch_ack(ctx: &PlayContext<'_>, data: bytes::Bytes) {
-    if let Ok(batch_ack) = decode_packet(
-        ServerboundChunkBatchReceivedPacket::decode(data),
+    if let Ok(batch_ack) = decode_packet::<ServerboundChunkBatchReceivedPacket>(
+        data,
         ctx.addr,
         ctx.player_name,
         "ChunkBatchReceived",
@@ -547,8 +531,8 @@ fn handle_chunk_batch_ack(ctx: &PlayContext<'_>, data: bytes::Bytes) {
 
 /// Handles player command packets (sprint, sneak, etc.).
 fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
-    if let Ok(cmd) = decode_packet(
-        ServerboundPlayerCommandPacket::decode(data),
+    if let Ok(cmd) = decode_packet::<ServerboundPlayerCommandPacket>(
+        data,
         ctx.addr,
         ctx.player_name,
         "PlayerCommand",
@@ -576,8 +560,8 @@ fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
 
 /// Handles player input packets (shift, sprint flags).
 fn handle_player_input(ctx: &PlayContext<'_>, data: bytes::Bytes) {
-    if let Ok(input_pkt) = decode_packet(
-        ServerboundPlayerInputPacket::decode(data),
+    if let Ok(input_pkt) = decode_packet::<ServerboundPlayerInputPacket>(
+        data,
         ctx.addr,
         ctx.player_name,
         "PlayerInput",

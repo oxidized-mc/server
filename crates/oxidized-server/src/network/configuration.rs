@@ -3,6 +3,7 @@
 //! Sends registry data, tags, enabled features, and transitions the
 //! client to PLAY state. The configuration flow is server-driven.
 
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_protocol::packets::configuration::{
     ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
@@ -14,7 +15,7 @@ use oxidized_protocol::registry;
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use tracing::{debug, info, warn};
 
-use super::helpers::disconnect_err;
+use super::helpers::{decode_packet, disconnect_err};
 
 /// Handles the CONFIGURATION state — sends registry data, tags, features,
 /// and transitions the client to PLAY.
@@ -49,12 +50,7 @@ pub async fn handle_configuration(
             version: "1.21.6".to_string(),
         }],
     };
-    conn.send_raw(
-        ClientboundSelectKnownPacksPacket::PACKET_ID,
-        &known_packs.encode(),
-    )
-    .await?;
-    conn.flush().await?;
+    conn.send_packet(&known_packs).await?;
     debug!(peer = %addr, "Sent SelectKnownPacks");
 
     // 2. Receive serverbound packets until we get SelectKnownPacks.
@@ -65,13 +61,8 @@ pub async fn handle_configuration(
         let pkt = conn.read_raw_packet().await?;
         match pkt.id {
             ServerboundClientInformationPacket::PACKET_ID => {
-                let info_pkt =
-                    ServerboundClientInformationPacket::decode(pkt.data).map_err(|e| {
-                        ConnectionError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            e.to_string(),
-                        ))
-                    })?;
+                let info_pkt: ServerboundClientInformationPacket =
+                    decode_packet(pkt.data, addr, "", "ClientInformation")?;
                 debug!(
                     peer = %addr,
                     language = %info_pkt.information.language,
@@ -84,13 +75,8 @@ pub async fn handle_configuration(
                 debug!(peer = %addr, "Received custom payload (ignored)");
             },
             ServerboundSelectKnownPacksPacket::PACKET_ID => {
-                let _client_packs =
-                    ServerboundSelectKnownPacksPacket::decode(pkt.data).map_err(|e| {
-                        ConnectionError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            e.to_string(),
-                        ))
-                    })?;
+                let _client_packs: ServerboundSelectKnownPacksPacket =
+                    decode_packet(pkt.data, addr, "", "SelectKnownPacks")?;
                 debug!(peer = %addr, "Received client known packs response");
                 break;
             },
@@ -139,6 +125,8 @@ pub async fn handle_configuration(
             entries: reg_entries,
         };
 
+        // Use send_raw without flush here — we batch all registries and
+        // flush once after the loop.
         let body = packet.encode();
         conn.send_raw(ClientboundRegistryDataPacket::PACKET_ID, &body)
             .await?;
@@ -153,12 +141,7 @@ pub async fn handle_configuration(
     // 4. Send tags (block, item, fluid, entity_type, enchantment, etc.)
     let tags_packet = registry::build_tags_packet();
     let tag_count = tags_packet.tags.len();
-    conn.send_raw(
-        ClientboundUpdateTagsPacket::PACKET_ID,
-        &tags_packet.encode(),
-    )
-    .await?;
-    conn.flush().await?;
+    conn.send_packet(&tags_packet).await?;
     debug!(peer = %addr, registries = tag_count, "Sent tags");
 
     // 5. Send enabled features (vanilla feature set)
@@ -171,22 +154,12 @@ pub async fn handle_configuration(
     let features_packet = ClientboundUpdateEnabledFeaturesPacket {
         features: vec![vanilla_feature],
     };
-    conn.send_raw(
-        ClientboundUpdateEnabledFeaturesPacket::PACKET_ID,
-        &features_packet.encode(),
-    )
-    .await?;
-    conn.flush().await?;
+    conn.send_packet(&features_packet).await?;
     debug!(peer = %addr, "Sent enabled features");
 
     // 6. Send FinishConfiguration
     let finish = ClientboundFinishConfigurationPacket;
-    conn.send_raw(
-        ClientboundFinishConfigurationPacket::PACKET_ID,
-        &finish.encode(),
-    )
-    .await?;
-    conn.flush().await?;
+    conn.send_packet(&finish).await?;
     debug!(peer = %addr, "Sent finish configuration");
 
     // 7. Wait for client FinishConfiguration acknowledgement.
@@ -195,13 +168,8 @@ pub async fn handle_configuration(
         let finish_pkt = conn.read_raw_packet().await?;
         match finish_pkt.id {
             ServerboundClientInformationPacket::PACKET_ID => {
-                let info_pkt = ServerboundClientInformationPacket::decode(finish_pkt.data)
-                    .map_err(|e| {
-                        ConnectionError::Io(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            e.to_string(),
-                        ))
-                    })?;
+                let info_pkt: ServerboundClientInformationPacket =
+                    decode_packet(finish_pkt.data, addr, "", "ClientInformation")?;
                 debug!(
                     peer = %addr,
                     language = %info_pkt.information.language,

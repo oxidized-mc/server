@@ -6,6 +6,7 @@
 //! to [`ConnectionState::Configuration`].
 
 use oxidized_protocol::auth;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
 use oxidized_protocol::crypto::{generate_challenge, minecraft_digest, offline_uuid};
 use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
@@ -16,7 +17,7 @@ use oxidized_protocol::packets::login::{
 use tracing::{debug, info, warn};
 
 use super::LoginContext;
-use super::helpers::{disconnect, disconnect_err};
+use super::helpers::{decode_packet, disconnect, disconnect_err};
 
 /// Handles the full login sequence for a single client connection.
 ///
@@ -47,12 +48,8 @@ pub async fn handle_login(
         return Err(disconnect_err(conn, "Unexpected packet during login").await);
     }
 
-    let hello = ServerboundHelloPacket::decode(hello_pkt.data).map_err(|e| {
-        ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e.to_string(),
-        ))
-    })?;
+    let hello: ServerboundHelloPacket =
+        decode_packet(hello_pkt.data, addr, "", "LoginHello")?;
 
     debug!(peer = %addr, name = %hello.name, profile_id = %hello.profile_id, "Login hello received");
 
@@ -84,10 +81,7 @@ pub async fn handle_login(
         let compression_pkt = ClientboundLoginCompressionPacket {
             threshold: ctx.compression_threshold,
         };
-        let body = compression_pkt.encode();
-        conn.send_raw(ClientboundLoginCompressionPacket::PACKET_ID, &body)
-            .await?;
-        conn.flush().await?;
+        conn.send_packet(&compression_pkt).await?;
 
         #[allow(clippy::cast_sign_loss)]
         conn.enable_compression(ctx.compression_threshold as usize);
@@ -110,10 +104,7 @@ pub async fn handle_login(
         username: username.clone(),
         properties,
     };
-    let body = finished.encode();
-    conn.send_raw(ClientboundLoginFinishedPacket::PACKET_ID, &body)
-        .await?;
-    conn.flush().await?;
+    conn.send_packet(&finished).await?;
 
     debug!(peer = %addr, uuid = %uuid, name = %username, "Login finished sent");
 
@@ -158,10 +149,7 @@ async fn authenticate_online(
         challenge: challenge.to_vec(),
         should_authenticate: true,
     };
-    let body = hello_response.encode();
-    conn.send_raw(ClientboundHelloPacket::PACKET_ID, &body)
-        .await?;
-    conn.flush().await?;
+    conn.send_packet(&hello_response).await?;
 
     debug!(peer = %addr, "Encryption request sent");
 
@@ -172,12 +160,8 @@ async fn authenticate_online(
         return Err(disconnect_err(conn, "Unexpected packet — expected encryption response").await);
     }
 
-    let key = ServerboundKeyPacket::decode(key_pkt.data).map_err(|e| {
-        ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e.to_string(),
-        ))
-    })?;
+    let key: ServerboundKeyPacket =
+        decode_packet(key_pkt.data, addr, "", "KeyResponse")?;
 
     // d. Decrypt shared secret and challenge.
     let shared_secret = ctx
