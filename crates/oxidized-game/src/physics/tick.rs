@@ -66,8 +66,7 @@ pub fn physics_tick(
     // 3. Swept AABB collision with movement-dependent axis ordering.
     let bbox = entity.bounding_box;
     let obstacles = collect_obstacles(level, &bbox, dx, dy, dz, shape_provider);
-    let (actual_dx, actual_dy, actual_dz) =
-        collide_with_shapes(&bbox, dx, dy, dz, &obstacles);
+    let (actual_dx, actual_dy, actual_dz) = collide_with_shapes(&bbox, dx, dy, dz, &obstacles);
 
     // 4. Apply resolved movement.
     entity.set_pos(
@@ -148,13 +147,8 @@ fn friction_for_state(_state_id: u32) -> f64 {
 ///
 /// Used to decide whether to send a
 /// `ClientboundSetEntityMotionPacket` to watching players.
-pub fn velocity_changed_significantly(
-    old: (f64, f64, f64),
-    new: (f64, f64, f64),
-) -> bool {
-    (old.0 - new.0).abs() > 0.01
-        || (old.1 - new.1).abs() > 0.01
-        || (old.2 - new.2).abs() > 0.01
+pub fn velocity_changed_significantly(old: (f64, f64, f64), new: (f64, f64, f64)) -> bool {
+    (old.0 - new.0).abs() > 0.01 || (old.1 - new.1).abs() > 0.01 || (old.2 - new.2).abs() > 0.01
 }
 
 #[cfg(test)]

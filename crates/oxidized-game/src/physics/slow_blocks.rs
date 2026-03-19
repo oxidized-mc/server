@@ -27,12 +27,7 @@ use oxidized_protocol::types::BlockPos;
 /// # Errors
 ///
 /// Returns 1.0 if the block position is in an unloaded chunk.
-pub fn block_speed_factor(
-    level: &impl BlockGetter,
-    x: f64,
-    y: f64,
-    z: f64,
-) -> f64 {
+pub fn block_speed_factor(level: &impl BlockGetter, x: f64, y: f64, z: f64) -> f64 {
     let feet = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
     match level.get_block_state(feet) {
         Ok(state_id) => speed_factor_for_state(state_id),
@@ -47,12 +42,7 @@ pub fn block_speed_factor(
 /// # Errors
 ///
 /// Returns 1.0 if the block position is in an unloaded chunk.
-pub fn block_jump_factor(
-    level: &impl BlockGetter,
-    x: f64,
-    y: f64,
-    z: f64,
-) -> f64 {
+pub fn block_jump_factor(level: &impl BlockGetter, x: f64, y: f64, z: f64) -> f64 {
     let feet = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
     match level.get_block_state(feet) {
         Ok(state_id) => jump_factor_for_state(state_id),

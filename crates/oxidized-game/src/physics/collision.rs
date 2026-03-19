@@ -5,8 +5,8 @@
 //! order is movement-dependent: Y is always first, then X and Z are ordered
 //! by which has the larger absolute movement (matching `Direction.axisStepOrder`).
 
-use oxidized_protocol::types::aabb::Aabb;
 use oxidized_protocol::types::BlockPos;
+use oxidized_protocol::types::aabb::Aabb;
 
 use super::voxel_shape::BlockShapeProvider;
 use crate::level::traits::BlockGetter;
@@ -257,10 +257,7 @@ mod tests {
         let floor = Aabb::new(-10.0, 0.0, -10.0, 10.0, 1.0, 10.0);
         let (dx, dy, dz) = collide_with_shapes(&entity, 1.0, -10.0, 1.0, &[floor]);
         // Y resolves first: entity at y=5, floor top at y=1 → dy = -(5-1) = -4
-        assert!(
-            (dy - (-4.0)).abs() < 1e-9,
-            "Expected dy=-4.0, got {dy}"
-        );
+        assert!((dy - (-4.0)).abs() < 1e-9, "Expected dy=-4.0, got {dy}");
         // X and Z should be unaffected (no horizontal collision with floor)
         assert!((dx - 1.0).abs() < 1e-9);
         assert!((dz - 1.0).abs() < 1e-9);
