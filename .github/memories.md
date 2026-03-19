@@ -1302,3 +1302,59 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - 7 new tests: 5 range correctness tests (single arg, multi arg, partial match, no match,
   trailing space), 1 serializer flag test (entity arg has ask_server), 1 updated existing.
 - Workspace total: 1460 tests (up from 1454).
+
+### 2026-07-XX — Phase 18d: Critical Bugs & Feature Completeness
+
+#### Bugs Found & Fixed
+
+1. **Help pagination click not working** — Client sends `ServerboundChatCommandSignedPacket`
+   (0x08) when clicking RunCommand in chat, but server only handled unsigned variant (0x07).
+   Fix: decode signed packet (extract command, skip signature fields), dispatch to same handler.
+
+2. **Command feedback broadcasting to all players** — `feedback_sender` used `chat_tx` broadcast
+   channel. Fix: use `std::sync::mpsc::channel` per command execution, drain after dispatch,
+   send only to the executing player's connection.
+
+3. **MOTD showing 0 players** — `ServerStatus` was created once at startup with `online: 0`.
+   Fix: build status response dynamically in `handle_status()` by querying `player_list`.
+   Important: scope `RwLockReadGuard` in a block to avoid holding it across `.await`.
+
+4. **Tab list not updating for existing players** — No `PlayerInfoUpdate` broadcast on join,
+   no `PlayerInfoRemove` broadcast on leave. Fix: broadcast via `chat_tx` after add/before
+   remove. Note: joining player already gets existing players via `build_login_sequence`.
+
+#### Key Learnings
+
+- **`parking_lot::RwLockReadGuard` is NOT `Send`** — cannot hold across `.await` in Tokio.
+  Solution: scope the guard in a `{ }` block.
+- **Signed vs unsigned command packets** — Both dispatch to same system. Client uses signed
+  (0x08) for chat clicks, unsigned (0x07) for direct typing. Decode: extract command string,
+  skip timestamp/salt/signatures/last-seen/checksum.
+- **`std::sync::mpsc::Sender` IS `Send`** — safe to use in async-to-sync bridge for command
+  feedback. Create channel before dispatch, pass sender to source, drain receiver after.
+- **Status sample capped at 12** in vanilla (random subset of online players).
+
+#### Entity Selectors
+
+- Basic implementation: parse `@a/@e/@p/@r/@s/@n`, resolve from `ServerHandle` online player
+  list. `@s` returns executing player (error from console). `@r` is deterministic (TODO: rand).
+- Filter syntax `[key=value]` accepted by parser (bracket detected) but not processed.
+- `get_entities()`/`get_entity()` context getters handle selectors OR plain player names.
+- Tab-completion suggests selectors when input starts with `@` or is empty.
+
+#### Console Commands
+
+- Tokio task reads stdin via `BufReader::lines()`, builds `CommandSourceStack` with Console
+  source, dispatches through `server_ctx.commands`. Feedback printed to stdout.
+- `/stop` detection: exact word match on first whitespace-delimited token (NOT prefix match).
+- Shutdown signal via `broadcast::channel` — `tokio::select!` on Ctrl+C OR shutdown_rx.
+
+#### Vanilla Command Stubs
+
+- 78 total commands registered (16 implemented + 62 stubs). Stubs return "not yet implemented".
+- Aliases registered separately: experience→xp, msg→tell/w, teammsg→tm.
+- All stubs visible in client tab-completion.
+
+#### Test Coverage
+
+- 9 new selector tests, workspace total: 1476 tests.
