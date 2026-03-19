@@ -1018,3 +1018,42 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
   (512 blocks), not 10 chunks. Always multiply by 16 to get block distance.
 - Bounds-checking Vec allocation against remaining buffer bytes is essential safety hardening
   beyond just checking for negative counts.
+
+### Phase 16 — Basic Physics (2026-03)
+
+#### What Went Well
+- Java reference verification prevented 5 major discrepancies from phase doc
+- TDD cycle smooth — 40 new tests (unit + integration), all passing on first fix cycle
+- Code review passed with zero significant issues
+
+#### Phase Doc Errors Discovered
+1. **Axis order WRONG**: Phase doc uses X→Y→Z. Java uses Y first, then X/Z by movement 
+   magnitude (`Direction.axisStepOrder()`): |dx|>=|dz| → Y→X→Z, else Y→Z→X.
+2. **Gravity timing WRONG**: Phase doc applies gravity first. Java applies AFTER friction/input.
+3. **Velocity packet WRONG**: Phase doc says i16*8000. Java uses LpVec3 (same as AddEntity).
+4. **Powder snow speed WRONG**: Phase doc says 0.3. Java uses `makeStuckInBlock(Vec3(0.9, 1.5, 0.9))`.
+5. **VoxelShape::translated bug**: Phase doc has `bx` instead of `bz` for max_z.
+6. **Blue ice missing**: Phase doc doesn't mention BLUE_ICE (friction=0.989 vs 0.98 for other ice).
+
+#### Key Patterns
+- `physics_tick()` in `oxidized_game::physics::tick` — full per-tick physics update
+- `collide_with_shapes()` — movement-dependent axis ordering (Y first)
+- `clip_x/y/z()` — per-axis AABB sweep collision
+- `collect_obstacles()` — gather block shapes in swept volume
+- `apply_jump()` in `oxidized_game::physics::jump` — jump with boost/sprint
+- `BlockShapeProvider` trait + `FullCubeShapeProvider` — block collision shape lookup
+- `VoxelShape::translated()` — convert block-local shapes to world-space Aabb
+
+#### Block Friction Values (from Blocks.java)
+- Default: 0.6
+- ICE/PACKED_ICE/FROSTED_ICE: 0.98
+- BLUE_ICE: 0.989
+- SLIME_BLOCK: 0.8
+
+#### Technical Debt
+- Block friction/speed lookups are stubbed (TODO p08) — need block registry integration
+- No step-up algorithm yet — Entity default is 0.0, LivingEntity uses STEP_HEIGHT attribute (0.6)
+- No entity-entity collision (boats, minecarts, mob pushing)
+- Honey block sticky sliding not implemented
+- Slime block bounce not implemented
+- Cobweb/sweet berry/bubble column velocity modifiers not implemented
