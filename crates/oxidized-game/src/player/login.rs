@@ -74,9 +74,26 @@ pub fn build_login_sequence(
     dimensions: &[ResourceLocation],
     dimension_type_id: i32,
 ) -> Vec<EncodedPacket> {
-    let mut packets = Vec::with_capacity(8);
+    let packets = vec![
+        build_login_packet(player, level_data, all_players, dimensions, dimension_type_id),
+        build_abilities_packet(player),
+        build_spawn_position_packet(player, level_data),
+        build_game_mode_event_packet(player),
+        build_player_info_packet(all_players),
+        build_chunk_center_packet(player),
+        build_simulation_distance_packet(player),
+        build_position_packet(player, teleport_id),
+    ];
+    packets
+}
 
-    // 1. ClientboundLoginPacket
+fn build_login_packet(
+    player: &ServerPlayer,
+    level_data: &PrimaryLevelData,
+    all_players: &PlayerList,
+    dimensions: &[ResourceLocation],
+    dimension_type_id: i32,
+) -> EncodedPacket {
     let login = ClientboundLoginPacket {
         player_id: player.entity_id,
         hardcore: level_data.hardcore,
@@ -101,23 +118,28 @@ pub fn build_login_sequence(
         },
         enforces_secure_chat: false,
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundLoginPacket::PACKET_ID,
         body: login.encode(),
-    });
+    }
+}
 
-    // 2. ClientboundPlayerAbilitiesPacket
+fn build_abilities_packet(player: &ServerPlayer) -> EncodedPacket {
     let abilities = ClientboundPlayerAbilitiesPacket {
         flags: player.abilities.flags_byte(),
         fly_speed: player.abilities.fly_speed,
         walk_speed: player.abilities.walk_speed,
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundPlayerAbilitiesPacket::PACKET_ID,
         body: abilities.encode(),
-    });
+    }
+}
 
-    // 3. ClientboundSetDefaultSpawnPositionPacket
+fn build_spawn_position_packet(
+    player: &ServerPlayer,
+    level_data: &PrimaryLevelData,
+) -> EncodedPacket {
     let (sx, sy, sz) = level_data.spawn_pos();
     let spawn_block = BlockPos::new(sx, sy, sz);
     let spawn_pos = ClientboundSetDefaultSpawnPositionPacket {
@@ -126,22 +148,24 @@ pub fn build_login_sequence(
         yaw: level_data.spawn_angle,
         pitch: 0.0,
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundSetDefaultSpawnPositionPacket::PACKET_ID,
         body: spawn_pos.encode(),
-    });
+    }
+}
 
-    // 4. ClientboundGameEventPacket — CHANGE_GAME_MODE
+fn build_game_mode_event_packet(player: &ServerPlayer) -> EncodedPacket {
     let game_event = ClientboundGameEventPacket {
         event: GameEventType::ChangeGameMode,
         param: player.game_mode.id() as f32,
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundGameEventPacket::PACKET_ID,
         body: game_event.encode(),
-    });
+    }
+}
 
-    // 5. ClientboundPlayerInfoUpdatePacket — all online players
+fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
     let info_entries: Vec<PlayerInfoEntry> = all_players
         .iter()
         .map(|p| {
@@ -169,31 +193,34 @@ pub fn build_login_sequence(
         ),
         entries: info_entries,
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
         body: player_info.encode(),
-    });
+    }
+}
 
-    // 6. ClientboundSetChunkCacheCenterPacket
+fn build_chunk_center_packet(player: &ServerPlayer) -> EncodedPacket {
     let chunk_center = ClientboundSetChunkCacheCenterPacket {
         chunk_x: player.chunk_x(),
         chunk_z: player.chunk_z(),
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundSetChunkCacheCenterPacket::PACKET_ID,
         body: chunk_center.encode(),
-    });
+    }
+}
 
-    // 7. ClientboundSetSimulationDistancePacket
+fn build_simulation_distance_packet(player: &ServerPlayer) -> EncodedPacket {
     let sim_dist = ClientboundSetSimulationDistancePacket {
         simulation_distance: player.simulation_distance,
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundSetSimulationDistancePacket::PACKET_ID,
         body: sim_dist.encode(),
-    });
+    }
+}
 
-    // 8. ClientboundPlayerPositionPacket — initial position
+fn build_position_packet(player: &ServerPlayer, teleport_id: i32) -> EncodedPacket {
     let position = ClientboundPlayerPositionPacket {
         teleport_id,
         x: player.pos.x,
@@ -206,12 +233,10 @@ pub fn build_login_sequence(
         pitch: player.pitch,
         relative_flags: RelativeFlags::empty(),
     };
-    packets.push(EncodedPacket {
+    EncodedPacket {
         id: ClientboundPlayerPositionPacket::PACKET_ID,
         body: position.encode(),
-    });
-
-    packets
+    }
 }
 
 /// Processes a client's teleport confirmation.

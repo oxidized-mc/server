@@ -321,46 +321,7 @@ impl PalettedContainer {
         };
         let bits_needed = bits_for_count(distinct_count);
 
-        // Build the new palette data
-        self.data = if bits_needed >= self.strategy.global_bits_threshold() {
-            // Global palette: use registry-derived bits, not bits_needed
-            let global_bits = self.strategy.global_palette_bits();
-            let mut storage = BitStorage::new(global_bits, size)?;
-            for (i, &v) in values.iter().enumerate() {
-                storage.set(i, u64::from(v))?;
-            }
-            PaletteData::Global(storage)
-        } else if bits_needed >= self.strategy.hashmap_bits_threshold() {
-            let storage_bits = self.strategy.storage_bits(bits_needed);
-            let mut palette = HashMapPalette::new(storage_bits);
-            let mut storage = BitStorage::new(storage_bits, size)?;
-            for (i, &v) in values.iter().enumerate() {
-                let result = palette.index_or_insert(v);
-                let idx = match result {
-                    PaletteAddResult::Existing(idx) | PaletteAddResult::New(idx) => idx,
-                    PaletteAddResult::NeedsResize => {
-                        return Err(PalettedContainerError::InvalidBitsPerEntry(bits_needed));
-                    },
-                };
-                storage.set(i, u64::from(idx))?;
-            }
-            PaletteData::HashMap(palette, storage)
-        } else {
-            let storage_bits = self.strategy.storage_bits(bits_needed);
-            let mut palette = LinearPalette::new(storage_bits);
-            let mut storage = BitStorage::new(storage_bits, size)?;
-            for (i, &v) in values.iter().enumerate() {
-                let result = palette.index_or_insert(v);
-                let idx = match result {
-                    PaletteAddResult::Existing(idx) | PaletteAddResult::New(idx) => idx,
-                    PaletteAddResult::NeedsResize => {
-                        return Err(PalettedContainerError::InvalidBitsPerEntry(bits_needed));
-                    },
-                };
-                storage.set(i, u64::from(idx))?;
-            }
-            PaletteData::Linear(palette, storage)
-        };
+        self.data = build_palette_data_from_values(self.strategy, bits_needed, &values)?;
         Ok(())
     }
 
@@ -472,31 +433,19 @@ impl PalettedContainer {
                 strategy,
                 data: PaletteData::Global(storage),
             })
-        } else if bits_per_entry >= strategy.hashmap_bits_threshold() {
-            // HashMap palette
-            let palette_len = read_varint(data)? as usize;
-            let mut entries = Vec::with_capacity(palette_len);
-            for _ in 0..palette_len {
-                entries.push(read_varint(data)? as u32);
-            }
-            let palette = HashMapPalette::from_entries(bits_per_entry, entries);
-            let storage = read_bit_storage(bits_per_entry, size, data)?;
-            Ok(Self {
-                strategy,
-                data: PaletteData::HashMap(palette, storage),
-            })
         } else {
-            // Linear palette
+            // Linear or HashMap palette — read entries then select tier
             let palette_len = read_varint(data)? as usize;
             let mut entries = Vec::with_capacity(palette_len);
             for _ in 0..palette_len {
                 entries.push(read_varint(data)? as u32);
             }
-            let palette = LinearPalette::from_entries(bits_per_entry, entries);
             let storage = read_bit_storage(bits_per_entry, size, data)?;
+            let palette_data =
+                build_palette_data_from_entries(strategy, bits_per_entry, entries, storage);
             Ok(Self {
                 strategy,
-                data: PaletteData::Linear(palette, storage),
+                data: palette_data,
             })
         }
     }
@@ -569,12 +518,8 @@ impl PalettedContainer {
                 global_storage.set(i, u64::from(registry_id))?;
             }
             PaletteData::Global(global_storage)
-        } else if storage_bits >= strategy.hashmap_bits_threshold() {
-            let palette = HashMapPalette::from_entries(storage_bits, palette_ids);
-            PaletteData::HashMap(palette, storage)
         } else {
-            let palette = LinearPalette::from_entries(storage_bits, palette_ids);
-            PaletteData::Linear(palette, storage)
+            build_palette_data_from_entries(strategy, storage_bits, palette_ids, storage)
         };
 
         Ok(Self { strategy, data })
@@ -595,6 +540,79 @@ impl PalettedContainer {
 }
 
 // ── Helper functions ───────────────────────────────────────────────────────
+
+/// Builds [`PaletteData`] by inserting raw values into the correct palette tier.
+///
+/// Used during palette upgrades where all container values need to be
+/// re-indexed into a fresh palette of the appropriate tier.
+fn build_palette_data_from_values(
+    strategy: Strategy,
+    bits_needed: u8,
+    values: &[u32],
+) -> Result<PaletteData, PalettedContainerError> {
+    let size = values.len();
+
+    if bits_needed >= strategy.global_bits_threshold() {
+        let global_bits = strategy.global_palette_bits();
+        let mut storage = BitStorage::new(global_bits, size)?;
+        for (i, &v) in values.iter().enumerate() {
+            storage.set(i, u64::from(v))?;
+        }
+        return Ok(PaletteData::Global(storage));
+    }
+
+    let storage_bits = strategy.storage_bits(bits_needed);
+    let use_hashmap = bits_needed >= strategy.hashmap_bits_threshold();
+
+    if use_hashmap {
+        let mut palette = HashMapPalette::new(storage_bits);
+        let mut storage = BitStorage::new(storage_bits, size)?;
+        for (i, &v) in values.iter().enumerate() {
+            let idx = unwrap_palette_index(palette.index_or_insert(v), bits_needed)?;
+            storage.set(i, u64::from(idx))?;
+        }
+        Ok(PaletteData::HashMap(palette, storage))
+    } else {
+        let mut palette = LinearPalette::new(storage_bits);
+        let mut storage = BitStorage::new(storage_bits, size)?;
+        for (i, &v) in values.iter().enumerate() {
+            let idx = unwrap_palette_index(palette.index_or_insert(v), bits_needed)?;
+            storage.set(i, u64::from(idx))?;
+        }
+        Ok(PaletteData::Linear(palette, storage))
+    }
+}
+
+/// Builds [`PaletteData`] from pre-read palette entries and bit storage.
+///
+/// Selects between [`LinearPalette`] and [`HashMapPalette`] based on the
+/// strategy's threshold for the given bits per entry.
+fn build_palette_data_from_entries(
+    strategy: Strategy,
+    bits_per_entry: u8,
+    entries: Vec<u32>,
+    storage: BitStorage,
+) -> PaletteData {
+    if bits_per_entry >= strategy.hashmap_bits_threshold() {
+        let palette = HashMapPalette::from_entries(bits_per_entry, entries);
+        PaletteData::HashMap(palette, storage)
+    } else {
+        let palette = LinearPalette::from_entries(bits_per_entry, entries);
+        PaletteData::Linear(palette, storage)
+    }
+}
+
+/// Extracts the palette index from a [`PaletteAddResult`], or returns an
+/// error if the palette unexpectedly needs a resize.
+fn unwrap_palette_index(
+    result: PaletteAddResult,
+    bits: u8,
+) -> Result<u32, PalettedContainerError> {
+    match result {
+        PaletteAddResult::Existing(idx) | PaletteAddResult::New(idx) => Ok(idx),
+        PaletteAddResult::NeedsResize => Err(PalettedContainerError::InvalidBitsPerEntry(bits)),
+    }
+}
 
 /// Returns the minimum number of bits to represent `count` distinct values.
 fn bits_for_count(count: usize) -> u8 {

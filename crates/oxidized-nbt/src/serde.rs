@@ -444,6 +444,33 @@ impl ser::SerializeStructVariant for NbtStructSerializer {
 /// Serde [`Deserializer`] wrapping a reference to an [`NbtTag`].
 struct NbtDeserializer<'a>(&'a NbtTag);
 
+/// Generates a primitive `deserialize_*` trait method that matches a single
+/// [`NbtTag`] variant and forwards to the corresponding visitor method.
+macro_rules! deserialize_prim {
+    ($method:ident, $variant:ident, $visit:ident, $ty_name:literal) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+            match self.0 {
+                NbtTag::$variant(v) => visitor.$visit(*v),
+                _ => Err(Error(format!(
+                    concat!("expected ", $ty_name, ", got {}"),
+                    self.0.type_name()
+                ))),
+            }
+        }
+    };
+    ($method:ident, $variant:ident, $visit:ident as $cast:ty, $ty_name:literal) => {
+        fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+            match self.0 {
+                NbtTag::$variant(v) => visitor.$visit(*v as $cast),
+                _ => Err(Error(format!(
+                    concat!("expected ", $ty_name, ", got {}"),
+                    self.0.type_name()
+                ))),
+            }
+        }
+    };
+}
+
 impl<'de, 'a> de::Deserializer<'de> for NbtDeserializer<'a> {
     type Error = Error;
 
@@ -504,78 +531,16 @@ impl<'de, 'a> de::Deserializer<'de> for NbtDeserializer<'a> {
         }
     }
 
-    fn deserialize_i8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Byte(v) => visitor.visit_i8(*v),
-            _ => Err(Error(format!("expected byte, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_i16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Short(v) => visitor.visit_i16(*v),
-            _ => Err(Error(format!("expected short, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_i32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Int(v) => visitor.visit_i32(*v),
-            _ => Err(Error(format!("expected int, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_i64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Long(v) => visitor.visit_i64(*v),
-            _ => Err(Error(format!("expected long, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_u8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Byte(v) => visitor.visit_u8(*v as u8),
-            _ => Err(Error(format!("expected byte, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_u16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Short(v) => visitor.visit_u16(*v as u16),
-            _ => Err(Error(format!("expected short, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_u32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Int(v) => visitor.visit_u32(*v as u32),
-            _ => Err(Error(format!("expected int, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_u64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Long(v) => visitor.visit_u64(*v as u64),
-            _ => Err(Error(format!("expected long, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_f32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Float(v) => visitor.visit_f32(*v),
-            _ => Err(Error(format!("expected float, got {}", self.0.type_name()))),
-        }
-    }
-
-    fn deserialize_f64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            NbtTag::Double(v) => visitor.visit_f64(*v),
-            _ => Err(Error(format!(
-                "expected double, got {}",
-                self.0.type_name()
-            ))),
-        }
-    }
+    deserialize_prim!(deserialize_i8, Byte, visit_i8, "byte");
+    deserialize_prim!(deserialize_i16, Short, visit_i16, "short");
+    deserialize_prim!(deserialize_i32, Int, visit_i32, "int");
+    deserialize_prim!(deserialize_i64, Long, visit_i64, "long");
+    deserialize_prim!(deserialize_u8, Byte, visit_u8 as u8, "byte");
+    deserialize_prim!(deserialize_u16, Short, visit_u16 as u16, "short");
+    deserialize_prim!(deserialize_u32, Int, visit_u32 as u32, "int");
+    deserialize_prim!(deserialize_u64, Long, visit_u64 as u64, "long");
+    deserialize_prim!(deserialize_f32, Float, visit_f32, "float");
+    deserialize_prim!(deserialize_f64, Double, visit_f64, "double");
 
     fn deserialize_char<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         match self.0 {
