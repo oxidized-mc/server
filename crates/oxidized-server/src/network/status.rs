@@ -1,0 +1,110 @@
+//! Status state handler.
+//!
+//! Responds to server list ping requests with the server's current status
+//! (player count, version, MOTD) and echoes pong packets.
+
+use oxidized_protocol::connection::{Connection, ConnectionError, RawPacket};
+use oxidized_protocol::packets::status::{
+    ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
+    ServerboundStatusRequestPacket,
+};
+use oxidized_protocol::status::ServerStatus;
+use tracing::{debug, warn};
+
+use super::LoginContext;
+
+/// Processes STATUS state packets.
+///
+/// Returns `true` when the exchange is complete (after sending the pong),
+/// signaling the connection should close.
+pub async fn handle_status(
+    conn: &mut Connection,
+    pkt: RawPacket,
+    ctx: &LoginContext,
+) -> Result<bool, ConnectionError> {
+    match pkt.id {
+        ServerboundStatusRequestPacket::PACKET_ID => {
+            let _request = ServerboundStatusRequestPacket::decode(pkt.data);
+
+            // Build the status dynamically from live server state so
+            // player count and sample are always up to date.
+            let server_ctx = &ctx.server_ctx;
+            let (online, sample) = {
+                let player_list = server_ctx.player_list.read();
+                let count = player_list.player_count() as u32;
+                let entries: Vec<_> = player_list
+                    .iter()
+                    .take(12) // Vanilla caps the sample at 12
+                    .map(|p| {
+                        let p = p.read();
+                        oxidized_protocol::status::PlayerSample {
+                            name: p.name.clone(),
+                            id: p.uuid,
+                        }
+                    })
+                    .collect();
+                (count, entries)
+            };
+
+            let base = &*ctx.server_status;
+            let live_status = ServerStatus {
+                version: base.version.clone(),
+                players: oxidized_protocol::status::StatusPlayers {
+                    max: server_ctx.max_players as u32,
+                    online,
+                    sample,
+                },
+                description: base.description.clone(),
+                favicon: base.favicon.clone(),
+                enforces_secure_chat: base.enforces_secure_chat,
+            };
+
+            let response = ClientboundStatusResponsePacket {
+                status_json: live_status
+                    .to_json()
+                    .map_err(|e| ConnectionError::Io(std::io::Error::other(e.to_string())))?,
+            };
+            let body = response.encode();
+            conn.send_raw(ClientboundStatusResponsePacket::PACKET_ID, &body)
+                .await?;
+            conn.flush().await?;
+
+            debug!(
+                peer = %conn.remote_addr(),
+                online = online,
+                json_len = response.status_json.len(),
+                "Sent status response",
+            );
+            Ok(false)
+        },
+        ServerboundPingRequestPacket::PACKET_ID => {
+            let ping = ServerboundPingRequestPacket::decode(pkt.data).map_err(|e| {
+                ConnectionError::Io(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    e.to_string(),
+                ))
+            })?;
+
+            let pong = ClientboundPongResponsePacket { time: ping.time };
+            let body = pong.encode();
+            conn.send_raw(ClientboundPongResponsePacket::PACKET_ID, &body)
+                .await?;
+            conn.flush().await?;
+
+            debug!(
+                peer = %conn.remote_addr(),
+                time = ping.time,
+                "Sent pong response",
+            );
+            Ok(true) // Close after pong (vanilla behavior)
+        },
+        unknown => {
+            warn!(
+                peer = %conn.remote_addr(),
+                packet_id = unknown,
+                "Unknown status packet",
+            );
+            Ok(false)
+        },
+    }
+}
