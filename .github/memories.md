@@ -1519,3 +1519,41 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - Per-packet builder functions (`build_*_packet()`) improve testability of login sequence.
 
 **Status:** R6 complete. R3 (component.rs split), R7 (doc comments) remain.
+
+---
+
+## Phase R2 — Packet Trait & Unified Codec Refactoring
+
+### Analysis Findings (Pre-Implementation)
+
+**Pattern gap identified:** All 59 packets implement identical inherent methods
+(`PACKET_ID`, `decode()`, `encode()`) but no trait unifies them. This causes:
+1. **15 per-packet error types** — most are single-variant wrappers around `TypeError`
+2. **16 identical `map_err` conversions** — in server handler code
+3. **No generic send/receive** — 3-line manual encode+send_raw+flush pattern
+4. **No generic roundtrip testing** — each test must be hand-written
+
+**ADR-007 was never implemented:** The Packet trait, McRead/McWrite, and derive macros
+were specified in ADR-007 but the macros in `oxidized-macros/src/lib.rs` are stubs
+(returning empty `TokenStream`). ADR-038 captures the incremental implementation plan.
+
+**Key design decisions (ADR-038):**
+- `Packet` trait: `const PACKET_ID: i32` + `decode(Bytes)` + `encode() -> BytesMut`
+- `PacketDecodeError`: unified enum wrapping TypeError, VarIntError, io::Error,
+  ResourceLocationError, NbtError, plus `InvalidData(String)` catch-all
+- All monomorphized (static dispatch) — no `Box<dyn Packet>`, no vtable overhead
+- Incremental migration: trait impls added alongside existing inherent methods, callers
+  migrated one handler at a time, old error types removed last
+- Derive macros deferred to a later phase
+
+**Migration order:** Status (4 pkt) → Handshake (1) → Login (7) → Configuration (8) → Play (39)
+
+**Explicitly not recommended (evaluated and rejected):**
+- ServerHandle sub-traits — only 2 implementors, premature
+- Arc<RwLock<T>> wrapper — mixed lock types are intentional
+- Plugin/dynamic registration — YAGNI
+- Typestate builders — current builders are correct
+- ComponentFormat trait — only 2 stable formats
+- Auto-registration (inventory/linkme) — compile-time registration sufficient
+
+**Status:** ADR-038 created, phase-r2-refactoring.md created. Implementation not started.
