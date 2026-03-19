@@ -235,6 +235,28 @@ All logic must follow TDD:
 
 Test naming: `test_<thing>_<condition>` or `<thing>_<outcome>_when_<condition>`.
 
+### Test Types (ADR-034)
+
+The project uses 6 test types (see [ADR-034](docs/adr/adr-034-testing-strategy.md)):
+
+| Type | Location | Framework | When to use |
+|------|----------|-----------|-------------|
+| **Unit** | `#[cfg(test)] mod tests` inline | `#[test]` | Every function/method |
+| **Integration** | `crates/<crate>/tests/*.rs` | `#[test]` | Cross-module workflows, public API only |
+| **Property-based** | inline or `tests/` | `proptest` | All parsers, codecs, roundtrips |
+| **Compliance** | `crates/oxidized-protocol/tests/compliance.rs` | custom | Protocol byte-for-byte verification |
+| **Doc** | `///` comments on public items | `cargo test --doc` | Every public struct/enum/function |
+| **Snapshot** | inline with `insta` | `insta::assert_snapshot!` | Error messages, generated output |
+
+**Minimum per PR:** Unit + Integration + Property-based (for parsers/codecs).
+
+**Conventions:**
+- Every test file/module starts with `#[allow(clippy::unwrap_used, clippy::expect_used)]`
+- Integration tests use **public API only** — no `pub(crate)` access
+- Proptest functions named `proptest_<thing>_<invariant>`
+- Doc examples must be self-contained (compile without external state)
+- Snapshot `.snap` files are committed alongside source in `snapshots/` dirs
+
 ---
 
 ### Reference Consistency Check (before every commit)

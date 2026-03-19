@@ -867,3 +867,51 @@ The fluid count was added in 26.1-pre-3 — older protocol docs may not show it.
 - Chunks are empty air (no worldgen/disk loading) — real chunks in later phases
 - No per-tick chunk throttling — all chunks sent in one batch during login
 - Block entities always VarInt(0) — no block entity support yet
+
+### 2026-03-19 — Testing Infrastructure: ADR-034 Compliance
+
+**Context:** Expanded from unit-tests-only to 6 of 8 ADR-034 test types.
+
+#### Test Infrastructure Summary
+| Type | Count | Framework | Status |
+|------|-------|-----------|--------|
+| Unit | 908 | `#[test]` | ✅ Pre-existing |
+| Integration | 40 | `tests/` dirs | ✅ Added |
+| Property-based | 25 | `proptest` | ✅ Added |
+| Compliance | 5 | custom | ✅ Added |
+| Doc tests | 37 | `///` examples | ✅ Added |
+| Snapshot | 27 | `insta` | ✅ Added |
+| Fuzz | 0 | `cargo-fuzz` | ❌ Future |
+| Benchmark | 0 | `criterion` | ❌ Future |
+
+#### Key Decisions
+- **Integration tests use public API only** — no `pub(crate)` access. Files in `crates/*/tests/`.
+- **Proptest added to 4 crates** (nbt, protocol, world, game) — covers all codecs/parsers per ADR-034.
+- **Insta snapshot tests for error Display** — prevents accidental error message changes.
+  Snapshots are `.snap` files next to source in `snapshots/` dirs.
+- **Compliance tests** in `crates/oxidized-protocol/tests/compliance.rs` — VarInt/VarLong
+  wiki.vg test vectors + handshake packet byte-for-byte verification.
+
+#### Test Conventions Established
+- Integration test files: `crates/<crate>/tests/<descriptive_name>.rs`
+- Every test file starts with `#[allow(clippy::unwrap_used, clippy::expect_used)]`
+- Proptest functions named `proptest_<thing>_<invariant>`
+- Snapshot test functions named `test_<error_type>_display_snapshots`
+- Doc examples must be self-contained (no external state)
+
+#### What's Missing (Still Needed)
+- **Connection state tests** — `Connection::new()` requires real TcpStream; needs refactoring
+  to extract state logic for unit-level testing
+- **Fuzz tests** — need `cargo-fuzz` infrastructure setup
+- **Benchmarks** — need `criterion` setup in `benches/` dirs
+- **View distance capping** — server uses client's view_distance (16) uncapped instead of
+  config max (10), sending 1089 chunks instead of 441
+
+#### Heightmap CLIENT_TYPES Fix
+Phase 13 was missing `MotionBlockingNoLeaves` (type_id=5) in CLIENT_TYPES.
+Java sends 3 client types: WORLD_SURFACE(1), MOTION_BLOCKING(4), MOTION_BLOCKING_NO_LEAVES(5).
+Fixed in commit 478d145.
+
+#### LEVEL_CHUNKS_LOAD_START Fix
+Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client to exit
+"Loading Terrain" screen. We were missing this packet entirely. Fixed in commit 8315483.
