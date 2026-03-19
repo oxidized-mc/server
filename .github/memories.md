@@ -1465,3 +1465,39 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
   The increase is purely from 16 new tests (53 → 202 test lines). This is healthy growth.
 
 **Status:** R4 complete. R3 (component.rs split) and R5 (type macros) are independent next steps.
+
+### Phase R5 Retrospective — Protocol Type Macros
+
+**Completed:** Eliminated ~144 lines of duplicated boilerplate across types + codec.
+
+**What went well:**
+- `impl_vector_ops!` with `no_neg` variant cleanly handles Vec3 (Add+Sub+Neg) vs Vec3i
+  (Add+Sub only). The nesting pattern (`$type` variant calls `$type, no_neg` then adds Neg)
+  avoids macro code duplication.
+- `impl_wire_primitive!` replaced 7 read/write pairs without `paste` crate — passing both
+  `$read_fn` and `$write_fn` names avoids a new dependency. Doc comments passed via
+  `$(#[$meta])*` pattern.
+- VarEncoding trait + generic `encode_var`/`decode_var` cleanly unifies VarInt/VarLong.
+  Trait is module-private; public API preserved as thin wrappers.
+- AABB `expand_axis`/`contract_axis` helpers are mathematically distinct (expand: `min+d` /
+  `max+d`; contract: `min-d` / `max-d`) — the phase doc's suggestion that contract=expand(-d)
+  was mathematically incorrect. Caught during implementation.
+
+**Patterns to reuse:**
+- `#[macro_use] mod type_macros;` as first module in `mod.rs` — ensures macros available
+  to all sibling modules. Must come before any module that invokes the macros.
+- `impl_vector_ops!` requires `add_vec(self, rhs) -> Self`, `subtract_vec(self, rhs) -> Self`,
+  `negate(self) -> Self` methods. Vec3i's `add_vec` delegates to `offset(other.x, other.y, other.z)`.
+- Avoiding `paste` crate: pass both names to macros instead of concatenating identifiers.
+
+**Gotchas discovered:**
+- `contract()` ≠ `expand_towards(-d)`. They affect opposite sides of the AABB. Separate
+  helpers needed — do not try to unify them.
+- Vec3 has both `subtract(dx, dy, dz)` (3 args) and `subtract_vec(rhs: Vec3)` (1 arg).
+  The macro uses `subtract_vec` to avoid ambiguity with the inherent 3-arg method.
+- `std::ops::{Add, Sub, Neg}` imports can be removed from files using the macro since the
+  macro uses fully-qualified `std::ops::Add`. Operator `+`/`-` work without trait in scope.
+- `impl_directional!` generates `pub const fn` methods — requires `offset()` to also be
+  `const fn`, which it already is on both Vec3i and BlockPos.
+
+**Status:** R5 complete. R3 (component.rs split), R6 (module docs), R7 (doc comments) remain.
