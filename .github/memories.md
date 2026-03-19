@@ -1358,3 +1358,52 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 #### Test Coverage
 
 - 9 new selector tests, workspace total: 1476 tests.
+
+---
+
+### Post-Phase-18 Architectural Review (2026-03-19)
+
+#### God Files Identified
+
+- **`network.rs` (2079 LOC)** — 6 responsibilities in one file: listener, 4 state handlers,
+  auth, chat, commands, helpers. `handle_play_entry()` is 715 lines. 433-line if-else chain
+  for packet dispatch. 19 repeated decode+match+log blocks.
+- **`component.rs` (1439 LOC)** — 6 responsibilities: structs, builders, display, JSON serde,
+  NBT serde, legacy. Same 6 content variants matched in 11 separate blocks across 3 formats.
+- **`context.rs` (642 LOC)** — 155-line `parse_argument()` match. 13 near-identical typed
+  getter functions. Numeric validation copy-pasted 4 times.
+
+#### ADR-008 Deviation
+
+- ADR-008 specified typestate `Connection<S: State>` but implementation uses runtime
+  `ConnectionState` enum. Pragmatic choice — typestate adds async signature complexity.
+  Module-level safety (per ADR-036) achieves the same goal. Do NOT retroactively implement
+  typestate.
+
+#### Refactoring ADRs Created
+
+- **ADR-035** — Module Structure & File Size Policy (soft ~500 LOC guideline, hard rules
+  on responsibility count and match arm count)
+- **ADR-036** — Packet Handler Architecture (match dispatch + handler functions +
+  decode_packet helper + PlayContext struct)
+- **ADR-037** — Coordinate & Vector Type Macros (impl_vector_ops!, impl_directional!,
+  impl_axis_accessor!, impl_wire_primitive!)
+
+#### Type Boilerplate
+
+- ~200 lines of duplicated patterns across Vec3/Vec3i/BlockPos/SectionPos: operator
+  overloading, directional accessors, axis accessors, wire format read/write.
+- VarInt/VarLong encode/decode are near-identical functions (~67 lines duplication).
+- `codec/types.rs` has 11 read/write primitive pairs as copy-paste boilerplate.
+
+#### Well-Architected Areas (Don't Touch)
+
+- **World crate** — bit_storage.rs, region.rs, level_chunk.rs are clean, focused, well-tested.
+- **Physics** — tick.rs is clean (84-line main function), minimal branching, good helpers.
+- **snbt.rs/serde.rs** — well-organized with clear sections. Duplication is localized (macro
+  candidates but not urgent). No splitting needed until files exceed ~1500 LOC.
+
+#### Refactoring Phase
+
+- Phase R1 doc at `docs/phases/phase-r1-refactoring.md`. Should be done between P18 and P19.
+- 6 sub-phases (R1–R6), 27 work items. Critical path: ADRs → network.rs split → component split.
