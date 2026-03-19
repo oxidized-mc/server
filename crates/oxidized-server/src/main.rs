@@ -165,6 +165,7 @@ fn main() -> anyhow::Result<()> {
             dimensions,
             max_view_distance: config.world.view_distance as i32,
             max_simulation_distance: config.world.simulation_distance as i32,
+            chat_tx: broadcast::channel(256).0,
         });
 
         // Build the shared login context.

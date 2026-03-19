@@ -12,10 +12,12 @@ use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::chunk::view_distance::spiral_chunks;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_game::player::movement::validate_movement;
+use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::player::{
     GameMode, PlayerList, ServerPlayer, build_login_sequence, handle_accept_teleportation,
 };
 use oxidized_protocol::auth;
+use oxidized_protocol::chat::Component;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
 use oxidized_protocol::crypto::{
     ServerKeyPair, generate_challenge, minecraft_digest, offline_uuid,
@@ -37,8 +39,9 @@ use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
     ClientboundForgetLevelChunkPacket, ClientboundGameEventPacket,
     ClientboundLevelChunkWithLightPacket, ClientboundPlayerPositionPacket,
-    ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
-    PlayerCommandAction, RelativeFlags, ServerboundAcceptTeleportationPacket,
+    ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
+    ClientboundSystemChatPacket, GameEventType, PlayerCommandAction, RelativeFlags,
+    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket, ServerboundChatPacket,
     ServerboundChunkBatchReceivedPacket, ServerboundMovePlayerPacket,
     ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
 };
@@ -89,6 +92,17 @@ pub struct ServerContext {
     pub max_view_distance: i32,
     /// Maximum simulation distance allowed by the server config (2–32 chunks).
     pub max_simulation_distance: i32,
+    /// Broadcast channel for chat messages sent to all connected players.
+    pub chat_tx: broadcast::Sender<ChatBroadcastMessage>,
+}
+
+/// A chat message broadcast to all connected players.
+#[derive(Debug, Clone)]
+pub struct ChatBroadcastMessage {
+    /// Pre-encoded packet bytes (packet ID + body) ready for `send_raw`.
+    pub packet_id: i32,
+    /// Encoded packet body bytes.
+    pub data: bytes::Bytes,
 }
 
 /// Starts the TCP listener and accepts connections until a shutdown signal
@@ -825,6 +839,12 @@ async fn handle_play_entry(
     let initial_chunk = ChunkPos::from_block(player_chunk_x, player_chunk_z);
     let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, player_view_distance);
 
+    // Subscribe to chat broadcast channel.
+    let mut chat_rx = server_ctx.chat_tx.subscribe();
+
+    // Per-player chat rate limiter.
+    let mut rate_limiter = ChatRateLimiter::new();
+
     info!(
         peer = %addr,
         uuid = %uuid,
@@ -835,9 +855,34 @@ async fn handle_play_entry(
     );
 
     // PLAY read loop — handles movement, teleport confirmations, chunk batch
-    // rate feedback, sprint/sneak state, and logs other packets.
+    // rate feedback, sprint/sneak state, chat messages, and logs other packets.
     loop {
-        match conn.read_raw_packet().await {
+        tokio::select! {
+            // Receive broadcast chat messages from other players.
+            broadcast_result = chat_rx.recv() => {
+                match broadcast_result {
+                    Ok(msg) => {
+                        if let Err(e) = conn.send_raw(msg.packet_id, &msg.data).await {
+                            debug!(peer = %addr, error = %e, "Failed to send broadcast chat");
+                            break;
+                        }
+                        if let Err(e) = conn.flush().await {
+                            debug!(peer = %addr, error = %e, "Failed to flush broadcast chat");
+                            break;
+                        }
+                    },
+                    Err(broadcast::error::RecvError::Lagged(n)) => {
+                        debug!(peer = %addr, missed = n, "Chat broadcast lagged — dropped messages");
+                    },
+                    Err(broadcast::error::RecvError::Closed) => {
+                        debug!(peer = %addr, "Chat broadcast channel closed");
+                        break;
+                    },
+                }
+            },
+            // Read incoming packets from this client.
+            packet_result = conn.read_raw_packet() => {
+        match packet_result {
             Ok(pkt) => {
                 if pkt.id == ServerboundAcceptTeleportationPacket::PACKET_ID {
                     match ServerboundAcceptTeleportationPacket::decode(pkt.data) {
@@ -1060,6 +1105,68 @@ async fn handle_play_entry(
                             debug!(peer = %addr, error = %e, "Failed to decode player input");
                         },
                     }
+                } else if pkt.id == ServerboundChatPacket::PACKET_ID {
+                    match ServerboundChatPacket::decode(pkt.data) {
+                        Ok(chat_pkt) => {
+                            if !rate_limiter.try_acquire(std::time::Instant::now()) {
+                                warn!(peer = %addr, name = %player_name, "Chat rate-limited");
+                                let kick_msg = ClientboundSystemChatPacket {
+                                    content: Component::text("You are sending messages too quickly"),
+                                    overlay: false,
+                                };
+                                let _ = conn.send_raw(
+                                    ClientboundSystemChatPacket::PACKET_ID,
+                                    &kick_msg.encode(),
+                                ).await;
+                                let _ = conn.flush().await;
+                            } else {
+                                let decorated = Component::translatable(
+                                    "chat.type.text".to_string(),
+                                    vec![
+                                        Component::text(&player_name),
+                                        Component::text(&chat_pkt.message),
+                                    ],
+                                );
+                                let sys_pkt = ClientboundSystemChatPacket {
+                                    content: decorated,
+                                    overlay: false,
+                                };
+                                let encoded = sys_pkt.encode();
+                                let broadcast_msg = ChatBroadcastMessage {
+                                    packet_id: ClientboundSystemChatPacket::PACKET_ID,
+                                    data: encoded.freeze(),
+                                };
+                                let _ = server_ctx.chat_tx.send(broadcast_msg);
+                                info!(
+                                    peer = %addr,
+                                    player = %player_name,
+                                    message = %chat_pkt.message,
+                                    "Chat message",
+                                );
+                            }
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode chat packet");
+                        },
+                    }
+                } else if pkt.id == ServerboundChatCommandPacket::PACKET_ID {
+                    match ServerboundChatCommandPacket::decode(pkt.data) {
+                        Ok(cmd_pkt) => {
+                            if !rate_limiter.try_acquire(std::time::Instant::now()) {
+                                warn!(peer = %addr, name = %player_name, "Command rate-limited");
+                            } else {
+                                handle_chat_command(
+                                    conn,
+                                    &cmd_pkt.command,
+                                    &player_name,
+                                    server_ctx,
+                                ).await;
+                            }
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode chat command");
+                        },
+                    }
                 } else {
                     debug!(
                         peer = %addr,
@@ -1078,6 +1185,8 @@ async fn handle_play_entry(
                 break;
             },
         }
+            }, // end tokio::select! packet_result branch
+        } // end tokio::select!
     }
 
     // Clean up — remove player from the list.
@@ -1085,6 +1194,72 @@ async fn handle_play_entry(
     info!(peer = %addr, name = %player_name, "Player removed from player list");
 
     Ok(())
+}
+
+/// Handles a chat command (`/say`, `/me`), broadcasting the result.
+///
+/// Commands not recognized are silently ignored — the full command
+/// dispatcher comes in Phase 18.
+async fn handle_chat_command(
+    conn: &mut Connection,
+    command: &str,
+    player_name: &str,
+    server_ctx: &ServerContext,
+) {
+    let parts: Vec<&str> = command.splitn(2, ' ').collect();
+    let cmd_name = parts[0];
+    let args = parts.get(1).copied().unwrap_or("");
+
+    match cmd_name {
+        "say" => {
+            if args.is_empty() {
+                return;
+            }
+            // /say broadcasts as a system message: [<name>] <message>
+            let msg = Component::text(format!("[{player_name}] {args}"));
+            let pkt = ClientboundSystemChatPacket {
+                content: msg,
+                overlay: false,
+            };
+            let encoded = pkt.encode();
+            let broadcast = ChatBroadcastMessage {
+                packet_id: ClientboundSystemChatPacket::PACKET_ID,
+                data: encoded.freeze(),
+            };
+            let _ = server_ctx.chat_tx.send(broadcast);
+            info!(player = %player_name, message = %args, "Command /say");
+        },
+        "me" => {
+            if args.is_empty() {
+                return;
+            }
+            // /me broadcasts as: * <name> <action>
+            let msg = Component::text(format!("* {player_name} {args}"));
+            let pkt = ClientboundSystemChatPacket {
+                content: msg,
+                overlay: false,
+            };
+            let encoded = pkt.encode();
+            let broadcast = ChatBroadcastMessage {
+                packet_id: ClientboundSystemChatPacket::PACKET_ID,
+                data: encoded.freeze(),
+            };
+            let _ = server_ctx.chat_tx.send(broadcast);
+            info!(player = %player_name, action = %args, "Command /me");
+        },
+        _ => {
+            // Unknown command — send feedback to the player only.
+            let err_msg = ClientboundSystemChatPacket {
+                content: Component::text(format!("Unknown command: /{cmd_name}")),
+                overlay: false,
+            };
+            let _ = conn
+                .send_raw(ClientboundSystemChatPacket::PACKET_ID, &err_msg.encode())
+                .await;
+            let _ = conn.flush().await;
+            debug!(player = %player_name, command = %command, "Unknown command");
+        },
+    }
 }
 
 /// Sends the initial chunk batch for a player joining the world.
@@ -1269,6 +1444,7 @@ mod tests {
                 dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
                 max_view_distance: 10,
                 max_simulation_distance: 10,
+                chat_tx: broadcast::channel(256).0,
             }),
         })
     }

@@ -7,38 +7,8 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-// ---------------------------------------------------------------------------
-// Component (minimal — expanded in Phase 17)
-// ---------------------------------------------------------------------------
-
-/// A minimal Minecraft text component.
-///
-/// For Phase 3, only plain text is supported. This will be expanded to
-/// support `extra`, `translate`, `color`, `bold`, etc. in Phase 17.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Component {
-    /// The literal text content.
-    pub text: String,
-}
-
-impl Component {
-    /// Creates a new plain-text component.
-    pub fn text(s: impl Into<String>) -> Self {
-        Self { text: s.into() }
-    }
-}
-
-impl From<&str> for Component {
-    fn from(s: &str) -> Self {
-        Self::text(s)
-    }
-}
-
-impl From<String> for Component {
-    fn from(s: String) -> Self {
-        Self::text(s)
-    }
-}
+// Re-export Component from the chat module for backward compatibility.
+pub use crate::chat::Component;
 
 // ---------------------------------------------------------------------------
 // ServerStatus
@@ -195,12 +165,12 @@ mod tests {
     #[test]
     fn test_component_from_str() {
         let comp = Component::from("hello");
-        assert_eq!(comp.text, "hello");
+        assert_eq!(format!("{comp}"), "hello");
     }
 
     #[test]
     fn test_component_text_constructor() {
         let comp = Component::text("world".to_string());
-        assert_eq!(comp.text, "world");
+        assert_eq!(format!("{comp}"), "world");
     }
 }
