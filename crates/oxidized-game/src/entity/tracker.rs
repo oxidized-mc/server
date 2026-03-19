@@ -66,18 +66,13 @@ impl EntityTracker {
     ) -> (Vec<uuid::Uuid>, Vec<uuid::Uuid>) {
         let current = self.watching.entry(entity_id).or_default();
         let to_add: Vec<_> = now_watching.difference(current).copied().collect();
-        let to_remove: Vec<_> =
-            current.difference(&now_watching).copied().collect();
+        let to_remove: Vec<_> = current.difference(&now_watching).copied().collect();
         *current = now_watching;
         (to_add, to_remove)
     }
 
     /// Returns `true` if `player_uuid` is currently tracking `entity_id`.
-    pub fn is_tracking(
-        &self,
-        entity_id: i32,
-        player_uuid: &uuid::Uuid,
-    ) -> bool {
+    pub fn is_tracking(&self, entity_id: i32, player_uuid: &uuid::Uuid) -> bool {
         self.watching
             .get(&entity_id)
             .is_some_and(|s| s.contains(player_uuid))
@@ -101,9 +96,7 @@ impl EntityTracker {
 
     /// Returns the number of players watching a specific entity.
     pub fn watcher_count(&self, entity_id: i32) -> usize {
-        self.watching
-            .get(&entity_id)
-            .map_or(0, HashSet::len)
+        self.watching.get(&entity_id).map_or(0, HashSet::len)
     }
 }
 
@@ -165,8 +158,7 @@ mod tests {
         tracker.register(42, 64);
 
         let p1 = uuid::Uuid::new_v4();
-        let (add, remove) =
-            tracker.update(42, [p1].into_iter().collect());
+        let (add, remove) = tracker.update(42, [p1].into_iter().collect());
         assert_eq!(add.len(), 1);
         assert_eq!(add[0], p1);
         assert!(remove.is_empty());
@@ -185,8 +177,7 @@ mod tests {
         tracker.update(42, [p1, p2].into_iter().collect());
 
         // Second: only p2 watching → p1 removed
-        let (add, remove) =
-            tracker.update(42, [p2].into_iter().collect());
+        let (add, remove) = tracker.update(42, [p2].into_iter().collect());
         assert!(add.is_empty());
         assert_eq!(remove.len(), 1);
         assert_eq!(remove[0], p1);
@@ -203,8 +194,7 @@ mod tests {
         let p2 = uuid::Uuid::new_v4();
 
         tracker.update(42, [p1].into_iter().collect());
-        let (add, remove) =
-            tracker.update(42, [p2].into_iter().collect());
+        let (add, remove) = tracker.update(42, [p2].into_iter().collect());
         assert_eq!(add.len(), 1);
         assert_eq!(add[0], p2);
         assert_eq!(remove.len(), 1);
@@ -244,12 +234,8 @@ mod tests {
         // Out of range
         assert!(!is_in_tracking_range(0.0, 0.0, 65.0, 0.0, 64));
         // Diagonal
-        assert!(is_in_tracking_range(
-            0.0, 0.0, 45.0, 45.0, 64
-        ));
-        assert!(!is_in_tracking_range(
-            0.0, 0.0, 46.0, 46.0, 64
-        ));
+        assert!(is_in_tracking_range(0.0, 0.0, 45.0, 45.0, 64));
+        assert!(!is_in_tracking_range(0.0, 0.0, 46.0, 46.0, 64));
     }
 
     #[test]

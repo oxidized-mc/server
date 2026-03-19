@@ -95,49 +95,23 @@ impl Entity {
     ///
     /// Allocates a unique entity ID, generates a random UUID, and
     /// defines the base entity data slots (flags, air supply, pose, etc.).
-    pub fn new(
-        entity_type: ResourceLocation,
-        width: f32,
-        height: f32,
-    ) -> Self {
+    pub fn new(entity_type: ResourceLocation, width: f32, height: f32) -> Self {
         let id = next_entity_id();
         let mut synched_data = SynchedEntityData::new();
 
         // Define base Entity data slots (matches Entity.java constructor).
-        synched_data.define(
-            DATA_SHARED_FLAGS,
-            DataSerializerType::Byte,
-            0u8,
-        );
-        synched_data.define(
-            DATA_AIR_SUPPLY,
-            DataSerializerType::Int,
-            300i32,
-        );
+        synched_data.define(DATA_SHARED_FLAGS, DataSerializerType::Byte, 0u8);
+        synched_data.define(DATA_AIR_SUPPLY, DataSerializerType::Int, 300i32);
         synched_data.define(
             DATA_CUSTOM_NAME,
             DataSerializerType::OptionalComponent,
             None::<String>,
         );
-        synched_data.define(
-            DATA_CUSTOM_NAME_VISIBLE,
-            DataSerializerType::Boolean,
-            false,
-        );
-        synched_data
-            .define(DATA_SILENT, DataSerializerType::Boolean, false);
-        synched_data.define(
-            DATA_NO_GRAVITY,
-            DataSerializerType::Boolean,
-            false,
-        );
-        synched_data
-            .define(DATA_POSE, DataSerializerType::Pose, 0i32);
-        synched_data.define(
-            DATA_TICKS_FROZEN,
-            DataSerializerType::Int,
-            0i32,
-        );
+        synched_data.define(DATA_CUSTOM_NAME_VISIBLE, DataSerializerType::Boolean, false);
+        synched_data.define(DATA_SILENT, DataSerializerType::Boolean, false);
+        synched_data.define(DATA_NO_GRAVITY, DataSerializerType::Boolean, false);
+        synched_data.define(DATA_POSE, DataSerializerType::Pose, 0i32);
+        synched_data.define(DATA_TICKS_FROZEN, DataSerializerType::Int, 0i32);
 
         Self {
             id,
@@ -154,13 +128,7 @@ impl Entity {
             vz: 0.0,
             on_ground: false,
             removed: false,
-            bounding_box: Aabb::from_center(
-                0.0,
-                0.0,
-                0.0,
-                f64::from(width),
-                f64::from(height),
-            ),
+            bounding_box: Aabb::from_center(0.0, 0.0, 0.0, f64::from(width), f64::from(height)),
             synched_data,
             width,
             height,
@@ -173,13 +141,8 @@ impl Entity {
         self.x = x;
         self.y = y;
         self.z = z;
-        self.bounding_box = Aabb::from_center(
-            x,
-            y,
-            z,
-            f64::from(self.width),
-            f64::from(self.height),
-        );
+        self.bounding_box =
+            Aabb::from_center(x, y, z, f64::from(self.width), f64::from(self.height));
     }
 
     /// Returns the value of a shared flag bit.
@@ -243,11 +206,7 @@ mod tests {
     use super::*;
 
     fn make_entity() -> Entity {
-        Entity::new(
-            ResourceLocation::minecraft("cow"),
-            0.9,
-            1.4,
-        )
+        Entity::new(ResourceLocation::minecraft("cow"), 0.9, 1.4)
     }
 
     #[test]

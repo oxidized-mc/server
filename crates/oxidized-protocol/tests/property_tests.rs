@@ -507,8 +507,7 @@ proptest! {
 // ---------------------------------------------------------------------------
 
 use oxidized_protocol::packets::play::{
-    ClientboundAddEntityPacket, ClientboundRemoveEntitiesPacket,
-    ClientboundSetEntityDataPacket,
+    ClientboundAddEntityPacket, ClientboundRemoveEntitiesPacket, ClientboundSetEntityDataPacket,
 };
 
 proptest! {

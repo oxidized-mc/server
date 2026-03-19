@@ -17,8 +17,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use super::varint;
 use super::types::TypeError;
+use super::varint;
 
 /// Maximum absolute value that can be encoded.
 const ABS_MAX_VALUE: f64 = 1.717_986_918_3e10;
@@ -57,8 +57,7 @@ fn pack(value: f64) -> u64 {
 
 /// Dequantizes a 15-bit integer to a normalized component (-1..1).
 fn unpack(value: u64) -> f64 {
-    (value & DATA_BITS_MASK).min(MAX_QUANTIZED_VALUE as u64) as f64 * 2.0
-        / MAX_QUANTIZED_VALUE
+    (value & DATA_BITS_MASK).min(MAX_QUANTIZED_VALUE as u64) as f64 * 2.0 / MAX_QUANTIZED_VALUE
         - 1.0
 }
 
@@ -91,11 +90,7 @@ pub fn write(buf: &mut BytesMut, x: f64, y: f64, z: f64) {
 
     let scale = ceil_long(chessboard_length);
     let is_partial = (scale & 3) != scale;
-    let markers = if is_partial {
-        (scale & 3) | 4
-    } else {
-        scale
-    };
+    let markers = if is_partial { (scale & 3) | 4 } else { scale };
 
     let xn = pack(x / scale as f64) << X_OFFSET;
     let yn = pack(y / scale as f64) << Y_OFFSET;
@@ -120,10 +115,7 @@ pub fn write(buf: &mut BytesMut, x: f64, y: f64, z: f64) {
 /// Returns [`TypeError::UnexpectedEof`] if the buffer is too short.
 pub fn read(buf: &mut Bytes) -> Result<(f64, f64, f64), TypeError> {
     if buf.remaining() < 1 {
-        return Err(TypeError::UnexpectedEof {
-            need: 1,
-            have: 0,
-        });
+        return Err(TypeError::UnexpectedEof { need: 1, have: 0 });
     }
 
     let lowest = buf.get_u8() as u64;
@@ -176,18 +168,9 @@ mod tests {
         write(&mut buf, x, y, z);
         let mut data = buf.freeze();
         let (rx, ry, rz) = read(&mut data).unwrap();
-        assert!(
-            (rx - x).abs() < tolerance,
-            "x: expected {x}, got {rx}"
-        );
-        assert!(
-            (ry - y).abs() < tolerance,
-            "y: expected {y}, got {ry}"
-        );
-        assert!(
-            (rz - z).abs() < tolerance,
-            "z: expected {z}, got {rz}"
-        );
+        assert!((rx - x).abs() < tolerance, "x: expected {x}, got {rx}");
+        assert!((ry - y).abs() < tolerance, "y: expected {y}, got {ry}");
+        assert!((rz - z).abs() < tolerance, "z: expected {z}, got {rz}");
     }
 
     #[test]

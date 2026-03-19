@@ -230,6 +230,7 @@ impl SynchedEntityData {
     /// # Panics
     ///
     /// Panics if the slot is undefined or the type `T` doesn't match.
+    #[allow(clippy::expect_used)]
     pub fn get<T: Any + Clone>(&self, slot: u8) -> T {
         let item = self.items[slot as usize]
             .as_ref()
@@ -248,11 +249,8 @@ impl SynchedEntityData {
     /// # Panics
     ///
     /// Panics if the slot is undefined.
-    pub fn set<T: Any + PartialEq + Clone + Send + Sync>(
-        &mut self,
-        slot: u8,
-        value: T,
-    ) {
+    #[allow(clippy::expect_used)]
+    pub fn set<T: Any + PartialEq + Clone + Send + Sync>(&mut self, slot: u8, value: T) {
         let item = self.items[slot as usize]
             .as_mut()
             .expect("undefined data slot");

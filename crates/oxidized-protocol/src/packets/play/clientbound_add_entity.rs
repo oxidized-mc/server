@@ -144,8 +144,7 @@ mod tests {
 
         let mut buf = BytesMut::new();
         pkt.encode(&mut buf);
-        let decoded =
-            ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
+        let decoded = ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
 
         assert_eq!(decoded.entity_id, 42);
         assert_eq!(decoded.uuid, uuid);
@@ -180,8 +179,7 @@ mod tests {
 
         let mut buf = BytesMut::new();
         pkt.encode(&mut buf);
-        let decoded =
-            ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
+        let decoded = ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
 
         // LpVec3 is lossy — check within tolerance
         assert!((decoded.vx - 1.5).abs() < 0.1);
