@@ -1434,3 +1434,34 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - All others: 50–280 LOC, well under limits
 
 **Status:** R2 complete. Next: R3 (ECS component split) per phase doc.
+
+### Phase R4 Retrospective — Command Context Argument Dispatch Refactor
+
+**Completed:** Refactored `context.rs` (641 LOC → 789 LOC; 587 non-test + 202 test).
+
+**What went well:**
+- `validate_range<T: PartialOrd + Display>()` cleanly replaces 4 copy-pasted min/max blocks
+  with identical behavior (same error messages). Generic over i32/i64/f32/f64.
+- `get_arg_result()` + `get_typed()` helper pair consolidates 13 getters. `get_typed` works
+  for all Copy-type getters; `get_string` (borrows `&'a str`) and `get_time` (matches 2
+  variants) use `get_arg_result` directly — correct design choice.
+- Per-type parser functions (14 total) make `parse_argument()` a clean dispatch table where
+  each match arm is a single function call.
+- Coordinate helpers (`parse_int3_coordinates`, `parse_double3_coordinates`,
+  `parse_double2_coordinates`) are reused by BlockPos, Vec3, Vec2.
+- 16 new tests added without modifying any existing test — all 42 original tests pass.
+
+**Patterns to reuse:**
+- `get_typed()` pattern: `extract(get_arg_result(ctx, name)?).ok_or_else(...)` — clean
+  for any match-and-extract-from-enum pattern. Reusable if more argument types are added.
+- `validate_range<T>()` — reusable anywhere numeric bounds are checked.
+- `parse_word_as_string()` — fallback parser for unimplemented argument types reduces
+  repeated `Ok(ArgumentResult::String(reader.read_word().to_string()))`.
+
+**Gotchas discovered:**
+- `get_string` returns `&'a str` borrowing from `CommandContext`, so it can't use `get_typed`
+  (which returns owned T). This is correct — don't force the pattern where lifetimes differ.
+- File went from 641 → 789 LOC total, but non-test LOC stayed ~587 (below 800 hard limit).
+  The increase is purely from 16 new tests (53 → 202 test lines). This is healthy growth.
+
+**Status:** R4 complete. R3 (component.rs split) and R5 (type macros) are independent next steps.
