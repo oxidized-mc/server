@@ -15,15 +15,18 @@ use std::sync::Arc;
 use clap::Parser;
 use mimalloc::MiMalloc;
 use oxidized_game::commands::Commands;
+use oxidized_game::commands::source::{CommandSourceKind, CommandSourceStack};
 use oxidized_game::player::PlayerList;
 use oxidized_nbt::NbtCompound;
+use oxidized_protocol::chat::Component;
 use oxidized_protocol::constants;
 use oxidized_protocol::crypto::ServerKeyPair;
-use oxidized_protocol::status::{Component, ServerStatus, StatusPlayers, StatusVersion};
+use oxidized_protocol::status::{ServerStatus, StatusPlayers, StatusVersion};
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::storage::PrimaryLevelData;
+use tokio::io::AsyncBufReadExt;
 use tokio::sync::broadcast;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::cli::Args;
 use crate::config::ServerConfig;
@@ -178,6 +181,7 @@ fn main() -> anyhow::Result<()> {
         });
 
         // Build the shared login context.
+        let console_server_ctx = server_ctx.clone();
         let login_ctx = Arc::new(LoginContext {
             server_status,
             keypair: Arc::new(keypair),
@@ -196,12 +200,78 @@ fn main() -> anyhow::Result<()> {
             }
         });
 
-        // Wait for Ctrl+C, then broadcast shutdown.
-        if let Err(e) = tokio::signal::ctrl_c().await {
-            error!(error = %e, "Failed to listen for shutdown signal");
+        // Spawn the console command reader (stdin).
+        let console_shutdown_tx = shutdown_tx.clone();
+        let console_handle = tokio::spawn(async move {
+            let stdin = tokio::io::stdin();
+            let reader = tokio::io::BufReader::new(stdin);
+            let mut lines = reader.lines();
+            loop {
+                match lines.next_line().await {
+                    Ok(Some(line)) => {
+                        let line = line.trim().to_string();
+                        if line.is_empty() {
+                            continue;
+                        }
+                        let ctx = console_server_ctx.clone();
+                        let shutdown = console_shutdown_tx.clone();
+                        // Build a console command source that prints feedback to stdout.
+                        let source = CommandSourceStack {
+                            source: CommandSourceKind::Console,
+                            position: (0.0, 0.0, 0.0),
+                            rotation: (0.0, 0.0),
+                            permission_level: 4,
+                            display_name: "Server".to_string(),
+                            server: ctx.clone(),
+                            feedback_sender: std::sync::Arc::new(|component: &Component| {
+                                println!("{component}");
+                            }),
+                            silent: false,
+                        };
+                        match ctx.commands.dispatch(&line, source) {
+                            Ok(_) => {
+                                debug!(command = %line, "Console command executed");
+                            },
+                            Err(e) => {
+                                eprintln!("Error: {e}");
+                            },
+                        }
+                        // Check if the command was /stop
+                        let cmd_word = line
+                            .trim_start_matches('/')
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or("");
+                        if cmd_word == "stop" {
+                            let _ = shutdown.send(());
+                        }
+                    },
+                    Ok(None) => break, // EOF
+                    Err(e) => {
+                        debug!(error = %e, "Console read error");
+                        break;
+                    },
+                }
+            }
+        });
+
+        // Wait for Ctrl+C or shutdown from /stop command, then broadcast shutdown.
+        let mut shutdown_rx = shutdown_tx.subscribe();
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => {
+                if let Err(e) = result {
+                    error!(error = %e, "Failed to listen for shutdown signal");
+                }
+            },
+            _ = shutdown_rx.recv() => {
+                // Shutdown was triggered by /stop command from console or player.
+            },
         }
         info!("Shutdown signal received");
         let _ = shutdown_tx.send(());
+
+        // Abort the console reader (it blocks on stdin).
+        console_handle.abort();
 
         // Wait for the listener task to finish.
         let _ = listener_handle.await;
