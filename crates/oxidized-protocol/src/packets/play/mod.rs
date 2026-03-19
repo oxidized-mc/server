@@ -21,6 +21,7 @@ pub mod clientbound_set_chunk_cache_center;
 pub mod clientbound_set_chunk_cache_radius;
 pub mod clientbound_set_default_spawn_position;
 pub mod clientbound_set_entity_data;
+pub mod clientbound_set_entity_motion;
 pub mod clientbound_set_simulation_distance;
 pub mod serverbound_accept_teleportation;
 pub mod serverbound_chunk_batch_received;
@@ -55,6 +56,7 @@ pub use clientbound_set_default_spawn_position::ClientboundSetDefaultSpawnPositi
 pub use clientbound_set_entity_data::{
     ClientboundSetEntityDataPacket, DATA_EOF_MARKER, EntityDataEntry,
 };
+pub use clientbound_set_entity_motion::ClientboundSetEntityMotionPacket;
 pub use clientbound_set_simulation_distance::ClientboundSetSimulationDistancePacket;
 pub use serverbound_accept_teleportation::ServerboundAcceptTeleportationPacket;
 pub use serverbound_chunk_batch_received::ServerboundChunkBatchReceivedPacket;
