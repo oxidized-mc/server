@@ -41,6 +41,27 @@ pub struct MovementResult {
 /// 2. Coordinates must be within ±30 million blocks horizontally
 /// 3. Movement distance must not exceed [`MAX_MOVEMENT_PER_TICK`]
 /// 4. Pitch is clamped to ±90°
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::player::movement::validate_movement;
+/// use oxidized_protocol::types::Vec3;
+///
+/// // Small step — accepted
+/// let result = validate_movement(
+///     Vec3::ZERO, 0.0, 0.0,
+///     Some(1.0), Some(0.0), Some(0.0), None, None,
+/// );
+/// assert!(result.accepted);
+///
+/// // Too fast — needs correction
+/// let result = validate_movement(
+///     Vec3::ZERO, 0.0, 0.0,
+///     Some(200.0), Some(0.0), Some(0.0), None, None,
+/// );
+/// assert!(result.needs_correction);
+/// ```
 pub fn validate_movement(
     current_pos: Vec3,
     current_yaw: f32,

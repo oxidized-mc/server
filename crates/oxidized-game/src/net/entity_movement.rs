@@ -21,6 +21,18 @@ pub const MAX_DELTA_BLOCKS: f64 = 7.999;
 /// `delta = (new * 4096) as i64 - (old * 4096) as i64`
 ///
 /// This matches the vanilla encoding in `ClientboundMoveEntityPacket`.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::net::entity_movement::encode_delta;
+///
+/// // One block = 4096 units
+/// assert_eq!(encode_delta(0.0, 1.0), Some(4096));
+///
+/// // Too far for delta encoding
+/// assert_eq!(encode_delta(0.0, 9.0), None);
+/// ```
 pub fn encode_delta(old: f64, new: f64) -> Option<i16> {
     let raw = (new * DELTA_SCALE) as i64 - (old * DELTA_SCALE) as i64;
     if raw < i64::from(i16::MIN) || raw > i64::from(i16::MAX) {
@@ -33,6 +45,16 @@ pub fn encode_delta(old: f64, new: f64) -> Option<i16> {
 /// Packs a rotation angle (degrees) into a byte (0–255 → 0–360°).
 ///
 /// Matches `Mth.packDegrees()` in vanilla.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::net::entity_movement::pack_degrees;
+///
+/// assert_eq!(pack_degrees(0.0), 0);
+/// assert_eq!(pack_degrees(180.0), 128);
+/// assert_eq!(pack_degrees(360.0), 0); // wraps
+/// ```
 pub fn pack_degrees(angle: f32) -> u8 {
     ((angle * 256.0 / 360.0) as i32 & 0xFF) as u8
 }
@@ -40,6 +62,15 @@ pub fn pack_degrees(angle: f32) -> u8 {
 /// Unpacks a byte (0–255) back to degrees (0–360°).
 ///
 /// Inverse of [`pack_degrees`].
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::net::entity_movement::unpack_degrees;
+///
+/// assert!((unpack_degrees(128) - 180.0).abs() < 0.01);
+/// assert_eq!(unpack_degrees(0), 0.0);
+/// ```
 pub fn unpack_degrees(byte: u8) -> f32 {
     byte as f32 * 360.0 / 256.0
 }
@@ -71,6 +102,20 @@ pub enum EntityMoveKind {
 ///
 /// Returns [`EntityMoveKind::Delta`] if all three axis deltas fit in `i16`,
 /// or [`EntityMoveKind::Sync`] if any delta exceeds the range.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::net::entity_movement::{classify_move, EntityMoveKind};
+///
+/// // Small movement — delta-encoded
+/// let kind = classify_move(0.0, 64.0, 0.0, 1.0, 64.5, -0.5);
+/// assert!(matches!(kind, EntityMoveKind::Delta { .. }));
+///
+/// // Large teleport — full position sync
+/// let kind = classify_move(0.0, 64.0, 0.0, 100.0, 64.0, 0.0);
+/// assert!(matches!(kind, EntityMoveKind::Sync { .. }));
+/// ```
 pub fn classify_move(
     old_x: f64,
     old_y: f64,

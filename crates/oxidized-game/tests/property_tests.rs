@@ -163,3 +163,141 @@ proptest! {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Movement logic property tests
+// ---------------------------------------------------------------------------
+
+use oxidized_game::net::entity_movement::{
+    classify_move, encode_delta, pack_degrees, unpack_degrees, EntityMoveKind, DELTA_SCALE,
+};
+use oxidized_game::player::movement::{validate_movement, MAX_COORDINATE, MAX_MOVEMENT_PER_TICK};
+use oxidized_protocol::types::Vec3;
+
+proptest! {
+    /// encode_delta roundtrip: for small deltas, decoding the i16 recovers the
+    /// original position within 1/4096 precision.
+    #[test]
+    fn proptest_encode_delta_small_values(
+        old in -1000.0f64..1000.0,
+        offset in -7.0f64..7.0,
+    ) {
+        let new = old + offset;
+        let delta = encode_delta(old, new);
+        prop_assert!(delta.is_some(), "delta within ±7 blocks should fit i16");
+        let d = delta.unwrap();
+        // Reconstruct: (old * 4096 + d) / 4096
+        let reconstructed = ((old * DELTA_SCALE) as i64 + i64::from(d)) as f64 / DELTA_SCALE;
+        let error = (reconstructed - new).abs();
+        prop_assert!(error < 1.0 / DELTA_SCALE + f64::EPSILON,
+            "delta encoding error {error} exceeds 1/4096 for old={old}, new={new}");
+    }
+
+    /// encode_delta returns None for deltas exceeding ~8 blocks.
+    #[test]
+    fn proptest_encode_delta_large_values(
+        old in -1000.0f64..1000.0,
+        offset in 8.1f64..100.0,
+    ) {
+        // Positive large offset
+        prop_assert!(encode_delta(old, old + offset).is_none(),
+            "delta > 8 blocks should be None");
+        // Negative large offset
+        prop_assert!(encode_delta(old, old - offset).is_none(),
+            "delta < -8 blocks should be None");
+    }
+
+    /// pack_degrees → unpack_degrees roundtrip within 1.41° tolerance.
+    #[test]
+    fn proptest_degrees_pack_unpack_roundtrip(angle in 0.0f32..360.0) {
+        let packed = pack_degrees(angle);
+        let unpacked = unpack_degrees(packed);
+        // Maximum error is 360/256 = 1.40625°
+        let error = (unpacked - angle).abs();
+        prop_assert!(error < 1.41, "degree roundtrip error {error}° for {angle}°");
+    }
+
+    /// unpack_degrees always produces values in [0, 360).
+    #[test]
+    fn proptest_unpack_degrees_range(byte: u8) {
+        let degrees = unpack_degrees(byte);
+        prop_assert!(degrees >= 0.0 && degrees < 360.0,
+            "unpack_degrees({byte}) = {degrees} out of [0, 360)");
+    }
+
+    /// classify_move returns Delta for small moves, Sync for large moves.
+    #[test]
+    fn proptest_classify_move_consistency(
+        old_x in -1000.0f64..1000.0,
+        old_y in -64.0f64..320.0,
+        old_z in -1000.0f64..1000.0,
+        dx in -7.0f64..7.0,
+        dy in -7.0f64..7.0,
+        dz in -7.0f64..7.0,
+    ) {
+        let kind = classify_move(old_x, old_y, old_z,
+                                  old_x + dx, old_y + dy, old_z + dz);
+        match kind {
+            EntityMoveKind::Delta { .. } => {
+                // All three deltas must have fit
+                prop_assert!(encode_delta(old_x, old_x + dx).is_some());
+                prop_assert!(encode_delta(old_y, old_y + dy).is_some());
+                prop_assert!(encode_delta(old_z, old_z + dz).is_some());
+            },
+            EntityMoveKind::Sync { x, y, z } => {
+                prop_assert_eq!(x.to_bits(), (old_x + dx).to_bits());
+                prop_assert_eq!(y.to_bits(), (old_y + dy).to_bits());
+                prop_assert_eq!(z.to_bits(), (old_z + dz).to_bits());
+            },
+        }
+    }
+
+    /// validate_movement: needs_correction ↔ distance² > MAX².
+    #[test]
+    fn proptest_validate_movement_correction_invariant(
+        dx in -150.0f64..150.0,
+        dy in -150.0f64..150.0,
+        dz in -150.0f64..150.0,
+    ) {
+        let origin = Vec3::new(0.0, 64.0, 0.0);
+        let result = validate_movement(
+            origin, 0.0, 0.0,
+            Some(dx), Some(64.0 + dy), Some(dz),
+            None, None,
+        );
+        let dist_sq = dx * dx + dy * dy + dz * dz;
+        let expected_correction = dist_sq > MAX_MOVEMENT_PER_TICK * MAX_MOVEMENT_PER_TICK;
+        let max_sq = MAX_MOVEMENT_PER_TICK * MAX_MOVEMENT_PER_TICK;
+        prop_assert_eq!(result.needs_correction, expected_correction,
+            "dist²={}, MAX²={}", dist_sq, max_sq);
+        prop_assert_eq!(result.accepted, !expected_correction);
+    }
+
+    /// validate_movement: pitch is always clamped to ±90°.
+    #[test]
+    fn proptest_validate_movement_pitch_clamp(pitch in -180.0f32..180.0) {
+        let result = validate_movement(
+            Vec3::ZERO, 0.0, 0.0,
+            None, None, None, None, Some(pitch),
+        );
+        prop_assert!(result.new_pitch >= -90.0 && result.new_pitch <= 90.0,
+            "pitch {pitch} should be clamped to ±90, got {}", result.new_pitch);
+    }
+
+    /// validate_movement: x/z coordinates clamped to ±MAX_COORDINATE.
+    #[test]
+    fn proptest_validate_movement_coordinate_clamp(
+        x in -5.0e7f64..5.0e7,
+        z in -5.0e7f64..5.0e7,
+    ) {
+        let result = validate_movement(
+            Vec3::ZERO, 0.0, 0.0,
+            Some(x), Some(0.0), Some(z),
+            None, None,
+        );
+        prop_assert!(result.new_pos.x >= -MAX_COORDINATE && result.new_pos.x <= MAX_COORDINATE,
+            "x={} not clamped to ±{}", result.new_pos.x, MAX_COORDINATE);
+        prop_assert!(result.new_pos.z >= -MAX_COORDINATE && result.new_pos.z <= MAX_COORDINATE,
+            "z={} not clamped to ±{}", result.new_pos.z, MAX_COORDINATE);
+    }
+}
