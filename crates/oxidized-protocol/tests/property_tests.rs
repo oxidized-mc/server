@@ -501,3 +501,138 @@ proptest! {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Entity packet roundtrips
+// ---------------------------------------------------------------------------
+
+use oxidized_protocol::packets::play::{
+    ClientboundAddEntityPacket, ClientboundRemoveEntitiesPacket,
+    ClientboundSetEntityDataPacket,
+};
+
+proptest! {
+    /// ClientboundAddEntityPacket encode → decode roundtrip (zero velocity).
+    #[test]
+    fn proptest_add_entity_roundtrip(
+        entity_id: i32,
+        entity_type: i32,
+        x in finite_f64(), y in finite_f64(), z in finite_f64(),
+        x_rot: u8, y_rot: u8, y_head_rot: u8,
+        data_val: i32,
+    ) {
+        let uuid = uuid::Uuid::new_v4();
+        let pkt = ClientboundAddEntityPacket {
+            entity_id, uuid, entity_type,
+            x, y, z,
+            vx: 0.0, vy: 0.0, vz: 0.0,
+            x_rot, y_rot, y_head_rot,
+            data: data_val,
+        };
+        let mut buf = BytesMut::new();
+        pkt.encode(&mut buf);
+        let decoded = ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
+        prop_assert_eq!(decoded.entity_id, entity_id);
+        prop_assert_eq!(decoded.uuid, uuid);
+        prop_assert_eq!(decoded.entity_type, entity_type);
+        prop_assert_eq!(decoded.x.to_bits(), x.to_bits());
+        prop_assert_eq!(decoded.y.to_bits(), y.to_bits());
+        prop_assert_eq!(decoded.z.to_bits(), z.to_bits());
+        prop_assert_eq!(decoded.x_rot, x_rot);
+        prop_assert_eq!(decoded.y_rot, y_rot);
+        prop_assert_eq!(decoded.y_head_rot, y_head_rot);
+        prop_assert_eq!(decoded.data, data_val);
+    }
+
+    /// ClientboundRemoveEntitiesPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_remove_entities_roundtrip(
+        ids in prop::collection::vec(any::<i32>(), 0..20),
+    ) {
+        let pkt = ClientboundRemoveEntitiesPacket { entity_ids: ids.clone() };
+        let mut buf = BytesMut::new();
+        pkt.encode(&mut buf);
+        let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
+        prop_assert_eq!(decoded.entity_ids, ids);
+    }
+
+    /// ClientboundSetEntityDataPacket single-byte entry encode → decode.
+    #[test]
+    fn proptest_set_entity_data_single_byte_roundtrip(
+        entity_id: i32,
+        slot in 0u8..=254,
+        value: u8,
+    ) {
+        let pkt = ClientboundSetEntityDataPacket::single_byte(entity_id, slot, value);
+        let mut buf = BytesMut::new();
+        pkt.encode(&mut buf);
+        let decoded = ClientboundSetEntityDataPacket::decode(buf.freeze()).unwrap();
+        prop_assert_eq!(decoded.entity_id, entity_id);
+        prop_assert_eq!(decoded.entries.len(), 1);
+        prop_assert_eq!(decoded.entries[0].slot, slot);
+        prop_assert_eq!(decoded.entries[0].serializer_type, 0); // Byte
+        prop_assert_eq!(&decoded.entries[0].value_bytes, &vec![value]);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LpVec3 property tests
+// ---------------------------------------------------------------------------
+
+use oxidized_protocol::codec::lp_vec3;
+
+proptest! {
+    /// LpVec3 zero vector always encodes to a single byte.
+    #[test]
+    fn proptest_lpvec3_zero_is_single_byte(
+        x in -1e-5f64..1e-5,
+        y in -1e-5f64..1e-5,
+        z in -1e-5f64..1e-5,
+    ) {
+        let mut buf = BytesMut::new();
+        lp_vec3::write(&mut buf, x, y, z);
+        prop_assert_eq!(buf.len(), 1, "near-zero vector should be 1 byte");
+        prop_assert_eq!(buf[0], 0);
+    }
+
+    /// LpVec3 roundtrip: decoded values are within reasonable tolerance
+    /// of the originals for typical game velocities.
+    #[test]
+    fn proptest_lpvec3_roundtrip_typical(
+        x in -10.0f64..10.0,
+        y in -10.0f64..10.0,
+        z in -10.0f64..10.0,
+    ) {
+        let mut buf = BytesMut::new();
+        lp_vec3::write(&mut buf, x, y, z);
+        let mut data = buf.freeze();
+        let (rx, ry, rz) = lp_vec3::read(&mut data).unwrap();
+
+        let max_comp = x.abs().max(y.abs()).max(z.abs());
+        if max_comp < 3.1e-5 {
+            // Near-zero → decoded as exact zero
+            prop_assert_eq!(rx, 0.0);
+            prop_assert_eq!(ry, 0.0);
+            prop_assert_eq!(rz, 0.0);
+        } else {
+            // Tolerance: proportional to scale (LpVec3 is 15-bit)
+            let tol = max_comp * 0.01 + 0.001;
+            prop_assert!((rx - x).abs() < tol,
+                "x: {x} → {rx}, tol={tol}");
+            prop_assert!((ry - y).abs() < tol,
+                "y: {y} → {ry}, tol={tol}");
+            prop_assert!((rz - z).abs() < tol,
+                "z: {z} → {rz}, tol={tol}");
+        }
+    }
+
+    /// LpVec3 NaN input is sanitized (decoded as zero vector).
+    #[test]
+    fn proptest_lpvec3_nan_sanitized(y in finite_f64(), z in finite_f64()) {
+        let mut buf = BytesMut::new();
+        lp_vec3::write(&mut buf, f64::NAN, y, z);
+        let mut data = buf.freeze();
+        let result = lp_vec3::read(&mut data);
+        prop_assert!(result.is_ok(), "NaN-sanitized encode should decode successfully");
+    }
+}

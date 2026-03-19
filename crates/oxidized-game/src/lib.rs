@@ -4,6 +4,7 @@
 //! design for cache-friendly tick processing.
 
 pub mod chunk;
+pub mod entity;
 pub mod level;
 pub mod net;
 pub mod player;

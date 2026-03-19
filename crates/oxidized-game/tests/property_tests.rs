@@ -301,3 +301,109 @@ proptest! {
             "z={} not clamped to ±{}", result.new_pos.z, MAX_COORDINATE);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Entity framework property tests
+// ---------------------------------------------------------------------------
+
+use oxidized_game::entity::aabb::Aabb;
+use oxidized_game::entity::synched_data::{DataSerializerType, SynchedEntityData};
+use oxidized_game::entity::tracker::is_in_tracking_range;
+
+proptest! {
+    /// AABB from_center volume is always width² × height.
+    #[test]
+    fn proptest_aabb_volume_invariant(
+        x in -1e6f64..1e6,
+        y in -1e6f64..1e6,
+        z in -1e6f64..1e6,
+        width in 0.01f64..10.0,
+        height in 0.01f64..10.0,
+    ) {
+        let bbox = Aabb::from_center(x, y, z, width, height);
+        let expected_volume = width * width * height;
+        let error = (bbox.volume() - expected_volume).abs();
+        prop_assert!(error < 1e-6,
+            "volume {} != expected {} (error {})", bbox.volume(), expected_volume, error);
+    }
+
+    /// AABB from_center always contains its own center point.
+    #[test]
+    fn proptest_aabb_contains_center(
+        x in -1e6f64..1e6,
+        y in -1e6f64..1e6,
+        z in -1e6f64..1e6,
+        width in 0.01f64..10.0,
+        height in 0.01f64..10.0,
+    ) {
+        let bbox = Aabb::from_center(x, y, z, width, height);
+        let (cx, cy, cz) = bbox.center();
+        prop_assert!(bbox.contains(cx, cy, cz),
+            "AABB at ({x},{y},{z}) w={width} h={height} doesn't contain its center");
+    }
+
+    /// AABB::intersects is symmetric.
+    #[test]
+    fn proptest_aabb_intersects_symmetric(
+        x1 in -100.0f64..100.0,
+        y1 in -100.0f64..100.0,
+        z1 in -100.0f64..100.0,
+        x2 in -100.0f64..100.0,
+        y2 in -100.0f64..100.0,
+        z2 in -100.0f64..100.0,
+        w in 0.1f64..5.0,
+        h in 0.1f64..5.0,
+    ) {
+        let a = Aabb::from_center(x1, y1, z1, w, h);
+        let b = Aabb::from_center(x2, y2, z2, w, h);
+        prop_assert_eq!(a.intersects(&b), b.intersects(&a),
+            "intersects must be symmetric");
+    }
+
+    /// is_in_tracking_range is symmetric (player↔entity are interchangeable).
+    #[test]
+    fn proptest_tracking_range_symmetric(
+        ex in -1000.0f64..1000.0,
+        ez in -1000.0f64..1000.0,
+        px in -1000.0f64..1000.0,
+        pz in -1000.0f64..1000.0,
+        range in 1i32..=256,
+    ) {
+        let a = is_in_tracking_range(ex, ez, px, pz, range);
+        let b = is_in_tracking_range(px, pz, ex, ez, range);
+        prop_assert_eq!(a, b, "tracking range check must be symmetric");
+    }
+
+    /// DataSerializerType from_id → id roundtrip for all valid IDs.
+    #[test]
+    fn proptest_serializer_type_roundtrip(id in 0u32..43) {
+        let ty = DataSerializerType::from_id(id).unwrap();
+        prop_assert_eq!(ty.id(), id);
+    }
+
+    /// DataSerializerType from_id returns None for out-of-range IDs.
+    #[test]
+    fn proptest_serializer_type_invalid(id in 43u32..1000) {
+        prop_assert!(DataSerializerType::from_id(id).is_none());
+    }
+
+    /// SynchedEntityData set + get roundtrip for i32 values.
+    #[test]
+    fn proptest_synched_data_i32_roundtrip(value: i32) {
+        let mut data = SynchedEntityData::new();
+        data.define(1, DataSerializerType::Int, 0i32);
+        data.set(1u8, value);
+        prop_assert_eq!(data.get::<i32>(1), value);
+    }
+
+    /// SynchedEntityData: setting same value twice doesn't dirty.
+    #[test]
+    fn proptest_synched_data_no_spurious_dirty(value: u8) {
+        let mut data = SynchedEntityData::new();
+        data.define(0, DataSerializerType::Byte, value);
+        // Same value as default — should not dirty
+        data.set(0u8, value);
+        prop_assert!(!data.is_dirty(),
+            "setting same value {value} should not dirty");
+    }
+}

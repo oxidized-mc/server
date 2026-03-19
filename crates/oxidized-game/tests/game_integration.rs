@@ -605,3 +605,195 @@ fn test_teleport_accept_empty_queue_fails() {
         "empty queue should reject any ID"
     );
 }
+
+// ===========================================================================
+// Entity framework integration tests
+// ===========================================================================
+
+use oxidized_game::entity::data_slots::*;
+use oxidized_game::entity::synched_data::{DataSerializerType, SynchedEntityData};
+use oxidized_game::entity::tracker::{
+    is_in_tracking_range, EntityTracker, TRACKING_RANGE_ANIMAL, TRACKING_RANGE_MISC,
+    TRACKING_RANGE_PLAYER,
+};
+use oxidized_game::entity::Entity;
+
+/// Creating an entity populates all 8 base data slots and the bbox is
+/// consistent with the stated dimensions.
+#[test]
+fn test_entity_create_full_lifecycle() {
+    let mut entity = Entity::new(
+        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("pig"),
+        0.9,
+        0.9,
+    );
+
+    // 8 base data slots
+    assert_eq!(entity.synched_data.len(), 8);
+    assert_eq!(entity.synched_data.get::<i32>(DATA_AIR_SUPPLY), 300);
+    assert!(!entity.synched_data.get::<bool>(DATA_SILENT));
+
+    // Set position and verify AABB moves with it
+    entity.set_pos(100.0, 65.0, -200.0);
+    assert!(entity.bounding_box.contains(100.0, 65.5, -200.0));
+    assert!(!entity.bounding_box.contains(100.0, 66.0, -200.0)); // height=0.9
+
+    // Modify flags — verify independent bits
+    entity.set_flag(FLAG_ON_FIRE, true);
+    entity.set_flag(FLAG_INVISIBLE, true);
+    assert!(entity.is_on_fire());
+    assert!(entity.is_invisible());
+    assert!(!entity.is_sprinting());
+
+    entity.set_flag(FLAG_ON_FIRE, false);
+    assert!(!entity.is_on_fire());
+    assert!(entity.is_invisible());
+}
+
+/// Dirty tracking across a series of get/set/pack_dirty cycles.
+#[test]
+fn test_synched_data_dirty_lifecycle() {
+    let mut data = SynchedEntityData::new();
+    data.define(0, DataSerializerType::Byte, 0u8);
+    data.define(1, DataSerializerType::Int, 300i32);
+    data.define(4, DataSerializerType::Boolean, false);
+
+    // Initially clean
+    assert!(!data.is_dirty());
+    assert!(data.pack_dirty().is_empty());
+
+    // Change two slots
+    data.set(0u8, 5u8);
+    data.set(4u8, true);
+    assert!(data.is_dirty());
+
+    let dirty = data.pack_dirty();
+    assert_eq!(dirty.len(), 2);
+    assert!(dirty.iter().any(|d| d.slot == 0));
+    assert!(dirty.iter().any(|d| d.slot == 4));
+    assert!(!data.is_dirty());
+
+    // Setting same value again should not dirty
+    data.set(0u8, 5u8);
+    assert!(!data.is_dirty());
+
+    // pack_all always returns everything regardless of dirty state
+    let all = data.pack_all();
+    assert_eq!(all.len(), 3);
+}
+
+/// Multiple entities get unique IDs and each has independent synched data.
+#[test]
+fn test_multiple_entities_independent() {
+    let e1 = Entity::new(
+        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("cow"),
+        0.9,
+        1.4,
+    );
+    let e2 = Entity::new(
+        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("zombie"),
+        0.6,
+        1.95,
+    );
+    let e3 = Entity::new(
+        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("creeper"),
+        0.6,
+        1.7,
+    );
+
+    // All IDs must be unique
+    let ids = [e1.id, e2.id, e3.id];
+    let unique: HashSet<_> = ids.iter().collect();
+    assert_eq!(unique.len(), 3, "entity IDs must be unique");
+
+    // All UUIDs must be unique
+    let uuids = [e1.uuid, e2.uuid, e3.uuid];
+    let unique_uuids: HashSet<_> = uuids.iter().collect();
+    assert_eq!(unique_uuids.len(), 3, "entity UUIDs must be unique");
+}
+
+/// EntityTracker full workflow: register → update → track → unregister.
+#[test]
+fn test_tracker_full_workflow() {
+    let mut tracker = EntityTracker::new();
+    assert!(tracker.is_empty());
+
+    // Register two entities with different ranges
+    tracker.register(1, TRACKING_RANGE_PLAYER);
+    tracker.register(2, TRACKING_RANGE_ANIMAL);
+    assert_eq!(tracker.len(), 2);
+
+    let p1 = uuid::Uuid::new_v4();
+    let p2 = uuid::Uuid::new_v4();
+    let p3 = uuid::Uuid::new_v4();
+
+    // Tick 1: p1 and p2 can see entity 1
+    let (added, removed) = tracker.update(1, [p1, p2].into_iter().collect());
+    assert_eq!(added.len(), 2);
+    assert!(removed.is_empty());
+
+    // Tick 2: p1 leaves, p3 arrives for entity 1
+    let (added, removed) = tracker.update(1, [p2, p3].into_iter().collect());
+    assert_eq!(added.len(), 1);
+    assert_eq!(added[0], p3);
+    assert_eq!(removed.len(), 1);
+    assert_eq!(removed[0], p1);
+
+    // Verify tracking queries
+    assert!(!tracker.is_tracking(1, &p1));
+    assert!(tracker.is_tracking(1, &p2));
+    assert!(tracker.is_tracking(1, &p3));
+    assert_eq!(tracker.watcher_count(1), 2);
+
+    // Unregister entity 1 — returns all current watchers
+    let final_watchers = tracker.unregister(1);
+    assert!(final_watchers.contains(&p2));
+    assert!(final_watchers.contains(&p3));
+    assert_eq!(tracker.len(), 1); // entity 2 still tracked
+}
+
+/// AABB intersect/contains works across entity bounding boxes at
+/// different positions.
+#[test]
+fn test_aabb_entity_collision() {
+    let mut e1 = Entity::new(
+        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("cow"),
+        0.9,
+        1.4,
+    );
+    let mut e2 = Entity::new(
+        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("pig"),
+        0.9,
+        0.9,
+    );
+
+    // Place them at the same spot — should intersect
+    e1.set_pos(10.0, 64.0, 10.0);
+    e2.set_pos(10.0, 64.0, 10.0);
+    assert!(e1.bounding_box.intersects(&e2.bounding_box));
+
+    // Move e2 far away — should not intersect
+    e2.set_pos(20.0, 64.0, 20.0);
+    assert!(!e1.bounding_box.intersects(&e2.bounding_box));
+
+    // Place them overlapping but not at center
+    e2.set_pos(10.5, 64.0, 10.0);
+    assert!(e1.bounding_box.intersects(&e2.bounding_box));
+}
+
+/// `is_in_tracking_range` works correctly at boundary conditions.
+#[test]
+fn test_tracking_range_boundary_conditions() {
+    // Exactly at range
+    assert!(is_in_tracking_range(0.0, 0.0, 80.0, 0.0, TRACKING_RANGE_MISC));
+
+    // Just beyond range
+    assert!(!is_in_tracking_range(0.0, 0.0, 80.01, 0.0, TRACKING_RANGE_MISC));
+
+    // Diagonal — exactly at sqrt(range²) distance
+    let diag = (TRACKING_RANGE_MISC as f64) / 2.0_f64.sqrt();
+    assert!(is_in_tracking_range(0.0, 0.0, diag, diag, TRACKING_RANGE_MISC));
+
+    // Negative coordinates
+    assert!(is_in_tracking_range(-100.0, -100.0, -120.0, -100.0, TRACKING_RANGE_MISC));
+}
