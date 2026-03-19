@@ -48,6 +48,17 @@ impl HeightmapType {
 ///
 /// Uses compact bit-packed storage with `ceil(log2(world_height + 1))` bits
 /// per entry. For the overworld (height 384), this is 9 bits × 256 entries.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
+///
+/// let mut hm = Heightmap::new(HeightmapType::MotionBlocking, 384).unwrap();
+/// hm.set(0, 0, 64).unwrap();
+/// assert_eq!(hm.get(0, 0).unwrap(), 64);
+/// assert_eq!(hm.heightmap_type(), HeightmapType::MotionBlocking);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Heightmap {
     data: BitStorage,

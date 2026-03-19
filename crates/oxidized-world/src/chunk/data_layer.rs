@@ -9,6 +9,19 @@ pub const DATA_LAYER_SIZE: usize = 2048;
 /// A nibble-packed array of 4096 4-bit light values.
 ///
 /// Matches vanilla's `DataLayer` format.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::DataLayer;
+///
+/// let mut layer = DataLayer::new();
+/// assert!(layer.is_empty());
+///
+/// layer.set(0, 0, 0, 15); // max light level
+/// assert_eq!(layer.get(0, 0, 0), 15);
+/// assert!(!layer.is_empty());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataLayer {
     data: Vec<u8>,

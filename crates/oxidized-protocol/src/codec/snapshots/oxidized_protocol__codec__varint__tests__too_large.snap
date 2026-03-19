@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-protocol/src/codec/varint.rs
+expression: "format!(\"{}\", VarIntError::TooLarge { max_bytes: 5 })"
+---
+VarInt is too large (exceeded 5 bytes)

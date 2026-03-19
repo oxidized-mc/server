@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-world/src/chunk/bit_storage.rs
+expression: "format!(\"{}\", BitStorageError::DataLengthMismatch\n{ expected: 256, actual: 128, })"
+---
+expected 256 longs, got 128

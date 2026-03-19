@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-protocol/src/codec/varint.rs
+expression: "format!(\"{}\", VarIntError::UnexpectedEof)"
+---
+unexpected end of buffer

@@ -53,6 +53,19 @@ pub enum BitStorageError {
 /// ```text
 /// [VarInt: number of longs] [long₀] [long₁] … [longₙ]
 /// ```
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::BitStorage;
+///
+/// let mut storage = BitStorage::new(4, 16).unwrap();
+/// storage.set(0, 5).unwrap();
+/// storage.set(3, 15).unwrap();
+/// assert_eq!(storage.get(0).unwrap(), 5);
+/// assert_eq!(storage.get(3).unwrap(), 15);
+/// assert_eq!(storage.get(1).unwrap(), 0); // unset entries are zero
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BitStorage {
     data: Vec<u64>,
@@ -249,6 +262,45 @@ impl ExactSizeIterator for BitStorageIter<'_> {}
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_error_display_snapshots() {
+        insta::assert_snapshot!(
+            "invalid_bits",
+            format!("{}", BitStorageError::InvalidBits(0))
+        );
+        insta::assert_snapshot!(
+            "out_of_bounds",
+            format!(
+                "{}",
+                BitStorageError::OutOfBounds {
+                    index: 16,
+                    size: 16,
+                }
+            )
+        );
+        insta::assert_snapshot!(
+            "value_too_large",
+            format!(
+                "{}",
+                BitStorageError::ValueTooLarge {
+                    value: 16,
+                    max: 15,
+                    bits: 4,
+                }
+            )
+        );
+        insta::assert_snapshot!(
+            "data_length_mismatch",
+            format!(
+                "{}",
+                BitStorageError::DataLengthMismatch {
+                    expected: 256,
+                    actual: 128,
+                }
+            )
+        );
+    }
 
     #[test]
     fn test_new_zero_filled() {

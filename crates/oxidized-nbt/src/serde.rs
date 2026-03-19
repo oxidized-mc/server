@@ -18,6 +18,24 @@ use crate::tag::NbtTag;
 
 /// Deserializes a Rust value from an [`NbtCompound`].
 ///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtCompound, from_compound, to_compound};
+/// use serde::Deserialize;
+///
+/// #[derive(Deserialize, PartialEq, Debug)]
+/// struct Player { health: i32, name: String }
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_int("health", 20);
+/// compound.put_string("name", "Steve");
+///
+/// let player: Player = from_compound(&compound).unwrap();
+/// assert_eq!(player.health, 20);
+/// assert_eq!(player.name, "Steve");
+/// ```
+///
 /// # Errors
 ///
 /// Returns [`NbtError::SerdeError`] if the compound structure does not
@@ -29,6 +47,21 @@ pub fn from_compound<T: de::DeserializeOwned>(compound: &NbtCompound) -> Result<
 }
 
 /// Serializes a Rust value into an [`NbtCompound`].
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::to_compound;
+/// use serde::Serialize;
+///
+/// #[derive(Serialize)]
+/// struct Player { health: i32, name: String }
+///
+/// let player = Player { health: 20, name: "Steve".into() };
+/// let compound = to_compound(&player).unwrap();
+/// assert_eq!(compound.get_int("health"), Some(20));
+/// assert_eq!(compound.get_string("name"), Some("Steve"));
+/// ```
 ///
 /// # Errors
 ///

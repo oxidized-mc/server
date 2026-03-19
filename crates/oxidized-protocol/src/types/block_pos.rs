@@ -50,6 +50,22 @@ const X_OFFSET: u32 = Z_OFFSET + PACKED_Z_LENGTH;
 /// | Y | 0–11 | 12 |
 ///
 /// Sign extension is applied when unpacking.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::types::BlockPos;
+///
+/// // Create a position and roundtrip through the packed i64 format
+/// let pos = BlockPos::new(100, 64, -200);
+/// let packed = pos.as_long();
+/// let unpacked = BlockPos::from_long(packed);
+/// assert_eq!(unpacked, pos);
+///
+/// // Directional helpers
+/// let above = pos.above();
+/// assert_eq!(above.y, 65);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockPos {
     /// The X coordinate (block space).

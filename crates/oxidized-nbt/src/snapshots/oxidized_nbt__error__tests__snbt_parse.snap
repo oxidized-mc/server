@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::SnbtParse\n{ pos: 42, message: \"unexpected character\".into(), })"
+---
+SNBT parse error at position 42: unexpected character

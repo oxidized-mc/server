@@ -19,6 +19,20 @@ use super::server_player::ServerPlayer;
 /// Thread-safe via `Arc<RwLock<ServerPlayer>>` entries. The `PlayerList`
 /// itself should be wrapped in its own lock or held by a single owner
 /// (the tick loop).
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::player::PlayerList;
+///
+/// let list = PlayerList::new(20);
+/// assert_eq!(list.player_count(), 0);
+/// assert_eq!(list.max_players(), 20);
+///
+/// let id1 = list.next_entity_id();
+/// let id2 = list.next_entity_id();
+/// assert_ne!(id1, id2); // monotonically increasing
+/// ```
 #[derive(Debug)]
 pub struct PlayerList {
     /// Players indexed by UUID.

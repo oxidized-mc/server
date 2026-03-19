@@ -100,6 +100,21 @@ pub async fn write_frame(
 mod tests {
     use super::*;
 
+    #[test]
+    fn test_error_display_snapshots() {
+        insta::assert_snapshot!(
+            "packet_too_large",
+            format!(
+                "{}",
+                FrameError::PacketTooLarge {
+                    size: 3_000_000,
+                    max: 2_097_152,
+                }
+            )
+        );
+        insta::assert_snapshot!("zero_length", format!("{}", FrameError::ZeroLength));
+    }
+
     #[tokio::test]
     async fn test_frame_roundtrip() {
         let payload = b"\x00Hello, Minecraft!";

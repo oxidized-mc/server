@@ -40,6 +40,17 @@ pub enum VarIntError {
 // ---------------------------------------------------------------------------
 
 /// Encodes a 32-bit VarInt into `buf`, returning the number of bytes written (1–5).
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::codec::varint::{encode_varint, VARINT_MAX_BYTES};
+///
+/// let mut buf = [0u8; VARINT_MAX_BYTES];
+/// let len = encode_varint(300, &mut buf);
+/// assert_eq!(len, 2);
+/// assert_eq!(&buf[..len], &[0xAC, 0x02]);
+/// ```
 pub fn encode_varint(mut value: i32, buf: &mut [u8; VARINT_MAX_BYTES]) -> usize {
     let mut i = 0;
     loop {
@@ -63,6 +74,16 @@ pub fn encode_varint(mut value: i32, buf: &mut [u8; VARINT_MAX_BYTES]) -> usize 
 ///
 /// Returns [`VarIntError::TooLarge`] if the value exceeds 5 bytes, or
 /// [`VarIntError::UnexpectedEof`] if the buffer is too short.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::codec::varint::decode_varint;
+///
+/// let (value, bytes_read) = decode_varint(&[0xAC, 0x02]).unwrap();
+/// assert_eq!(value, 300);
+/// assert_eq!(bytes_read, 2);
+/// ```
 pub fn decode_varint(buf: &[u8]) -> Result<(i32, usize), VarIntError> {
     let mut result: i32 = 0;
     let mut shift: u32 = 0;
@@ -128,6 +149,17 @@ pub fn decode_varlong(buf: &[u8]) -> Result<(i64, usize), VarIntError> {
 // ---------------------------------------------------------------------------
 
 /// Writes a VarInt to a [`BufMut`].
+///
+/// # Examples
+///
+/// ```
+/// use bytes::BytesMut;
+/// use oxidized_protocol::codec::varint::write_varint_buf;
+///
+/// let mut buf = BytesMut::new();
+/// write_varint_buf(25565, &mut buf);
+/// assert_eq!(&buf[..], &[0xDD, 0xC7, 0x01]);
+/// ```
 pub fn write_varint_buf(value: i32, buf: &mut BytesMut) {
     let mut tmp = [0u8; VARINT_MAX_BYTES];
     let len = encode_varint(value, &mut tmp);
@@ -139,6 +171,20 @@ pub fn write_varint_buf(value: i32, buf: &mut BytesMut) {
 /// # Errors
 ///
 /// Returns [`VarIntError`] on malformed or truncated input.
+///
+/// # Examples
+///
+/// ```
+/// use bytes::{Bytes, BytesMut};
+/// use oxidized_protocol::codec::varint::{write_varint_buf, read_varint_buf};
+///
+/// let mut out = BytesMut::new();
+/// write_varint_buf(25565, &mut out);
+///
+/// let mut input = out.freeze();
+/// let value = read_varint_buf(&mut input).unwrap();
+/// assert_eq!(value, 25565);
+/// ```
 pub fn read_varint_buf(buf: &mut Bytes) -> Result<i32, VarIntError> {
     let mut result: i32 = 0;
     let mut shift: u32 = 0;
@@ -206,6 +252,18 @@ pub async fn write_varint_async(
 }
 
 /// Returns the number of bytes needed to encode `value` as a VarInt.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::codec::varint::varint_size;
+///
+/// assert_eq!(varint_size(0), 1);
+/// assert_eq!(varint_size(127), 1);
+/// assert_eq!(varint_size(128), 2);
+/// assert_eq!(varint_size(25565), 3);
+/// assert_eq!(varint_size(-1), 5);
+/// ```
 pub const fn varint_size(value: i32) -> usize {
     let value = value as u32;
     match value {
@@ -432,6 +490,22 @@ mod tests {
         assert_eq!(varint_size(25565), 3);
         assert_eq!(varint_size(i32::MAX), 5);
         assert_eq!(varint_size(-1), 5);
+    }
+
+    // -----------------------------------------------------------------------
+    // Error display snapshots
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_error_display_snapshots() {
+        insta::assert_snapshot!(
+            "too_large",
+            format!("{}", VarIntError::TooLarge { max_bytes: 5 })
+        );
+        insta::assert_snapshot!(
+            "unexpected_eof",
+            format!("{}", VarIntError::UnexpectedEof)
+        );
     }
 
     // -----------------------------------------------------------------------

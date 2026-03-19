@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-protocol/src/codec/frame.rs
+expression: "format!(\"{}\", FrameError::ZeroLength)"
+---
+zero-length frame

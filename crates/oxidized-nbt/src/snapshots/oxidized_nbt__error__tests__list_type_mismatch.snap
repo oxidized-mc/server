@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::ListTypeMismatch { expected: 3, got: 8, })"
+---
+list type mismatch: expected tag type 3, got 8

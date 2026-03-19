@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::DepthLimit { depth: 513, max: 512, })"
+---
+NBT nesting depth exceeded: depth 513, max 512

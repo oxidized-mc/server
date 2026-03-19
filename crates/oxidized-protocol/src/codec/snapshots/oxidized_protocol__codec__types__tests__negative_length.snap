@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-protocol/src/codec/types.rs
+expression: "format!(\"{}\", TypeError::NegativeLength(-1))"
+---
+negative string length: -1

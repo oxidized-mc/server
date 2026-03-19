@@ -11,6 +11,17 @@ use oxidized_world::chunk::ChunkPos;
 /// Yields `(2*radius+1)^2` positions, shell by shell (Chebyshev distance 0,
 /// then 1, then 2, …). Within each shell, positions are iterated in a
 /// deterministic order.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::ChunkPos;
+/// use oxidized_game::chunk::view_distance::spiral_chunks;
+///
+/// let chunks: Vec<ChunkPos> = spiral_chunks(ChunkPos::new(0, 0), 1).collect();
+/// assert_eq!(chunks.len(), 9); // 3×3
+/// assert_eq!(chunks[0], ChunkPos::new(0, 0)); // center first
+/// ```
 pub fn spiral_chunks(center: ChunkPos, radius: i32) -> impl Iterator<Item = ChunkPos> {
     let mut result = Vec::with_capacity(((2 * radius + 1) * (2 * radius + 1)) as usize);
     for r in 0..=radius {
@@ -27,6 +38,25 @@ pub fn spiral_chunks(center: ChunkPos, radius: i32) -> impl Iterator<Item = Chun
 
 /// Returns the set of chunks that a player at `new_center` needs but did not
 /// need at `old_center`, given `radius` (Chebyshev view distance).
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::ChunkPos;
+/// use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload};
+///
+/// let old = ChunkPos::new(0, 0);
+/// let new = ChunkPos::new(2, 0);
+/// let radius = 1;
+///
+/// let to_load = chunks_to_load(old, new, radius);
+/// let to_unload = chunks_to_unload(old, new, radius);
+///
+/// // No position should appear in both lists
+/// for pos in &to_load {
+///     assert!(!to_unload.contains(pos));
+/// }
+/// ```
 pub fn chunks_to_load(old_center: ChunkPos, new_center: ChunkPos, radius: i32) -> Vec<ChunkPos> {
     spiral_chunks(new_center, radius)
         .filter(|&pos| chebyshev(pos, old_center) > radius)

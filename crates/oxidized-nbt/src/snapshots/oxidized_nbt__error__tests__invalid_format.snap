@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::InvalidFormat(\"missing root compound tag\".into()))"
+---
+invalid NBT format: missing root compound tag

@@ -43,6 +43,18 @@ pub enum ChunkError {
 }
 
 /// A full chunk column in a server level.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::{ChunkPos, LevelChunk};
+///
+/// let mut chunk = LevelChunk::new(ChunkPos::new(0, 0));
+/// // y=0 maps to section index 4 (overworld min_y = -64)
+/// chunk.set_block_state(5, 0, 5, 1).unwrap();
+/// assert_eq!(chunk.get_block_state(5, 0, 5).unwrap(), 1);
+/// assert_eq!(chunk.get_block_state(0, 0, 0).unwrap(), 0); // air
+/// ```
 #[derive(Debug, Clone)]
 pub struct LevelChunk {
     /// Chunk position in chunk coordinates.
@@ -310,6 +322,21 @@ impl LevelChunk {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_error_display_snapshots() {
+        insta::assert_snapshot!(
+            "out_of_bounds",
+            format!(
+                "{}",
+                ChunkError::OutOfBounds {
+                    x: 100,
+                    y: -65,
+                    z: 200,
+                }
+            )
+        );
+    }
 
     #[test]
     fn test_chunk_pos_from_block() {

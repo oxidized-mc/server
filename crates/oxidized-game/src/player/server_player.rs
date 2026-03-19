@@ -18,6 +18,27 @@ use super::game_mode::GameMode;
 use super::inventory::PlayerInventory;
 
 /// Runtime state for a single connected player.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::player::ServerPlayer;
+/// use oxidized_game::player::GameMode;
+/// use oxidized_protocol::auth::GameProfile;
+/// use oxidized_protocol::types::ResourceLocation;
+/// use uuid::Uuid;
+///
+/// let uuid = Uuid::nil();
+/// let profile = GameProfile::new(uuid, "Steve".into());
+/// let player = ServerPlayer::new(
+///     1,
+///     profile,
+///     ResourceLocation::minecraft("overworld"),
+///     GameMode::Survival,
+/// );
+/// assert_eq!(player.name, "Steve");
+/// assert_eq!(player.entity_id, 1);
+/// ```
 #[derive(Debug)]
 pub struct ServerPlayer {
     /// Network entity ID (unique per server session, assigned by [`PlayerList`]).

@@ -49,6 +49,20 @@ pub enum TypeError {
 ///
 /// Returns [`TypeError`] if the string is too long, the buffer is truncated,
 /// or the bytes are not valid UTF-8.
+///
+/// # Examples
+///
+/// ```
+/// use bytes::{Bytes, BytesMut};
+/// use oxidized_protocol::codec::types::{write_string, read_string};
+///
+/// let mut out = BytesMut::new();
+/// write_string(&mut out, "Hello, Minecraft!");
+///
+/// let mut input = out.freeze();
+/// let s = read_string(&mut input, 255).unwrap();
+/// assert_eq!(s, "Hello, Minecraft!");
+/// ```
 pub fn read_string(buf: &mut Bytes, max_chars: usize) -> Result<String, TypeError> {
     let len = varint::read_varint_buf(buf)?;
     if len < 0 {
@@ -74,6 +88,18 @@ pub fn read_string(buf: &mut Bytes, max_chars: usize) -> Result<String, TypeErro
 }
 
 /// Writes a VarInt-length-prefixed UTF-8 string to `buf`.
+///
+/// # Examples
+///
+/// ```
+/// use bytes::BytesMut;
+/// use oxidized_protocol::codec::types::write_string;
+///
+/// let mut buf = BytesMut::new();
+/// write_string(&mut buf, "Hello");
+/// // VarInt(5) + 5 ASCII bytes = 6 bytes total
+/// assert_eq!(buf.len(), 6);
+/// ```
 pub fn write_string(buf: &mut BytesMut, s: &str) {
     varint::write_varint_buf(s.len() as i32, buf);
     buf.put_slice(s.as_bytes());
@@ -161,6 +187,21 @@ pub fn write_bool(buf: &mut BytesMut, value: bool) {
 /// # Errors
 ///
 /// Returns [`TypeError::UnexpectedEof`] if fewer than 16 bytes remain.
+///
+/// # Examples
+///
+/// ```
+/// use bytes::{Bytes, BytesMut};
+/// use oxidized_protocol::codec::types::{write_uuid, read_uuid};
+///
+/// let id = uuid::Uuid::nil();
+/// let mut out = BytesMut::new();
+/// write_uuid(&mut out, &id);
+///
+/// let mut input = out.freeze();
+/// let decoded = read_uuid(&mut input).unwrap();
+/// assert_eq!(decoded, id);
+/// ```
 pub fn read_uuid(buf: &mut Bytes) -> Result<uuid::Uuid, TypeError> {
     if buf.remaining() < 16 {
         return Err(TypeError::UnexpectedEof {
@@ -174,6 +215,18 @@ pub fn read_uuid(buf: &mut Bytes) -> Result<uuid::Uuid, TypeError> {
 }
 
 /// Writes a UUID as 16 big-endian bytes (two `u64`s: most/least significant).
+///
+/// # Examples
+///
+/// ```
+/// use bytes::BytesMut;
+/// use oxidized_protocol::codec::types::write_uuid;
+///
+/// let id = uuid::Uuid::nil();
+/// let mut buf = BytesMut::new();
+/// write_uuid(&mut buf, &id);
+/// assert_eq!(buf.len(), 16);
+/// ```
 pub fn write_uuid(buf: &mut BytesMut, uuid: &uuid::Uuid) {
     let (msb, lsb) = uuid.as_u64_pair();
     buf.put_u64(msb);
@@ -254,6 +307,31 @@ pub fn write_byte_array(buf: &mut BytesMut, data: &[u8]) {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_error_display_snapshots() {
+        insta::assert_snapshot!(
+            "string_too_long",
+            format!(
+                "{}",
+                TypeError::StringTooLong { len: 300, max: 255 }
+            )
+        );
+        insta::assert_snapshot!(
+            "negative_length",
+            format!("{}", TypeError::NegativeLength(-1))
+        );
+        insta::assert_snapshot!(
+            "unexpected_eof",
+            format!(
+                "{}",
+                TypeError::UnexpectedEof {
+                    need: 16,
+                    have: 4,
+                }
+            )
+        );
+    }
 
     #[test]
     fn test_string_roundtrip() {

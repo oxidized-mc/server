@@ -135,6 +135,23 @@ pub fn read_named_tag<R: Read>(
 ///
 /// The root name is read and discarded.
 ///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtAccounter, NbtCompound, read_nbt, write_nbt};
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_int("score", 100);
+///
+/// let mut buf = Vec::new();
+/// write_nbt(&mut buf, &compound).unwrap();
+///
+/// let mut reader = buf.as_slice();
+/// let mut acc = NbtAccounter::unlimited();
+/// let result = read_nbt(&mut reader, &mut acc).unwrap();
+/// assert_eq!(result.get_int("score"), Some(100));
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error if the root tag is not a compound, or on any I/O or
@@ -163,6 +180,23 @@ pub fn read_nbt<R: Read>(
 /// `[TAG_COMPOUND][compound payload]` — **no root name**.
 ///
 /// This is the format used for Minecraft protocol packets (1.20.2+).
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtAccounter, NbtCompound, read_network_nbt, write_network_nbt};
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_byte("op", 1);
+///
+/// let mut buf = Vec::new();
+/// write_network_nbt(&mut buf, &compound).unwrap();
+///
+/// let mut reader = buf.as_slice();
+/// let mut acc = NbtAccounter::default_quota();
+/// let result = read_network_nbt(&mut reader, &mut acc).unwrap();
+/// assert_eq!(result.get_byte("op"), Some(1));
+/// ```
 ///
 /// # Errors
 ///

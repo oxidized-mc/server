@@ -17,6 +17,22 @@ use crate::writer::write_nbt;
 ///
 /// Uses the uncompressed disk quota (100 MiB).
 ///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtCompound, read_gzip, write_gzip};
+/// use std::io::Cursor;
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_long("seed", 12345);
+///
+/// let mut compressed = Vec::new();
+/// write_gzip(&mut compressed, &compound).unwrap();
+///
+/// let result = read_gzip(Cursor::new(&compressed)).unwrap();
+/// assert_eq!(result.get_long("seed"), Some(12345));
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error on decompression failure, invalid NBT, or quota violation.
@@ -42,6 +58,19 @@ pub fn read_zlib(data: &[u8]) -> Result<NbtCompound, NbtError> {
 /// Reads a root compound from uncompressed bytes.
 ///
 /// Uses the uncompressed disk quota (100 MiB).
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtCompound, read_bytes, write_bytes};
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_int("health", 20);
+///
+/// let data = write_bytes(&compound).unwrap();
+/// let result = read_bytes(&data).unwrap();
+/// assert_eq!(result.get_int("health"), Some(20));
+/// ```
 ///
 /// # Errors
 ///
@@ -69,6 +98,21 @@ pub fn read_file(path: &Path) -> Result<NbtCompound, NbtError> {
 
 /// Writes a root compound as GZIP-compressed data.
 ///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtCompound, write_gzip};
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_string("biome", "forest");
+///
+/// let mut compressed = Vec::new();
+/// write_gzip(&mut compressed, &compound).unwrap();
+/// // GZIP magic bytes
+/// assert_eq!(compressed[0], 0x1F);
+/// assert_eq!(compressed[1], 0x8B);
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error on I/O or compression failure.
@@ -91,6 +135,18 @@ pub fn write_zlib(compound: &NbtCompound) -> Result<Vec<u8>, NbtError> {
 }
 
 /// Writes a root compound as uncompressed bytes.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtCompound, write_bytes};
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_string("msg", "hello");
+///
+/// let bytes = write_bytes(&compound).unwrap();
+/// assert!(!bytes.is_empty());
+/// ```
 ///
 /// # Errors
 ///
