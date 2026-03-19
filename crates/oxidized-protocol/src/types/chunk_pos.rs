@@ -24,6 +24,25 @@ use super::block_pos::BlockPos;
 /// `ChunkPos` but `oxidized-world` cannot depend on `oxidized-protocol` per
 /// crate layering rules. A shared `oxidized-types` crate should be created
 /// to consolidate coordinate types (BlockPos, ChunkPos, SectionPos).
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::types::ChunkPos;
+///
+/// // Create from chunk coordinates
+/// let chunk = ChunkPos::new(2, 3);
+/// assert_eq!(chunk.min_block_x(), 32);
+/// assert_eq!(chunk.min_block_z(), 48);
+///
+/// // Derive from block coordinates
+/// let chunk = ChunkPos::from_block_coords(100, 200);
+/// assert_eq!(chunk, ChunkPos::new(6, 12));
+///
+/// // Pack/unpack roundtrip
+/// let packed = chunk.as_long();
+/// assert_eq!(ChunkPos::from_long(packed), chunk);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ChunkPos {
     /// The chunk X coordinate.

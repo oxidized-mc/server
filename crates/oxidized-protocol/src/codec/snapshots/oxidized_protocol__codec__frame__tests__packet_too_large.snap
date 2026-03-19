@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-protocol/src/codec/frame.rs
+expression: "format!(\"{}\", FrameError::PacketTooLarge { size: 3_000_000, max: 2_097_152, })"
+---
+packet too large: 3000000 bytes (max 2097152)

@@ -57,6 +57,24 @@ impl TryFrom<i32> for ClientIntent {
 /// This is always the first packet in any connection. After receiving it,
 /// the server transitions to either [`Status`](ClientIntent::Status) or
 /// [`Login`](ClientIntent::Login) state.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::packets::handshake::{ClientIntentionPacket, ClientIntent};
+///
+/// let packet = ClientIntentionPacket {
+///     protocol_version: 1_073_742_124,
+///     server_address: "localhost".to_string(),
+///     server_port: 25565,
+///     next_state: ClientIntent::Status,
+/// };
+///
+/// // Encode and decode roundtrip
+/// let encoded = packet.encode();
+/// let decoded = ClientIntentionPacket::decode(encoded.freeze()).unwrap();
+/// assert_eq!(decoded, packet);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientIntentionPacket {
     /// The protocol version the client is using.

@@ -11,6 +11,20 @@ use crate::error::{DEFAULT_QUOTA, MAX_DEPTH, NbtError, UNCOMPRESSED_QUOTA};
 /// Create one per parse operation and pass it through every recursive call.
 /// The accounter ensures that malicious or malformed payloads cannot exhaust
 /// memory or blow the stack.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::NbtAccounter;
+///
+/// // Use unlimited() for trusted data where quotas are not needed.
+/// let mut acc = NbtAccounter::unlimited();
+/// acc.account_bytes(1024).unwrap();
+/// assert_eq!(acc.usage(), 1024);
+///
+/// // Use default_quota() for network data (2 MiB limit).
+/// let acc = NbtAccounter::default_quota();
+/// ```
 pub struct NbtAccounter {
     usage: usize,
     quota: usize,

@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::UnexpectedEnd)"
+---
+unexpected end of NBT data

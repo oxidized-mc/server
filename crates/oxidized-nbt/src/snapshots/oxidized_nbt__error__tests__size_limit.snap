@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::SizeLimit { used: 3_000_000, quota: 2_097_152, })"
+---
+NBT size limit exceeded: used 3000000 bytes, quota 2097152 bytes

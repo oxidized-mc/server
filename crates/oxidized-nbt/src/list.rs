@@ -9,6 +9,19 @@ use crate::tag::NbtTag;
 /// Every element must share the same tag type ID. An empty list has element
 /// type [`TAG_END`] (0); the first push to an empty list sets its element
 /// type automatically.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtList, NbtTag};
+///
+/// let mut list = NbtList::empty();
+/// list.push(NbtTag::Int(10)).unwrap();
+/// list.push(NbtTag::Int(20)).unwrap();
+///
+/// assert_eq!(list.len(), 2);
+/// assert_eq!(list.get(0), Some(&NbtTag::Int(10)));
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct NbtList {
     element_type: u8,

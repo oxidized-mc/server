@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-world/src/chunk/bit_storage.rs
+expression: "format!(\"{}\", BitStorageError::InvalidBits(0))"
+---
+bits per entry must be 1..=32, got 0

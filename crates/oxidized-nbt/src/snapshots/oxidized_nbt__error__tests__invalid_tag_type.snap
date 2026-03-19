@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::InvalidTagType(99))"
+---
+invalid tag type ID: 99

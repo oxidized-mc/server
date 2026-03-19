@@ -139,6 +139,19 @@ pub fn write_named_tag<W: Write>(writer: &mut W, name: &str, tag: &NbtTag) -> Re
 ///
 /// This is the format used for disk files (level.dat, etc.).
 ///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtCompound, write_nbt};
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_string("level", "plains");
+///
+/// let mut buf = Vec::new();
+/// write_nbt(&mut buf, &compound).unwrap();
+/// assert!(!buf.is_empty());
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error on I/O failure.
@@ -154,6 +167,19 @@ pub fn write_nbt<W: Write>(writer: &mut W, compound: &NbtCompound) -> Result<(),
 /// `[TAG_COMPOUND][compound payload]` — **no root name**.
 ///
 /// This is the format used for Minecraft protocol packets (1.20.2+).
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::{NbtCompound, write_network_nbt};
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_int("entity_id", 7);
+///
+/// let mut buf = Vec::new();
+/// write_network_nbt(&mut buf, &compound).unwrap();
+/// assert!(!buf.is_empty());
+/// ```
 ///
 /// # Errors
 ///

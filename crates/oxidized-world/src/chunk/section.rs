@@ -9,6 +9,20 @@ use super::paletted_container::{PalettedContainer, PalettedContainerError, Strat
 ///
 /// Contains palette-compressed block states and biome data, plus counts
 /// of non-empty blocks and fluids for quick access.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::LevelChunkSection;
+///
+/// let mut section = LevelChunkSection::new();
+/// assert_eq!(section.non_empty_block_count(), 0);
+///
+/// // Set a stone block (state ID 1) at position (0, 0, 0)
+/// section.set_block_state(0, 0, 0, 1).unwrap();
+/// assert_eq!(section.get_block_state(0, 0, 0).unwrap(), 1);
+/// assert_eq!(section.non_empty_block_count(), 1);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LevelChunkSection {
     /// Number of non-air blocks in this section.

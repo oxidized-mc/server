@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::InvalidUtf8)"
+---
+invalid Modified UTF-8 data

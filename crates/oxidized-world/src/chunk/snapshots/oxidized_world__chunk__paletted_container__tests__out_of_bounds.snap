@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-world/src/chunk/paletted_container.rs
+expression: "format!(\"{}\", PalettedContainerError::OutOfBounds\n{ x: 17, y: 0, z: 3, size: 16, })"
+---
+coordinate (17, 0, 3) out of bounds for size 16

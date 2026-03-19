@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-world/src/chunk/bit_storage.rs
+expression: "format!(\"{}\", BitStorageError::OutOfBounds { index: 16, size: 16, })"
+---
+index 16 out of bounds for size 16

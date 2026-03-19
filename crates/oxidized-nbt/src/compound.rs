@@ -9,6 +9,21 @@ use crate::tag::NbtTag;
 ///
 /// Backed by [`IndexMap`] so that iteration order matches insertion order,
 /// which is important for deterministic serialization.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::NbtCompound;
+///
+/// let mut compound = NbtCompound::new();
+/// compound.put_int("x", 10);
+/// compound.put_string("name", "Overworld");
+///
+/// assert_eq!(compound.get_int("x"), Some(10));
+/// assert_eq!(compound.get_string("name"), Some("Overworld"));
+/// assert_eq!(compound.len(), 2);
+/// assert!(!compound.is_empty());
+/// ```
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct NbtCompound {
     entries: IndexMap<String, NbtTag>,

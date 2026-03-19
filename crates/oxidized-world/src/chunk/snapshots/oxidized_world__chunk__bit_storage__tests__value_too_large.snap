@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-world/src/chunk/bit_storage.rs
+expression: "format!(\"{}\", BitStorageError::ValueTooLarge { value: 16, max: 15, bits: 4, })"
+---
+value 16 exceeds max 15 for 4-bit storage

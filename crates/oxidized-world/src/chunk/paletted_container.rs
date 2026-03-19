@@ -50,6 +50,17 @@ pub enum PalettedContainerError {
 /// Strategy configuration for a paletted container.
 ///
 /// Determines palette type thresholds for block states vs biomes.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::paletted_container::Strategy;
+///
+/// assert_eq!(Strategy::BlockStates.size(), 4096); // 16³
+/// assert_eq!(Strategy::Biomes.size(), 64);         // 4³
+/// assert_eq!(Strategy::BlockStates.side(), 16);
+/// assert_eq!(Strategy::Biomes.side(), 4);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Strategy {
     /// Block states: 4096 entries (16³), palette thresholds 0/1-4/5-8/9+.
@@ -146,6 +157,17 @@ enum PaletteData {
 /// Stores either block state IDs (4096 entries, 16³) or biome IDs
 /// (64 entries, 4³), automatically selecting the most compact
 /// representation.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_world::chunk::paletted_container::{PalettedContainer, Strategy};
+///
+/// let mut container = PalettedContainer::new(Strategy::BlockStates, 0);
+/// container.set(1, 2, 3, 42).unwrap();
+/// assert_eq!(container.get(1, 2, 3).unwrap(), 42);
+/// assert_eq!(container.get(0, 0, 0).unwrap(), 0); // default value
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PalettedContainer {
     strategy: Strategy,
@@ -666,6 +688,40 @@ fn read_bit_storage(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_error_display_snapshots() {
+        insta::assert_snapshot!(
+            "out_of_bounds",
+            format!(
+                "{}",
+                PalettedContainerError::OutOfBounds {
+                    x: 17,
+                    y: 0,
+                    z: 3,
+                    size: 16,
+                }
+            )
+        );
+        insta::assert_snapshot!(
+            "invalid_bits_per_entry",
+            format!("{}", PalettedContainerError::InvalidBitsPerEntry(99))
+        );
+        insta::assert_snapshot!(
+            "insufficient_data",
+            format!(
+                "{}",
+                PalettedContainerError::InsufficientData {
+                    expected: 256,
+                    actual: 10,
+                }
+            )
+        );
+        insta::assert_snapshot!(
+            "malformed_varint",
+            format!("{}", PalettedContainerError::MalformedVarInt)
+        );
+    }
 
     #[test]
     fn test_empty_container() {

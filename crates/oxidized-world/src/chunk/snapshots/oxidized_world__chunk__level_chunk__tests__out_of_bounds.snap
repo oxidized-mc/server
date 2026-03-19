@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-world/src/chunk/level_chunk.rs
+expression: "format!(\"{}\", ChunkError::OutOfBounds { x: 100, y: -65, z: 200, })"
+---
+position out of bounds: (100, -65, 200)

@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\",\nNbtError::Io(io::Error::new(io::ErrorKind::BrokenPipe, \"broken pipe\")))"
+---
+I/O error: broken pipe

@@ -1,0 +1,5 @@
+---
+source: crates/oxidized-nbt/src/error.rs
+expression: "format!(\"{}\", NbtError::SerdeError(\"field not found\".into()))"
+---
+serde error: field not found

@@ -57,6 +57,25 @@ const X_OFFSET: u32 = Z_OFFSET + PACKED_XZ_LENGTH;
 /// | X | 42–63 | 22 |
 /// | Z | 20–41 | 22 |
 /// | Y | 0–19 | 20 |
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::types::{SectionPos, BlockPos};
+///
+/// // Create from section coordinates
+/// let section = SectionPos::new(2, -4, 3);
+/// assert_eq!(section.min_block_y(), -64);
+///
+/// // Derive from a block position
+/// let block = BlockPos::new(32, -64, 48);
+/// let section = SectionPos::of_block_pos(&block);
+/// assert_eq!(section, SectionPos::new(2, -4, 3));
+///
+/// // Pack/unpack roundtrip
+/// let packed = section.as_long();
+/// assert_eq!(SectionPos::from_long(packed), section);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SectionPos {
     /// The section X coordinate.

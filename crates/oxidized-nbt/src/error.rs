@@ -100,3 +100,78 @@ pub enum NbtError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use std::io;
+
+    #[test]
+    fn test_error_display_snapshots() {
+        insta::assert_snapshot!(
+            "invalid_tag_type",
+            format!("{}", NbtError::InvalidTagType(99))
+        );
+        insta::assert_snapshot!(
+            "size_limit",
+            format!(
+                "{}",
+                NbtError::SizeLimit {
+                    used: 3_000_000,
+                    quota: 2_097_152,
+                }
+            )
+        );
+        insta::assert_snapshot!(
+            "depth_limit",
+            format!(
+                "{}",
+                NbtError::DepthLimit {
+                    depth: 513,
+                    max: 512,
+                }
+            )
+        );
+        insta::assert_snapshot!("invalid_utf8", format!("{}", NbtError::InvalidUtf8));
+        insta::assert_snapshot!("unexpected_end", format!("{}", NbtError::UnexpectedEnd));
+        insta::assert_snapshot!(
+            "invalid_format",
+            format!(
+                "{}",
+                NbtError::InvalidFormat("missing root compound tag".into())
+            )
+        );
+        insta::assert_snapshot!(
+            "list_type_mismatch",
+            format!(
+                "{}",
+                NbtError::ListTypeMismatch {
+                    expected: 3,
+                    got: 8,
+                }
+            )
+        );
+        insta::assert_snapshot!(
+            "snbt_parse",
+            format!(
+                "{}",
+                NbtError::SnbtParse {
+                    pos: 42,
+                    message: "unexpected character".into(),
+                }
+            )
+        );
+        insta::assert_snapshot!(
+            "serde_error",
+            format!("{}", NbtError::SerdeError("field not found".into()))
+        );
+        insta::assert_snapshot!(
+            "io_error",
+            format!(
+                "{}",
+                NbtError::Io(io::Error::new(io::ErrorKind::BrokenPipe, "broken pipe"))
+            )
+        );
+    }
+}

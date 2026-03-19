@@ -11,6 +11,22 @@ use crate::list::NbtList;
 ///
 /// There is no `End` variant — the TAG_END byte is a wire-format sentinel
 /// used only during serialization of compounds, not a user-facing value.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_nbt::NbtTag;
+///
+/// // Create tags from primitives via From impls
+/// let byte_tag: NbtTag = 1i8.into();
+/// let int_tag: NbtTag = 42i32.into();
+/// let str_tag: NbtTag = "hello".into();
+///
+/// // Access the inner value with typed accessors
+/// assert_eq!(int_tag.as_int(), Some(42));
+/// assert_eq!(int_tag.as_byte(), None); // wrong type returns None
+/// assert_eq!(str_tag.as_str(), Some("hello"));
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum NbtTag {
     /// A signed 8-bit integer.
