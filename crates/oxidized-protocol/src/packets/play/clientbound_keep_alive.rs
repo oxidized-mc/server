@@ -1,4 +1,4 @@
-//! ClientboundKeepAlivePacket (0x16) — server keepalive ping.
+//! ClientboundKeepAlivePacket (0x2C) — server keepalive ping.
 //!
 //! Sent every 15 seconds during the PLAY state. The client must respond
 //! with [`ServerboundKeepAlivePacket`] echoing the same `id`. If no
@@ -8,7 +8,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::packets::play::PlayPacketError;
 
-/// 0x16 — Keepalive ping from server to client.
+/// 0x2C — Keepalive ping from server to client.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientboundKeepAlivePacket {
     /// Challenge ID. The client must echo this back in its response.
@@ -17,7 +17,7 @@ pub struct ClientboundKeepAlivePacket {
 
 impl ClientboundKeepAlivePacket {
     /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x16;
+    pub const PACKET_ID: i32 = 0x2C;
 
     /// Encodes the packet body (without packet ID).
     pub fn encode(&self) -> BytesMut {
@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundKeepAlivePacket::PACKET_ID, 0x16);
+        assert_eq!(ClientboundKeepAlivePacket::PACKET_ID, 0x2C);
     }
 
     #[test]
