@@ -729,8 +729,7 @@ async fn handle_play_entry(
     let mut player = ServerPlayer::new(entity_id, profile, dimension, game_mode);
 
     // Apply client preferences, capped to server maximums.
-    player.view_distance =
-        i32::from(client_info.view_distance).min(server_ctx.max_view_distance);
+    player.view_distance = i32::from(client_info.view_distance).min(server_ctx.max_view_distance);
     player.simulation_distance =
         i32::from(client_info.view_distance).min(server_ctx.max_simulation_distance);
 

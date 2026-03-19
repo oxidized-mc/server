@@ -393,7 +393,11 @@ fn test_chunk_tracker_large_jump() {
     let (to_load, to_unload) = tracker.update_center(ChunkPos::new(1000, 1000));
     assert_eq!(to_unload.len(), 25, "all old chunks should be unloaded");
     assert_eq!(to_load.len(), 25, "all new chunks should be loaded");
-    assert_eq!(tracker.loaded_count(), 25, "total loaded should be constant");
+    assert_eq!(
+        tracker.loaded_count(),
+        25,
+        "total loaded should be constant"
+    );
 
     // Verify none of the old chunks are still loaded
     assert!(!tracker.is_loaded(&ChunkPos::new(0, 0)));
