@@ -604,10 +604,7 @@ fn build_palette_data_from_entries(
 
 /// Extracts the palette index from a [`PaletteAddResult`], or returns an
 /// error if the palette unexpectedly needs a resize.
-fn unwrap_palette_index(
-    result: PaletteAddResult,
-    bits: u8,
-) -> Result<u32, PalettedContainerError> {
+fn unwrap_palette_index(result: PaletteAddResult, bits: u8) -> Result<u32, PalettedContainerError> {
     match result {
         PaletteAddResult::Existing(idx) | PaletteAddResult::New(idx) => Ok(idx),
         PaletteAddResult::NeedsResize => Err(PalettedContainerError::InvalidBitsPerEntry(bits)),
