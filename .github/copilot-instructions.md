@@ -416,6 +416,7 @@ Full descriptions in the session plan file. Summary:
 | p08–p11 | Block registry, chunk structures, Anvil load, server level |
 | p12–p14 | Player join + spawns, chunks render, movement works |
 | p15–p18 | Entities, physics, chat, commands |
+| **R1** | **Architectural refactoring (ADR-035/036/037) — between p18 and p19** |
 | p19–p22 | World ticks, saves, inventory, block interaction |
 | p23–p27 | World generation (flat + noise), combat, mobs, animals |
 | p28–p32 | Redstone, crafting, block entities, advancements, scoreboards |
