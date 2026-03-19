@@ -274,13 +274,34 @@ impl Component {
     /// assert!(json.contains("red"), "got: {json}");
     /// ```
     pub fn from_legacy(s: &str) -> Self {
+        Self::from_legacy_with_char(s, '\u{00A7}')
+    }
+
+    /// Parse a legacy color-coded string into a component tree, recognizing
+    /// both the standard `§` character and a custom `color_char` prefix.
+    ///
+    /// This is the shared color parsing logic used for MOTD, chat messages,
+    /// tab list, scoreboard, bossbar, name tags, and anywhere else color
+    /// codes need to be resolved.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxidized_protocol::chat::Component;
+    /// // Using '&' as the color prefix
+    /// let c = Component::from_legacy_with_char("&cRed &lBold", '&');
+    /// let json = c.to_json().unwrap();
+    /// assert!(json.contains("red"), "got: {json}");
+    /// ```
+    pub fn from_legacy_with_char(s: &str, color_char: char) -> Self {
+        let section_sign = '\u{00A7}';
         let mut root = Component::text("");
         let mut current_text = String::new();
         let mut current_style = Style::default();
         let mut chars = s.chars().peekable();
 
         while let Some(ch) = chars.next() {
-            if ch == '\u{00A7}' {
+            if ch == section_sign || ch == color_char {
                 if let Some(&code_char) = chars.peek() {
                     if let Some(fmt) = ChatFormatting::from_code(code_char) {
                         // Flush current text
@@ -1344,5 +1365,71 @@ mod tests {
     fn test_from_str() {
         let c: Component = "hello".into();
         assert_eq!(c.content, ComponentContent::Text("hello".into()));
+    }
+
+    // ── from_legacy_with_char ────────────────────────────────────────
+
+    #[test]
+    fn test_from_legacy_with_char_ampersand() {
+        let c = Component::from_legacy_with_char("&cRed text", '&');
+        let json = c.to_json().unwrap();
+        assert!(json.contains("red"), "got: {json}");
+        assert!(json.contains("Red text"), "got: {json}");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_section_sign_still_works() {
+        let c = Component::from_legacy_with_char("§cRed text", '&');
+        let json = c.to_json().unwrap();
+        assert!(json.contains("red"), "got: {json}");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_mixed_prefixes() {
+        let c = Component::from_legacy_with_char("§cRed &lBold", '&');
+        let json = c.to_json().unwrap();
+        assert!(json.contains("red"), "got: {json}");
+        assert!(json.contains("bold"), "got: {json}");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_bold_and_color() {
+        let c = Component::from_legacy_with_char("&6&lGold Bold", '&');
+        let json = c.to_json().unwrap();
+        assert!(json.contains("gold"), "got: {json}");
+        assert!(json.contains("bold"), "got: {json}");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_reset() {
+        let c = Component::from_legacy_with_char("&cRed &rNormal", '&');
+        assert!(c.children.len() >= 2, "expected multiple children");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_no_codes() {
+        let c = Component::from_legacy_with_char("plain text", '&');
+        assert_eq!(format!("{c}"), "plain text");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_hash_prefix() {
+        let c = Component::from_legacy_with_char("#cRed text", '#');
+        let json = c.to_json().unwrap();
+        assert!(json.contains("red"), "got: {json}");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_trailing_prefix() {
+        // Color char at end of string with no code after it
+        let c = Component::from_legacy_with_char("text&", '&');
+        assert_eq!(format!("{c}"), "text&");
+    }
+
+    #[test]
+    fn test_from_legacy_with_char_invalid_code() {
+        // &z is not a valid code — should be kept as literal
+        let c = Component::from_legacy_with_char("&ztext", '&');
+        assert_eq!(format!("{c}"), "&ztext");
     }
 }

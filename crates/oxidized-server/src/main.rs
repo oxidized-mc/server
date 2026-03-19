@@ -106,6 +106,11 @@ fn main() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("invalid bind address: {e}"))?;
 
         // Build the ServerStatus from config for the server list.
+        let color_char = config.chat.color_char();
+        let motd_component = match color_char {
+            Some(ch) => Component::from_legacy_with_char(&config.display.motd, ch),
+            None => Component::from_legacy(&config.display.motd),
+        };
         let server_status = Arc::new(ServerStatus {
             version: StatusVersion {
                 name: constants::VERSION_NAME.to_string(),
@@ -116,7 +121,7 @@ fn main() -> anyhow::Result<()> {
                 online: 0,
                 sample: Vec::new(),
             },
-            description: Component::text(&config.display.motd),
+            description: motd_component,
             favicon: None, // Favicon loading deferred to Phase 18
             enforces_secure_chat: false,
         });
@@ -166,6 +171,7 @@ fn main() -> anyhow::Result<()> {
             max_view_distance: config.world.view_distance as i32,
             max_simulation_distance: config.world.simulation_distance as i32,
             chat_tx: broadcast::channel(256).0,
+            color_char,
         });
 
         // Build the shared login context.
