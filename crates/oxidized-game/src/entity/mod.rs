@@ -87,6 +87,11 @@ pub struct Entity {
     pub width: f32,
     /// Height of entity's hitbox (meters).
     pub height: f32,
+
+    /// Accumulated fall distance (blocks) for fall damage calculation.
+    ///
+    /// Increases while falling, resets to 0.0 on landing.
+    pub fall_distance: f32,
 }
 
 impl Entity {
@@ -131,6 +136,7 @@ impl Entity {
             synched_data,
             width,
             height,
+            fall_distance: 0.0,
         }
     }
 
