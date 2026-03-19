@@ -6,7 +6,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 /// Sets the center chunk for the client's chunk cache.
 ///
@@ -39,6 +41,20 @@ impl ClientboundSetChunkCacheCenterPacket {
     }
 }
 
+impl Packet for ClientboundSetChunkCacheCenterPacket {
+    const PACKET_ID: i32 = 0x5E;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let chunk_x = varint::read_varint_buf(&mut data)?;
+        let chunk_z = varint::read_varint_buf(&mut data)?;
+        Ok(Self { chunk_x, chunk_z })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -65,5 +81,25 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSetChunkCacheCenterPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundSetChunkCacheCenterPacket {
+            chunk_x: 5,
+            chunk_z: -3,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundSetChunkCacheCenterPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSetChunkCacheCenterPacket as Packet>::PACKET_ID,
+            0x5E
+        );
     }
 }

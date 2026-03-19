@@ -6,6 +6,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x2C — Keepalive ping from server to client.
@@ -41,6 +43,23 @@ impl ClientboundKeepAlivePacket {
     }
 }
 
+impl Packet for ClientboundKeepAlivePacket {
+    const PACKET_ID: i32 = 0x2C;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        if data.remaining() < 8 {
+            return Err(PacketDecodeError::InvalidData(
+                "KeepAlive packet too short".to_string(),
+            ));
+        }
+        Ok(Self { id: data.get_i64() })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -71,5 +90,22 @@ mod tests {
     fn test_decode_too_short() {
         let data = Bytes::from_static(&[0, 1, 2]);
         assert!(ClientboundKeepAlivePacket::decode(data).is_err());
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundKeepAlivePacket { id: 123_456_789 };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundKeepAlivePacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundKeepAlivePacket as Packet>::PACKET_ID,
+            0x2C
+        );
     }
 }

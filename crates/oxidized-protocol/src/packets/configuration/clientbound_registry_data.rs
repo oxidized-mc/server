@@ -6,8 +6,10 @@
 use bytes::{Buf, Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint::{self, VarIntError};
+use crate::codec::Packet;
 use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundRegistryDataPacket`].
@@ -120,6 +122,43 @@ impl ClientboundRegistryDataPacket {
     }
 }
 
+impl Packet for ClientboundRegistryDataPacket {
+    const PACKET_ID: i32 = 0x07;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let registry = ResourceLocation::read(&mut data)?;
+
+        let count = varint::read_varint_buf(&mut data)?;
+        if count < 0 {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "negative entry count: {count}"
+            )));
+        }
+
+        let mut entries = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            let id = ResourceLocation::read(&mut data)?;
+            let has_data = types::read_bool(&mut data)?;
+            let nbt_data = if has_data {
+                let mut reader = data.reader();
+                let mut acc = oxidized_nbt::NbtAccounter::unlimited();
+                let compound = oxidized_nbt::read_network_nbt(&mut reader, &mut acc)?;
+                data = reader.into_inner();
+                Some(compound)
+            } else {
+                None
+            };
+            entries.push(RegistryEntry { id, data: nbt_data });
+        }
+
+        Ok(Self { registry, entries })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -193,5 +232,28 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundRegistryDataPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundRegistryDataPacket {
+            registry: ResourceLocation::new("minecraft", "dimension_type").unwrap(),
+            entries: vec![RegistryEntry {
+                id: ResourceLocation::new("minecraft", "overworld").unwrap(),
+                data: None,
+            }],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundRegistryDataPacket as Packet>::PACKET_ID,
+            0x07
+        );
     }
 }

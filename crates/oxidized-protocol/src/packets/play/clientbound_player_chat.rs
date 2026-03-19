@@ -3,7 +3,9 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::{types, varint};
+use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
 
@@ -219,6 +221,142 @@ impl ClientboundPlayerChatPacket {
     }
 }
 
+impl Packet for ClientboundPlayerChatPacket {
+    const PACKET_ID: i32 = 0x41;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let map_err = |e: PlayPacketError| -> PacketDecodeError {
+            match e {
+                PlayPacketError::UnexpectedEof => {
+                    PacketDecodeError::InvalidData(
+                        "unexpected end of packet data".into(),
+                    )
+                },
+                PlayPacketError::InvalidData(s) => {
+                    PacketDecodeError::InvalidData(s)
+                },
+                PlayPacketError::VarInt(e) => e.into(),
+                PlayPacketError::Type(e) => e.into(),
+                PlayPacketError::ResourceLocation(e) => e.into(),
+            }
+        };
+
+        let global_index = varint::read_varint_buf(&mut data)?;
+        let sender = types::read_uuid(&mut data)?;
+        let index = varint::read_varint_buf(&mut data)?;
+        let has_sig = types::read_bool(&mut data)?;
+        let message_signature = if has_sig {
+            if data.remaining() < 256 {
+                return Err(PacketDecodeError::InvalidData(
+                    "unexpected end of packet data".into(),
+                ));
+            }
+            let mut sig = [0u8; 256];
+            data.copy_to_slice(&mut sig);
+            Some(sig)
+        } else {
+            None
+        };
+
+        let message_content = types::read_string(&mut data, 256)?;
+        let timestamp = types::read_i64(&mut data)?;
+        let salt = types::read_i64(&mut data)?;
+        let last_seen_count = varint::read_varint_buf(&mut data)?;
+        if !(0..=128).contains(&last_seen_count) {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "invalid last_seen_count: {last_seen_count}"
+            )));
+        }
+        for _ in 0..last_seen_count {
+            let packed_id = varint::read_varint_buf(&mut data)?;
+            if packed_id == 0 {
+                if data.remaining() < 256 {
+                    return Err(PacketDecodeError::InvalidData(
+                        "unexpected end of packet data".into(),
+                    ));
+                }
+                data.advance(256);
+            }
+        }
+
+        let has_unsigned = types::read_bool(&mut data)?;
+        let unsigned_content = if has_unsigned {
+            Some(
+                read_component_nbt(&mut data).map_err(&map_err)?,
+            )
+        } else {
+            None
+        };
+
+        let filter_type = varint::read_varint_buf(&mut data)?;
+        let filter_mask = match filter_type {
+            0 => FilterMask::PassThrough,
+            1 => FilterMask::FullyFiltered,
+            2 => {
+                let len = varint::read_varint_buf(&mut data)?;
+                if !(0..=256).contains(&len) {
+                    return Err(PacketDecodeError::InvalidData(
+                        format!(
+                            "filter mask bitset length out of \
+                             range: {len}"
+                        ),
+                    ));
+                }
+                let mut bits = Vec::with_capacity(len as usize);
+                for _ in 0..len {
+                    if data.remaining() < 8 {
+                        return Err(
+                            PacketDecodeError::InvalidData(
+                                "unexpected end of packet data"
+                                    .into(),
+                            ),
+                        );
+                    }
+                    bits.push(data.get_i64());
+                }
+                FilterMask::PartiallyFiltered(bits)
+            },
+            other => {
+                return Err(PacketDecodeError::InvalidData(
+                    format!("unknown filter mask type: {other}"),
+                ));
+            },
+        };
+
+        let holder_id = varint::read_varint_buf(&mut data)?;
+        let chat_type_id = holder_id - 1;
+        let sender_name =
+            read_component_nbt(&mut data).map_err(&map_err)?;
+        let has_target = types::read_bool(&mut data)?;
+        let target_name = if has_target {
+            Some(
+                read_component_nbt(&mut data).map_err(&map_err)?,
+            )
+        } else {
+            None
+        };
+
+        Ok(Self {
+            global_index,
+            sender,
+            index,
+            message_signature,
+            message_content,
+            timestamp,
+            salt,
+            unsigned_content,
+            filter_mask,
+            chat_type_id,
+            sender_name,
+            target_name,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -286,5 +424,41 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundPlayerChatPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.target_name, Some(Component::text("Alex")));
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundPlayerChatPacket {
+            global_index: 0,
+            sender: uuid::Uuid::nil(),
+            index: 0,
+            message_signature: None,
+            message_content: "test".to_string(),
+            timestamp: 1_700_000_000_000,
+            salt: 42,
+            unsigned_content: None,
+            filter_mask: FilterMask::PassThrough,
+            chat_type_id: 0,
+            sender_name: Component::text("Steve"),
+            target_name: None,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundPlayerChatPacket as Packet>::decode(
+                encoded.freeze(),
+            )
+            .unwrap();
+        assert_eq!(decoded.message_content, "test");
+        assert_eq!(decoded.sender, uuid::Uuid::nil());
+        assert_eq!(decoded.chat_type_id, 0);
+        assert_eq!(decoded.sender_name, Component::text("Steve"));
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundPlayerChatPacket as Packet>::PACKET_ID,
+            0x41
+        );
     }
 }

@@ -6,7 +6,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 /// Sets the client's chunk cache radius.
 ///
@@ -32,6 +34,19 @@ impl ClientboundSetChunkCacheRadiusPacket {
         let mut buf = BytesMut::with_capacity(5);
         varint::write_varint_buf(self.radius, &mut buf);
         buf
+    }
+}
+
+impl Packet for ClientboundSetChunkCacheRadiusPacket {
+    const PACKET_ID: i32 = 0x5F;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let radius = varint::read_varint_buf(&mut data)?;
+        Ok(Self { radius })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
     }
 }
 
@@ -62,5 +77,22 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSetChunkCacheRadiusPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.radius, 32);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundSetChunkCacheRadiusPacket { radius: 10 };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundSetChunkCacheRadiusPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSetChunkCacheRadiusPacket as Packet>::PACKET_ID,
+            0x5F
+        );
     }
 }

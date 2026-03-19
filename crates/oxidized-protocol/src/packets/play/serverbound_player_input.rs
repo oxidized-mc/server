@@ -6,6 +6,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// Player movement input state, sent every tick.
 ///
 /// Each field represents a currently-held input key. All 7 fields are
@@ -126,6 +129,26 @@ impl ServerboundPlayerInputPacket {
     }
 }
 
+impl Packet for ServerboundPlayerInputPacket {
+    const PACKET_ID: i32 = 0x2B;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        if !data.has_remaining() {
+            return Err(PacketDecodeError::InvalidData(
+                "not enough data for PlayerInput flags byte".into(),
+            ));
+        }
+        let flags = data.get_u8();
+        Ok(Self {
+            input: PlayerInput::from_byte(flags),
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -199,5 +222,32 @@ mod tests {
     #[test]
     fn test_packet_id() {
         assert_eq!(ServerboundPlayerInputPacket::PACKET_ID, 0x2B);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundPlayerInputPacket {
+            input: PlayerInput {
+                forward: true,
+                shift: true,
+                ..Default::default()
+            },
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundPlayerInputPacket as Packet>::decode(encoded.freeze())
+                .unwrap();
+        assert_eq!(decoded.input.forward, true);
+        assert_eq!(decoded.input.shift, true);
+        assert_eq!(decoded.input.backward, false);
+        assert_eq!(decoded.input.sprint, false);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundPlayerInputPacket as Packet>::PACKET_ID,
+            0x2B
+        );
     }
 }

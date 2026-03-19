@@ -3,6 +3,8 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x79 — System chat message (no signature, no player sender).
@@ -39,6 +41,36 @@ impl ClientboundSystemChatPacket {
             false
         };
         Ok(Self { content, overlay })
+    }
+}
+
+impl Packet for ClientboundSystemChatPacket {
+    const PACKET_ID: i32 = 0x79;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let content = read_component_nbt(&mut data).map_err(|e| match e {
+            PlayPacketError::UnexpectedEof => {
+                PacketDecodeError::InvalidData(
+                    "unexpected end of packet data".into(),
+                )
+            },
+            PlayPacketError::InvalidData(s) => {
+                PacketDecodeError::InvalidData(s)
+            },
+            PlayPacketError::VarInt(e) => e.into(),
+            PlayPacketError::Type(e) => e.into(),
+            PlayPacketError::ResourceLocation(e) => e.into(),
+        })?;
+        let overlay = if data.has_remaining() {
+            data.get_u8() != 0
+        } else {
+            false
+        };
+        Ok(Self { content, overlay })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
     }
 }
 
@@ -126,5 +158,29 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSystemChatPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.content, pkt.content);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundSystemChatPacket {
+            content: Component::text("hello"),
+            overlay: false,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundSystemChatPacket as Packet>::decode(
+                encoded.freeze(),
+            )
+            .unwrap();
+        assert_eq!(decoded.content, Component::text("hello"));
+        assert!(!decoded.overlay);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSystemChatPacket as Packet>::PACKET_ID,
+            0x79
+        );
     }
 }

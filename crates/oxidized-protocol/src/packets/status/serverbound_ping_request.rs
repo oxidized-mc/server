@@ -5,7 +5,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
+use crate::codec::Packet;
 
 /// Errors from decoding a [`ServerboundPingRequestPacket`].
 #[derive(Debug, Error)]
@@ -48,6 +50,19 @@ impl ServerboundPingRequestPacket {
     }
 }
 
+impl Packet for ServerboundPingRequestPacket {
+    const PACKET_ID: i32 = 0x01;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let time = types::read_i64(&mut data)?;
+        Ok(Self { time })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -69,5 +84,27 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ServerboundPingRequestPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.time, -1);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundPingRequestPacket {
+            time: 1_719_000_000_000,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundPingRequestPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_decode_empty_fails() {
+        let result = <ServerboundPingRequestPacket as Packet>::decode(Bytes::new());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(<ServerboundPingRequestPacket as Packet>::PACKET_ID, 0x01);
     }
 }

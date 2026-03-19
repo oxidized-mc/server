@@ -12,6 +12,9 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// Action flags indicating which fields are present in each entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PlayerInfoActions(pub u8);
@@ -233,6 +236,112 @@ impl ClientboundPlayerInfoUpdatePacket {
     }
 }
 
+impl Packet for ClientboundPlayerInfoUpdatePacket {
+    const PACKET_ID: i32 = 0x46;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        if data.remaining() < 1 {
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of packet data".into(),
+            ));
+        }
+        let actions = PlayerInfoActions(data.get_u8());
+
+        let entry_count = varint::read_varint_buf(&mut data)? as usize;
+        let mut entries = Vec::with_capacity(entry_count);
+
+        for _ in 0..entry_count {
+            let uuid = types::read_uuid(&mut data)?;
+            let mut entry = PlayerInfoEntry {
+                uuid,
+                name: String::new(),
+                properties: Vec::new(),
+                game_mode: 0,
+                latency: 0,
+                listed: false,
+                has_display_name: false,
+                show_hat: false,
+                list_order: 0,
+            };
+
+            if actions.contains(PlayerInfoActions::ADD_PLAYER) {
+                entry.name = types::read_string(&mut data, 16)?;
+                let prop_count = varint::read_varint_buf(&mut data)? as usize;
+                for _ in 0..prop_count {
+                    let name = types::read_string(&mut data, 32767)?;
+                    let value = types::read_string(&mut data, 32767)?;
+                    let has_sig = types::read_bool(&mut data)?;
+                    let signature = if has_sig {
+                        Some(types::read_string(&mut data, 32767)?)
+                    } else {
+                        None
+                    };
+                    entry
+                        .properties
+                        .push(ProfileProperty::new(name, value, signature));
+                }
+            }
+
+            if actions.contains(PlayerInfoActions::INITIALIZE_CHAT) {
+                let has_session = types::read_bool(&mut data)?;
+                if has_session {
+                    let _session_uuid = types::read_uuid(&mut data)?;
+                    let _expiry = types::read_i64(&mut data)?;
+                    let key_len = varint::read_varint_buf(&mut data)? as usize;
+                    if data.remaining() < key_len {
+                        return Err(PacketDecodeError::InvalidData(
+                            "unexpected end of packet data".into(),
+                        ));
+                    }
+                    data.advance(key_len);
+                    let sig_len = varint::read_varint_buf(&mut data)? as usize;
+                    if data.remaining() < sig_len {
+                        return Err(PacketDecodeError::InvalidData(
+                            "unexpected end of packet data".into(),
+                        ));
+                    }
+                    data.advance(sig_len);
+                }
+            }
+
+            if actions.contains(PlayerInfoActions::UPDATE_GAME_MODE) {
+                entry.game_mode = varint::read_varint_buf(&mut data)?;
+            }
+
+            if actions.contains(PlayerInfoActions::UPDATE_LISTED) {
+                entry.listed = types::read_bool(&mut data)?;
+            }
+
+            if actions.contains(PlayerInfoActions::UPDATE_LATENCY) {
+                entry.latency = varint::read_varint_buf(&mut data)?;
+            }
+
+            if actions.contains(PlayerInfoActions::UPDATE_DISPLAY_NAME) {
+                entry.has_display_name = types::read_bool(&mut data)?;
+                if entry.has_display_name {
+                    let _display = types::read_string(&mut data, 32767)?;
+                }
+            }
+
+            if actions.contains(PlayerInfoActions::UPDATE_LIST_ORDER) {
+                entry.list_order = varint::read_varint_buf(&mut data)?;
+            }
+
+            if actions.contains(PlayerInfoActions::UPDATE_HAT) {
+                entry.show_hat = types::read_bool(&mut data)?;
+            }
+
+            entries.push(entry);
+        }
+
+        Ok(Self { actions, entries })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -348,6 +457,42 @@ mod tests {
         assert_eq!(
             decoded.entries[0].properties[0].signature(),
             Some("c2lnbmF0dXJl")
+        );
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let uuid = uuid::Uuid::new_v4();
+        let pkt = ClientboundPlayerInfoUpdatePacket {
+            actions: PlayerInfoActions(
+                PlayerInfoActions::ADD_PLAYER | PlayerInfoActions::UPDATE_GAME_MODE,
+            ),
+            entries: vec![PlayerInfoEntry {
+                uuid,
+                name: "Steve".into(),
+                properties: vec![],
+                game_mode: 1,
+                latency: 0,
+                listed: false,
+                has_display_name: false,
+                show_hat: false,
+                list_order: 0,
+            }],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundPlayerInfoUpdatePacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded.entries.len(), 1);
+        assert_eq!(decoded.entries[0].uuid, uuid);
+        assert_eq!(decoded.entries[0].name, "Steve");
+        assert_eq!(decoded.entries[0].game_mode, 1);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundPlayerInfoUpdatePacket as Packet>::PACKET_ID,
+            0x46
         );
     }
 }

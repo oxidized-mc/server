@@ -8,7 +8,9 @@
 
 use bytes::{Buf, Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 use super::clientbound_login::PlayPacketError;
 
@@ -59,6 +61,37 @@ impl ClientboundRemoveEntitiesPacket {
         for &id in &self.entity_ids {
             varint::write_varint_buf(id, buf);
         }
+    }
+}
+
+impl Packet for ClientboundRemoveEntitiesPacket {
+    const PACKET_ID: i32 = 0x4D;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let count = varint::read_varint_buf(&mut data)?;
+        if count < 0 {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "negative entity count: {count}"
+            )));
+        }
+        let count = count as usize;
+        if count > data.remaining() {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "entity count {count} exceeds available data ({} bytes)",
+                data.remaining()
+            )));
+        }
+        let mut entity_ids = Vec::with_capacity(count);
+        for _ in 0..count {
+            entity_ids.push(varint::read_varint_buf(&mut data)?);
+        }
+        Ok(Self { entity_ids })
+    }
+
+    fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::new();
+        self.encode(&mut buf);
+        buf
     }
 }
 
@@ -113,6 +146,25 @@ mod tests {
         assert!(
             format!("{err:?}").contains("exceeds available data"),
             "expected bounds error, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundRemoveEntitiesPacket {
+            entity_ids: vec![1, 2, 3],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundRemoveEntitiesPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundRemoveEntitiesPacket as Packet>::PACKET_ID,
+            0x4D
         );
     }
 }

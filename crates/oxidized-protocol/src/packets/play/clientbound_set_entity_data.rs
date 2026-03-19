@@ -8,7 +8,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 use super::clientbound_login::PlayPacketError;
 
@@ -155,6 +157,47 @@ impl ClientboundSetEntityDataPacket {
     }
 }
 
+impl Packet for ClientboundSetEntityDataPacket {
+    const PACKET_ID: i32 = 0x63;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let entity_id = varint::read_varint_buf(&mut data)?;
+        let mut entries = Vec::new();
+
+        if data.is_empty() {
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of entity data".into(),
+            ));
+        }
+
+        let slot = data[0];
+        data.advance(1);
+
+        if slot != DATA_EOF_MARKER {
+            let serializer_type = varint::read_varint_buf(&mut data)?;
+            let mut value_bytes = data.to_vec();
+            data.clear();
+            if value_bytes.last() == Some(&DATA_EOF_MARKER) {
+                value_bytes.pop();
+            }
+
+            entries.push(EntityDataEntry {
+                slot,
+                serializer_type,
+                value_bytes,
+            });
+        }
+
+        Ok(Self { entity_id, entries })
+    }
+
+    fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::new();
+        self.encode(&mut buf);
+        buf
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -228,5 +271,22 @@ mod tests {
     #[test]
     fn test_eof_marker_constant() {
         assert_eq!(DATA_EOF_MARKER, 255);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundSetEntityDataPacket::single_byte(42, 0, 0x05);
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundSetEntityDataPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSetEntityDataPacket as Packet>::PACKET_ID,
+            0x63
+        );
     }
 }

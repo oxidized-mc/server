@@ -6,6 +6,9 @@ use uuid::Uuid;
 use crate::codec::{types, varint};
 use crate::packets::play::PlayPacketError;
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// 0x45 — Removes one or more players from the tab list.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClientboundPlayerInfoRemovePacket {
@@ -38,6 +41,28 @@ impl ClientboundPlayerInfoRemovePacket {
             types::write_uuid(&mut buf, uuid);
         }
         buf
+    }
+}
+
+impl Packet for ClientboundPlayerInfoRemovePacket {
+    const PACKET_ID: i32 = 0x45;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let count = varint::read_varint_buf(&mut data)? as usize;
+        if count > 1000 {
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of packet data".into(),
+            ));
+        }
+        let mut uuids = Vec::with_capacity(count);
+        for _ in 0..count {
+            uuids.push(types::read_uuid(&mut data)?);
+        }
+        Ok(Self { uuids })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
     }
 }
 
@@ -77,5 +102,24 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundPlayerInfoRemovePacket::decode(encoded.freeze()).unwrap();
         assert!(decoded.uuids.is_empty());
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundPlayerInfoRemovePacket {
+            uuids: vec![Uuid::nil()],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundPlayerInfoRemovePacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundPlayerInfoRemovePacket as Packet>::PACKET_ID,
+            0x45
+        );
     }
 }

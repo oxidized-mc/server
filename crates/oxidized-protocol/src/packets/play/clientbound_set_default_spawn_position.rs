@@ -14,6 +14,9 @@ use crate::types::resource_location::ResourceLocation;
 
 use super::clientbound_login::PlayPacketError;
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// Sets the world spawn position (compass target).
 ///
 /// Wire format: `dimension: ResourceLocation | pos: i64 (packed BlockPos) | yaw: f32 | pitch: f32`.
@@ -61,6 +64,32 @@ impl ClientboundSetDefaultSpawnPositionPacket {
     }
 }
 
+impl Packet for ClientboundSetDefaultSpawnPositionPacket {
+    const PACKET_ID: i32 = 0x61;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let dimension = ResourceLocation::read(&mut data)?;
+        let pos = types::read_i64(&mut data)?;
+        if data.remaining() < 8 {
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of packet data".into(),
+            ));
+        }
+        let yaw = data.get_f32();
+        let pitch = data.get_f32();
+        Ok(Self {
+            dimension,
+            pos,
+            yaw,
+            pitch,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -85,5 +114,28 @@ mod tests {
         assert_eq!(pos.z, -200);
         assert!((decoded.yaw - 90.0).abs() < f32::EPSILON);
         assert!((decoded.pitch).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundSetDefaultSpawnPositionPacket {
+            dimension: ResourceLocation::minecraft("overworld"),
+            pos: BlockPos::new(0, 64, 0).as_long(),
+            yaw: 0.0,
+            pitch: 0.0,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundSetDefaultSpawnPositionPacket as Packet>::decode(encoded.freeze())
+                .unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSetDefaultSpawnPositionPacket as Packet>::PACKET_ID,
+            0x61
+        );
     }
 }

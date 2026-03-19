@@ -7,7 +7,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 use super::PlayPacketError;
 
@@ -107,6 +109,29 @@ impl ServerboundPlayerCommandPacket {
     }
 }
 
+impl Packet for ServerboundPlayerCommandPacket {
+    const PACKET_ID: i32 = 0x2A;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let entity_id = varint::read_varint_buf(&mut data)?;
+        let action_id = varint::read_varint_buf(&mut data)?;
+        let action = PlayerCommandAction::from_id(action_id).map_err(|e| match e {
+            PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
+            other => PacketDecodeError::InvalidData(other.to_string()),
+        })?;
+        let extra = varint::read_varint_buf(&mut data)?;
+        Ok(Self {
+            entity_id,
+            action,
+            data: extra,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -163,5 +188,29 @@ mod tests {
         let decoded = ServerboundPlayerCommandPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.action, PlayerCommandAction::StartRidingJump);
         assert_eq!(decoded.data, 80);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundPlayerCommandPacket {
+            entity_id: 1,
+            action: PlayerCommandAction::StartSprinting,
+            data: 0,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundPlayerCommandPacket as Packet>::decode(encoded.freeze())
+                .unwrap();
+        assert_eq!(decoded.entity_id, 1);
+        assert_eq!(decoded.action, PlayerCommandAction::StartSprinting);
+        assert_eq!(decoded.data, 0);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundPlayerCommandPacket as Packet>::PACKET_ID,
+            0x2A
+        );
     }
 }

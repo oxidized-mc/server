@@ -6,8 +6,10 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint::{self, VarIntError};
+use crate::codec::Packet;
 
 /// Errors from decoding a [`ClientboundLoginFinishedPacket`].
 #[derive(Debug, Error)]
@@ -113,6 +115,44 @@ impl ClientboundLoginFinishedPacket {
     }
 }
 
+impl Packet for ClientboundLoginFinishedPacket {
+    const PACKET_ID: i32 = 0x02;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let uuid = types::read_uuid(&mut data)?;
+        let username = types::read_string(&mut data, 16)?;
+
+        let count = varint::read_varint_buf(&mut data)?;
+        let mut properties = Vec::with_capacity(count as usize);
+
+        for _ in 0..count {
+            let name = types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?;
+            let value = types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?;
+            let has_signature = types::read_bool(&mut data)?;
+            let signature = if has_signature {
+                Some(types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?)
+            } else {
+                None
+            };
+            properties.push(ProfileProperty {
+                name,
+                value,
+                signature,
+            });
+        }
+
+        Ok(Self {
+            uuid,
+            username,
+            properties,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -151,5 +191,30 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundLoginFinishedPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundLoginFinishedPacket {
+            uuid: uuid::Uuid::from_u128(0xABCD),
+            username: "Test".to_string(),
+            properties: vec![ProfileProperty {
+                name: "textures".to_string(),
+                value: "val".to_string(),
+                signature: None,
+            }],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundLoginFinishedPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundLoginFinishedPacket as Packet>::PACKET_ID,
+            0x02
+        );
     }
 }

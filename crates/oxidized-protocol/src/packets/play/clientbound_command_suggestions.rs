@@ -1,10 +1,13 @@
 //! ClientboundCommandSuggestionsPacket (0x0F) — server returns tab-completions.
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
-use crate::codec::types::write_string;
-use crate::codec::varint::write_varint_buf;
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::types::{read_string, write_string};
+use crate::codec::varint::{read_varint_buf, write_varint_buf};
+use crate::codec::Packet;
+use crate::packets::play::PlayPacketError;
 
 /// 0x0F — Server returns tab-completion suggestions.
 #[derive(Debug, Clone)]
@@ -55,5 +58,98 @@ impl ClientboundCommandSuggestionsPacket {
         }
 
         buf
+    }
+
+    /// Decodes the packet from raw bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PlayPacketError`] if the buffer is malformed or contains
+    /// invalid tooltip JSON.
+    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
+        let id = read_varint_buf(&mut data)?;
+        let start = read_varint_buf(&mut data)?;
+        let length = read_varint_buf(&mut data)?;
+        let count = read_varint_buf(&mut data)?;
+        let mut suggestions = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            let text = read_string(&mut data, 32767)?;
+            let has_tooltip = if data.has_remaining() {
+                data.get_u8() != 0
+            } else {
+                false
+            };
+            let tooltip = if has_tooltip {
+                let json_str = read_string(&mut data, 262144)?;
+                let comp = serde_json::from_str(&json_str).map_err(|e| {
+                    PlayPacketError::InvalidData(format!("invalid tooltip JSON: {e}"))
+                })?;
+                Some(comp)
+            } else {
+                None
+            };
+            suggestions.push(SuggestionEntry { text, tooltip });
+        }
+        Ok(Self {
+            id,
+            start,
+            length,
+            suggestions,
+        })
+    }
+}
+
+impl Packet for ClientboundCommandSuggestionsPacket {
+    const PACKET_ID: i32 = 0x0F;
+
+    fn decode(data: Bytes) -> Result<Self, PacketDecodeError> {
+        Self::decode(data).map_err(|e| match e {
+            PlayPacketError::VarInt(v) => PacketDecodeError::VarInt(v),
+            PlayPacketError::Type(t) => PacketDecodeError::Type(t),
+            PlayPacketError::ResourceLocation(r) => PacketDecodeError::ResourceLocation(r),
+            other => PacketDecodeError::InvalidData(other.to_string()),
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundCommandSuggestionsPacket {
+            id: 1,
+            start: 0,
+            length: 5,
+            suggestions: vec![SuggestionEntry {
+                text: "test".into(),
+                tooltip: None,
+            }],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ClientboundCommandSuggestionsPacket as Packet>::decode(
+            encoded.freeze(),
+        )
+        .unwrap();
+        assert_eq!(decoded.id, pkt.id);
+        assert_eq!(decoded.start, pkt.start);
+        assert_eq!(decoded.length, pkt.length);
+        assert_eq!(decoded.suggestions.len(), 1);
+        assert_eq!(decoded.suggestions[0].text, "test");
+        assert!(decoded.suggestions[0].tooltip.is_none());
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundCommandSuggestionsPacket as Packet>::PACKET_ID,
+            0x0F
+        );
     }
 }

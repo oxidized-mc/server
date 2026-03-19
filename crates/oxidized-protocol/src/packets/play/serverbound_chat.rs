@@ -2,7 +2,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::{types, varint};
+use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// Acknowledgement state for recent chat messages.
@@ -114,6 +116,62 @@ impl ServerboundChatPacket {
     }
 }
 
+impl Packet for ServerboundChatPacket {
+    const PACKET_ID: i32 = 0x09;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let map_err = |e: PlayPacketError| -> PacketDecodeError {
+            match e {
+                PlayPacketError::UnexpectedEof => {
+                    PacketDecodeError::InvalidData(
+                        "unexpected end of packet data".into(),
+                    )
+                },
+                PlayPacketError::InvalidData(s) => {
+                    PacketDecodeError::InvalidData(s)
+                },
+                PlayPacketError::VarInt(e) => e.into(),
+                PlayPacketError::Type(e) => e.into(),
+                PlayPacketError::ResourceLocation(e) => e.into(),
+            }
+        };
+        let message = types::read_string(&mut data, 256)?;
+        if message.starts_with('/') {
+            return Err(PacketDecodeError::InvalidData(
+                "chat message must not start with '/'".to_string(),
+            ));
+        }
+        let timestamp = types::read_i64(&mut data)?;
+        let salt = types::read_i64(&mut data)?;
+        let has_sig = types::read_bool(&mut data)?;
+        let signature = if has_sig {
+            if data.remaining() < 256 {
+                return Err(PacketDecodeError::InvalidData(
+                    "unexpected end of packet data".into(),
+                ));
+            }
+            let mut sig = [0u8; 256];
+            data.copy_to_slice(&mut sig);
+            Some(sig)
+        } else {
+            None
+        };
+        let last_seen =
+            LastSeenMessagesUpdate::decode(&mut data).map_err(map_err)?;
+        Ok(Self {
+            message,
+            timestamp,
+            salt,
+            signature,
+            last_seen,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -173,5 +231,32 @@ mod tests {
         let encoded = pkt.encode();
         let result = ServerboundChatPacket::decode(encoded.freeze());
         assert!(result.is_err(), "message over 256 chars must be rejected");
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundChatPacket {
+            message: "hello".to_string(),
+            timestamp: 1234,
+            salt: 0,
+            signature: None,
+            last_seen: LastSeenMessagesUpdate::default(),
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundChatPacket as Packet>::decode(encoded.freeze())
+                .unwrap();
+        assert_eq!(decoded.message, "hello");
+        assert_eq!(decoded.timestamp, 1234);
+        assert_eq!(decoded.salt, 0);
+        assert!(decoded.signature.is_none());
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundChatPacket as Packet>::PACKET_ID,
+            0x09
+        );
     }
 }

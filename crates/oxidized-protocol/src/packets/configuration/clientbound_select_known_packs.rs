@@ -6,8 +6,10 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint::{self, VarIntError};
+use crate::codec::Packet;
 
 /// Errors from decoding a known-packs packet.
 #[derive(Debug, Error)]
@@ -105,6 +107,34 @@ impl ClientboundSelectKnownPacksPacket {
     }
 }
 
+impl Packet for ClientboundSelectKnownPacksPacket {
+    const PACKET_ID: i32 = 0x0e;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let count = varint::read_varint_buf(&mut data)?;
+        if count < 0 {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "negative pack count: {count}"
+            )));
+        }
+        let mut packs = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            packs.push(KnownPack::read(&mut data).map_err(|e| match e {
+                KnownPacksError::VarInt(v) => PacketDecodeError::VarInt(v),
+                KnownPacksError::Type(t) => PacketDecodeError::Type(t),
+                KnownPacksError::NegativeCount(n) => {
+                    PacketDecodeError::InvalidData(format!("negative pack count: {n}"))
+                }
+            })?);
+        }
+        Ok(Self { packs })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -151,5 +181,28 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSelectKnownPacksPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundSelectKnownPacksPacket {
+            packs: vec![KnownPack {
+                namespace: "minecraft".to_string(),
+                id: "core".to_string(),
+                version: "1.21.5".to_string(),
+            }],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundSelectKnownPacksPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSelectKnownPacksPacket as Packet>::PACKET_ID,
+            0x0e
+        );
     }
 }

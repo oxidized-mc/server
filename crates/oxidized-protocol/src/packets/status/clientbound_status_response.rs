@@ -2,9 +2,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.status.ClientboundStatusResponsePacket`.
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
+use crate::codec::Packet;
 
 /// Clientbound packet `0x00` in the STATUS state — the server status as JSON.
 ///
@@ -28,11 +30,23 @@ impl ClientboundStatusResponsePacket {
     }
 }
 
+impl Packet for ClientboundStatusResponsePacket {
+    const PACKET_ID: i32 = 0x00;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let status_json = types::read_string(&mut data, 32767)?;
+        Ok(Self { status_json })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use bytes::Bytes;
 
     #[test]
     fn test_encode_status_response() {
@@ -40,9 +54,33 @@ mod tests {
             status_json: r#"{"version":{"name":"26.1-pre-3","protocol":1073742124}}"#.to_string(),
         };
         let encoded = pkt.encode();
-        // Verify we can read the string back
         let mut data = Bytes::from(encoded.to_vec());
         let decoded_str = types::read_string(&mut data, 32767).unwrap();
         assert_eq!(decoded_str, pkt.status_json);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundStatusResponsePacket {
+            status_json: r#"{"description":"A Minecraft Server"}"#.to_string(),
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundStatusResponsePacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_decode_empty_fails() {
+        let result = <ClientboundStatusResponsePacket as Packet>::decode(Bytes::new());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundStatusResponsePacket as Packet>::PACKET_ID,
+            0x00
+        );
     }
 }

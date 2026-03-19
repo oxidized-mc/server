@@ -6,7 +6,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
+use crate::codec::Packet;
 
 /// Errors from decoding a [`ClientboundHelloPacket`].
 #[derive(Debug, Error)]
@@ -69,6 +71,27 @@ impl ClientboundHelloPacket {
     }
 }
 
+impl Packet for ClientboundHelloPacket {
+    const PACKET_ID: i32 = 0x01;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let server_id = types::read_string(&mut data, 20)?;
+        let public_key = types::read_byte_array(&mut data, 256)?;
+        let challenge = types::read_byte_array(&mut data, 256)?;
+        let should_authenticate = types::read_bool(&mut data)?;
+        Ok(Self {
+            server_id,
+            public_key,
+            challenge,
+            should_authenticate,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -85,5 +108,23 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundHelloPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundHelloPacket {
+            server_id: "".to_string(),
+            public_key: vec![0x30, 0x82],
+            challenge: vec![0xAB, 0xCD],
+            should_authenticate: false,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ClientboundHelloPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(<ClientboundHelloPacket as Packet>::PACKET_ID, 0x01);
     }
 }

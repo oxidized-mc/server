@@ -6,8 +6,10 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint::{self, VarIntError};
+use crate::codec::Packet;
 
 /// The client's declared intent after the handshake.
 ///
@@ -126,6 +128,35 @@ impl ClientIntentionPacket {
     }
 }
 
+impl Packet for ClientIntentionPacket {
+    const PACKET_ID: i32 = 0x00;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let protocol_version = varint::read_varint_buf(&mut data)?;
+        let server_address = types::read_string(&mut data, 255)?;
+        let server_port = types::read_u16(&mut data)?;
+        let next_state_raw = varint::read_varint_buf(&mut data)?;
+        let next_state = ClientIntent::try_from(next_state_raw).map_err(|e| match e {
+            IntentionError::UnknownIntent(v) => {
+                PacketDecodeError::InvalidData(format!("unknown client intent: {v}"))
+            }
+            IntentionError::VarInt(e) => PacketDecodeError::VarInt(e),
+            IntentionError::Type(e) => PacketDecodeError::Type(e),
+        })?;
+
+        Ok(Self {
+            protocol_version,
+            server_address,
+            server_port,
+            next_state,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -202,5 +233,37 @@ mod tests {
         assert_eq!(decoded.server_address, "localhost");
         assert_eq!(decoded.server_port, 25565);
         assert_eq!(decoded.next_state, ClientIntent::Status);
+    }
+
+    // --- Packet trait tests ---
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientIntentionPacket {
+            protocol_version: 1_073_742_124,
+            server_address: "localhost".to_string(),
+            server_port: 25565,
+            next_state: ClientIntent::Login,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ClientIntentionPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_unknown_intent_maps_to_invalid_data() {
+        let mut buf = BytesMut::new();
+        varint::write_varint_buf(1_073_742_124, &mut buf);
+        types::write_string(&mut buf, "localhost");
+        types::write_u16(&mut buf, 25565);
+        varint::write_varint_buf(99, &mut buf);
+        let err = <ClientIntentionPacket as Packet>::decode(buf.freeze()).unwrap_err();
+        assert!(matches!(err, PacketDecodeError::InvalidData(_)));
+        assert!(err.to_string().contains("99"));
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(<ClientIntentionPacket as Packet>::PACKET_ID, 0x00);
     }
 }

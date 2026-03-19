@@ -5,6 +5,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// Serverbound packet `0x03` in the LOGIN state — login acknowledged.
 ///
 /// This is an empty packet with no fields. The client sends it after receiving
@@ -32,6 +35,18 @@ impl ServerboundLoginAcknowledgedPacket {
     }
 }
 
+impl Packet for ServerboundLoginAcknowledgedPacket {
+    const PACKET_ID: i32 = 0x03;
+
+    fn decode(_data: Bytes) -> Result<Self, PacketDecodeError> {
+        Ok(Self)
+    }
+
+    fn encode(&self) -> BytesMut {
+        BytesMut::new()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -43,5 +58,22 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ServerboundLoginAcknowledgedPacket::decode(encoded.freeze());
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundLoginAcknowledgedPacket;
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundLoginAcknowledgedPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundLoginAcknowledgedPacket as Packet>::PACKET_ID,
+            0x03
+        );
     }
 }

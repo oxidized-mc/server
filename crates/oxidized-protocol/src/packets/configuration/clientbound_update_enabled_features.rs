@@ -6,7 +6,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint::{self, VarIntError};
+use crate::codec::Packet;
 use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundUpdateEnabledFeaturesPacket`].
@@ -70,6 +72,28 @@ impl ClientboundUpdateEnabledFeaturesPacket {
     }
 }
 
+impl Packet for ClientboundUpdateEnabledFeaturesPacket {
+    const PACKET_ID: i32 = 0x0c;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let count = varint::read_varint_buf(&mut data)?;
+        if count < 0 {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "negative feature count: {count}"
+            )));
+        }
+        let mut features = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            features.push(ResourceLocation::read(&mut data)?);
+        }
+        Ok(Self { features })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -104,5 +128,25 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundUpdateEnabledFeaturesPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundUpdateEnabledFeaturesPacket {
+            features: vec![ResourceLocation::new("minecraft", "vanilla").unwrap()],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundUpdateEnabledFeaturesPacket as Packet>::decode(encoded.freeze())
+                .unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundUpdateEnabledFeaturesPacket as Packet>::PACKET_ID,
+            0x0c
+        );
     }
 }
