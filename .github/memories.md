@@ -792,12 +792,38 @@ implementation against Java Block.java, DimensionType.java, and vanilla generate
 - Test helpers: `make_test_player(id, name)` and `make_player_with_id(list, name)` patterns
 
 #### Technical Debt
-- `login.rs` with `send_login_sequence()` not yet created (depends on PlayerConnection which is Phase 14+)
 - PlayerInventory is a stub (Phase 22)
 - No ECS component integration yet (Phase 14+ per ADR-020)
+- Minimal PLAY read loop only handles teleport confirmations — full PLAY handling is Phase 14+
 
 #### Metrics
 - **Tests:** 75 game + 471 protocol = 546 total (all pass, 0 warnings)
 - **Files created:** 16 new files (6 game, 10 protocol)
 - **Files modified:** 4 (lib.rs, packets/mod.rs, auth.rs, primary_level_data.rs)
 - **Review iterations:** 1 (clean pass)
+
+### Phase 12 — Server Integration (2025-07)
+
+**Date:** 2025-07
+
+#### What Went Well
+- Wiring ServerContext through the connection handler was clean — only 2 files needed changes
+- build_login_sequence() from oxidized-game integrated directly — all 8 packets sent in order
+- authenticate_online() refactored to return GameProfile directly (cleaner than decomposed tuple)
+- Code review caught real bugs: ghost player on send failure, dead `unreachable!()` code
+
+#### What Surprised Us
+- Two distinct ProfileProperty types exist: `auth::ProfileProperty` (private fields, Deserialize) vs `packets::login::ProfileProperty` (public fields) — must convert between them
+- `disconnect()` always returns `Err` — using `disconnect()?; unreachable!()` is dead code; use `return Err(disconnect_err(...).await)` instead
+- PrimaryLevelData has no Default impl — must use `from_nbt(&NbtCompound::new())` for defaults
+
+#### Patterns Established
+- `return Err(disconnect_err(conn, msg).await)` — consistent disconnect pattern (no unreachable)
+- Add player to PlayerList AFTER sending login packets — prevents ghost entries on send failure
+- `ServerContext` struct: shared server state (PlayerList, PrimaryLevelData, dimensions) wrapped in Arc
+- `map_err(|e| anyhow::anyhow!("context: {e}"))?` for infallible-in-practice calls in main.rs (no expect)
+
+#### Technical Debt
+- PLAY read loop is minimal (teleport confirmations only) — full handling Phase 14+
+- No player removal from PlayerList on disconnect (cleanup is best-effort log + remove)
+- PlayerConnection bridge channels (ADR-020) not yet implemented
