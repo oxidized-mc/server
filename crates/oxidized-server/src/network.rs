@@ -85,6 +85,10 @@ pub struct ServerContext {
     pub level_data: PrimaryLevelData,
     /// All registered dimension identifiers (e.g., `minecraft:overworld`).
     pub dimensions: Vec<ResourceLocation>,
+    /// Maximum view distance allowed by the server config (2–32 chunks).
+    pub max_view_distance: i32,
+    /// Maximum simulation distance allowed by the server config (2–32 chunks).
+    pub max_simulation_distance: i32,
 }
 
 /// Starts the TCP listener and accepts connections until a shutdown signal
@@ -724,9 +728,11 @@ async fn handle_play_entry(
 
     let mut player = ServerPlayer::new(entity_id, profile, dimension, game_mode);
 
-    // Apply client preferences.
-    player.view_distance = i32::from(client_info.view_distance);
-    player.simulation_distance = i32::from(client_info.view_distance).min(10);
+    // Apply client preferences, capped to server maximums.
+    player.view_distance =
+        i32::from(client_info.view_distance).min(server_ctx.max_view_distance);
+    player.simulation_distance =
+        i32::from(client_info.view_distance).min(server_ctx.max_simulation_distance);
 
     // Try to load saved player data from playerdata/<uuid>.dat.
     let playerdata_path = format!("world/playerdata/{uuid}.dat");
@@ -1262,6 +1268,8 @@ mod tests {
                 player_list: RwLock::new(PlayerList::new(20)),
                 level_data: PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
                 dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
+                max_view_distance: 10,
+                max_simulation_distance: 10,
             }),
         })
     }
