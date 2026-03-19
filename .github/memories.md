@@ -1066,3 +1066,38 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - `PhysicsBlockProperties::defaults()` returns empty vecs (all lookups return defaults) — use in tests that don't care about block-specific physics
 - Located in `crates/oxidized-game/src/physics/block_properties.rs`
 - Add new block overrides to `PHYSICS_OVERRIDES` const array
+
+### Phase 17 — Chat System (2025-07)
+
+#### Key Architecture Decisions
+- **Component lives in `oxidized-protocol/src/chat/`**, not `oxidized-game` — protocol packets
+  reference Component directly, and game depends on protocol (not vice versa)
+- **Component wire format is NBT** on the play-state wire, NOT JSON strings. The phase doc
+  was wrong — vanilla uses `ComponentSerialization.TRUSTED_STREAM_CODEC` which is NBT-based.
+  JSON is only used for status response (server list ping)
+- **Chat broadcast uses `tokio::sync::broadcast` channel** stored in `ServerContext` —
+  each player's play loop subscribes via `tokio::select!` to receive broadcasts
+- **ADR-028 mandates manual serde** (not derive) for Component JSON — the JSON format varies
+  by content type (text/translate/selector have different tag keys)
+
+#### Verified Packet IDs (26.1-pre-3)
+- ServerboundChatPacket = 0x09
+- ServerboundChatCommandPacket = 0x07
+- ServerboundChatAckPacket = 0x06
+- ClientboundPlayerChatPacket = 0x40
+- ClientboundSystemChatPacket = 0x78
+- ClientboundDisguisedChatPacket = 0x20
+- ClientboundDeleteChatPacket = 0x1E
+
+#### Gotchas
+- `NbtCompound::put_string()` returns `Option<NbtTag>` (previous value), not `()`
+- `NbtList::push()` returns `Result` (type validation) — use `let _ =` to suppress
+- Raw string literals containing `#` need `r##"..."##` syntax
+- Component `to_nbt()` returns `NbtTag`, not `NbtCompound` — match on tag variant
+- Phase doc packet IDs were wrong — always verify against `GameProtocols.java`
+
+#### Technical Debt
+- `/say` and `/me` are simple string matching — full command dispatcher comes in Phase 18
+- Rate limiter sends warning but doesn't disconnect persistent spammers
+- `read_component_nbt` uses unlimited NbtAccounter — fine for server-created clientbound
+  packets but should be bounded if ever used for untrusted input
