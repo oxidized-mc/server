@@ -3,5 +3,7 @@
 //! Uses an ECS architecture for entity management with data-oriented
 //! design for cache-friendly tick processing.
 
+pub mod chunk;
 pub mod level;
+pub mod net;
 pub mod player;
