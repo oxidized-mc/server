@@ -4,7 +4,6 @@
 //! are wrapped in higher-level newtypes like `BlockPos` or `ChunkPos`.
 
 use std::fmt;
-use std::ops::{Add, Sub};
 
 use bytes::{Bytes, BytesMut};
 
@@ -50,34 +49,22 @@ impl Vec3i {
         )
     }
 
-    /// Returns the position one block above (positive Y).
-    pub const fn above(self) -> Self {
-        self.offset(0, 1, 0)
+    /// Returns the sum of this vector and `other`.
+    ///
+    /// Uses wrapping arithmetic to match vanilla Java behavior.
+    pub const fn add_vec(self, other: Vec3i) -> Self {
+        self.offset(other.x, other.y, other.z)
     }
 
-    /// Returns the position one block below (negative Y).
-    pub const fn below(self) -> Self {
-        self.offset(0, -1, 0)
-    }
-
-    /// Returns the position one block to the north (negative Z).
-    pub const fn north(self) -> Self {
-        self.offset(0, 0, -1)
-    }
-
-    /// Returns the position one block to the south (positive Z).
-    pub const fn south(self) -> Self {
-        self.offset(0, 0, 1)
-    }
-
-    /// Returns the position one block to the east (positive X).
-    pub const fn east(self) -> Self {
-        self.offset(1, 0, 0)
-    }
-
-    /// Returns the position one block to the west (negative X).
-    pub const fn west(self) -> Self {
-        self.offset(-1, 0, 0)
+    /// Returns the difference of this vector and `other`.
+    ///
+    /// Uses wrapping arithmetic to match vanilla Java behavior.
+    pub const fn subtract_vec(self, other: Vec3i) -> Self {
+        Self::new(
+            self.x.wrapping_sub(other.x),
+            self.y.wrapping_sub(other.y),
+            self.z.wrapping_sub(other.z),
+        )
     }
 
     /// Returns the position offset by one step in the given direction.
@@ -182,29 +169,8 @@ impl Vec3i {
     }
 }
 
-impl Add for Vec3i {
-    type Output = Vec3i;
-
-    fn add(self, rhs: Vec3i) -> Vec3i {
-        Vec3i::new(
-            self.x.wrapping_add(rhs.x),
-            self.y.wrapping_add(rhs.y),
-            self.z.wrapping_add(rhs.z),
-        )
-    }
-}
-
-impl Sub for Vec3i {
-    type Output = Vec3i;
-
-    fn sub(self, rhs: Vec3i) -> Vec3i {
-        Vec3i::new(
-            self.x.wrapping_sub(rhs.x),
-            self.y.wrapping_sub(rhs.y),
-            self.z.wrapping_sub(rhs.z),
-        )
-    }
-}
+impl_vector_ops!(Vec3i, no_neg);
+impl_directional!(Vec3i);
 
 impl fmt::Display for Vec3i {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

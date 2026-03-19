@@ -39,6 +39,73 @@ pub enum VarIntError {
 // Synchronous encode / decode (buffer-based)
 // ---------------------------------------------------------------------------
 
+/// Shared encoding/decoding behavior for VarInt (i32) and VarLong (i64).
+trait VarEncoding: Copy + PartialEq {
+    const MAX_BYTES: usize;
+    const BIT_SIZE: u32;
+    fn zero() -> Self;
+    fn low_7_bits(self) -> u8;
+    fn unsigned_shr_7(self) -> Self;
+    fn or_shifted_byte(self, byte: u8, shift: u32) -> Self;
+}
+
+impl VarEncoding for i32 {
+    const MAX_BYTES: usize = VARINT_MAX_BYTES;
+    const BIT_SIZE: u32 = 32;
+    fn zero() -> Self { 0 }
+    fn low_7_bits(self) -> u8 { (self & 0x7F) as u8 }
+    fn unsigned_shr_7(self) -> Self { ((self as u32) >> 7) as i32 }
+    fn or_shifted_byte(self, byte: u8, shift: u32) -> Self {
+        self | (((byte & 0x7F) as i32) << shift)
+    }
+}
+
+impl VarEncoding for i64 {
+    const MAX_BYTES: usize = VARLONG_MAX_BYTES;
+    const BIT_SIZE: u32 = 64;
+    fn zero() -> Self { 0 }
+    fn low_7_bits(self) -> u8 { (self & 0x7F) as u8 }
+    fn unsigned_shr_7(self) -> Self { ((self as u64) >> 7) as i64 }
+    fn or_shifted_byte(self, byte: u8, shift: u32) -> Self {
+        self | (((byte & 0x7F) as i64) << shift)
+    }
+}
+
+fn encode_var<T: VarEncoding>(mut value: T, buf: &mut [u8]) -> usize {
+    let mut i = 0;
+    loop {
+        let mut byte = value.low_7_bits();
+        value = value.unsigned_shr_7();
+        if value != T::zero() {
+            byte |= 0x80;
+        }
+        buf[i] = byte;
+        i += 1;
+        if value == T::zero() {
+            break;
+        }
+    }
+    i
+}
+
+fn decode_var<T: VarEncoding>(buf: &[u8]) -> Result<(T, usize), VarIntError> {
+    let mut result = T::zero();
+    let mut shift: u32 = 0;
+    for (i, &byte) in buf.iter().enumerate() {
+        result = result.or_shifted_byte(byte, shift);
+        if byte & 0x80 == 0 {
+            return Ok((result, i + 1));
+        }
+        shift += 7;
+        if shift >= T::BIT_SIZE {
+            return Err(VarIntError::TooLarge {
+                max_bytes: T::MAX_BYTES,
+            });
+        }
+    }
+    Err(VarIntError::UnexpectedEof)
+}
+
 /// Encodes a 32-bit VarInt into `buf`, returning the number of bytes written (1–5).
 ///
 /// # Examples
@@ -51,21 +118,8 @@ pub enum VarIntError {
 /// assert_eq!(len, 2);
 /// assert_eq!(&buf[..len], &[0xAC, 0x02]);
 /// ```
-pub fn encode_varint(mut value: i32, buf: &mut [u8; VARINT_MAX_BYTES]) -> usize {
-    let mut i = 0;
-    loop {
-        let mut byte = (value & 0x7F) as u8;
-        value = ((value as u32) >> 7) as i32;
-        if value != 0 {
-            byte |= 0x80;
-        }
-        buf[i] = byte;
-        i += 1;
-        if value == 0 {
-            break;
-        }
-    }
-    i
+pub fn encode_varint(value: i32, buf: &mut [u8; VARINT_MAX_BYTES]) -> usize {
+    encode_var(value, buf)
 }
 
 /// Decodes a VarInt from `buf`, returning `(value, bytes_consumed)`.
@@ -85,39 +139,12 @@ pub fn encode_varint(mut value: i32, buf: &mut [u8; VARINT_MAX_BYTES]) -> usize 
 /// assert_eq!(bytes_read, 2);
 /// ```
 pub fn decode_varint(buf: &[u8]) -> Result<(i32, usize), VarIntError> {
-    let mut result: i32 = 0;
-    let mut shift: u32 = 0;
-    for (i, &byte) in buf.iter().enumerate() {
-        result |= ((byte & 0x7F) as i32) << shift;
-        if byte & 0x80 == 0 {
-            return Ok((result, i + 1));
-        }
-        shift += 7;
-        if shift >= 32 {
-            return Err(VarIntError::TooLarge {
-                max_bytes: VARINT_MAX_BYTES,
-            });
-        }
-    }
-    Err(VarIntError::UnexpectedEof)
+    decode_var(buf)
 }
 
 /// Encodes a 64-bit VarLong into `buf`, returning the number of bytes written (1–10).
-pub fn encode_varlong(mut value: i64, buf: &mut [u8; VARLONG_MAX_BYTES]) -> usize {
-    let mut i = 0;
-    loop {
-        let mut byte = (value & 0x7F) as u8;
-        value = ((value as u64) >> 7) as i64;
-        if value != 0 {
-            byte |= 0x80;
-        }
-        buf[i] = byte;
-        i += 1;
-        if value == 0 {
-            break;
-        }
-    }
-    i
+pub fn encode_varlong(value: i64, buf: &mut [u8; VARLONG_MAX_BYTES]) -> usize {
+    encode_var(value, buf)
 }
 
 /// Decodes a VarLong from `buf`, returning `(value, bytes_consumed)`.
@@ -127,21 +154,7 @@ pub fn encode_varlong(mut value: i64, buf: &mut [u8; VARLONG_MAX_BYTES]) -> usiz
 /// Returns [`VarIntError::TooLarge`] if the value exceeds 10 bytes, or
 /// [`VarIntError::UnexpectedEof`] if the buffer is too short.
 pub fn decode_varlong(buf: &[u8]) -> Result<(i64, usize), VarIntError> {
-    let mut result: i64 = 0;
-    let mut shift: u32 = 0;
-    for (i, &byte) in buf.iter().enumerate() {
-        result |= ((byte & 0x7F) as i64) << shift;
-        if byte & 0x80 == 0 {
-            return Ok((result, i + 1));
-        }
-        shift += 7;
-        if shift >= 64 {
-            return Err(VarIntError::TooLarge {
-                max_bytes: VARLONG_MAX_BYTES,
-            });
-        }
-    }
-    Err(VarIntError::UnexpectedEof)
+    decode_var(buf)
 }
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,29 @@ use thiserror::Error;
 
 use super::varint;
 
+/// Generate a matched pair of read/write functions for a fixed-size wire primitive.
+macro_rules! impl_wire_primitive {
+    ($(#[$rmeta:meta])* $read_name:ident,
+     $(#[$wmeta:meta])* $write_name:ident,
+     $type:ty, $get:ident, $put:ident, $size:expr) => {
+        $(#[$rmeta])*
+        pub fn $read_name(buf: &mut Bytes) -> Result<$type, TypeError> {
+            if buf.remaining() < $size {
+                return Err(TypeError::UnexpectedEof {
+                    need: $size,
+                    have: buf.remaining(),
+                });
+            }
+            Ok(buf.$get())
+        }
+
+        $(#[$wmeta])*
+        pub fn $write_name(buf: &mut BytesMut, value: $type) {
+            buf.$put(value);
+        }
+    };
+}
+
 /// Errors from reading typed protocol values.
 #[derive(Debug, Error)]
 #[non_exhaustive]
@@ -105,102 +128,65 @@ pub fn write_string(buf: &mut BytesMut, s: &str) {
     buf.put_slice(s.as_bytes());
 }
 
-/// Reads a single `u8` from `buf`.
-///
-/// # Errors
-///
-/// Returns [`TypeError::UnexpectedEof`] if the buffer is empty.
-pub fn read_u8(buf: &mut Bytes) -> Result<u8, TypeError> {
-    if !buf.has_remaining() {
-        return Err(TypeError::UnexpectedEof { need: 1, have: 0 });
-    }
-    Ok(buf.get_u8())
-}
+impl_wire_primitive!(
+    /// Reads a single `u8` from `buf`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::UnexpectedEof`] if the buffer is empty.
+    read_u8,
+    /// Writes a single `u8` to `buf`.
+    write_u8,
+    u8, get_u8, put_u8, 1
+);
 
-/// Writes a single `u8` to `buf`.
-pub fn write_u8(buf: &mut BytesMut, value: u8) {
-    buf.put_u8(value);
-}
+impl_wire_primitive!(
+    /// Reads a big-endian `i16` from `buf`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::UnexpectedEof`] if fewer than 2 bytes remain.
+    read_i16,
+    /// Writes a big-endian `i16` to `buf`.
+    write_i16,
+    i16, get_i16, put_i16, 2
+);
 
-/// Reads a big-endian `i16` from `buf`.
-///
-/// # Errors
-///
-/// Returns [`TypeError::UnexpectedEof`] if fewer than 2 bytes remain.
-pub fn read_i16(buf: &mut Bytes) -> Result<i16, TypeError> {
-    if buf.remaining() < 2 {
-        return Err(TypeError::UnexpectedEof {
-            need: 2,
-            have: buf.remaining(),
-        });
-    }
-    Ok(buf.get_i16())
-}
+impl_wire_primitive!(
+    /// Reads a big-endian `u16` from `buf`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::UnexpectedEof`] if fewer than 2 bytes remain.
+    read_u16,
+    /// Writes a big-endian `u16` to `buf`.
+    write_u16,
+    u16, get_u16, put_u16, 2
+);
 
-/// Writes a big-endian `i16` to `buf`.
-pub fn write_i16(buf: &mut BytesMut, value: i16) {
-    buf.put_i16(value);
-}
+impl_wire_primitive!(
+    /// Reads a big-endian `i64` from `buf`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::UnexpectedEof`] if fewer than 8 bytes remain.
+    read_i64,
+    /// Writes a big-endian `i64` to `buf`.
+    write_i64,
+    i64, get_i64, put_i64, 8
+);
 
-/// Reads a big-endian `u16` from `buf`.
-///
-/// # Errors
-///
-/// Returns [`TypeError::UnexpectedEof`] if fewer than 2 bytes remain.
-pub fn read_u16(buf: &mut Bytes) -> Result<u16, TypeError> {
-    if buf.remaining() < 2 {
-        return Err(TypeError::UnexpectedEof {
-            need: 2,
-            have: buf.remaining(),
-        });
-    }
-    Ok(buf.get_u16())
-}
-
-/// Writes a big-endian `u16` to `buf`.
-pub fn write_u16(buf: &mut BytesMut, value: u16) {
-    buf.put_u16(value);
-}
-
-/// Reads a big-endian `i64` from `buf`.
-///
-/// # Errors
-///
-/// Returns [`TypeError::UnexpectedEof`] if fewer than 8 bytes remain.
-pub fn read_i64(buf: &mut Bytes) -> Result<i64, TypeError> {
-    if buf.remaining() < 8 {
-        return Err(TypeError::UnexpectedEof {
-            need: 8,
-            have: buf.remaining(),
-        });
-    }
-    Ok(buf.get_i64())
-}
-
-/// Writes a big-endian `i64` to `buf`.
-pub fn write_i64(buf: &mut BytesMut, value: i64) {
-    buf.put_i64(value);
-}
-
-/// Reads a big-endian `i32` from `buf`.
-///
-/// # Errors
-///
-/// Returns [`TypeError::UnexpectedEof`] if fewer than 4 bytes remain.
-pub fn read_i32(buf: &mut Bytes) -> Result<i32, TypeError> {
-    if buf.remaining() < 4 {
-        return Err(TypeError::UnexpectedEof {
-            need: 4,
-            have: buf.remaining(),
-        });
-    }
-    Ok(buf.get_i32())
-}
-
-/// Writes a big-endian `i32` to `buf`.
-pub fn write_i32(buf: &mut BytesMut, value: i32) {
-    buf.put_i32(value);
-}
+impl_wire_primitive!(
+    /// Reads a big-endian `i32` from `buf`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::UnexpectedEof`] if fewer than 4 bytes remain.
+    read_i32,
+    /// Writes a big-endian `i32` to `buf`.
+    write_i32,
+    i32, get_i32, put_i32, 4
+);
 
 /// Reads a boolean (single byte: `0x00` = false, `0x01` = true).
 ///
@@ -208,8 +194,11 @@ pub fn write_i32(buf: &mut BytesMut, value: i32) {
 ///
 /// Returns [`TypeError::UnexpectedEof`] if the buffer is empty.
 pub fn read_bool(buf: &mut Bytes) -> Result<bool, TypeError> {
-    if !buf.has_remaining() {
-        return Err(TypeError::UnexpectedEof { need: 1, have: 0 });
+    if buf.remaining() < 1 {
+        return Err(TypeError::UnexpectedEof {
+            need: 1,
+            have: buf.remaining(),
+        });
     }
     Ok(buf.get_u8() != 0)
 }
@@ -270,45 +259,29 @@ pub fn write_uuid(buf: &mut BytesMut, uuid: &uuid::Uuid) {
     buf.put_u64(lsb);
 }
 
-/// Reads a big-endian `f32` from `buf`.
-///
-/// # Errors
-///
-/// Returns [`TypeError::UnexpectedEof`] if fewer than 4 bytes remain.
-pub fn read_f32(buf: &mut Bytes) -> Result<f32, TypeError> {
-    if buf.remaining() < 4 {
-        return Err(TypeError::UnexpectedEof {
-            need: 4,
-            have: buf.remaining(),
-        });
-    }
-    Ok(buf.get_f32())
-}
+impl_wire_primitive!(
+    /// Reads a big-endian `f32` from `buf`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::UnexpectedEof`] if fewer than 4 bytes remain.
+    read_f32,
+    /// Writes a big-endian `f32` to `buf`.
+    write_f32,
+    f32, get_f32, put_f32, 4
+);
 
-/// Writes a big-endian `f32` to `buf`.
-pub fn write_f32(buf: &mut BytesMut, value: f32) {
-    buf.put_f32(value);
-}
-
-/// Reads a big-endian `f64` from `buf`.
-///
-/// # Errors
-///
-/// Returns [`TypeError::UnexpectedEof`] if fewer than 8 bytes remain.
-pub fn read_f64(buf: &mut Bytes) -> Result<f64, TypeError> {
-    if buf.remaining() < 8 {
-        return Err(TypeError::UnexpectedEof {
-            need: 8,
-            have: buf.remaining(),
-        });
-    }
-    Ok(buf.get_f64())
-}
-
-/// Writes a big-endian `f64` to `buf`.
-pub fn write_f64(buf: &mut BytesMut, value: f64) {
-    buf.put_f64(value);
-}
+impl_wire_primitive!(
+    /// Reads a big-endian `f64` from `buf`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TypeError::UnexpectedEof`] if fewer than 8 bytes remain.
+    read_f64,
+    /// Writes a big-endian `f64` to `buf`.
+    write_f64,
+    f64, get_f64, put_f64, 8
+);
 
 /// Reads a VarInt-length-prefixed byte array from `buf`.
 ///

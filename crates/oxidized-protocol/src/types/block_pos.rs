@@ -132,44 +132,14 @@ impl BlockPos {
         )
     }
 
-    /// Returns the position one block above (positive Y).
-    pub const fn above(self) -> Self {
-        self.above_n(1)
-    }
-
     /// Returns the position `n` blocks above (positive Y).
     pub const fn above_n(self, n: i32) -> Self {
         self.offset(0, n, 0)
     }
 
-    /// Returns the position one block below (negative Y).
-    pub const fn below(self) -> Self {
-        self.below_n(1)
-    }
-
     /// Returns the position `n` blocks below (negative Y).
     pub const fn below_n(self, n: i32) -> Self {
         self.offset(0, -n, 0)
-    }
-
-    /// Returns the position one block to the north (negative Z).
-    pub const fn north(self) -> Self {
-        self.offset(0, 0, -1)
-    }
-
-    /// Returns the position one block to the south (positive Z).
-    pub const fn south(self) -> Self {
-        self.offset(0, 0, 1)
-    }
-
-    /// Returns the position one block to the east (positive X).
-    pub const fn east(self) -> Self {
-        self.offset(1, 0, 0)
-    }
-
-    /// Returns the position one block to the west (negative X).
-    pub const fn west(self) -> Self {
-        self.offset(-1, 0, 0)
     }
 
     /// Returns the position offset by one step in the given [`Direction`].
@@ -235,6 +205,8 @@ impl BlockPos {
         types::write_i64(buf, self.as_long());
     }
 }
+
+impl_directional!(BlockPos);
 
 impl From<Vec3i> for BlockPos {
     fn from(v: Vec3i) -> Self {
