@@ -114,9 +114,7 @@ mod tests {
     fn test_soul_sand_slows_movement() {
         let (reg, bp) = registry_physics();
         let soul_id = reg.default_state("minecraft:soul_sand").unwrap().0 as u32;
-        let level = UniformLevel {
-            state_id: soul_id,
-        };
+        let level = UniformLevel { state_id: soul_id };
         let factor = block_speed_factor(&level, &bp, 0.5, 64.0, 0.5);
         assert!(
             (factor - SOUL_SAND_SPEED_FACTOR).abs() < 1e-10,
@@ -128,9 +126,7 @@ mod tests {
     fn test_honey_slows_movement() {
         let (reg, bp) = registry_physics();
         let honey_id = reg.default_state("minecraft:honey_block").unwrap().0 as u32;
-        let level = UniformLevel {
-            state_id: honey_id,
-        };
+        let level = UniformLevel { state_id: honey_id };
         let factor = block_speed_factor(&level, &bp, 0.5, 64.0, 0.5);
         assert!(
             (factor - HONEY_BLOCK_SPEED_FACTOR).abs() < 1e-10,
@@ -142,9 +138,7 @@ mod tests {
     fn test_honey_reduces_jump() {
         let (reg, bp) = registry_physics();
         let honey_id = reg.default_state("minecraft:honey_block").unwrap().0 as u32;
-        let level = UniformLevel {
-            state_id: honey_id,
-        };
+        let level = UniformLevel { state_id: honey_id };
         let factor = block_jump_factor(&level, &bp, 0.5, 64.0, 0.5);
         assert!(
             (factor - HONEY_BLOCK_JUMP_FACTOR).abs() < 1e-10,
@@ -170,9 +164,7 @@ mod tests {
     fn test_stone_has_normal_speed() {
         let (reg, bp) = registry_physics();
         let stone_id = reg.default_state("minecraft:stone").unwrap().0 as u32;
-        let level = UniformLevel {
-            state_id: stone_id,
-        };
+        let level = UniformLevel { state_id: stone_id };
         let factor = block_speed_factor(&level, &bp, 0.5, 64.0, 0.5);
         assert!(
             (factor - 1.0).abs() < 1e-10,
