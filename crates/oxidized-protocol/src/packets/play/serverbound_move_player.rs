@@ -3,6 +3,16 @@
 //! Four variants share the same struct — the difference is which fields
 //! the client populates. Packet IDs correspond to the four Java inner
 //! classes: `Pos`, `Rot`, `PosRot`, `StatusOnly`.
+//!
+//! # Packet trait exception
+//!
+//! This packet does **not** implement [`Packet`](crate::codec::Packet) because
+//! it maps to four distinct wire packet IDs (`0x1E`–`0x21`) with a single Rust
+//! struct. The [`Packet`](crate::codec::Packet) trait requires a single
+//! `const PACKET_ID`, which cannot represent this 4-ID pattern. The server
+//! handler dispatches manually by packet ID and calls the appropriate
+//! `decode_pos` / `decode_pos_rot` / `decode_rot` / `decode_status_only`
+//! method directly. This is an intentional design choice — see ADR-038.
 
 use bytes::{Buf, Bytes};
 
