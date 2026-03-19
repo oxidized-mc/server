@@ -1050,10 +1050,19 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - BLUE_ICE: 0.989
 - SLIME_BLOCK: 0.8
 
-#### Technical Debt
-- Block friction/speed lookups are stubbed (TODO p08) — need block registry integration
+#### Technical Debt (Resolved)
+- ~~Block friction/speed lookups are stubbed~~ → **RESOLVED**: `PhysicsBlockProperties` dense lookup table wired to `BlockRegistry` (commit 0901789)
+- ~~Slime block bounce not implemented~~ → **RESOLVED**: Negates vy on landing when on slime block (commit 0901789)
+
+#### Technical Debt (Remaining)
 - No step-up algorithm yet — Entity default is 0.0, LivingEntity uses STEP_HEIGHT attribute (0.6)
 - No entity-entity collision (boats, minecarts, mob pushing)
 - Honey block sticky sliding not implemented
-- Slime block bounce not implemented
 - Cobweb/sweet berry/bubble column velocity modifiers not implemented
+
+#### Pattern: PhysicsBlockProperties
+- Dense `Vec<f64>` arrays indexed by block state ID for O(1) friction/speed/jump lookups
+- Built from `BlockRegistry` at startup via `PhysicsBlockProperties::from_registry()`
+- `PhysicsBlockProperties::defaults()` returns empty vecs (all lookups return defaults) — use in tests that don't care about block-specific physics
+- Located in `crates/oxidized-game/src/physics/block_properties.rs`
+- Add new block overrides to `PHYSICS_OVERRIDES` const array
