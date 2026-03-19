@@ -95,6 +95,29 @@ pub const BARRIER: BlockStateId = BlockStateId(12534);
 /// Iron trapdoor — default state.
 pub const IRON_TRAPDOOR: BlockStateId = BlockStateId(12582);
 
+// --- Physics-relevant blocks ---
+
+/// Cobweb — default state.
+pub const COBWEB: BlockStateId = BlockStateId(2247);
+/// Soul sand — default state.
+pub const SOUL_SAND: BlockStateId = BlockStateId(6998);
+/// Slime block — default state.
+pub const SLIME_BLOCK: BlockStateId = BlockStateId(12532);
+/// Packed ice — default state.
+pub const PACKED_ICE: BlockStateId = BlockStateId(12914);
+/// Frosted ice — default state (age=0).
+pub const FROSTED_ICE: BlockStateId = BlockStateId(14841);
+/// Blue ice — default state.
+pub const BLUE_ICE: BlockStateId = BlockStateId(15275);
+/// Bubble column — default state (drag_down=true).
+pub const BUBBLE_COLUMN: BlockStateId = BlockStateId(15294);
+/// Sweet berry bush — default state (age=0).
+pub const SWEET_BERRY_BUSH: BlockStateId = BlockStateId(20941);
+/// Honey block — default state.
+pub const HONEY_BLOCK: BlockStateId = BlockStateId(21816);
+/// Powder snow — default state.
+pub const POWDER_SNOW: BlockStateId = BlockStateId(24689);
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {

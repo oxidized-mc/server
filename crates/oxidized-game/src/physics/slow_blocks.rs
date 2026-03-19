@@ -1,14 +1,14 @@
 //! Slow-block speed and jump modifiers.
 //!
 //! Certain blocks modify entity movement when standing on or inside them.
-//! This module provides lookup functions for those modifiers.
+//! This module provides lookup functions that delegate to
+//! [`PhysicsBlockProperties`] for per-block values.
 //!
-//! In a full implementation, these would be driven by the block registry.
-//! For now, the functions accept block state IDs and return modifier values
-//! based on known block types.
+//! [`PhysicsBlockProperties`]: super::block_properties::PhysicsBlockProperties
 
-use super::constants::*;
 use crate::level::traits::BlockGetter;
+
+use super::block_properties::PhysicsBlockProperties;
 
 use oxidized_protocol::types::BlockPos;
 
@@ -27,10 +27,16 @@ use oxidized_protocol::types::BlockPos;
 /// # Errors
 ///
 /// Returns 1.0 if the block position is in an unloaded chunk.
-pub fn block_speed_factor(level: &impl BlockGetter, x: f64, y: f64, z: f64) -> f64 {
+pub fn block_speed_factor(
+    level: &impl BlockGetter,
+    block_physics: &PhysicsBlockProperties,
+    x: f64,
+    y: f64,
+    z: f64,
+) -> f64 {
     let feet = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
     match level.get_block_state(feet) {
-        Ok(state_id) => speed_factor_for_state(state_id),
+        Ok(state_id) => block_physics.speed_factor(state_id),
         Err(_) => 1.0,
     }
 }
@@ -42,37 +48,18 @@ pub fn block_speed_factor(level: &impl BlockGetter, x: f64, y: f64, z: f64) -> f
 /// # Errors
 ///
 /// Returns 1.0 if the block position is in an unloaded chunk.
-pub fn block_jump_factor(level: &impl BlockGetter, x: f64, y: f64, z: f64) -> f64 {
+pub fn block_jump_factor(
+    level: &impl BlockGetter,
+    block_physics: &PhysicsBlockProperties,
+    x: f64,
+    y: f64,
+    z: f64,
+) -> f64 {
     let feet = BlockPos::new(x.floor() as i32, y.floor() as i32, z.floor() as i32);
     match level.get_block_state(feet) {
-        Ok(state_id) => jump_factor_for_state(state_id),
+        Ok(state_id) => block_physics.jump_factor(state_id),
         Err(_) => 1.0,
     }
-}
-
-/// Maps a block state ID to its speed factor.
-///
-/// TODO(p08): Drive from block registry once available.
-fn speed_factor_for_state(_state_id: u32) -> f64 {
-    // Placeholder — all blocks return 1.0 until the block registry maps
-    // state IDs to block properties. Known slow blocks:
-    // - Soul Sand → SOUL_SAND_SPEED_FACTOR (0.4)
-    // - Honey Block → HONEY_BLOCK_SPEED_FACTOR (0.4)
-    // - Powder Snow → POWDER_SNOW_SPEED_FACTOR (0.9)
-    let _ = SOUL_SAND_SPEED_FACTOR;
-    let _ = HONEY_BLOCK_SPEED_FACTOR;
-    let _ = POWDER_SNOW_SPEED_FACTOR;
-    1.0
-}
-
-/// Maps a block state ID to its jump factor.
-///
-/// TODO(p08): Drive from block registry once available.
-fn jump_factor_for_state(_state_id: u32) -> f64 {
-    // Placeholder — all blocks return 1.0 until the block registry maps
-    // state IDs. Honey blocks would return HONEY_BLOCK_JUMP_FACTOR (0.5).
-    let _ = HONEY_BLOCK_JUMP_FACTOR;
-    1.0
 }
 
 #[cfg(test)]
@@ -81,6 +68,8 @@ mod tests {
 
     use super::*;
     use crate::level::error::LevelError;
+    use crate::physics::constants::*;
+    use oxidized_world::registry::BlockRegistry;
 
     struct EmptyLevel;
 
@@ -90,15 +79,104 @@ mod tests {
         }
     }
 
+    /// A level that returns a specific state ID everywhere.
+    struct UniformLevel {
+        state_id: u32,
+    }
+
+    impl BlockGetter for UniformLevel {
+        fn get_block_state(&self, _pos: BlockPos) -> Result<u32, LevelError> {
+            Ok(self.state_id)
+        }
+    }
+
+    fn registry_physics() -> (BlockRegistry, PhysicsBlockProperties) {
+        let reg = BlockRegistry::load().expect("block registry");
+        let bp = PhysicsBlockProperties::from_registry(&reg);
+        (reg, bp)
+    }
+
     #[test]
     fn test_default_speed_factor() {
-        let factor = block_speed_factor(&EmptyLevel, 0.5, 64.0, 0.5);
+        let bp = PhysicsBlockProperties::defaults();
+        let factor = block_speed_factor(&EmptyLevel, &bp, 0.5, 64.0, 0.5);
         assert!((factor - 1.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_default_jump_factor() {
-        let factor = block_jump_factor(&EmptyLevel, 0.5, 64.0, 0.5);
+        let bp = PhysicsBlockProperties::defaults();
+        let factor = block_jump_factor(&EmptyLevel, &bp, 0.5, 64.0, 0.5);
         assert!((factor - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_soul_sand_slows_movement() {
+        let (reg, bp) = registry_physics();
+        let soul_id = reg.default_state("minecraft:soul_sand").unwrap().0 as u32;
+        let level = UniformLevel {
+            state_id: soul_id,
+        };
+        let factor = block_speed_factor(&level, &bp, 0.5, 64.0, 0.5);
+        assert!(
+            (factor - SOUL_SAND_SPEED_FACTOR).abs() < 1e-10,
+            "Soul sand speed factor should be {SOUL_SAND_SPEED_FACTOR}, got {factor}"
+        );
+    }
+
+    #[test]
+    fn test_honey_slows_movement() {
+        let (reg, bp) = registry_physics();
+        let honey_id = reg.default_state("minecraft:honey_block").unwrap().0 as u32;
+        let level = UniformLevel {
+            state_id: honey_id,
+        };
+        let factor = block_speed_factor(&level, &bp, 0.5, 64.0, 0.5);
+        assert!(
+            (factor - HONEY_BLOCK_SPEED_FACTOR).abs() < 1e-10,
+            "Honey speed factor should be {HONEY_BLOCK_SPEED_FACTOR}, got {factor}"
+        );
+    }
+
+    #[test]
+    fn test_honey_reduces_jump() {
+        let (reg, bp) = registry_physics();
+        let honey_id = reg.default_state("minecraft:honey_block").unwrap().0 as u32;
+        let level = UniformLevel {
+            state_id: honey_id,
+        };
+        let factor = block_jump_factor(&level, &bp, 0.5, 64.0, 0.5);
+        assert!(
+            (factor - HONEY_BLOCK_JUMP_FACTOR).abs() < 1e-10,
+            "Honey jump factor should be {HONEY_BLOCK_JUMP_FACTOR}, got {factor}"
+        );
+    }
+
+    #[test]
+    fn test_powder_snow_slows_movement() {
+        let (reg, bp) = registry_physics();
+        let powder_id = reg.default_state("minecraft:powder_snow").unwrap().0 as u32;
+        let level = UniformLevel {
+            state_id: powder_id,
+        };
+        let factor = block_speed_factor(&level, &bp, 0.5, 64.0, 0.5);
+        assert!(
+            (factor - POWDER_SNOW_SPEED_FACTOR).abs() < 1e-10,
+            "Powder snow speed factor should be {POWDER_SNOW_SPEED_FACTOR}, got {factor}"
+        );
+    }
+
+    #[test]
+    fn test_stone_has_normal_speed() {
+        let (reg, bp) = registry_physics();
+        let stone_id = reg.default_state("minecraft:stone").unwrap().0 as u32;
+        let level = UniformLevel {
+            state_id: stone_id,
+        };
+        let factor = block_speed_factor(&level, &bp, 0.5, 64.0, 0.5);
+        assert!(
+            (factor - 1.0).abs() < 1e-10,
+            "Stone should have speed factor 1.0"
+        );
     }
 }
