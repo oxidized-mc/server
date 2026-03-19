@@ -87,6 +87,15 @@ impl<S> CommandNode<S> {
         }
     }
 
+    /// Returns the optional human-readable description.
+    pub fn description(&self) -> Option<&str> {
+        match self {
+            Self::Root(_) => None,
+            Self::Literal(n) => n.description.as_deref(),
+            Self::Argument(n) => n.description.as_deref(),
+        }
+    }
+
     /// Returns `true` if this source passes the requirement check.
     pub fn can_use(&self, source: &S) -> bool {
         match self.requirement() {
@@ -157,6 +166,8 @@ pub struct LiteralCommandNode<S> {
     pub command: Option<CommandFn<S>>,
     /// Permission check.
     pub requirement: Option<RequirementFn<S>>,
+    /// Optional human-readable description (e.g. for `/help` output).
+    pub description: Option<String>,
 }
 
 impl<S> Clone for LiteralCommandNode<S> {
@@ -167,6 +178,7 @@ impl<S> Clone for LiteralCommandNode<S> {
             redirect: self.redirect.clone(),
             command: self.command.clone(),
             requirement: self.requirement.clone(),
+            description: self.description.clone(),
         }
     }
 }
@@ -187,6 +199,8 @@ pub struct ArgumentCommandNode<S> {
     pub requirement: Option<RequirementFn<S>>,
     /// Custom suggestion provider identifier.
     pub suggestions_type: Option<String>,
+    /// Optional human-readable description (e.g. for `/help` output).
+    pub description: Option<String>,
 }
 
 impl<S> Clone for ArgumentCommandNode<S> {
@@ -199,6 +213,7 @@ impl<S> Clone for ArgumentCommandNode<S> {
             command: self.command.clone(),
             requirement: self.requirement.clone(),
             suggestions_type: self.suggestions_type.clone(),
+            description: self.description.clone(),
         }
     }
 }
@@ -213,6 +228,7 @@ pub fn literal<S: Clone + Send + Sync + 'static>(name: &str) -> LiteralBuilder<S
         command: None,
         requirement: None,
         redirect: None,
+        description: None,
     }
 }
 
@@ -229,6 +245,7 @@ pub fn argument<S: Clone + Send + Sync + 'static>(
         requirement: None,
         redirect: None,
         suggestions_type: None,
+        description: None,
     }
 }
 
@@ -239,6 +256,7 @@ pub struct LiteralBuilder<S> {
     command: Option<CommandFn<S>>,
     requirement: Option<RequirementFn<S>>,
     redirect: Option<Arc<CommandNode<S>>>,
+    description: Option<String>,
 }
 
 impl<S: Clone + Send + Sync + 'static> LiteralBuilder<S> {
@@ -275,6 +293,12 @@ impl<S: Clone + Send + Sync + 'static> LiteralBuilder<S> {
         self
     }
 
+    /// Sets an optional human-readable description.
+    pub fn description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+
     /// Builds the literal node.
     pub fn build(self) -> CommandNode<S> {
         let mut node = LiteralCommandNode {
@@ -283,6 +307,7 @@ impl<S: Clone + Send + Sync + 'static> LiteralBuilder<S> {
             redirect: self.redirect,
             command: self.command,
             requirement: self.requirement,
+            description: self.description,
         };
         for child in self.children {
             let name = child.name().to_string();
@@ -307,6 +332,7 @@ pub struct ArgumentBuilder<S> {
     requirement: Option<RequirementFn<S>>,
     redirect: Option<Arc<CommandNode<S>>>,
     suggestions_type: Option<String>,
+    description: Option<String>,
 }
 
 impl<S: Clone + Send + Sync + 'static> ArgumentBuilder<S> {
@@ -349,6 +375,12 @@ impl<S: Clone + Send + Sync + 'static> ArgumentBuilder<S> {
         self
     }
 
+    /// Sets an optional human-readable description.
+    pub fn description(mut self, desc: impl Into<String>) -> Self {
+        self.description = Some(desc.into());
+        self
+    }
+
     /// Builds the argument node.
     pub fn build(self) -> CommandNode<S> {
         let mut node = ArgumentCommandNode {
@@ -359,6 +391,7 @@ impl<S: Clone + Send + Sync + 'static> ArgumentBuilder<S> {
             command: self.command,
             requirement: self.requirement,
             suggestions_type: self.suggestions_type,
+            description: self.description,
         };
         for child in self.children {
             let name = child.name().to_string();

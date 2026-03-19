@@ -17,6 +17,20 @@ pub trait ServerHandle: Send + Sync {
     fn online_player_count(&self) -> usize;
     /// Returns the maximum number of players.
     fn max_players(&self) -> usize;
+    /// Returns the current difficulty (0=peaceful, 1=easy, 2=normal, 3=hard).
+    fn difficulty(&self) -> i32;
+    /// Returns the current game time in ticks.
+    fn game_time(&self) -> i64;
+    /// Returns the current day time in ticks.
+    fn day_time(&self) -> i64;
+    /// Returns true if raining.
+    fn is_raining(&self) -> bool;
+    /// Returns true if thundering.
+    fn is_thundering(&self) -> bool;
+    /// Kicks a player by name with a reason message. Returns true if found.
+    fn kick_player(&self, name: &str, reason: &str) -> bool;
+    /// Finds a player UUID by name.
+    fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid>;
 }
 
 /// The kind of entity that is executing a command.

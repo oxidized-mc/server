@@ -9,6 +9,7 @@ pub mod arguments;
 pub mod context;
 pub mod dispatcher;
 pub mod nodes;
+pub mod pagination;
 pub mod serializer;
 pub mod source;
 
@@ -34,6 +35,7 @@ pub use arguments::{ArgumentType, StringKind};
 pub use context::{CommandContext, ParsedArgument, StringRange};
 pub use dispatcher::CommandDispatcher;
 pub use nodes::{ArgumentCommandNode, CommandNode, LiteralCommandNode, RootCommandNode};
+pub use pagination::PaginatedMessage;
 pub use serializer::{CommandNodeData, CommandTreeData};
 pub use source::{CommandSourceKind, CommandSourceStack};
 
@@ -79,7 +81,9 @@ impl Commands {
         input: &str,
         source: &CommandSourceStack,
     ) -> Vec<context::Suggestion> {
-        self.dispatcher.get_completions(input, source)
+        let player_names = source.server.online_player_names();
+        self.dispatcher
+            .get_completions(input, source, &player_names)
     }
 
     /// Serialize the command tree for `ClientboundCommandsPacket`.
