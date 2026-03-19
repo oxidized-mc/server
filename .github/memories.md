@@ -1501,3 +1501,21 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
   `const fn`, which it already is on both Vec3i and BlockPos.
 
 **Status:** R5 complete. R3 (component.rs split), R6 (module docs), R7 (doc comments) remain.
+
+### R6 — Small Wins (Localized Duplication)
+
+**What went well:**
+- All 5 items completed in one pass with zero test failures.
+- `deserialize_prim!` macro must be defined **outside** the `impl` block for serde
+  `Deserializer` — defining inside compiles but the generated methods aren't recognized
+  as trait implementations. Use `$ty_name:literal` (not `expr`) for `concat!` compatibility.
+- `build_palette_data_from_values()` and `build_palette_data_from_entries()` cleanly separate
+  the two distinct palette-building patterns (from raw values vs from pre-read entries).
+- `vec![...]` macro evaluates elements left-to-right, safe for ordered packet sequences.
+
+**Patterns discovered:**
+- `format_typed_array<T: Display>(out, prefix, arr, suffix)` — generic typed-array formatter.
+- `validate_index()` / `validate_value()` / `long_bit_offset()` — standard BitStorage helpers.
+- Per-packet builder functions (`build_*_packet()`) improve testability of login sequence.
+
+**Status:** R6 complete. R3 (component.rs split), R7 (doc comments) remain.
