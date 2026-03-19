@@ -264,7 +264,10 @@ For each batch:
 
 - [ ] `PacketDecodeError` enum defined in `oxidized-protocol::codec::packet`
 - [ ] `Packet` trait defined in `oxidized-protocol::codec::packet`
-- [ ] All 59 existing packets implement `Packet`
+- [ ] All 59 existing packets implement `Packet` (60 impls: 59 packet files × 1 impl,
+  except `clientbound_move_entity` has 3 impls and `serverbound_move_player` is exempt —
+  its 4-packet-ID pattern does not fit the single `const PACKET_ID` requirement; see
+  module-level doc comment)
 - [ ] `Connection::send_packet<P>()` method exists and works
 - [ ] All 15 per-packet error types removed
 - [ ] All 16 `map_err` conversions in server handlers replaced
