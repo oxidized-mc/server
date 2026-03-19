@@ -56,9 +56,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         ctx.source.send_success(
                             &Component::translatable(
                                 "commands.effect.clear.everything.success.single",
-                                vec![Component::text(
-                                    ctx.source.display_name.clone(),
-                                )],
+                                vec![Component::text(ctx.source.display_name.clone())],
                             ),
                             true,
                         );
@@ -72,18 +70,20 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                 player_only: false,
                             },
                         )
-                        .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                            let targets = get_string(ctx, "targets")?;
-                            // TODO: Clear all effects from targets
-                            ctx.source.send_success(
-                                &Component::translatable(
-                                    "commands.effect.clear.everything.success.single",
-                                    vec![Component::text(targets)],
-                                ),
-                                true,
-                            );
-                            Ok(1)
-                        }),
+                        .executes(
+                            |ctx: &CommandContext<CommandSourceStack>| {
+                                let targets = get_string(ctx, "targets")?;
+                                // TODO: Clear all effects from targets
+                                ctx.source.send_success(
+                                    &Component::translatable(
+                                        "commands.effect.clear.everything.success.single",
+                                        vec![Component::text(targets)],
+                                    ),
+                                    true,
+                                );
+                                Ok(1)
+                            },
+                        ),
                     ),
             ),
     );

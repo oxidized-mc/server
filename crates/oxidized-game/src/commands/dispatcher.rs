@@ -286,27 +286,28 @@ fn collect_child_suggestions<S>(
                     });
                 }
             },
-            CommandNode::Argument(arg) => {
-                match &arg.argument_type {
-                    ArgumentType::Entity { .. } | ArgumentType::GameProfile => {
-                        for name in player_names {
-                            if name.to_lowercase().starts_with(&current_word.to_lowercase()) {
-                                suggestions.push(Suggestion {
-                                    range: StringRange::new(range_start, range_end),
-                                    text: name.clone(),
-                                    tooltip: None,
-                                });
-                            }
+            CommandNode::Argument(arg) => match &arg.argument_type {
+                ArgumentType::Entity { .. } | ArgumentType::GameProfile => {
+                    for name in player_names {
+                        if name
+                            .to_lowercase()
+                            .starts_with(&current_word.to_lowercase())
+                        {
+                            suggestions.push(Suggestion {
+                                range: StringRange::new(range_start, range_end),
+                                text: name.clone(),
+                                tooltip: None,
+                            });
                         }
-                    },
-                    _ => {
-                        suggestions.push(Suggestion {
-                            range: StringRange::new(range_start, range_end),
-                            text: format!("<{}>", arg.name),
-                            tooltip: None,
-                        });
-                    },
-                }
+                    }
+                },
+                _ => {
+                    suggestions.push(Suggestion {
+                        range: StringRange::new(range_start, range_end),
+                        text: format!("<{}>", arg.name),
+                        tooltip: None,
+                    });
+                },
             },
             _ => {},
         }
@@ -742,9 +743,7 @@ mod tests {
                         player_only: true,
                     },
                 )
-                .then(
-                    argument("item", ArgumentType::ItemStack).executes(|_| Ok(1)),
-                ),
+                .then(argument("item", ArgumentType::ItemStack).executes(|_| Ok(1))),
             ),
         );
         let src = make_source(4);

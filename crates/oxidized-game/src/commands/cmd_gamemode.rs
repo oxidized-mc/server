@@ -51,10 +51,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                         "commands.gamemode.success.other",
                                         vec![
                                             Component::text(target),
-                                            Component::translatable(
-                                                gm.translation_key(),
-                                                vec![],
-                                            ),
+                                            Component::translatable(gm.translation_key(), vec![]),
                                         ],
                                     ),
                                     true,

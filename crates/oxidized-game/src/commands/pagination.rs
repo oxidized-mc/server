@@ -1,8 +1,8 @@
 //! Reusable chat pagination for long command output.
 
+use oxidized_protocol::chat::ChatFormatting;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::chat::style::{ClickEvent, HoverEvent, TextColor};
-use oxidized_protocol::chat::ChatFormatting;
 
 /// Configuration for a paginated message.
 pub struct PaginatedMessage {

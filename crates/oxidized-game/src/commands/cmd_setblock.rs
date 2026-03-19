@@ -30,7 +30,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     );
 }
 
-fn setblock_exec(ctx: &CommandContext<CommandSourceStack>) -> Result<i32, crate::commands::CommandError> {
+fn setblock_exec(
+    ctx: &CommandContext<CommandSourceStack>,
+) -> Result<i32, crate::commands::CommandError> {
     let (x, y, z) = get_block_pos(ctx, "pos")?;
     let _block = get_string(ctx, "block")?;
     // TODO: Actually set the block via ServerLevel
