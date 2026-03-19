@@ -115,7 +115,7 @@ impl Component {
     /// ```
     /// use oxidized_protocol::chat::Component;
     /// let c = Component::text("hello");
-    /// assert_eq!(c.to_json(), r#"{"text":"hello"}"#);
+    /// assert_eq!(c.to_json().unwrap(), r#"{"text":"hello"}"#);
     /// ```
     pub fn text(s: impl Into<String>) -> Self {
         Self {
@@ -254,8 +254,13 @@ impl Component {
     }
 
     /// Serialize to JSON string.
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).expect("component JSON serialization is infallible")
+    ///
+    /// # Errors
+    ///
+    /// Returns `serde_json::Error` if serialization fails (should not happen
+    /// for well-formed components).
+    pub fn to_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
     }
 
     /// Parse a legacy §-code string into a component tree.
@@ -265,7 +270,7 @@ impl Component {
     /// ```
     /// use oxidized_protocol::chat::Component;
     /// let c = Component::from_legacy("§cRed text");
-    /// let json = c.to_json();
+    /// let json = c.to_json().unwrap();
     /// assert!(json.contains("red"), "got: {json}");
     /// ```
     pub fn from_legacy(s: &str) -> Self {
@@ -280,9 +285,8 @@ impl Component {
                     if let Some(fmt) = ChatFormatting::from_code(code_char) {
                         // Flush current text
                         if !current_text.is_empty() {
-                            let child =
-                                Component::text(std::mem::take(&mut current_text))
-                                    .with_style(current_style.clone());
+                            let child = Component::text(std::mem::take(&mut current_text))
+                                .with_style(current_style.clone());
                             root.children.push(child);
                         }
 
@@ -301,14 +305,14 @@ impl Component {
                                 ChatFormatting::Italic => current_style.italic = Some(true),
                                 ChatFormatting::Underline => {
                                     current_style.underlined = Some(true);
-                                }
+                                },
                                 ChatFormatting::Strikethrough => {
                                     current_style.strikethrough = Some(true);
-                                }
+                                },
                                 ChatFormatting::Obfuscated => {
                                     current_style.obfuscated = Some(true);
-                                }
-                                _ => {}
+                                },
+                                _ => {},
                             }
                         }
                         chars.next(); // consume code char
@@ -329,7 +333,7 @@ impl Component {
         if root.children.len() == 1 {
             if let ComponentContent::Text(ref t) = root.content {
                 if t.is_empty() && root.style.is_empty() {
-                    return root.children.into_iter().next().expect("checked len==1");
+                    return root.children.remove(0);
                 }
             }
         }
@@ -349,11 +353,9 @@ impl Component {
 
     fn append_legacy(&self, out: &mut String) {
         // Apply style
-        if let Some(ref color) = self.style.color {
-            if let TextColor::Named(cf) = color {
-                out.push('\u{00A7}');
-                out.push(cf.code());
-            }
+        if let Some(TextColor::Named(cf)) = &self.style.color {
+            out.push('\u{00A7}');
+            out.push(cf.code());
         }
         if self.style.bold == Some(true) {
             out.push_str(&ChatFormatting::Bold.prefix());
@@ -380,7 +382,7 @@ impl Component {
                 out.push_str(name);
                 out.push(':');
                 out.push_str(objective);
-            }
+            },
             ComponentContent::Selector { pattern, .. } => out.push_str(pattern),
             ComponentContent::Nbt { path, .. } => out.push_str(path),
         }
@@ -447,7 +449,7 @@ impl Serialize for Component {
         match &self.content {
             ComponentContent::Text(t) => {
                 map.serialize_entry("text", t)?;
-            }
+            },
             ComponentContent::Translatable {
                 key,
                 fallback,
@@ -460,13 +462,13 @@ impl Serialize for Component {
                 if !args.is_empty() {
                     map.serialize_entry("with", args)?;
                 }
-            }
+            },
             ComponentContent::Selector { pattern, separator } => {
                 map.serialize_entry("selector", pattern)?;
                 if let Some(sep) = separator {
                     map.serialize_entry("separator", sep)?;
                 }
-            }
+            },
             ComponentContent::Score { name, objective } => {
                 #[derive(Serialize)]
                 struct ScoreValue<'a> {
@@ -474,10 +476,10 @@ impl Serialize for Component {
                     objective: &'a str,
                 }
                 map.serialize_entry("score", &ScoreValue { name, objective })?;
-            }
+            },
             ComponentContent::Keybind(k) => {
                 map.serialize_entry("keybind", k)?;
-            }
+            },
             ComponentContent::Nbt {
                 path,
                 interpret,
@@ -496,9 +498,9 @@ impl Serialize for Component {
                     NbtSource::Block(pos) => map.serialize_entry("block", pos)?,
                     NbtSource::Storage(rl) => {
                         map.serialize_entry("storage", &rl.to_string())?;
-                    }
+                    },
                 }
-            }
+            },
         }
 
         // Style fields (flattened into the same map)
@@ -553,9 +555,7 @@ fn count_style_fields(style: &Style) -> usize {
 fn count_content_extra_fields(content: &ComponentContent) -> usize {
     match content {
         ComponentContent::Text(_) => 0,
-        ComponentContent::Translatable {
-            fallback, args, ..
-        } => {
+        ComponentContent::Translatable { fallback, args, .. } => {
             let mut n = 0;
             if fallback.is_some() {
                 n += 1;
@@ -564,14 +564,14 @@ fn count_content_extra_fields(content: &ComponentContent) -> usize {
                 n += 1;
             }
             n
-        }
+        },
         ComponentContent::Selector { separator, .. } => {
             if separator.is_some() {
                 1
             } else {
                 0
             }
-        }
+        },
         ComponentContent::Score { .. } => 0,
         ComponentContent::Keybind(_) => 0,
         ComponentContent::Nbt {
@@ -587,14 +587,11 @@ fn count_content_extra_fields(content: &ComponentContent) -> usize {
                 n += 1;
             }
             n
-        }
+        },
     }
 }
 
-fn serialize_style_fields<S: SerializeMap>(
-    style: &Style,
-    map: &mut S,
-) -> Result<(), S::Error> {
+fn serialize_style_fields<S: SerializeMap>(style: &Style, map: &mut S) -> Result<(), S::Error> {
     if let Some(ref c) = style.color {
         map.serialize_entry("color", c)?;
     }
@@ -695,7 +692,7 @@ impl<'de> Deserialize<'de> for Component {
                             let s: ScoreRaw = map.next_value()?;
                             score_name = Some(s.name);
                             score_objective = Some(s.objective);
-                        }
+                        },
                         "keybind" => keybind = Some(map.next_value()?),
                         "nbt" => nbt_path = Some(map.next_value()?),
                         "interpret" => interpret = map.next_value()?,
@@ -717,13 +714,13 @@ impl<'de> Deserialize<'de> for Component {
                         "font" => {
                             let s: String = map.next_value()?;
                             style.font =
-                                Some(ResourceLocation::from_string(&s).map_err(
-                                    |e| de::Error::custom(format!("invalid font: {e}")),
-                                )?);
-                        }
+                                Some(ResourceLocation::from_string(&s).map_err(|e| {
+                                    de::Error::custom(format!("invalid font: {e}"))
+                                })?);
+                        },
                         _ => {
                             let _: serde_json::Value = map.next_value()?;
-                        }
+                        },
                     }
                 }
 
@@ -755,8 +752,7 @@ impl<'de> Deserialize<'de> for Component {
                         NbtSource::Block(pos)
                     } else if let Some(stor) = nbt_storage {
                         NbtSource::Storage(
-                            ResourceLocation::from_string(&stor)
-                                .map_err(de::Error::custom)?,
+                            ResourceLocation::from_string(&stor).map_err(de::Error::custom)?,
                         )
                     } else {
                         return Err(de::Error::custom("nbt component missing source"));
@@ -799,7 +795,7 @@ impl Component {
         match &self.content {
             ComponentContent::Text(t) => {
                 compound.put_string("text", t);
-            }
+            },
             ComponentContent::Translatable {
                 key,
                 fallback,
@@ -816,22 +812,22 @@ impl Component {
                     }
                     compound.put("with", NbtTag::List(list));
                 }
-            }
+            },
             ComponentContent::Selector { pattern, separator } => {
                 compound.put_string("selector", pattern);
                 if let Some(sep) = separator {
                     compound.put("separator", sep.to_nbt());
                 }
-            }
+            },
             ComponentContent::Score { name, objective } => {
                 let mut score = NbtCompound::new();
                 score.put_string("name", name);
                 score.put_string("objective", objective);
                 compound.put("score", NbtTag::Compound(score));
-            }
+            },
             ComponentContent::Keybind(k) => {
                 compound.put_string("keybind", k);
-            }
+            },
             ComponentContent::Nbt {
                 path,
                 interpret,
@@ -848,15 +844,15 @@ impl Component {
                 match source {
                     NbtSource::Entity(sel) => {
                         compound.put_string("entity", sel);
-                    }
+                    },
                     NbtSource::Block(pos) => {
                         compound.put_string("block", pos);
-                    }
+                    },
                     NbtSource::Storage(rl) => {
-                        compound.put_string("storage", &rl.to_string());
-                    }
+                        compound.put_string("storage", rl.to_string());
+                    },
                 }
-            }
+            },
         }
 
         // Style fields
@@ -864,10 +860,10 @@ impl Component {
             match color {
                 TextColor::Named(cf) => {
                     compound.put_string("color", cf.name());
-                }
+                },
                 TextColor::Hex(v) => {
-                    compound.put_string("color", &format!("#{:06X}", v & 0xFFFFFF));
-                }
+                    compound.put_string("color", format!("#{:06X}", v & 0xFFFFFF));
+                },
             }
         }
         if let Some(b) = self.style.bold {
@@ -908,14 +904,14 @@ impl Component {
                 HoverEvent::ShowText(c) => {
                     he_nbt.put_string("action", "show_text");
                     he_nbt.put("contents", c.to_nbt());
-                }
+                },
                 HoverEvent::ShowItem(item) => {
                     he_nbt.put_string("action", "show_item");
                     let mut item_nbt = NbtCompound::new();
                     item_nbt.put_string("id", &item.id);
                     item_nbt.put_int("count", item.count);
                     he_nbt.put("contents", NbtTag::Compound(item_nbt));
-                }
+                },
                 HoverEvent::ShowEntity(entity) => {
                     he_nbt.put_string("action", "show_entity");
                     let mut ent_nbt = NbtCompound::new();
@@ -925,12 +921,12 @@ impl Component {
                         ent_nbt.put("name", name.to_nbt());
                     }
                     he_nbt.put("contents", NbtTag::Compound(ent_nbt));
-                }
+                },
             }
             compound.put("hoverEvent", NbtTag::Compound(he_nbt));
         }
         if let Some(ref f) = self.style.font {
-            compound.put_string("font", &f.to_string());
+            compound.put_string("font", f.to_string());
         }
 
         // Children
@@ -961,7 +957,7 @@ impl Component {
                     component.children.push(Self::from_nbt(child_tag)?);
                 }
                 Ok(component)
-            }
+            },
             _ => Err(format!("unexpected NBT tag type for component: {:?}", tag)),
         }
     }
@@ -996,10 +992,7 @@ impl Component {
             }
         } else if let Some(NbtTag::Compound(score)) = compound.get("score") {
             ComponentContent::Score {
-                name: score
-                    .get_string("name")
-                    .unwrap_or_default()
-                    .to_string(),
+                name: score.get_string("name").unwrap_or_default().to_string(),
                 objective: score
                     .get_string("objective")
                     .unwrap_or_default()
@@ -1008,9 +1001,7 @@ impl Component {
         } else if let Some(k) = compound.get_string("keybind") {
             ComponentContent::Keybind(k.to_string())
         } else if let Some(path) = compound.get_string("nbt") {
-            let interpret = compound
-                .get_byte("interpret")
-                .is_some_and(|b| b != 0);
+            let interpret = compound.get_byte("interpret").is_some_and(|b| b != 0);
             let separator = compound
                 .get("separator")
                 .map(Self::from_nbt)
@@ -1068,18 +1059,12 @@ impl Component {
             style.insertion = Some(ins.to_string());
         }
         if let Some(NbtTag::Compound(ce)) = compound.get("clickEvent") {
-            if let (Some(action), Some(value)) =
-                (ce.get_string("action"), ce.get_string("value"))
-            {
+            if let (Some(action), Some(value)) = (ce.get_string("action"), ce.get_string("value")) {
                 style.click_event = match action {
                     "open_url" => Some(ClickEvent::OpenUrl(value.to_string())),
                     "run_command" => Some(ClickEvent::RunCommand(value.to_string())),
-                    "suggest_command" => {
-                        Some(ClickEvent::SuggestCommand(value.to_string()))
-                    }
-                    "copy_to_clipboard" => {
-                        Some(ClickEvent::CopyToClipboard(value.to_string()))
-                    }
+                    "suggest_command" => Some(ClickEvent::SuggestCommand(value.to_string())),
+                    "copy_to_clipboard" => Some(ClickEvent::CopyToClipboard(value.to_string())),
                     "change_page" => Some(ClickEvent::ChangePage(value.to_string())),
                     _ => None,
                 };
@@ -1100,23 +1085,15 @@ impl Component {
                                 .map(Self::from_nbt)
                                 .transpose()?
                                 .map(Box::new);
-                            Some(HoverEvent::ShowEntity(
-                                super::style::HoverEntity {
-                                    entity_type: ent
-                                        .get_string("type")
-                                        .unwrap_or_default()
-                                        .to_string(),
-                                    id: ent
-                                        .get_string("id")
-                                        .unwrap_or_default()
-                                        .to_string(),
-                                    name,
-                                },
-                            ))
+                            Some(HoverEvent::ShowEntity(super::style::HoverEntity {
+                                entity_type: ent.get_string("type").unwrap_or_default().to_string(),
+                                id: ent.get_string("id").unwrap_or_default().to_string(),
+                                name,
+                            }))
                         } else {
                             None
                         }
-                    }
+                    },
                     _ => None,
                 };
             }
@@ -1152,7 +1129,7 @@ mod tests {
     #[test]
     fn test_text_component_serializes_to_json() {
         let c = Component::text("hello");
-        assert_eq!(c.to_json(), r#"{"text":"hello"}"#);
+        assert_eq!(c.to_json().unwrap(), r#"{"text":"hello"}"#);
     }
 
     #[test]
@@ -1160,7 +1137,7 @@ mod tests {
         let c = Component::text("alert")
             .color(TextColor::Named(ChatFormatting::Red))
             .bold();
-        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["color"], "red");
         assert_eq!(json["bold"], true);
         assert_eq!(json["text"], "alert");
@@ -1169,7 +1146,7 @@ mod tests {
     #[test]
     fn test_hex_color_serializes_as_hash_string() {
         let c = Component::text("test").color(TextColor::Hex(0xFF8000));
-        let json = c.to_json();
+        let json = c.to_json().unwrap();
         assert!(json.contains("#FF8000"), "got: {json}");
     }
 
@@ -1179,7 +1156,7 @@ mod tests {
             "chat.type.text",
             vec![Component::text("Alice"), Component::text("hello world")],
         );
-        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["translate"], "chat.type.text");
         assert_eq!(json["with"][0]["text"], "Alice");
         assert_eq!(json["with"][1]["text"], "hello world");
@@ -1188,7 +1165,7 @@ mod tests {
     #[test]
     fn test_click_event_in_component() {
         let c = Component::text("click me").click(ClickEvent::RunCommand("/home".into()));
-        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["clickEvent"]["action"], "run_command");
         assert_eq!(json["clickEvent"]["value"], "/home");
     }
@@ -1197,7 +1174,7 @@ mod tests {
     fn test_hover_event_show_text() {
         let c = Component::text("hover me")
             .hover(HoverEvent::ShowText(Box::new(Component::text("tooltip"))));
-        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["hoverEvent"]["action"], "show_text");
         assert_eq!(json["hoverEvent"]["contents"]["text"], "tooltip");
     }
@@ -1207,7 +1184,7 @@ mod tests {
         let c = Component::text("Hello ")
             .append(Component::text("World").bold())
             .append(Component::text("!"));
-        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["text"], "Hello ");
         assert_eq!(json["extra"][0]["text"], "World");
         assert_eq!(json["extra"][0]["bold"], true);
@@ -1217,14 +1194,14 @@ mod tests {
     #[test]
     fn test_keybind_component() {
         let c = Component::keybind("key.jump");
-        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["keybind"], "key.jump");
     }
 
     #[test]
     fn test_score_component() {
         let c = Component::score("@s", "kills");
-        let json: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["score"]["name"], "@s");
         assert_eq!(json["score"]["objective"], "kills");
     }
@@ -1243,10 +1220,7 @@ mod tests {
             serde_json::from_str(r#"{"text":"hello","bold":true,"color":"red"}"#).unwrap();
         assert_eq!(c.content, ComponentContent::Text("hello".into()));
         assert_eq!(c.style.bold, Some(true));
-        assert_eq!(
-            c.style.color,
-            Some(TextColor::Named(ChatFormatting::Red))
-        );
+        assert_eq!(c.style.color, Some(TextColor::Named(ChatFormatting::Red)));
     }
 
     #[test]
@@ -1259,7 +1233,7 @@ mod tests {
                     .color(TextColor::Hex(0xFF6B35))
                     .click(ClickEvent::RunCommand("/help".into())),
             );
-        let json = original.to_json();
+        let json = original.to_json().unwrap();
         let deserialized: Component = serde_json::from_str(&json).unwrap();
         assert_eq!(original, deserialized);
     }
@@ -1325,10 +1299,7 @@ mod tests {
     #[test]
     fn test_from_legacy_simple_color() {
         let c = Component::from_legacy("§cRed text");
-        assert_eq!(
-            c.style.color,
-            Some(TextColor::Named(ChatFormatting::Red))
-        );
+        assert_eq!(c.style.color, Some(TextColor::Named(ChatFormatting::Red)));
         if let ComponentContent::Text(t) = &c.content {
             assert_eq!(t, "Red text");
         } else {
@@ -1340,7 +1311,7 @@ mod tests {
     fn test_from_legacy_multiple_codes() {
         let c = Component::from_legacy("§cRed §lBold");
         // Should produce children with different styles
-        assert!(!c.children.is_empty() || c.to_json().contains("red"));
+        assert!(!c.children.is_empty() || c.to_json().unwrap().contains("red"));
     }
 
     #[test]
@@ -1353,8 +1324,7 @@ mod tests {
 
     #[test]
     fn test_to_legacy_string() {
-        let c = Component::text("Hello")
-            .color(TextColor::Named(ChatFormatting::Red));
+        let c = Component::text("Hello").color(TextColor::Named(ChatFormatting::Red));
         let legacy = c.to_legacy_string();
         assert!(legacy.contains("§c"), "got: {legacy}");
         assert!(legacy.contains("Hello"), "got: {legacy}");
@@ -1364,8 +1334,7 @@ mod tests {
 
     #[test]
     fn test_display_extracts_plain_text() {
-        let c = Component::text("Hello ")
-            .append(Component::text("World"));
+        let c = Component::text("Hello ").append(Component::text("World"));
         assert_eq!(format!("{c}"), "Hello World");
     }
 

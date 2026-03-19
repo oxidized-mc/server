@@ -91,7 +91,7 @@ impl ClientboundPlayerChatPacket {
                 for &long in bits {
                     buf.put_i64(long);
                 }
-            }
+            },
         }
 
         // Chat type bound (Holder<ChatType> + name + optional target)
@@ -134,10 +134,10 @@ impl ClientboundPlayerChatPacket {
         let salt = types::read_i64(&mut data)?;
         // Skip last_seen packed list
         let last_seen_count = varint::read_varint_buf(&mut data)?;
-        if last_seen_count < 0 || last_seen_count > 128 {
-            return Err(PlayPacketError::InvalidData(
-                format!("invalid last_seen_count: {last_seen_count}"),
-            ));
+        if !(0..=128).contains(&last_seen_count) {
+            return Err(PlayPacketError::InvalidData(format!(
+                "invalid last_seen_count: {last_seen_count}"
+            )));
         }
         for _ in 0..last_seen_count {
             let packed_id = varint::read_varint_buf(&mut data)?;
@@ -164,10 +164,10 @@ impl ClientboundPlayerChatPacket {
             1 => FilterMask::FullyFiltered,
             2 => {
                 let len = varint::read_varint_buf(&mut data)?;
-                if len < 0 || len > 256 {
-                    return Err(PlayPacketError::InvalidData(
-                        format!("filter mask bitset length out of range: {len}"),
-                    ));
+                if !(0..=256).contains(&len) {
+                    return Err(PlayPacketError::InvalidData(format!(
+                        "filter mask bitset length out of range: {len}"
+                    )));
                 }
                 let mut bits = Vec::with_capacity(len as usize);
                 for _ in 0..len {
@@ -177,12 +177,12 @@ impl ClientboundPlayerChatPacket {
                     bits.push(data.get_i64());
                 }
                 FilterMask::PartiallyFiltered(bits)
-            }
+            },
             other => {
                 return Err(PlayPacketError::InvalidData(format!(
                     "unknown filter mask type: {other}"
                 )));
-            }
+            },
         };
 
         // Chat type bound

@@ -6,6 +6,8 @@
 pub mod clientbound_add_entity;
 pub mod clientbound_chunk_batch_finished;
 pub mod clientbound_chunk_batch_start;
+pub mod clientbound_delete_chat;
+pub mod clientbound_disguised_chat;
 pub mod clientbound_entity_position_sync;
 pub mod clientbound_forget_level_chunk;
 pub mod clientbound_game_event;
@@ -13,6 +15,7 @@ pub mod clientbound_level_chunk_with_light;
 pub mod clientbound_login;
 pub mod clientbound_move_entity;
 pub mod clientbound_player_abilities;
+pub mod clientbound_player_chat;
 pub mod clientbound_player_info_update;
 pub mod clientbound_player_position;
 pub mod clientbound_remove_entities;
@@ -23,9 +26,6 @@ pub mod clientbound_set_default_spawn_position;
 pub mod clientbound_set_entity_data;
 pub mod clientbound_set_entity_motion;
 pub mod clientbound_set_simulation_distance;
-pub mod clientbound_delete_chat;
-pub mod clientbound_disguised_chat;
-pub mod clientbound_player_chat;
 pub mod clientbound_system_chat;
 pub mod serverbound_accept_teleportation;
 pub mod serverbound_chat;
@@ -39,6 +39,8 @@ pub mod serverbound_player_input;
 pub use clientbound_add_entity::ClientboundAddEntityPacket;
 pub use clientbound_chunk_batch_finished::ClientboundChunkBatchFinishedPacket;
 pub use clientbound_chunk_batch_start::ClientboundChunkBatchStartPacket;
+pub use clientbound_delete_chat::ClientboundDeleteChatPacket;
+pub use clientbound_disguised_chat::ClientboundDisguisedChatPacket;
 pub use clientbound_entity_position_sync::ClientboundEntityPositionSyncPacket;
 pub use clientbound_forget_level_chunk::ClientboundForgetLevelChunkPacket;
 pub use clientbound_game_event::{ClientboundGameEventPacket, GameEventType};
@@ -51,6 +53,7 @@ pub use clientbound_move_entity::{
     ClientboundMoveEntityRotPacket,
 };
 pub use clientbound_player_abilities::ClientboundPlayerAbilitiesPacket;
+pub use clientbound_player_chat::{ClientboundPlayerChatPacket, FilterMask};
 pub use clientbound_player_info_update::{
     ClientboundPlayerInfoUpdatePacket, PlayerInfoActions, PlayerInfoEntry,
 };
@@ -65,15 +68,12 @@ pub use clientbound_set_entity_data::{
 };
 pub use clientbound_set_entity_motion::ClientboundSetEntityMotionPacket;
 pub use clientbound_set_simulation_distance::ClientboundSetSimulationDistancePacket;
+pub use clientbound_system_chat::ClientboundSystemChatPacket;
 pub use serverbound_accept_teleportation::ServerboundAcceptTeleportationPacket;
+pub use serverbound_chat::{LastSeenMessagesUpdate, ServerboundChatPacket};
+pub use serverbound_chat_ack::ServerboundChatAckPacket;
+pub use serverbound_chat_command::ServerboundChatCommandPacket;
 pub use serverbound_chunk_batch_received::ServerboundChunkBatchReceivedPacket;
 pub use serverbound_move_player::ServerboundMovePlayerPacket;
 pub use serverbound_player_command::{PlayerCommandAction, ServerboundPlayerCommandPacket};
 pub use serverbound_player_input::{PlayerInput, ServerboundPlayerInputPacket};
-pub use clientbound_delete_chat::ClientboundDeleteChatPacket;
-pub use clientbound_disguised_chat::ClientboundDisguisedChatPacket;
-pub use clientbound_player_chat::{ClientboundPlayerChatPacket, FilterMask};
-pub use clientbound_system_chat::ClientboundSystemChatPacket;
-pub use serverbound_chat::{LastSeenMessagesUpdate, ServerboundChatPacket};
-pub use serverbound_chat_ack::ServerboundChatAckPacket;
-pub use serverbound_chat_command::ServerboundChatCommandPacket;

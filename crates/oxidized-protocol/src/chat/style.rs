@@ -154,15 +154,15 @@ impl Serialize for HoverEvent {
             Self::ShowText(c) => {
                 map.serialize_entry("action", "show_text")?;
                 map.serialize_entry("contents", c)?;
-            }
+            },
             Self::ShowItem(item) => {
                 map.serialize_entry("action", "show_item")?;
                 map.serialize_entry("contents", item)?;
-            }
+            },
             Self::ShowEntity(entity) => {
                 map.serialize_entry("action", "show_entity")?;
                 map.serialize_entry("contents", entity)?;
-            }
+            },
         }
         map.end()
     }
@@ -180,15 +180,15 @@ impl<'de> Deserialize<'de> for HoverEvent {
             "show_text" => {
                 let c = serde_json::from_value(raw.contents).map_err(de::Error::custom)?;
                 Ok(Self::ShowText(Box::new(c)))
-            }
+            },
             "show_item" => {
                 let item = serde_json::from_value(raw.contents).map_err(de::Error::custom)?;
                 Ok(Self::ShowItem(item))
-            }
+            },
             "show_entity" => {
                 let entity = serde_json::from_value(raw.contents).map_err(de::Error::custom)?;
                 Ok(Self::ShowEntity(entity))
-            }
+            },
             other => Err(de::Error::custom(format!(
                 "unknown hover event action: {other}"
             ))),
@@ -270,10 +270,7 @@ impl Style {
             underlined: self.underlined.or(parent.underlined),
             strikethrough: self.strikethrough.or(parent.strikethrough),
             obfuscated: self.obfuscated.or(parent.obfuscated),
-            insertion: self
-                .insertion
-                .clone()
-                .or_else(|| parent.insertion.clone()),
+            insertion: self.insertion.clone().or_else(|| parent.insertion.clone()),
             click_event: self
                 .click_event
                 .clone()
@@ -383,14 +380,13 @@ impl<'de> Deserialize<'de> for Style {
                         "hoverEvent" => style.hover_event = Some(map.next_value()?),
                         "font" => {
                             let s: String = map.next_value()?;
-                            style.font = Some(
-                                ResourceLocation::from_string(&s).map_err(de::Error::custom)?,
-                            );
-                        }
+                            style.font =
+                                Some(ResourceLocation::from_string(&s).map_err(de::Error::custom)?);
+                        },
                         _ => {
                             // Skip unknown fields for forward-compat
                             let _: serde_json::Value = map.next_value()?;
-                        }
+                        },
                     }
                 }
                 Ok(style)
@@ -621,10 +617,7 @@ mod tests {
             .color(TextColor::Named(ChatFormatting::Blue))
             .build();
         let resolved = child.apply_to(&parent);
-        assert_eq!(
-            resolved.color,
-            Some(TextColor::Named(ChatFormatting::Blue))
-        );
+        assert_eq!(resolved.color, Some(TextColor::Named(ChatFormatting::Blue)));
     }
 
     #[test]

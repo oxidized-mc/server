@@ -8,11 +8,11 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
+use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::chunk::view_distance::spiral_chunks;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_game::player::movement::validate_movement;
-use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::player::{
     GameMode, PlayerList, ServerPlayer, build_login_sequence, handle_accept_teleportation,
 };

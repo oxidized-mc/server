@@ -54,7 +54,7 @@ pub fn write_component_nbt(buf: &mut BytesMut, component: &Component) {
             oxidized_nbt::write_network_nbt(&mut nbt_buf, &compound)
                 .expect("NBT write to Vec should not fail");
             buf.extend_from_slice(&nbt_buf);
-        }
+        },
         _ => {
             // Component::to_nbt should always return a Compound; fallback to empty.
             let compound = oxidized_nbt::NbtCompound::new();
@@ -63,7 +63,7 @@ pub fn write_component_nbt(buf: &mut BytesMut, component: &Component) {
             oxidized_nbt::write_network_nbt(&mut nbt_buf, &compound)
                 .expect("NBT write to Vec should not fail");
             buf.extend_from_slice(&nbt_buf);
-        }
+        },
     }
 }
 
