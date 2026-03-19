@@ -1,7 +1,7 @@
 //! Logging initialization for the Oxidized server.
 //!
-//! Uses [`tracing_subscriber`] with structured logging, env-filter support,
-//! and optional file/line display.
+//! Uses [`tracing_subscriber`] with structured logging and env-filter
+//! support. See [ADR-004](../../docs/adr/adr-004-logging-observability.md).
 
 use tracing_subscriber::EnvFilter;
 
@@ -20,9 +20,6 @@ pub fn init(default_level: &str) {
 
     tracing_subscriber::fmt()
         .with_env_filter(filter)
-        .with_thread_names(true)
         .with_target(true)
-        .with_file(true)
-        .with_line_number(true)
         .init();
 }
