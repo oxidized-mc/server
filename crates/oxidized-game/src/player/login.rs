@@ -75,7 +75,13 @@ pub fn build_login_sequence(
     dimension_type_id: i32,
 ) -> Vec<EncodedPacket> {
     let packets = vec![
-        build_login_packet(player, level_data, all_players, dimensions, dimension_type_id),
+        build_login_packet(
+            player,
+            level_data,
+            all_players,
+            dimensions,
+            dimension_type_id,
+        ),
         build_abilities_packet(player),
         build_spawn_position_packet(player, level_data),
         build_game_mode_event_packet(player),
