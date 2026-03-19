@@ -97,14 +97,20 @@ mod tests {
     fn test_from_type_error() {
         let err = TypeError::UnexpectedEof { need: 4, have: 2 };
         let pde: PacketDecodeError = err.into();
-        assert!(matches!(pde, PacketDecodeError::Type(TypeError::UnexpectedEof { .. })));
+        assert!(matches!(
+            pde,
+            PacketDecodeError::Type(TypeError::UnexpectedEof { .. })
+        ));
     }
 
     #[test]
     fn test_from_varint_error() {
         let err = VarIntError::TooLarge { max_bytes: 5 };
         let pde: PacketDecodeError = err.into();
-        assert!(matches!(pde, PacketDecodeError::VarInt(VarIntError::TooLarge { .. })));
+        assert!(matches!(
+            pde,
+            PacketDecodeError::VarInt(VarIntError::TooLarge { .. })
+        ));
     }
 
     #[test]
