@@ -8,6 +8,7 @@ pub mod abilities;
 pub mod game_mode;
 pub mod inventory;
 pub mod login;
+pub mod movement;
 pub mod player_list;
 pub mod server_player;
 

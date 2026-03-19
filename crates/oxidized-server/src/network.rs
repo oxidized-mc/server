@@ -8,8 +8,10 @@ use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
 
+use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::chunk::view_distance::spiral_chunks;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
+use oxidized_game::player::movement::validate_movement;
 use oxidized_game::player::{
     GameMode, PlayerList, ServerPlayer, build_login_sequence, handle_accept_teleportation,
 };
@@ -33,9 +35,12 @@ use oxidized_protocol::packets::login::{
 };
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
-    ClientboundGameEventPacket, ClientboundLevelChunkWithLightPacket,
-    ClientboundSetChunkCacheRadiusPacket, GameEventType, ServerboundAcceptTeleportationPacket,
-    ServerboundChunkBatchReceivedPacket,
+    ClientboundForgetLevelChunkPacket, ClientboundGameEventPacket,
+    ClientboundLevelChunkWithLightPacket, ClientboundPlayerPositionPacket,
+    ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
+    PlayerCommandAction, RelativeFlags, ServerboundAcceptTeleportationPacket,
+    ServerboundChunkBatchReceivedPacket, ServerboundMovePlayerPacket,
+    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
 };
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
@@ -811,6 +816,10 @@ async fn handle_play_entry(
     // Add player to the server player list (only after successful send).
     let player_arc = server_ctx.player_list.write().add(player);
 
+    // Track which chunks the player has loaded so we can send/forget on boundary crossings.
+    let initial_chunk = ChunkPos::from_block(player_chunk_x, player_chunk_z);
+    let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, player_view_distance);
+
     info!(
         peer = %addr,
         uuid = %uuid,
@@ -820,8 +829,8 @@ async fn handle_play_entry(
         "PLAY login sequence sent",
     );
 
-    // Minimal PLAY read loop — handles teleport confirmations, chunk batch
-    // rate feedback, and logs other packets. Full PLAY handling is Phase 14+.
+    // PLAY read loop — handles movement, teleport confirmations, chunk batch
+    // rate feedback, sprint/sneak state, and logs other packets.
     loop {
         match conn.read_raw_packet().await {
             Ok(pkt) => {
@@ -859,6 +868,191 @@ async fn handle_play_entry(
                         },
                         Err(e) => {
                             debug!(peer = %addr, error = %e, "Failed to decode chunk batch ack");
+                        },
+                    }
+                } else if pkt.id == ServerboundMovePlayerPacket::PACKET_ID_POS
+                    || pkt.id == ServerboundMovePlayerPacket::PACKET_ID_POS_ROT
+                    || pkt.id == ServerboundMovePlayerPacket::PACKET_ID_ROT
+                    || pkt.id == ServerboundMovePlayerPacket::PACKET_ID_STATUS_ONLY
+                {
+                    let move_pkt = match pkt.id {
+                        ServerboundMovePlayerPacket::PACKET_ID_POS => {
+                            ServerboundMovePlayerPacket::decode_pos(pkt.data)
+                        },
+                        ServerboundMovePlayerPacket::PACKET_ID_POS_ROT => {
+                            ServerboundMovePlayerPacket::decode_pos_rot(pkt.data)
+                        },
+                        ServerboundMovePlayerPacket::PACKET_ID_ROT => {
+                            ServerboundMovePlayerPacket::decode_rot(pkt.data)
+                        },
+                        _ => ServerboundMovePlayerPacket::decode_status_only(pkt.data),
+                    };
+
+                    match move_pkt {
+                        Ok(move_pkt) => {
+                            if move_pkt.contains_invalid_values() {
+                                debug!(peer = %addr, "Movement packet contains invalid values");
+                                continue;
+                            }
+
+                            let result = {
+                                let p = player_arc.read();
+                                validate_movement(
+                                    p.pos,
+                                    p.yaw,
+                                    p.pitch,
+                                    move_pkt.x,
+                                    move_pkt.y,
+                                    move_pkt.z,
+                                    move_pkt.yaw,
+                                    move_pkt.pitch,
+                                )
+                            };
+
+                            if result.needs_correction {
+                                let correction = {
+                                    let mut p = player_arc.write();
+                                    let teleport_id = p.next_teleport_id();
+                                    p.pending_teleports.push_back(teleport_id);
+                                    ClientboundPlayerPositionPacket {
+                                        teleport_id,
+                                        x: p.pos.x,
+                                        y: p.pos.y,
+                                        z: p.pos.z,
+                                        dx: 0.0,
+                                        dy: 0.0,
+                                        dz: 0.0,
+                                        yaw: p.yaw,
+                                        pitch: p.pitch,
+                                        relative_flags: RelativeFlags::empty(),
+                                    }
+                                };
+                                conn.send_raw(
+                                    ClientboundPlayerPositionPacket::PACKET_ID,
+                                    &correction.encode(),
+                                )
+                                .await?;
+                                conn.flush().await?;
+                                debug!(peer = %addr, "Position correction sent");
+                            } else {
+                                {
+                                    let mut p = player_arc.write();
+                                    p.pos = result.new_pos;
+                                    p.yaw = result.new_yaw;
+                                    p.pitch = result.new_pitch;
+                                    p.on_ground = move_pkt.on_ground;
+                                }
+
+                                // Check if player crossed a chunk boundary
+                                if move_pkt.has_pos() {
+                                    let new_chunk = ChunkPos::from_block(
+                                        result.new_pos.x.floor() as i32,
+                                        result.new_pos.z.floor() as i32,
+                                    );
+                                    let (to_load, to_unload) =
+                                        chunk_tracker.update_center(new_chunk);
+
+                                    if !to_load.is_empty() || !to_unload.is_empty() {
+                                        let center_pkt = ClientboundSetChunkCacheCenterPacket {
+                                            chunk_x: new_chunk.x,
+                                            chunk_z: new_chunk.z,
+                                        };
+                                        conn.send_raw(
+                                            ClientboundSetChunkCacheCenterPacket::PACKET_ID,
+                                            &center_pkt.encode(),
+                                        )
+                                        .await?;
+
+                                        for pos in &to_unload {
+                                            let forget = ClientboundForgetLevelChunkPacket {
+                                                chunk_x: pos.x,
+                                                chunk_z: pos.z,
+                                            };
+                                            conn.send_raw(
+                                                ClientboundForgetLevelChunkPacket::PACKET_ID,
+                                                &forget.encode(),
+                                            )
+                                            .await?;
+                                        }
+
+                                        if !to_load.is_empty() {
+                                            conn.send_raw(
+                                                ClientboundChunkBatchStartPacket::PACKET_ID,
+                                                &ClientboundChunkBatchStartPacket.encode(),
+                                            )
+                                            .await?;
+
+                                            for pos in &to_load {
+                                                let chunk = LevelChunk::new(*pos);
+                                                let chunk_pkt = build_chunk_packet(&chunk);
+                                                conn.send_raw(
+                                                    ClientboundLevelChunkWithLightPacket::PACKET_ID,
+                                                    &chunk_pkt.encode(),
+                                                )
+                                                .await?;
+                                            }
+
+                                            let batch_finished =
+                                                ClientboundChunkBatchFinishedPacket {
+                                                    batch_size: to_load.len() as i32,
+                                                };
+                                            conn.send_raw(
+                                                ClientboundChunkBatchFinishedPacket::PACKET_ID,
+                                                &batch_finished.encode(),
+                                            )
+                                            .await?;
+                                        }
+
+                                        conn.flush().await?;
+
+                                        debug!(
+                                            peer = %addr,
+                                            loaded = to_load.len(),
+                                            unloaded = to_unload.len(),
+                                            center_x = new_chunk.x,
+                                            center_z = new_chunk.z,
+                                            "Chunk boundary crossed",
+                                        );
+                                    }
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode movement packet");
+                        },
+                    }
+                } else if pkt.id == ServerboundPlayerCommandPacket::PACKET_ID {
+                    match ServerboundPlayerCommandPacket::decode(pkt.data) {
+                        Ok(cmd) => match cmd.action {
+                            PlayerCommandAction::StartSprinting => {
+                                player_arc.write().sprinting = true;
+                                debug!(peer = %addr, "Player started sprinting");
+                            },
+                            PlayerCommandAction::StopSprinting => {
+                                player_arc.write().sprinting = false;
+                                debug!(peer = %addr, "Player stopped sprinting");
+                            },
+                            _ => {
+                                debug!(
+                                    peer = %addr,
+                                    action = ?cmd.action,
+                                    "Player command (unhandled action)",
+                                );
+                            },
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode player command");
+                        },
+                    }
+                } else if pkt.id == ServerboundPlayerInputPacket::PACKET_ID {
+                    match ServerboundPlayerInputPacket::decode(pkt.data) {
+                        Ok(input_pkt) => {
+                            let mut p = player_arc.write();
+                            p.sneaking = input_pkt.input.shift;
+                            p.sprinting = input_pkt.input.sprint;
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode player input");
                         },
                     }
                 } else {
