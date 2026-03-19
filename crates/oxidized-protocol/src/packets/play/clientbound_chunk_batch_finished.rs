@@ -7,7 +7,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 /// Signals the end of a chunk batch.
 ///
@@ -36,6 +38,19 @@ impl ClientboundChunkBatchFinishedPacket {
     }
 }
 
+impl Packet for ClientboundChunkBatchFinishedPacket {
+    const PACKET_ID: i32 = 0x0B;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let batch_size = varint::read_varint_buf(&mut data)?;
+        Ok(Self { batch_size })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -55,5 +70,22 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundChunkBatchFinishedPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.batch_size, 0);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundChunkBatchFinishedPacket { batch_size: 49 };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundChunkBatchFinishedPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundChunkBatchFinishedPacket as Packet>::PACKET_ID,
+            0x0B
+        );
     }
 }

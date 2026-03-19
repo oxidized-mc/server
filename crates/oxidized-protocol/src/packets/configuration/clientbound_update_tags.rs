@@ -9,7 +9,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint::{self, VarIntError};
+use crate::codec::Packet;
 use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundUpdateTagsPacket`].
@@ -136,6 +138,61 @@ impl ClientboundUpdateTagsPacket {
     }
 }
 
+impl Packet for ClientboundUpdateTagsPacket {
+    const PACKET_ID: i32 = 0x0d;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let registry_count = varint::read_varint_buf(&mut data)?;
+        if registry_count < 0 {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "negative count: {registry_count}"
+            )));
+        }
+
+        let mut tags = Vec::with_capacity(registry_count as usize);
+        for _ in 0..registry_count {
+            let registry = ResourceLocation::read(&mut data)?;
+
+            let tag_count = varint::read_varint_buf(&mut data)?;
+            if tag_count < 0 {
+                return Err(PacketDecodeError::InvalidData(format!(
+                    "negative count: {tag_count}"
+                )));
+            }
+
+            let mut tag_entries = Vec::with_capacity(tag_count as usize);
+            for _ in 0..tag_count {
+                let name = ResourceLocation::read(&mut data)?;
+
+                let entry_count = varint::read_varint_buf(&mut data)?;
+                if entry_count < 0 {
+                    return Err(PacketDecodeError::InvalidData(format!(
+                        "negative count: {entry_count}"
+                    )));
+                }
+
+                let mut entries = Vec::with_capacity(entry_count as usize);
+                for _ in 0..entry_count {
+                    entries.push(varint::read_varint_buf(&mut data)?);
+                }
+
+                tag_entries.push(TagEntry { name, entries });
+            }
+
+            tags.push(TagRegistry {
+                registry,
+                tags: tag_entries,
+            });
+        }
+
+        Ok(Self { tags })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -230,5 +287,30 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundUpdateTagsPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundUpdateTagsPacket {
+            tags: vec![TagRegistry {
+                registry: ResourceLocation::new("minecraft", "block").unwrap(),
+                tags: vec![TagEntry {
+                    name: ResourceLocation::new("minecraft", "logs").unwrap(),
+                    entries: vec![10, 11],
+                }],
+            }],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundUpdateTagsPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundUpdateTagsPacket as Packet>::PACKET_ID,
+            0x0d
+        );
     }
 }

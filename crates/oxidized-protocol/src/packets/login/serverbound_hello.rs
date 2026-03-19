@@ -5,7 +5,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
+use crate::codec::Packet;
 
 /// Errors from decoding a [`ServerboundHelloPacket`].
 #[derive(Debug, Error)]
@@ -53,6 +55,20 @@ impl ServerboundHelloPacket {
     }
 }
 
+impl Packet for ServerboundHelloPacket {
+    const PACKET_ID: i32 = 0x00;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let name = types::read_string(&mut data, 16)?;
+        let profile_id = types::read_uuid(&mut data)?;
+        Ok(Self { name, profile_id })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -78,5 +94,21 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ServerboundHelloPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundHelloPacket {
+            name: "Steve".to_string(),
+            profile_id: uuid::Uuid::from_u128(0xCAFE),
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ServerboundHelloPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(<ServerboundHelloPacket as Packet>::PACKET_ID, 0x00);
     }
 }

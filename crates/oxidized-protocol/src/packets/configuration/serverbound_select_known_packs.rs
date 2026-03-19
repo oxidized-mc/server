@@ -6,7 +6,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 use crate::packets::configuration::clientbound_select_known_packs::{KnownPack, KnownPacksError};
 
 /// Errors from decoding a [`ServerboundSelectKnownPacksPacket`].
@@ -73,6 +75,39 @@ impl ServerboundSelectKnownPacksPacket {
     }
 }
 
+impl Packet for ServerboundSelectKnownPacksPacket {
+    const PACKET_ID: i32 = 0x07;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let count = varint::read_varint_buf(&mut data)?;
+        if count < 0 {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "negative pack count: {count}"
+            )));
+        }
+        if count > MAX_KNOWN_PACKS {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "too many packs: {count} (max 64)"
+            )));
+        }
+        let mut packs = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            packs.push(KnownPack::read(&mut data).map_err(|e| match e {
+                KnownPacksError::VarInt(v) => PacketDecodeError::VarInt(v),
+                KnownPacksError::Type(t) => PacketDecodeError::Type(t),
+                KnownPacksError::NegativeCount(n) => {
+                    PacketDecodeError::InvalidData(format!("negative pack count: {n}"))
+                }
+            })?);
+        }
+        Ok(Self { packs })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -127,5 +162,28 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ServerboundSelectKnownPacksPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.packs.len(), 64);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundSelectKnownPacksPacket {
+            packs: vec![KnownPack {
+                namespace: "minecraft".to_string(),
+                id: "core".to_string(),
+                version: "1.21.5".to_string(),
+            }],
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundSelectKnownPacksPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundSelectKnownPacksPacket as Packet>::PACKET_ID,
+            0x07
+        );
     }
 }

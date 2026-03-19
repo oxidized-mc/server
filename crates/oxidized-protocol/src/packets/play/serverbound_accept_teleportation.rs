@@ -6,7 +6,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 /// Client confirmation of a server-initiated teleport.
 ///
@@ -35,6 +37,19 @@ impl ServerboundAcceptTeleportationPacket {
     }
 }
 
+impl Packet for ServerboundAcceptTeleportationPacket {
+    const PACKET_ID: i32 = 0x00;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let teleport_id = varint::read_varint_buf(&mut data)?;
+        Ok(Self { teleport_id })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -54,5 +69,22 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ServerboundAcceptTeleportationPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.teleport_id, 0);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundAcceptTeleportationPacket { teleport_id: 42 };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundAcceptTeleportationPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundAcceptTeleportationPacket as Packet>::PACKET_ID,
+            0x00
+        );
     }
 }

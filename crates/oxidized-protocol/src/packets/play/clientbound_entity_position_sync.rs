@@ -12,6 +12,9 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// Full position sync for an entity (0x23).
 ///
 /// # Wire Format
@@ -99,6 +102,39 @@ impl ClientboundEntityPositionSyncPacket {
     }
 }
 
+impl Packet for ClientboundEntityPositionSyncPacket {
+    const PACKET_ID: i32 = 0x23;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let entity_id = varint::read_varint_buf(&mut data)?;
+        let x = types::read_f64(&mut data)?;
+        let y = types::read_f64(&mut data)?;
+        let z = types::read_f64(&mut data)?;
+        let vx = types::read_f64(&mut data)?;
+        let vy = types::read_f64(&mut data)?;
+        let vz = types::read_f64(&mut data)?;
+        let yaw = types::read_f32(&mut data)?;
+        let pitch = types::read_f32(&mut data)?;
+        let on_ground = types::read_bool(&mut data)?;
+        Ok(Self {
+            entity_id,
+            x,
+            y,
+            z,
+            vx,
+            vy,
+            vz,
+            yaw,
+            pitch,
+            on_ground,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -149,5 +185,33 @@ mod tests {
         assert!((decoded.vx - 1.5).abs() < f64::EPSILON);
         assert!((decoded.vy + 9.8).abs() < f64::EPSILON);
         assert!((decoded.vz - 0.3).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundEntityPositionSyncPacket {
+            entity_id: 1,
+            x: 100.5,
+            y: 64.0,
+            z: -200.25,
+            vx: 0.0,
+            vy: -0.08,
+            vz: 0.0,
+            yaw: 90.0,
+            pitch: -15.0,
+            on_ground: false,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundEntityPositionSyncPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundEntityPositionSyncPacket as Packet>::PACKET_ID,
+            0x23
+        );
     }
 }

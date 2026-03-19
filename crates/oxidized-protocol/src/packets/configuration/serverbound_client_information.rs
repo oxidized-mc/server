@@ -7,8 +7,10 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint;
+use crate::codec::Packet;
 use crate::types::{ChatVisibility, HumanoidArm, ParticleStatus};
 
 /// Maximum length of the language string (in characters).
@@ -186,6 +188,23 @@ impl ServerboundClientInformationPacket {
         let mut buf = BytesMut::new();
         self.information.write(&mut buf);
         buf
+    }
+}
+
+impl Packet for ServerboundClientInformationPacket {
+    const PACKET_ID: i32 = 0x00;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let information = ClientInformation::read(&mut data).map_err(|e| match e {
+            ClientInformationError::Type(t) => PacketDecodeError::Type(t),
+            ClientInformationError::VarInt(v) => PacketDecodeError::VarInt(v),
+            other => PacketDecodeError::InvalidData(other.to_string()),
+        })?;
+        Ok(Self { information })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
     }
 }
 
@@ -425,5 +444,24 @@ mod tests {
         let mut data = buf.freeze();
         let decoded = ClientInformation::read(&mut data).unwrap();
         assert_eq!(decoded.model_customisation, 0xFF);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundClientInformationPacket {
+            information: default_info(),
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundClientInformationPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundClientInformationPacket as Packet>::PACKET_ID,
+            0x00
+        );
     }
 }

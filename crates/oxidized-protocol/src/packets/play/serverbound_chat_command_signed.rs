@@ -5,9 +5,11 @@
 //! command string and skip the signature/last-seen fields because the
 //! server does not enforce chat signing.
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
+use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x08 — Signed chat command.
@@ -46,6 +48,29 @@ impl ServerboundChatCommandSignedPacket {
         // We intentionally do not validate them — mirrors vanilla offline-mode behavior
         // where signature enforcement is disabled.
         Ok(Self { command })
+    }
+
+    /// Encodes the packet body (without packet ID).
+    ///
+    /// Only the `command` field is encoded — signature/last-seen fields are
+    /// not relevant when re-encoding server-side.
+    pub fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(self.command.len() + 5);
+        types::write_string(&mut buf, &self.command);
+        buf
+    }
+}
+
+impl Packet for ServerboundChatCommandSignedPacket {
+    const PACKET_ID: i32 = 0x08;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let command = types::read_string(&mut data, 32767)?;
+        Ok(Self { command })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
     }
 }
 
@@ -95,5 +120,26 @@ mod tests {
 
         let pkt = ServerboundChatCommandSignedPacket::decode(buf.freeze()).unwrap();
         assert_eq!(pkt.command, "msg Alice hi");
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundChatCommandSignedPacket {
+            command: "help 2".into(),
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ServerboundChatCommandSignedPacket as Packet>::decode(
+            encoded.freeze(),
+        )
+        .unwrap();
+        assert_eq!(decoded.command, "help 2");
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundChatCommandSignedPacket as Packet>::PACKET_ID,
+            0x08
+        );
     }
 }

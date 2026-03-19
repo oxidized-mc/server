@@ -6,7 +6,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 /// Sets the simulation distance for the client.
 ///
@@ -37,6 +39,21 @@ impl ClientboundSetSimulationDistancePacket {
     }
 }
 
+impl Packet for ClientboundSetSimulationDistancePacket {
+    const PACKET_ID: i32 = 0x6F;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let simulation_distance = varint::read_varint_buf(&mut data)?;
+        Ok(Self {
+            simulation_distance,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -50,5 +67,25 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSetSimulationDistancePacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.simulation_distance, 10);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundSetSimulationDistancePacket {
+            simulation_distance: 10,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundSetSimulationDistancePacket as Packet>::decode(encoded.freeze())
+                .unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSetSimulationDistancePacket as Packet>::PACKET_ID,
+            0x6F
+        );
     }
 }

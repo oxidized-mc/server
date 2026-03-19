@@ -7,6 +7,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// A game event type ID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -107,6 +110,29 @@ impl ClientboundGameEventPacket {
     }
 }
 
+impl Packet for ClientboundGameEventPacket {
+    const PACKET_ID: i32 = 0x26;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        if data.remaining() < 5 {
+            return Err(PacketDecodeError::Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "not enough data for GameEventPacket",
+            )));
+        }
+        let type_id = data.get_u8();
+        let param = data.get_f32();
+        let event = GameEventType::from_id(type_id).ok_or_else(|| {
+            PacketDecodeError::InvalidData(format!("unknown game event type: {type_id}"))
+        })?;
+        Ok(Self { event, param })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -131,5 +157,22 @@ mod tests {
         buf.put_f32(0.0);
         let result = ClientboundGameEventPacket::decode(buf.freeze());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundGameEventPacket {
+            event: GameEventType::ChangeGameMode,
+            param: 1.0,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundGameEventPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(<ClientboundGameEventPacket as Packet>::PACKET_ID, 0x26);
     }
 }

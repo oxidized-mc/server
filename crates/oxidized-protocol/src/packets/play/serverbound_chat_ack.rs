@@ -2,7 +2,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x06 — Client acknowledges message chain offset.
@@ -34,6 +36,19 @@ impl ServerboundChatAckPacket {
     }
 }
 
+impl Packet for ServerboundChatAckPacket {
+    const PACKET_ID: i32 = 0x06;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let offset = varint::read_varint_buf(&mut data)?;
+        Ok(Self { offset })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -58,5 +73,22 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ServerboundChatAckPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.offset, 0);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundChatAckPacket { offset: 42 };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundChatAckPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded.offset, pkt.offset);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundChatAckPacket as Packet>::PACKET_ID,
+            0x06
+        );
     }
 }

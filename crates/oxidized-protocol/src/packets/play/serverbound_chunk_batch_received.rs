@@ -7,6 +7,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// Client response to a chunk batch.
 ///
 /// Wire format: `desired_chunks_per_tick: f32`.
@@ -43,6 +46,27 @@ impl ServerboundChunkBatchReceivedPacket {
         let mut buf = BytesMut::with_capacity(4);
         buf.put_f32(self.desired_chunks_per_tick);
         buf
+    }
+}
+
+impl Packet for ServerboundChunkBatchReceivedPacket {
+    const PACKET_ID: i32 = 0x0B;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        if data.remaining() < 4 {
+            return Err(PacketDecodeError::Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "not enough data for f32",
+            )));
+        }
+        let desired_chunks_per_tick = data.get_f32();
+        Ok(Self {
+            desired_chunks_per_tick,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
     }
 }
 
@@ -118,5 +142,24 @@ mod tests {
         let data = bytes::Bytes::from_static(&[0x00, 0x00]); // only 2 bytes, need 4
         let result = ServerboundChunkBatchReceivedPacket::decode(data);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ServerboundChunkBatchReceivedPacket {
+            desired_chunks_per_tick: 7.5,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundChunkBatchReceivedPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert!((decoded.desired_chunks_per_tick - 7.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ServerboundChunkBatchReceivedPacket as Packet>::PACKET_ID,
+            0x0B
+        );
     }
 }

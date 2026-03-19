@@ -3,7 +3,9 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
+use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
 
@@ -70,6 +72,53 @@ impl ClientboundDisguisedChatPacket {
     }
 }
 
+impl Packet for ClientboundDisguisedChatPacket {
+    const PACKET_ID: i32 = 0x21;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let map_err = |e: PlayPacketError| -> PacketDecodeError {
+            match e {
+                PlayPacketError::UnexpectedEof => {
+                    PacketDecodeError::InvalidData(
+                        "unexpected end of packet data".into(),
+                    )
+                },
+                PlayPacketError::InvalidData(s) => {
+                    PacketDecodeError::InvalidData(s)
+                },
+                PlayPacketError::VarInt(e) => e.into(),
+                PlayPacketError::Type(e) => e.into(),
+                PlayPacketError::ResourceLocation(e) => e.into(),
+            }
+        };
+        let message = read_component_nbt(&mut data).map_err(&map_err)?;
+        let holder_id = varint::read_varint_buf(&mut data)?;
+        let chat_type_id = holder_id - 1;
+        let sender_name =
+            read_component_nbt(&mut data).map_err(&map_err)?;
+        let has_target = if data.has_remaining() {
+            data.get_u8() != 0
+        } else {
+            false
+        };
+        let target_name = if has_target {
+            Some(read_component_nbt(&mut data).map_err(&map_err)?)
+        } else {
+            None
+        };
+        Ok(Self {
+            message,
+            chat_type_id,
+            sender_name,
+            target_name,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -107,5 +156,33 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundDisguisedChatPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.target_name, Some(Component::text("Bob")));
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundDisguisedChatPacket {
+            message: Component::text("test"),
+            chat_type_id: 0,
+            sender_name: Component::text("Server"),
+            target_name: None,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundDisguisedChatPacket as Packet>::decode(
+                encoded.freeze(),
+            )
+            .unwrap();
+        assert_eq!(decoded.message, Component::text("test"));
+        assert_eq!(decoded.chat_type_id, 0);
+        assert_eq!(decoded.sender_name, Component::text("Server"));
+        assert!(decoded.target_name.is_none());
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundDisguisedChatPacket as Packet>::PACKET_ID,
+            0x21
+        );
     }
 }

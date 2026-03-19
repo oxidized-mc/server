@@ -7,8 +7,10 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
 use crate::codec::varint;
+use crate::codec::Packet;
 
 use super::clientbound_login::PlayPacketError;
 
@@ -51,6 +53,23 @@ impl ClientboundRotateHeadPacket {
     }
 }
 
+impl Packet for ClientboundRotateHeadPacket {
+    const PACKET_ID: i32 = 0x53;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let entity_id = varint::read_varint_buf(&mut data)?;
+        let head_yaw = types::read_u8(&mut data)?;
+        Ok(Self {
+            entity_id,
+            head_yaw,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -85,5 +104,25 @@ mod tests {
         assert_eq!(encoded.len(), 3);
         let decoded = ClientboundRotateHeadPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundRotateHeadPacket {
+            entity_id: 42,
+            head_yaw: 128,
+        };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundRotateHeadPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundRotateHeadPacket as Packet>::PACKET_ID,
+            0x53
+        );
     }
 }

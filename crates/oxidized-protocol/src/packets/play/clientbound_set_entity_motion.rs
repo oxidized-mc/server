@@ -13,6 +13,9 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::Packet;
+
 /// Set entity motion packet (0x65).
 ///
 /// # Wire Format
@@ -77,6 +80,28 @@ impl ClientboundSetEntityMotionPacket {
     }
 }
 
+impl Packet for ClientboundSetEntityMotionPacket {
+    const PACKET_ID: i32 = 0x65;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let entity_id = varint::read_varint_buf(&mut data)?;
+        let (vx, vy, vz) = lp_vec3::read(&mut data)?;
+        Ok(Self {
+            entity_id,
+            vx,
+            vy,
+            vz,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(16);
+        varint::write_varint_buf(self.entity_id, &mut buf);
+        lp_vec3::write(&mut buf, self.vx, self.vy, self.vz);
+        buf
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -109,5 +134,25 @@ mod tests {
         assert!(decoded.vx.abs() < 1e-5);
         assert!(decoded.vy.abs() < 1e-5);
         assert!(decoded.vz.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let packet = ClientboundSetEntityMotionPacket::new(42, 0.0, 0.0, 0.0);
+        let encoded = Packet::encode(&packet);
+        let decoded =
+            <ClientboundSetEntityMotionPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded.entity_id, 42);
+        assert!(decoded.vx.abs() < 1e-5);
+        assert!(decoded.vy.abs() < 1e-5);
+        assert!(decoded.vz.abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundSetEntityMotionPacket as Packet>::PACKET_ID,
+            0x65
+        );
     }
 }

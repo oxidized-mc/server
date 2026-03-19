@@ -6,7 +6,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint::{self, VarIntError};
+use crate::codec::Packet;
 
 /// Errors from decoding a [`ClientboundLoginCompressionPacket`].
 #[derive(Debug, Error)]
@@ -50,6 +52,19 @@ impl ClientboundLoginCompressionPacket {
     }
 }
 
+impl Packet for ClientboundLoginCompressionPacket {
+    const PACKET_ID: i32 = 0x03;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let threshold = varint::read_varint_buf(&mut data)?;
+        Ok(Self { threshold })
+    }
+
+    fn encode(&self) -> BytesMut {
+        self.encode()
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -69,5 +84,22 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundLoginCompressionPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.threshold, -1);
+    }
+
+    #[test]
+    fn test_packet_trait_roundtrip() {
+        let pkt = ClientboundLoginCompressionPacket { threshold: 512 };
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundLoginCompressionPacket as Packet>::decode(encoded.freeze()).unwrap();
+        assert_eq!(pkt, decoded);
+    }
+
+    #[test]
+    fn test_packet_trait_id() {
+        assert_eq!(
+            <ClientboundLoginCompressionPacket as Packet>::PACKET_ID,
+            0x03
+        );
     }
 }
