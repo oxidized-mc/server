@@ -1,4 +1,4 @@
-//! Property-based tests for Phase 13 chunk sending logic.
+//! Property-based tests for chunk sending and movement logic.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -165,7 +165,7 @@ proptest! {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 14 — Movement logic property tests
+// Movement logic property tests
 // ---------------------------------------------------------------------------
 
 use oxidized_game::net::entity_movement::{
