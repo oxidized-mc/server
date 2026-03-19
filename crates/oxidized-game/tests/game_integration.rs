@@ -483,7 +483,7 @@ fn test_movement_validation_preserves_unchanged_fields() {
 
 #[test]
 fn test_entity_movement_small_delta_produces_delta_kind() {
-    use oxidized_game::net::entity_movement::{classify_move, EntityMoveKind};
+    use oxidized_game::net::entity_movement::{EntityMoveKind, classify_move};
 
     // Moving 1 block on each axis — should use delta encoding
     let kind = classify_move(0.0, 64.0, 0.0, 1.0, 65.0, 1.0);
@@ -499,7 +499,7 @@ fn test_entity_movement_small_delta_produces_delta_kind() {
 
 #[test]
 fn test_entity_movement_large_teleport_produces_sync_kind() {
-    use oxidized_game::net::entity_movement::{classify_move, EntityMoveKind};
+    use oxidized_game::net::entity_movement::{EntityMoveKind, classify_move};
 
     // Moving 100 blocks — must use full sync
     let kind = classify_move(0.0, 64.0, 0.0, 100.0, 64.0, 0.0);
@@ -515,7 +515,7 @@ fn test_entity_movement_large_teleport_produces_sync_kind() {
 
 #[test]
 fn test_entity_movement_boundary_at_eight_blocks() {
-    use oxidized_game::net::entity_movement::{classify_move, EntityMoveKind};
+    use oxidized_game::net::entity_movement::{EntityMoveKind, classify_move};
 
     // 7.999 blocks — should fit delta
     let kind = classify_move(0.0, 0.0, 0.0, 7.999, 0.0, 0.0);
@@ -584,7 +584,11 @@ fn test_teleport_accept_wrong_id_fails() {
         !handle_accept_teleportation(&mut player, 99),
         "wrong teleport ID should be rejected"
     );
-    assert_eq!(player.pending_teleports.len(), 1, "queue unchanged on wrong ID");
+    assert_eq!(
+        player.pending_teleports.len(),
+        1,
+        "queue unchanged on wrong ID"
+    );
 }
 
 #[test]

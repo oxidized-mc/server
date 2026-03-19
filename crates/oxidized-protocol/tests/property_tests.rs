@@ -239,8 +239,8 @@ proptest! {
 use oxidized_protocol::packets::play::{
     ClientboundEntityPositionSyncPacket, ClientboundMoveEntityPosPacket,
     ClientboundMoveEntityPosRotPacket, ClientboundMoveEntityRotPacket,
-    ClientboundPlayerPositionPacket, ClientboundRotateHeadPacket, PlayerCommandAction,
-    PlayerInput, RelativeFlags, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
+    ClientboundPlayerPositionPacket, ClientboundRotateHeadPacket, PlayerCommandAction, PlayerInput,
+    RelativeFlags, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
     ServerboundPlayerInputPacket,
 };
 
