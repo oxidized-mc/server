@@ -614,7 +614,7 @@ mod tests {
         );
         let node = CommandNode::Root(d.root);
         let desc = node.children().get("help").unwrap().description();
-        assert_eq!(desc.as_deref(), Some("Shows the help menu"));
+        assert_eq!(desc, Some("Shows the help menu"));
     }
 
     #[test]
@@ -631,7 +631,7 @@ mod tests {
         let test_node = node.children().get("test").unwrap();
         let name_node = test_node.children().get("name").unwrap();
         let desc = name_node.description();
-        assert_eq!(desc.as_deref(), Some("Player name"));
+        assert_eq!(desc, Some("Player name"));
     }
 
     #[test]
