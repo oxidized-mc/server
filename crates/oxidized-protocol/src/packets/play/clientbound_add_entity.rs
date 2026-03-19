@@ -14,8 +14,8 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Spawn entity packet (0x01).
 ///

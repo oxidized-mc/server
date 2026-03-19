@@ -3,9 +3,9 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
 
@@ -79,13 +79,9 @@ impl Packet for ClientboundDisguisedChatPacket {
         let map_err = |e: PlayPacketError| -> PacketDecodeError {
             match e {
                 PlayPacketError::UnexpectedEof => {
-                    PacketDecodeError::InvalidData(
-                        "unexpected end of packet data".into(),
-                    )
+                    PacketDecodeError::InvalidData("unexpected end of packet data".into())
                 },
-                PlayPacketError::InvalidData(s) => {
-                    PacketDecodeError::InvalidData(s)
-                },
+                PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
                 PlayPacketError::VarInt(e) => e.into(),
                 PlayPacketError::Type(e) => e.into(),
                 PlayPacketError::ResourceLocation(e) => e.into(),
@@ -94,8 +90,7 @@ impl Packet for ClientboundDisguisedChatPacket {
         let message = read_component_nbt(&mut data).map_err(&map_err)?;
         let holder_id = varint::read_varint_buf(&mut data)?;
         let chat_type_id = holder_id - 1;
-        let sender_name =
-            read_component_nbt(&mut data).map_err(&map_err)?;
+        let sender_name = read_component_nbt(&mut data).map_err(&map_err)?;
         let has_target = if data.has_remaining() {
             data.get_u8() != 0
         } else {
@@ -167,11 +162,7 @@ mod tests {
             target_name: None,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundDisguisedChatPacket as Packet>::decode(
-                encoded.freeze(),
-            )
-            .unwrap();
+        let decoded = <ClientboundDisguisedChatPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.message, Component::text("test"));
         assert_eq!(decoded.chat_type_id, 0);
         assert_eq!(decoded.sender_name, Component::text("Server"));
@@ -180,9 +171,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundDisguisedChatPacket as Packet>::PACKET_ID,
-            0x21
-        );
+        assert_eq!(<ClientboundDisguisedChatPacket as Packet>::PACKET_ID, 0x21);
     }
 }

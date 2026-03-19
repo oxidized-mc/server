@@ -6,8 +6,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Player movement input state, sent every tick.
 ///
@@ -234,9 +234,7 @@ mod tests {
             },
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundPlayerInputPacket as Packet>::decode(encoded.freeze())
-                .unwrap();
+        let decoded = <ServerboundPlayerInputPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.input.forward, true);
         assert_eq!(decoded.input.shift, true);
         assert_eq!(decoded.input.backward, false);
@@ -245,9 +243,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundPlayerInputPacket as Packet>::PACKET_ID,
-            0x2B
-        );
+        assert_eq!(<ServerboundPlayerInputPacket as Packet>::PACKET_ID, 0x2B);
     }
 }

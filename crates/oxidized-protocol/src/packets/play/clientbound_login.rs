@@ -10,8 +10,8 @@ use crate::codec::types::{self, TypeError};
 use crate::codec::varint;
 use crate::types::resource_location::ResourceLocation;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Common spawn information shared between login and respawn packets.
 ///

@@ -5,8 +5,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 use crate::packets::play::PlayPacketError;
 
 /// 0x1C — Keepalive response from client to server.
@@ -95,16 +95,12 @@ mod tests {
     fn test_packet_trait_roundtrip() {
         let pkt = ServerboundKeepAlivePacket { id: 987_654_321 };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundKeepAlivePacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ServerboundKeepAlivePacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundKeepAlivePacket as Packet>::PACKET_ID,
-            0x1C
-        );
+        assert_eq!(<ServerboundKeepAlivePacket as Packet>::PACKET_ID, 0x1C);
     }
 }

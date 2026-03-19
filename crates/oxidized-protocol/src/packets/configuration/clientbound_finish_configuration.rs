@@ -5,8 +5,8 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Clientbound packet `0x01` in the CONFIGURATION state — finish configuration.
 ///

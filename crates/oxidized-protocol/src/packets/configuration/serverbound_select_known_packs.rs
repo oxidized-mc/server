@@ -6,9 +6,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 use crate::packets::configuration::clientbound_select_known_packs::{KnownPack, KnownPacksError};
 
 /// Errors from decoding a [`ServerboundSelectKnownPacksPacket`].
@@ -97,7 +97,7 @@ impl Packet for ServerboundSelectKnownPacksPacket {
                 KnownPacksError::Type(t) => PacketDecodeError::Type(t),
                 KnownPacksError::NegativeCount(n) => {
                     PacketDecodeError::InvalidData(format!("negative pack count: {n}"))
-                }
+                },
             })?);
         }
         Ok(Self { packs })

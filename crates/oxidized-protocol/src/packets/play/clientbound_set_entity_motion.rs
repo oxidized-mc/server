@@ -13,8 +13,8 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Set entity motion packet (0x65).
 ///

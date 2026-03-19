@@ -7,8 +7,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// A game event type ID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,8 +166,7 @@ mod tests {
             param: 1.0,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundGameEventPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundGameEventPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

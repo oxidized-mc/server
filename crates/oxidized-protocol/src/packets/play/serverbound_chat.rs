@@ -2,9 +2,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::{types, varint};
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// Acknowledgement state for recent chat messages.
@@ -123,13 +123,9 @@ impl Packet for ServerboundChatPacket {
         let map_err = |e: PlayPacketError| -> PacketDecodeError {
             match e {
                 PlayPacketError::UnexpectedEof => {
-                    PacketDecodeError::InvalidData(
-                        "unexpected end of packet data".into(),
-                    )
+                    PacketDecodeError::InvalidData("unexpected end of packet data".into())
                 },
-                PlayPacketError::InvalidData(s) => {
-                    PacketDecodeError::InvalidData(s)
-                },
+                PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
                 PlayPacketError::VarInt(e) => e.into(),
                 PlayPacketError::Type(e) => e.into(),
                 PlayPacketError::ResourceLocation(e) => e.into(),
@@ -156,8 +152,7 @@ impl Packet for ServerboundChatPacket {
         } else {
             None
         };
-        let last_seen =
-            LastSeenMessagesUpdate::decode(&mut data).map_err(map_err)?;
+        let last_seen = LastSeenMessagesUpdate::decode(&mut data).map_err(map_err)?;
         Ok(Self {
             message,
             timestamp,
@@ -243,9 +238,7 @@ mod tests {
             last_seen: LastSeenMessagesUpdate::default(),
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundChatPacket as Packet>::decode(encoded.freeze())
-                .unwrap();
+        let decoded = <ServerboundChatPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.message, "hello");
         assert_eq!(decoded.timestamp, 1234);
         assert_eq!(decoded.salt, 0);
@@ -254,9 +247,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundChatPacket as Packet>::PACKET_ID,
-            0x09
-        );
+        assert_eq!(<ServerboundChatPacket as Packet>::PACKET_ID, 0x09);
     }
 }

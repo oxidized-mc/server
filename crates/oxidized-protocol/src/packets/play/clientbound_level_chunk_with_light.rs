@@ -8,7 +8,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::packet::{Packet, PacketDecodeError};
-use crate::codec::types::{read_i32, read_i64, TypeError};
+use crate::codec::types::{TypeError, read_i32, read_i64};
 use crate::codec::varint;
 
 /// A full chunk + light packet.
@@ -253,10 +253,7 @@ fn write_byte_arrays(buf: &mut BytesMut, arrays: &[Vec<u8>]) {
 }
 
 /// Reads a VarInt, validates it is non-negative, and returns it as `usize`.
-fn read_non_negative_varint(
-    buf: &mut Bytes,
-    field_name: &str,
-) -> Result<usize, PacketDecodeError> {
+fn read_non_negative_varint(buf: &mut Bytes, field_name: &str) -> Result<usize, PacketDecodeError> {
     let value = varint::read_varint_buf(buf)?;
     if value < 0 {
         return Err(PacketDecodeError::InvalidData(format!(
@@ -311,8 +308,7 @@ mod tests {
             light_data: LightUpdateData::empty(),
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundLevelChunkWithLightPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundLevelChunkWithLightPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 
@@ -331,8 +327,7 @@ mod tests {
             light_data: LightUpdateData::empty(),
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundLevelChunkWithLightPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundLevelChunkWithLightPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 
@@ -355,8 +350,7 @@ mod tests {
             },
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundLevelChunkWithLightPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundLevelChunkWithLightPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

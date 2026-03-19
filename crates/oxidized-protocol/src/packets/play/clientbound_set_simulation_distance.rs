@@ -6,9 +6,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 
 /// Sets the simulation distance for the client.
 ///
@@ -76,8 +76,7 @@ mod tests {
         };
         let encoded = Packet::encode(&pkt);
         let decoded =
-            <ClientboundSetSimulationDistancePacket as Packet>::decode(encoded.freeze())
-                .unwrap();
+            <ClientboundSetSimulationDistancePacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 

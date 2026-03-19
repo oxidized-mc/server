@@ -3,10 +3,10 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{read_string, write_string};
 use crate::codec::varint::{read_varint_buf, write_varint_buf};
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x0F — Server returns tab-completion suggestions.
@@ -133,10 +133,8 @@ mod tests {
             }],
         };
         let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundCommandSuggestionsPacket as Packet>::decode(
-            encoded.freeze(),
-        )
-        .unwrap();
+        let decoded =
+            <ClientboundCommandSuggestionsPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.id, pkt.id);
         assert_eq!(decoded.start, pkt.start);
         assert_eq!(decoded.length, pkt.length);

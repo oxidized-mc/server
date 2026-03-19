@@ -2,9 +2,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x06 — Client acknowledges message chain offset.
@@ -79,16 +79,12 @@ mod tests {
     fn test_packet_trait_roundtrip() {
         let pkt = ServerboundChatAckPacket { offset: 42 };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundChatAckPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ServerboundChatAckPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.offset, pkt.offset);
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundChatAckPacket as Packet>::PACKET_ID,
-            0x06
-        );
+        assert_eq!(<ServerboundChatAckPacket as Packet>::PACKET_ID, 0x06);
     }
 }

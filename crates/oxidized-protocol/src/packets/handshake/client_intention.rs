@@ -6,10 +6,10 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint::{self, VarIntError};
-use crate::codec::Packet;
 
 /// The client's declared intent after the handshake.
 ///
@@ -139,7 +139,7 @@ impl Packet for ClientIntentionPacket {
         let next_state = ClientIntent::try_from(next_state_raw).map_err(|e| match e {
             IntentionError::UnknownIntent(v) => {
                 PacketDecodeError::InvalidData(format!("unknown client intent: {v}"))
-            }
+            },
             IntentionError::VarInt(e) => PacketDecodeError::VarInt(e),
             IntentionError::Type(e) => PacketDecodeError::Type(e),
         })?;

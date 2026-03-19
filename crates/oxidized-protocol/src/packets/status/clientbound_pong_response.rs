@@ -4,9 +4,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
-use crate::codec::Packet;
 
 /// Clientbound packet `0x01` in the STATUS state — pong response.
 ///
@@ -66,8 +66,7 @@ mod tests {
             time: 1_719_000_000_000,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundPongResponsePacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundPongResponsePacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

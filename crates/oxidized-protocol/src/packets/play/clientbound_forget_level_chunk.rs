@@ -6,8 +6,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Unloads a chunk from the client's cache.
 ///

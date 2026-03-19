@@ -7,9 +7,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 
 use super::PlayPacketError;
 
@@ -198,9 +198,7 @@ mod tests {
             data: 0,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundPlayerCommandPacket as Packet>::decode(encoded.freeze())
-                .unwrap();
+        let decoded = <ServerboundPlayerCommandPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.entity_id, 1);
         assert_eq!(decoded.action, PlayerCommandAction::StartSprinting);
         assert_eq!(decoded.data, 0);
@@ -208,9 +206,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundPlayerCommandPacket as Packet>::PACKET_ID,
-            0x2A
-        );
+        assert_eq!(<ServerboundPlayerCommandPacket as Packet>::PACKET_ID, 0x2A);
     }
 }

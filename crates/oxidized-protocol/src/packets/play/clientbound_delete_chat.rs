@@ -2,9 +2,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x1F — Server requests client to delete a chat message.
@@ -137,17 +137,13 @@ mod tests {
             full_signature: None,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundDeleteChatPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundDeleteChatPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.packed_message_id, 5);
         assert!(decoded.full_signature.is_none());
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundDeleteChatPacket as Packet>::PACKET_ID,
-            0x1F
-        );
+        assert_eq!(<ClientboundDeleteChatPacket as Packet>::PACKET_ID, 0x1F);
     }
 }

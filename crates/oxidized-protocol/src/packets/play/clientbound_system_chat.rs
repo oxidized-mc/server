@@ -3,8 +3,8 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 use crate::packets::play::PlayPacketError;
 
 /// 0x79 — System chat message (no signature, no player sender).
@@ -50,13 +50,9 @@ impl Packet for ClientboundSystemChatPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let content = read_component_nbt(&mut data).map_err(|e| match e {
             PlayPacketError::UnexpectedEof => {
-                PacketDecodeError::InvalidData(
-                    "unexpected end of packet data".into(),
-                )
+                PacketDecodeError::InvalidData("unexpected end of packet data".into())
             },
-            PlayPacketError::InvalidData(s) => {
-                PacketDecodeError::InvalidData(s)
-            },
+            PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
             PlayPacketError::VarInt(e) => e.into(),
             PlayPacketError::Type(e) => e.into(),
             PlayPacketError::ResourceLocation(e) => e.into(),
@@ -167,20 +163,13 @@ mod tests {
             overlay: false,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSystemChatPacket as Packet>::decode(
-                encoded.freeze(),
-            )
-            .unwrap();
+        let decoded = <ClientboundSystemChatPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.content, Component::text("hello"));
         assert!(!decoded.overlay);
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundSystemChatPacket as Packet>::PACKET_ID,
-            0x79
-        );
+        assert_eq!(<ClientboundSystemChatPacket as Packet>::PACKET_ID, 0x79);
     }
 }

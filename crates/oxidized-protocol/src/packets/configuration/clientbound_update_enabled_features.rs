@@ -6,9 +6,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint::{self, VarIntError};
-use crate::codec::Packet;
 use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundUpdateEnabledFeaturesPacket`].
@@ -137,8 +137,7 @@ mod tests {
         };
         let encoded = Packet::encode(&pkt);
         let decoded =
-            <ClientboundUpdateEnabledFeaturesPacket as Packet>::decode(encoded.freeze())
-                .unwrap();
+            <ClientboundUpdateEnabledFeaturesPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 

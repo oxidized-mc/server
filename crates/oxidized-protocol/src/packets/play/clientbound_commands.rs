@@ -214,59 +214,56 @@ fn decode_node(buf: &mut Bytes) -> Result<CommandNodeData, PacketDecodeError> {
 ///
 /// Returns [`PacketDecodeError::InvalidData`] for unknown parser IDs or
 /// truncated buffers.
-fn read_parser_properties(
-    parser_id: i32,
-    buf: &mut Bytes,
-) -> Result<Vec<u8>, PacketDecodeError> {
+fn read_parser_properties(parser_id: i32, buf: &mut Bytes) -> Result<Vec<u8>, PacketDecodeError> {
     let before = buf.clone();
 
     match parser_id {
         // brigadier:bool — no properties
-        0 => {}
+        0 => {},
         // brigadier:float (1), brigadier:integer (3) — flags + optional 4-byte min/max
         1 | 3 => {
             let value_size = 4;
             skip_number_parser(buf, value_size)?;
-        }
+        },
         // brigadier:double (2), brigadier:long (4) — flags + optional 8-byte min/max
         2 | 4 => {
             let value_size = 8;
             skip_number_parser(buf, value_size)?;
-        }
+        },
         // brigadier:string — 1 VarInt (StringType enum)
         5 => {
             read_varint_buf(buf)?;
-        }
+        },
         // minecraft:entity — 1 byte flags
         6 => {
             ensure_remaining(buf, 1)?;
             buf.advance(1);
-        }
+        },
         // minecraft:game_profile through minecraft:nbt_path — no properties
-        7..=29 => {}
+        7..=29 => {},
         // minecraft:score_holder — 1 byte flags
         30 => {
             ensure_remaining(buf, 1)?;
             buf.advance(1);
-        }
+        },
         // minecraft:swizzle through minecraft:gamemode — no properties
-        31..=41 => {}
+        31..=41 => {},
         // minecraft:time — 1 i32 (minimum)
         42 => {
             ensure_remaining(buf, 4)?;
             buf.advance(4);
-        }
+        },
         // resource/tag variants — 1 ResourceLocation (VarInt-prefixed string)
         43..=46 => {
             read_string(buf, MAX_STRING_LENGTH)?;
-        }
+        },
         // minecraft:template_mirror through minecraft:enchantable_slot — no properties
-        47..=56 => {}
+        47..=56 => {},
         _ => {
             return Err(PacketDecodeError::InvalidData(format!(
                 "unknown parser ID: {parser_id}"
             )));
-        }
+        },
     }
 
     let consumed = before.remaining() - buf.remaining();
@@ -617,17 +614,13 @@ mod tests {
             root_index: 0,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundCommandsPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundCommandsPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 
     #[test]
     fn test_commands_packet_trait_id() {
-        assert_eq!(
-            <ClientboundCommandsPacket as Packet>::PACKET_ID,
-            0x10
-        );
+        assert_eq!(<ClientboundCommandsPacket as Packet>::PACKET_ID, 0x10);
     }
 
     #[test]

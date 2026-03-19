@@ -8,9 +8,9 @@
 
 use bytes::{Buf, Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 
 use super::clientbound_login::PlayPacketError;
 
@@ -162,9 +162,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundRemoveEntitiesPacket as Packet>::PACKET_ID,
-            0x4D
-        );
+        assert_eq!(<ClientboundRemoveEntitiesPacket as Packet>::PACKET_ID, 0x4D);
     }
 }

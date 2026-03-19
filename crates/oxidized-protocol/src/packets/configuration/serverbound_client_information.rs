@@ -7,10 +7,10 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint;
-use crate::codec::Packet;
 use crate::types::{ChatVisibility, HumanoidArm, ParticleStatus};
 
 /// Maximum length of the language string (in characters).
