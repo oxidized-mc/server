@@ -163,6 +163,8 @@ fn main() -> anyhow::Result<()> {
             )),
             level_data,
             dimensions,
+            max_view_distance: config.world.view_distance as i32,
+            max_simulation_distance: config.world.simulation_distance as i32,
         });
 
         // Build the shared login context.
