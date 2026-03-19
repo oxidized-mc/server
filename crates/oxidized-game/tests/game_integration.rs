@@ -404,3 +404,200 @@ fn test_chunk_tracker_large_jump() {
     // Verify new center is loaded
     assert!(tracker.is_loaded(&ChunkPos::new(1000, 1000)));
 }
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Movement validation integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_movement_validation_normal_walk() {
+    use oxidized_game::player::movement::validate_movement;
+    use oxidized_protocol::types::Vec3;
+
+    // Simulate a normal walking step: 0.1 blocks forward
+    let current = Vec3::new(100.0, 64.0, -50.0);
+    let result = validate_movement(
+        current,
+        90.0,
+        0.0,
+        Some(100.1),
+        Some(64.0),
+        Some(-50.0),
+        Some(91.0),
+        Some(0.0),
+    );
+    assert!(result.accepted, "normal walk should be accepted");
+    assert!(!result.needs_correction);
+    assert!((result.new_pos.x - 100.1).abs() < f64::EPSILON);
+    assert!((result.new_yaw - 91.0).abs() < f32::EPSILON);
+}
+
+#[test]
+fn test_movement_validation_too_fast_triggers_correction() {
+    use oxidized_game::player::movement::validate_movement;
+    use oxidized_protocol::types::Vec3;
+
+    // Attempt to teleport 200 blocks — must be rejected
+    let result = validate_movement(
+        Vec3::new(0.0, 64.0, 0.0),
+        0.0,
+        0.0,
+        Some(200.0),
+        Some(64.0),
+        Some(0.0),
+        None,
+        None,
+    );
+    assert!(!result.accepted, "200-block jump must be rejected");
+    assert!(result.needs_correction);
+}
+
+#[test]
+fn test_movement_validation_preserves_unchanged_fields() {
+    use oxidized_game::player::movement::validate_movement;
+    use oxidized_protocol::types::Vec3;
+
+    // Rotation-only update: position should not change
+    let current = Vec3::new(42.0, 100.0, -7.5);
+    let result = validate_movement(
+        current,
+        45.0,
+        -10.0,
+        None,
+        None,
+        None,
+        Some(180.0),
+        Some(30.0),
+    );
+    assert!(result.accepted);
+    assert!((result.new_pos.x - 42.0).abs() < f64::EPSILON);
+    assert!((result.new_pos.y - 100.0).abs() < f64::EPSILON);
+    assert!((result.new_pos.z + 7.5).abs() < f64::EPSILON);
+    assert!((result.new_yaw - 180.0).abs() < f32::EPSILON);
+    assert!((result.new_pitch - 30.0).abs() < f32::EPSILON);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Entity movement encoding integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_entity_movement_small_delta_produces_delta_kind() {
+    use oxidized_game::net::entity_movement::{classify_move, EntityMoveKind};
+
+    // Moving 1 block on each axis — should use delta encoding
+    let kind = classify_move(0.0, 64.0, 0.0, 1.0, 65.0, 1.0);
+    match kind {
+        EntityMoveKind::Delta { dx, dy, dz } => {
+            assert_eq!(dx, 4096, "1 block = 4096 units");
+            assert_eq!(dy, 4096);
+            assert_eq!(dz, 4096);
+        },
+        _ => panic!("Expected Delta for 1-block move"),
+    }
+}
+
+#[test]
+fn test_entity_movement_large_teleport_produces_sync_kind() {
+    use oxidized_game::net::entity_movement::{classify_move, EntityMoveKind};
+
+    // Moving 100 blocks — must use full sync
+    let kind = classify_move(0.0, 64.0, 0.0, 100.0, 64.0, 0.0);
+    match kind {
+        EntityMoveKind::Sync { x, y, z } => {
+            assert!((x - 100.0).abs() < f64::EPSILON);
+            assert!((y - 64.0).abs() < f64::EPSILON);
+            assert!(z.abs() < f64::EPSILON);
+        },
+        _ => panic!("Expected Sync for 100-block teleport"),
+    }
+}
+
+#[test]
+fn test_entity_movement_boundary_at_eight_blocks() {
+    use oxidized_game::net::entity_movement::{classify_move, EntityMoveKind};
+
+    // 7.999 blocks — should fit delta
+    let kind = classify_move(0.0, 0.0, 0.0, 7.999, 0.0, 0.0);
+    assert!(
+        matches!(kind, EntityMoveKind::Delta { .. }),
+        "7.999 blocks should use delta"
+    );
+
+    // 8.001 blocks — should not fit
+    let kind = classify_move(0.0, 0.0, 0.0, 8.001, 0.0, 0.0);
+    assert!(
+        matches!(kind, EntityMoveKind::Sync { .. }),
+        "8.001 blocks should use sync"
+    );
+}
+
+#[test]
+fn test_degree_packing_known_angles() {
+    use oxidized_game::net::entity_movement::{pack_degrees, unpack_degrees};
+
+    // Verify known angles survive roundtrip within tolerance
+    for &angle in &[0.0f32, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0] {
+        let packed = pack_degrees(angle);
+        let unpacked = unpack_degrees(packed);
+        assert!(
+            (unpacked - angle).abs() < 1.41,
+            "angle {angle}° → packed {packed} → unpacked {unpacked}°"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Teleport confirmation integration tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_teleport_accept_correct_id() {
+    use oxidized_game::player::login::handle_accept_teleportation;
+
+    let uuid = uuid::Uuid::new_v4();
+    let profile = GameProfile::new(uuid, "TeleportTest".into());
+    let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
+    let mut player = ServerPlayer::new(1, profile, dim, GameMode::Survival);
+    player.pending_teleports.push_back(42);
+    player.pending_teleports.push_back(43);
+
+    assert!(
+        handle_accept_teleportation(&mut player, 42),
+        "correct teleport ID should be accepted"
+    );
+    assert_eq!(player.pending_teleports.len(), 1);
+    assert_eq!(player.pending_teleports[0], 43);
+}
+
+#[test]
+fn test_teleport_accept_wrong_id_fails() {
+    use oxidized_game::player::login::handle_accept_teleportation;
+
+    let uuid = uuid::Uuid::new_v4();
+    let profile = GameProfile::new(uuid, "TeleportTest2".into());
+    let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
+    let mut player = ServerPlayer::new(2, profile, dim, GameMode::Survival);
+    player.pending_teleports.push_back(10);
+
+    assert!(
+        !handle_accept_teleportation(&mut player, 99),
+        "wrong teleport ID should be rejected"
+    );
+    assert_eq!(player.pending_teleports.len(), 1, "queue unchanged on wrong ID");
+}
+
+#[test]
+fn test_teleport_accept_empty_queue_fails() {
+    use oxidized_game::player::login::handle_accept_teleportation;
+
+    let uuid = uuid::Uuid::new_v4();
+    let profile = GameProfile::new(uuid, "TeleportTest3".into());
+    let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
+    let mut player = ServerPlayer::new(3, profile, dim, GameMode::Survival);
+
+    assert!(
+        !handle_accept_teleportation(&mut player, 1),
+        "empty queue should reject any ID"
+    );
+}

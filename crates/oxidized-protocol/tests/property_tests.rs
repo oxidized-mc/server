@@ -2,7 +2,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use proptest::prelude::*;
 
 use oxidized_protocol::codec::types;
@@ -229,5 +229,275 @@ proptest! {
         let decoded_z = i32::from_be_bytes(encoded[4..8].try_into().unwrap());
         prop_assert_eq!(decoded_x, x);
         prop_assert_eq!(decoded_z, z);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 14 — Movement packet roundtrips
+// ---------------------------------------------------------------------------
+
+use oxidized_protocol::packets::play::{
+    ClientboundEntityPositionSyncPacket, ClientboundMoveEntityPosPacket,
+    ClientboundMoveEntityPosRotPacket, ClientboundMoveEntityRotPacket,
+    ClientboundPlayerPositionPacket, ClientboundRotateHeadPacket, PlayerCommandAction,
+    PlayerInput, RelativeFlags, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
+    ServerboundPlayerInputPacket,
+};
+
+/// Builds raw bytes for `ServerboundMovePlayerPacket::decode_pos`.
+fn build_move_pos_bytes(x: f64, y: f64, z: f64, flags: u8) -> Bytes {
+    use bytes::BufMut;
+    let mut buf = BytesMut::with_capacity(25);
+    buf.put_f64(x);
+    buf.put_f64(y);
+    buf.put_f64(z);
+    buf.put_u8(flags & 0x03);
+    buf.freeze()
+}
+
+/// Builds raw bytes for `ServerboundMovePlayerPacket::decode_pos_rot`.
+fn build_move_pos_rot_bytes(x: f64, y: f64, z: f64, yaw: f32, pitch: f32, flags: u8) -> Bytes {
+    use bytes::BufMut;
+    let mut buf = BytesMut::with_capacity(33);
+    buf.put_f64(x);
+    buf.put_f64(y);
+    buf.put_f64(z);
+    buf.put_f32(yaw);
+    buf.put_f32(pitch);
+    buf.put_u8(flags & 0x03);
+    buf.freeze()
+}
+
+/// Builds raw bytes for `ServerboundMovePlayerPacket::decode_rot`.
+fn build_move_rot_bytes(yaw: f32, pitch: f32, flags: u8) -> Bytes {
+    use bytes::BufMut;
+    let mut buf = BytesMut::with_capacity(9);
+    buf.put_f32(yaw);
+    buf.put_f32(pitch);
+    buf.put_u8(flags & 0x03);
+    buf.freeze()
+}
+
+/// Strategy for finite f64 values (no NaN/Inf).
+fn finite_f64() -> impl Strategy<Value = f64> {
+    prop::num::f64::NORMAL
+        | prop::num::f64::POSITIVE
+        | prop::num::f64::NEGATIVE
+        | prop::num::f64::ZERO
+}
+
+/// Strategy for finite f32 values (no NaN/Inf).
+fn finite_f32() -> impl Strategy<Value = f32> {
+    prop::num::f32::NORMAL
+        | prop::num::f32::POSITIVE
+        | prop::num::f32::NEGATIVE
+        | prop::num::f32::ZERO
+}
+
+proptest! {
+    /// ServerboundMovePlayerPacket Pos variant: bytes → decode → verify fields.
+    #[test]
+    fn proptest_move_player_pos_roundtrip(
+        x in finite_f64(), y in finite_f64(), z in finite_f64(),
+        flags in 0u8..=3,
+    ) {
+        let data = build_move_pos_bytes(x, y, z, flags);
+        let pkt = ServerboundMovePlayerPacket::decode_pos(data).unwrap();
+        prop_assert_eq!(pkt.x.unwrap().to_bits(), x.to_bits());
+        prop_assert_eq!(pkt.y.unwrap().to_bits(), y.to_bits());
+        prop_assert_eq!(pkt.z.unwrap().to_bits(), z.to_bits());
+        prop_assert!(pkt.yaw.is_none());
+        prop_assert!(pkt.pitch.is_none());
+        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(pkt.horizontal_collision, flags & 0x02 != 0);
+        prop_assert!(pkt.has_pos());
+        prop_assert!(!pkt.has_rot());
+    }
+
+    /// ServerboundMovePlayerPacket PosRot variant: bytes → decode → verify fields.
+    #[test]
+    fn proptest_move_player_pos_rot_roundtrip(
+        x in finite_f64(), y in finite_f64(), z in finite_f64(),
+        yaw in finite_f32(), pitch in finite_f32(),
+        flags in 0u8..=3,
+    ) {
+        let data = build_move_pos_rot_bytes(x, y, z, yaw, pitch, flags);
+        let pkt = ServerboundMovePlayerPacket::decode_pos_rot(data).unwrap();
+        prop_assert_eq!(pkt.x.unwrap().to_bits(), x.to_bits());
+        prop_assert_eq!(pkt.y.unwrap().to_bits(), y.to_bits());
+        prop_assert_eq!(pkt.z.unwrap().to_bits(), z.to_bits());
+        prop_assert_eq!(pkt.yaw.unwrap().to_bits(), yaw.to_bits());
+        prop_assert_eq!(pkt.pitch.unwrap().to_bits(), pitch.to_bits());
+        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(pkt.horizontal_collision, flags & 0x02 != 0);
+        prop_assert!(pkt.has_pos());
+        prop_assert!(pkt.has_rot());
+    }
+
+    /// ServerboundMovePlayerPacket Rot variant: bytes → decode → verify fields.
+    #[test]
+    fn proptest_move_player_rot_roundtrip(
+        yaw in finite_f32(), pitch in finite_f32(),
+        flags in 0u8..=3,
+    ) {
+        let data = build_move_rot_bytes(yaw, pitch, flags);
+        let pkt = ServerboundMovePlayerPacket::decode_rot(data).unwrap();
+        prop_assert!(pkt.x.is_none());
+        prop_assert_eq!(pkt.yaw.unwrap().to_bits(), yaw.to_bits());
+        prop_assert_eq!(pkt.pitch.unwrap().to_bits(), pitch.to_bits());
+        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
+    }
+
+    /// ServerboundMovePlayerPacket StatusOnly variant: byte → decode → verify flags.
+    #[test]
+    fn proptest_move_player_status_only_roundtrip(flags in 0u8..=3) {
+        let data = Bytes::from(vec![flags]);
+        let pkt = ServerboundMovePlayerPacket::decode_status_only(data).unwrap();
+        prop_assert!(pkt.x.is_none());
+        prop_assert!(pkt.yaw.is_none());
+        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(pkt.horizontal_collision, flags & 0x02 != 0);
+    }
+
+    /// ServerboundPlayerCommandPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_player_command_roundtrip(
+        entity_id: i32,
+        action_id in 0i32..=6,
+        data_val: i32,
+    ) {
+        let action = PlayerCommandAction::from_id(action_id).unwrap();
+        let pkt = ServerboundPlayerCommandPacket { entity_id, action, data: data_val };
+        let encoded = pkt.encode();
+        let decoded = ServerboundPlayerCommandPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.entity_id, entity_id);
+        prop_assert_eq!(decoded.action, action);
+        prop_assert_eq!(decoded.data, data_val);
+    }
+
+    /// PlayerInput byte → struct → byte identity.
+    #[test]
+    fn proptest_player_input_byte_roundtrip(flags in 0u8..=0x7F) {
+        let input = PlayerInput::from_byte(flags);
+        let roundtripped = input.to_byte();
+        prop_assert_eq!(roundtripped, flags);
+    }
+
+    /// ServerboundPlayerInputPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_player_input_packet_roundtrip(flags in 0u8..=0x7F) {
+        let pkt = ServerboundPlayerInputPacket {
+            input: PlayerInput::from_byte(flags),
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundPlayerInputPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.input, pkt.input);
+    }
+
+    /// ClientboundPlayerPositionPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_player_position_roundtrip(
+        teleport_id: i32,
+        x in finite_f64(), y in finite_f64(), z in finite_f64(),
+        dx in finite_f64(), dy in finite_f64(), dz in finite_f64(),
+        yaw in finite_f32(), pitch in finite_f32(),
+        flags in 0i32..=0x1FF,
+    ) {
+        let pkt = ClientboundPlayerPositionPacket {
+            teleport_id, x, y, z, dx, dy, dz, yaw, pitch,
+            relative_flags: RelativeFlags(flags),
+        };
+        let encoded = pkt.encode();
+        let decoded = ClientboundPlayerPositionPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.teleport_id, teleport_id);
+        prop_assert_eq!(decoded.x.to_bits(), x.to_bits());
+        prop_assert_eq!(decoded.y.to_bits(), y.to_bits());
+        prop_assert_eq!(decoded.z.to_bits(), z.to_bits());
+        prop_assert_eq!(decoded.dx.to_bits(), dx.to_bits());
+        prop_assert_eq!(decoded.dy.to_bits(), dy.to_bits());
+        prop_assert_eq!(decoded.dz.to_bits(), dz.to_bits());
+        prop_assert_eq!(decoded.yaw.to_bits(), yaw.to_bits());
+        prop_assert_eq!(decoded.pitch.to_bits(), pitch.to_bits());
+        prop_assert_eq!(decoded.relative_flags, RelativeFlags(flags));
+    }
+
+    /// ClientboundMoveEntityPosPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_move_entity_pos_roundtrip(
+        entity_id: i32, dx: i16, dy: i16, dz: i16, on_ground: bool,
+    ) {
+        let pkt = ClientboundMoveEntityPosPacket { entity_id, dx, dy, dz, on_ground };
+        let encoded = pkt.encode();
+        let decoded = ClientboundMoveEntityPosPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded, pkt);
+    }
+
+    /// ClientboundMoveEntityPosRotPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_move_entity_pos_rot_roundtrip(
+        entity_id: i32, dx: i16, dy: i16, dz: i16,
+        yaw: u8, pitch: u8, on_ground: bool,
+    ) {
+        let pkt = ClientboundMoveEntityPosRotPacket {
+            entity_id, dx, dy, dz, yaw, pitch, on_ground,
+        };
+        let encoded = pkt.encode();
+        let decoded = ClientboundMoveEntityPosRotPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded, pkt);
+    }
+
+    /// ClientboundMoveEntityRotPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_move_entity_rot_roundtrip(
+        entity_id: i32, yaw: u8, pitch: u8, on_ground: bool,
+    ) {
+        let pkt = ClientboundMoveEntityRotPacket { entity_id, yaw, pitch, on_ground };
+        let encoded = pkt.encode();
+        let decoded = ClientboundMoveEntityRotPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded, pkt);
+    }
+
+    /// ClientboundEntityPositionSyncPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_entity_position_sync_roundtrip(
+        entity_id: i32,
+        x in finite_f64(), y in finite_f64(), z in finite_f64(),
+        vx in finite_f64(), vy in finite_f64(), vz in finite_f64(),
+        yaw in finite_f32(), pitch in finite_f32(),
+        on_ground: bool,
+    ) {
+        let pkt = ClientboundEntityPositionSyncPacket {
+            entity_id, x, y, z, vx, vy, vz, yaw, pitch, on_ground,
+        };
+        let encoded = pkt.encode();
+        let decoded = ClientboundEntityPositionSyncPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded.entity_id, entity_id);
+        prop_assert_eq!(decoded.x.to_bits(), x.to_bits());
+        prop_assert_eq!(decoded.y.to_bits(), y.to_bits());
+        prop_assert_eq!(decoded.z.to_bits(), z.to_bits());
+        prop_assert_eq!(decoded.vx.to_bits(), vx.to_bits());
+        prop_assert_eq!(decoded.vy.to_bits(), vy.to_bits());
+        prop_assert_eq!(decoded.vz.to_bits(), vz.to_bits());
+        prop_assert_eq!(decoded.yaw.to_bits(), yaw.to_bits());
+        prop_assert_eq!(decoded.pitch.to_bits(), pitch.to_bits());
+        prop_assert_eq!(decoded.on_ground, on_ground);
+    }
+
+    /// ClientboundRotateHeadPacket encode → decode roundtrip.
+    #[test]
+    fn proptest_rotate_head_roundtrip(entity_id: i32, head_yaw: u8) {
+        let pkt = ClientboundRotateHeadPacket { entity_id, head_yaw };
+        let encoded = pkt.encode();
+        let decoded = ClientboundRotateHeadPacket::decode(encoded.freeze()).unwrap();
+        prop_assert_eq!(decoded, pkt);
+    }
+
+    /// RelativeFlags: all 9 bits preserve through i32 roundtrip.
+    #[test]
+    fn proptest_relative_flags_bits(flags in 0i32..=0x1FF) {
+        let rf = RelativeFlags(flags);
+        for bit in 0..9 {
+            prop_assert_eq!(rf.contains(1 << bit), flags & (1 << bit) != 0);
+        }
     }
 }

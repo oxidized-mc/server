@@ -28,6 +28,17 @@ impl PlayerChunkTracker {
     /// Creates a new tracker centered at the given chunk position.
     ///
     /// The loaded set is initialized to all chunks within `view_distance`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
+    /// use oxidized_world::chunk::ChunkPos;
+    ///
+    /// let tracker = PlayerChunkTracker::new(ChunkPos::new(0, 0), 2);
+    /// // (2*2+1)² = 25 chunks loaded initially
+    /// assert_eq!(tracker.loaded_count(), 25);
+    /// ```
     pub fn new(center: ChunkPos, view_distance: i32) -> Self {
         let loaded: HashSet<ChunkPos> = spiral_chunks(center, view_distance).collect();
         Self {
@@ -44,6 +55,19 @@ impl PlayerChunkTracker {
     /// # Returns
     ///
     /// `(to_load, to_unload)` — chunks the server should send and forget.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
+    /// use oxidized_world::chunk::ChunkPos;
+    ///
+    /// let mut tracker = PlayerChunkTracker::new(ChunkPos::new(0, 0), 2);
+    /// let (to_load, to_unload) = tracker.update_center(ChunkPos::new(1, 0));
+    /// assert!(!to_load.is_empty());
+    /// assert!(!to_unload.is_empty());
+    /// assert_eq!(tracker.loaded_count(), 25); // count stays constant
+    /// ```
     pub fn update_center(&mut self, new_center: ChunkPos) -> (Vec<ChunkPos>, Vec<ChunkPos>) {
         if new_center == self.center {
             return (vec![], vec![]);
