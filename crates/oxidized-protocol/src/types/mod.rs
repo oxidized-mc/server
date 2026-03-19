@@ -1,5 +1,8 @@
 //! Protocol-level types shared across packet definitions.
 
+#[macro_use]
+mod type_macros;
+
 pub mod aabb;
 pub mod block_pos;
 pub mod chat_visibility;

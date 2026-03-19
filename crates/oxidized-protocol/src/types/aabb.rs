@@ -9,6 +9,28 @@ use super::block_pos::BlockPos;
 use super::direction::Axis;
 use super::vec3::Vec3;
 
+/// Extends one axis extent: negative delta extends min, positive extends max.
+fn expand_axis(min: f64, max: f64, delta: f64) -> (f64, f64) {
+    if delta < 0.0 {
+        (min + delta, max)
+    } else if delta > 0.0 {
+        (min, max + delta)
+    } else {
+        (min, max)
+    }
+}
+
+/// Contracts one axis extent: negative delta shrinks min side, positive shrinks max side.
+fn contract_axis(min: f64, max: f64, delta: f64) -> (f64, f64) {
+    if delta < 0.0 {
+        (min - delta, max)
+    } else if delta > 0.0 {
+        (min, max - delta)
+    } else {
+        (min, max)
+    }
+}
+
 /// An axis-aligned bounding box defined by minimum and maximum coordinates.
 ///
 /// Auto-corrects on construction so `min <= max` for all axes.
@@ -196,39 +218,10 @@ impl Aabb {
     /// For each axis, if the delta is negative the min is extended; if positive
     /// the max is extended.
     pub fn expand_towards(&self, dx: f64, dy: f64, dz: f64) -> Self {
-        let mut min_x = self.min_x;
-        let mut max_x = self.max_x;
-        let mut min_y = self.min_y;
-        let mut max_y = self.max_y;
-        let mut min_z = self.min_z;
-        let mut max_z = self.max_z;
-
-        if dx < 0.0 {
-            min_x += dx;
-        } else if dx > 0.0 {
-            max_x += dx;
-        }
-
-        if dy < 0.0 {
-            min_y += dy;
-        } else if dy > 0.0 {
-            max_y += dy;
-        }
-
-        if dz < 0.0 {
-            min_z += dz;
-        } else if dz > 0.0 {
-            max_z += dz;
-        }
-
-        Self {
-            min_x,
-            min_y,
-            min_z,
-            max_x,
-            max_y,
-            max_z,
-        }
+        let (min_x, max_x) = expand_axis(self.min_x, self.max_x, dx);
+        let (min_y, max_y) = expand_axis(self.min_y, self.max_y, dy);
+        let (min_z, max_z) = expand_axis(self.min_z, self.max_z, dz);
+        Self { min_x, min_y, min_z, max_x, max_y, max_z }
     }
 
     /// Returns a new [`Aabb`] contracted by the given amounts.
@@ -236,39 +229,10 @@ impl Aabb {
     /// For each axis, if the delta is negative the min side shrinks inward
     /// (min increases); if positive the max side shrinks inward (max decreases).
     pub fn contract(&self, dx: f64, dy: f64, dz: f64) -> Self {
-        let mut min_x = self.min_x;
-        let mut max_x = self.max_x;
-        let mut min_y = self.min_y;
-        let mut max_y = self.max_y;
-        let mut min_z = self.min_z;
-        let mut max_z = self.max_z;
-
-        if dx < 0.0 {
-            min_x -= dx;
-        } else if dx > 0.0 {
-            max_x -= dx;
-        }
-
-        if dy < 0.0 {
-            min_y -= dy;
-        } else if dy > 0.0 {
-            max_y -= dy;
-        }
-
-        if dz < 0.0 {
-            min_z -= dz;
-        } else if dz > 0.0 {
-            max_z -= dz;
-        }
-
-        Self {
-            min_x,
-            min_y,
-            min_z,
-            max_x,
-            max_y,
-            max_z,
-        }
+        let (min_x, max_x) = contract_axis(self.min_x, self.max_x, dx);
+        let (min_y, max_y) = contract_axis(self.min_y, self.max_y, dy);
+        let (min_z, max_z) = contract_axis(self.min_z, self.max_z, dz);
+        Self { min_x, min_y, min_z, max_x, max_y, max_z }
     }
 
     /// Returns a new [`Aabb`] translated by `(dx, dy, dz)`.

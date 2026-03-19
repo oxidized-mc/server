@@ -4,7 +4,6 @@
 //! values in the Minecraft protocol.
 
 use std::fmt;
-use std::ops::{Add, Neg, Sub};
 
 use bytes::{Bytes, BytesMut};
 
@@ -82,6 +81,11 @@ impl Vec3 {
         Self::new(self.x - other.x, self.y - other.y, self.z - other.z)
     }
 
+    /// Returns the negation of this vector.
+    pub fn negate(self) -> Self {
+        Self::new(-self.x, -self.y, -self.z)
+    }
+
     /// Returns a new vector scaled by `factor`.
     pub fn scale(self, factor: f64) -> Self {
         Self::new(self.x * factor, self.y * factor, self.z * factor)
@@ -155,24 +159,6 @@ impl Vec3 {
         self.distance_to_sqr(other) < distance * distance
     }
 
-    /// Returns a new vector with one axis component replaced.
-    pub fn with_axis(self, axis: Axis, value: f64) -> Self {
-        match axis {
-            Axis::X => Self::new(value, self.y, self.z),
-            Axis::Y => Self::new(self.x, value, self.z),
-            Axis::Z => Self::new(self.x, self.y, value),
-        }
-    }
-
-    /// Returns the component on the given axis.
-    pub fn get_axis(self, axis: Axis) -> f64 {
-        match axis {
-            Axis::X => self.x,
-            Axis::Y => self.y,
-            Axis::Z => self.z,
-        }
-    }
-
     /// Rotates this vector around the X axis by `radians`.
     pub fn x_rot(self, radians: f64) -> Self {
         let cos = radians.cos();
@@ -240,29 +226,8 @@ impl Vec3 {
     }
 }
 
-impl Add for Vec3 {
-    type Output = Vec3;
-
-    fn add(self, rhs: Vec3) -> Vec3 {
-        self.add_vec(rhs)
-    }
-}
-
-impl Sub for Vec3 {
-    type Output = Vec3;
-
-    fn sub(self, rhs: Vec3) -> Vec3 {
-        self.subtract_vec(rhs)
-    }
-}
-
-impl Neg for Vec3 {
-    type Output = Vec3;
-
-    fn neg(self) -> Vec3 {
-        Vec3::new(-self.x, -self.y, -self.z)
-    }
-}
+impl_vector_ops!(Vec3);
+impl_axis_accessor!(Vec3, f64);
 
 impl fmt::Display for Vec3 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
