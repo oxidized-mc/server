@@ -4,6 +4,7 @@
 //! and all packet definitions.
 
 pub mod auth;
+pub mod chat;
 pub mod codec;
 pub mod compression;
 pub mod connection;
