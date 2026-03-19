@@ -3,6 +3,7 @@
 //!
 //! Uses BFS traversal to assign node indices matching vanilla's ordering.
 
+use crate::commands::arguments::ArgumentType;
 use crate::commands::nodes::{CommandNode, RootCommandNode};
 use std::collections::VecDeque;
 
@@ -98,7 +99,14 @@ pub fn serialize_tree<S>(root: &RootCommandNode<S>, source: &S) -> CommandTreeDa
             }
 
             let parser = if let CommandNode::Argument(arg) = child {
-                if arg.suggestions_type.is_some() {
+                // Entity and GameProfile args need server-side suggestions
+                // so the client sends ServerboundCommandSuggestionPacket.
+                let has_suggestions = arg.suggestions_type.is_some()
+                    || matches!(
+                        &arg.argument_type,
+                        ArgumentType::Entity { .. } | ArgumentType::GameProfile
+                    );
+                if has_suggestions {
                     flags |= FLAG_SUGGESTIONS;
                 }
                 let mut props = Vec::new();
@@ -112,7 +120,16 @@ pub fn serialize_tree<S>(root: &RootCommandNode<S>, source: &S) -> CommandTreeDa
             };
 
             let suggestions_type = if let CommandNode::Argument(arg) = child {
-                arg.suggestions_type.clone()
+                if arg.suggestions_type.is_some() {
+                    arg.suggestions_type.clone()
+                } else if matches!(
+                    &arg.argument_type,
+                    ArgumentType::Entity { .. } | ArgumentType::GameProfile
+                ) {
+                    Some("minecraft:ask_server".to_string())
+                } else {
+                    None
+                }
             } else {
                 None
             };

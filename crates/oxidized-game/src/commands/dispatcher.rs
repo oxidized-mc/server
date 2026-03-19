@@ -156,6 +156,10 @@ impl<S: Clone + Send + Sync + 'static> CommandDispatcher<S> {
     }
 
     /// Collects tab-completion suggestions for the given input.
+    ///
+    /// The returned [`Suggestion`]s have their `range` set relative to
+    /// the full `input` string, so callers can map them directly to the
+    /// protocol's `start`/`length` fields.
     pub fn get_completions(
         &self,
         input: &str,
@@ -193,7 +197,9 @@ impl<S: Clone + Send + Sync + 'static> CommandDispatcher<S> {
                 return Vec::new();
             }
             let remaining = if parts.len() > 1 { parts[1] } else { "" };
-            return collect_child_suggestions(node, remaining, source, player_names);
+            // Offset = length of command name + 1 (for the space separator)
+            let offset = partial_cmd.len() + 1;
+            return collect_child_suggestions(node, remaining, offset, source, player_names);
         }
 
         Vec::new()
@@ -213,9 +219,13 @@ impl<S: Clone + Send + Sync + 'static> Default for CommandDispatcher<S> {
 }
 
 /// Recursively collects suggestions from child nodes.
+///
+/// `offset` is the character position in the original input where
+/// `remaining` starts. This lets us build correct [`StringRange`]s.
 fn collect_child_suggestions<S>(
     node: &CommandNode<S>,
     remaining: &str,
+    offset: usize,
     source: &S,
     player_names: &[String],
 ) -> Vec<Suggestion> {
@@ -224,6 +234,7 @@ fn collect_child_suggestions<S>(
 
     // If there's more input after a space, try to walk deeper.
     if parts.len() > 1 {
+        let next_offset = offset + current_word.len() + 1;
         // Try to match the current word to a child.
         for child in node.children().values() {
             match child {
@@ -231,13 +242,25 @@ fn collect_child_suggestions<S>(
                     if !child.can_use(source) {
                         continue;
                     }
-                    return collect_child_suggestions(child, parts[1], source, player_names);
+                    return collect_child_suggestions(
+                        child,
+                        parts[1],
+                        next_offset,
+                        source,
+                        player_names,
+                    );
                 },
                 CommandNode::Argument(_) => {
                     if !child.can_use(source) {
                         continue;
                     }
-                    return collect_child_suggestions(child, parts[1], source, player_names);
+                    return collect_child_suggestions(
+                        child,
+                        parts[1],
+                        next_offset,
+                        source,
+                        player_names,
+                    );
                 },
                 _ => {},
             }
@@ -246,6 +269,8 @@ fn collect_child_suggestions<S>(
     }
 
     // We're at the last word — suggest matching children.
+    let range_start = offset;
+    let range_end = offset + current_word.len();
     let mut suggestions = Vec::new();
     for child in node.children().values() {
         if !child.can_use(source) {
@@ -255,7 +280,7 @@ fn collect_child_suggestions<S>(
             CommandNode::Literal(lit) => {
                 if lit.literal.starts_with(current_word) {
                     suggestions.push(Suggestion {
-                        range: StringRange::new(0, current_word.len()),
+                        range: StringRange::new(range_start, range_end),
                         text: lit.literal.clone(),
                         tooltip: None,
                     });
@@ -267,7 +292,7 @@ fn collect_child_suggestions<S>(
                         for name in player_names {
                             if name.to_lowercase().starts_with(&current_word.to_lowercase()) {
                                 suggestions.push(Suggestion {
-                                    range: StringRange::new(0, current_word.len()),
+                                    range: StringRange::new(range_start, range_end),
                                     text: name.clone(),
                                     tooltip: None,
                                 });
@@ -276,7 +301,7 @@ fn collect_child_suggestions<S>(
                     },
                     _ => {
                         suggestions.push(Suggestion {
-                            range: StringRange::new(0, current_word.len()),
+                            range: StringRange::new(range_start, range_end),
                             text: format!("<{}>", arg.name),
                             tooltip: None,
                         });
@@ -663,5 +688,147 @@ mod tests {
         let texts: Vec<_> = completions.iter().map(|s| s.text.as_str()).collect();
         assert!(texts.contains(&"Alice"), "should suggest Alice");
         assert!(!texts.contains(&"Bob"), "should not suggest Bob");
+    }
+
+    // ── Suggestion range correctness ────────────────────────────────────
+
+    #[test]
+    fn suggestion_range_for_command_name() {
+        let mut d = CommandDispatcher::new();
+        d.register(literal("help").executes(|_| Ok(1)));
+        let src = make_source(4);
+        let completions = d.get_completions("he", &src, &[]);
+        assert_eq!(completions.len(), 1);
+        assert_eq!(completions[0].text, "help");
+        // Range covers the partial input "he" at position 0
+        assert_eq!(completions[0].range.start, 0);
+        assert_eq!(completions[0].range.end, 2);
+    }
+
+    #[test]
+    fn suggestion_range_for_first_argument() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kick").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: true,
+                        player_only: true,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        let names = vec!["Alice".to_string()];
+        // "kick Al" — the "Al" starts at offset 5 (after "kick ")
+        let completions = d.get_completions("kick Al", &src, &names);
+        assert_eq!(completions.len(), 1);
+        assert_eq!(completions[0].text, "Alice");
+        assert_eq!(completions[0].range.start, 5);
+        assert_eq!(completions[0].range.end, 7);
+    }
+
+    #[test]
+    fn suggestion_range_for_second_argument() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("give").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: true,
+                        player_only: true,
+                    },
+                )
+                .then(
+                    argument("item", ArgumentType::ItemStack).executes(|_| Ok(1)),
+                ),
+            ),
+        );
+        let src = make_source(4);
+        // "give Alice sto" — cursor is at the "sto" argument (offset 11)
+        let completions = d.get_completions("give Alice sto", &src, &[]);
+        // Should get <item> placeholder
+        assert!(!completions.is_empty());
+        assert_eq!(completions[0].range.start, 11);
+        assert_eq!(completions[0].range.end, 14);
+    }
+
+    #[test]
+    fn suggestion_range_for_empty_argument() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kick").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: true,
+                        player_only: true,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        let names = vec!["Alice".to_string()];
+        // "kick " — trailing space, empty argument at offset 5
+        let completions = d.get_completions("kick ", &src, &names);
+        assert_eq!(completions.len(), 1);
+        assert_eq!(completions[0].text, "Alice");
+        assert_eq!(completions[0].range.start, 5);
+        assert_eq!(completions[0].range.end, 5);
+    }
+
+    #[test]
+    fn suggestion_range_for_subcommand_literal() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("time")
+                .then(literal("set").executes(|_| Ok(1)))
+                .then(literal("query").executes(|_| Ok(2))),
+        );
+        let src = make_source(4);
+        // "time s" — "s" starts at offset 5
+        let completions = d.get_completions("time s", &src, &[]);
+        assert_eq!(completions.len(), 1);
+        assert_eq!(completions[0].text, "set");
+        assert_eq!(completions[0].range.start, 5);
+        assert_eq!(completions[0].range.end, 6);
+    }
+
+    // ── Serializer: Entity args get ask_server suggestions ──────────────
+
+    #[test]
+    fn serialize_entity_arg_has_ask_server_suggestion() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kick").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: true,
+                        player_only: true,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        let tree = d.serialize_tree(&src);
+        // Find the "target" argument node (index 2: root=0, kick=1, target=2)
+        let target_node = &tree.nodes[2];
+        assert_eq!(
+            target_node.suggestions_type.as_deref(),
+            Some("minecraft:ask_server"),
+            "Entity arg should have ask_server suggestions"
+        );
+        // Should have FLAG_SUGGESTIONS (bit 4)
+        assert_ne!(
+            target_node.flags & 0x10,
+            0,
+            "Entity arg flags should have suggestions bit set"
+        );
     }
 }
