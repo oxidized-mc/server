@@ -1378,16 +1378,32 @@ async fn handle_play_entry(
                                 conn,
                                 server_ctx,
                             );
-                            let input = suggestion_pkt.command.trim_start_matches('/');
+                            // Client sends command with leading `/` — strip it
+                            // but track the offset so we return correct ranges.
+                            let raw = &suggestion_pkt.command;
+                            let (input, prefix_len) = if let Some(stripped) = raw.strip_prefix('/') {
+                                (stripped, 1usize)
+                            } else {
+                                (raw.as_str(), 0usize)
+                            };
                             let suggestions = server_ctx.commands.completions(input, &source);
+                            // Compute the range from suggestions (all share the
+                            // same range for a single completion position).
+                            let (start, length) = if let Some(first) = suggestions.first() {
+                                let s = first.range.start + prefix_len;
+                                let l = first.range.len();
+                                (s as i32, l as i32)
+                            } else {
+                                (0, 0)
+                            };
                             let response = ClientboundCommandSuggestionsPacket {
                                 id: suggestion_pkt.id,
-                                start: 0,
-                                length: input.len() as i32,
+                                start,
+                                length,
                                 suggestions: suggestions.into_iter().map(|s| {
                                     oxidized_protocol::packets::play::clientbound_command_suggestions::SuggestionEntry {
                                         text: s.text,
-                                        tooltip: None,
+                                        tooltip: s.tooltip,
                                     }
                                 }).collect(),
                             };

@@ -1266,3 +1266,39 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - 13 new tests added: 8 pagination (single/multi-page, navigation, empty, boundary, min-per-page),
   3 description field (literal, argument, none), 2 username autocomplete (suggest + filter).
 - Workspace total: 1454 tests (up from 1441).
+
+### 2026-07-XX — Phase 18c: Autocomplete & Suggestion Fixes
+
+#### Bugs Found & Fixed
+
+1. **Suggestion packet `start`/`length` wrong** — `ClientboundCommandSuggestionsPacket` had
+   `start: 0, length: input.len()` which told the client to replace the ENTIRE command text.
+   Fix: use `StringRange` from suggestions + add `prefix_len` (1 for `/` prefix).
+
+2. **Entity/GameProfile args missing `ask_server` flag** — Without `FLAG_SUGGESTIONS` (bit 4)
+   and `suggestions_type: "minecraft:ask_server"`, the Minecraft client NEVER sends
+   `ServerboundCommandSuggestionPacket` for entity args — it handles them client-side showing
+   only `@a/@e/@s/@p/@r` selectors. Fix: auto-detect Entity/GameProfile args in serializer.rs.
+
+3. **`collect_child_suggestions` had wrong offsets** — All `StringRange`s were `(0, word.len())`
+   instead of being relative to the full input string. Fix: add `offset` parameter that
+   accumulates through recursion: starts at `command_name.len() + 1`, each level adds
+   `current_word.len() + 1`.
+
+#### Key Learnings
+
+- **Client only asks server for suggestions when `FLAG_SUGGESTIONS` is set** in the serialized
+  command tree node. For Entity/GameProfile args, vanilla sets `suggestions_type` to
+  `"minecraft:ask_server"`. Without this, autocomplete silently falls back to client-side only.
+- **`start` field in suggestion packet is relative to the RAW command string the client sent**
+  (including the `/` prefix). So if client sends `/give Al`, and suggestions replace "Al",
+  then `start = 6` (position of 'A' in `/give Al`), `length = 2`.
+- **Interactive chat (ClickEvent/HoverEvent) IS fully implemented** at the protocol level —
+  `Component::to_nbt()` and `to_json()` both serialize click/hover events. The `feedback_sender`
+  closure sends `ClientboundSystemChatPacket` which preserves the full component tree.
+
+#### Test Coverage
+
+- 7 new tests: 5 range correctness tests (single arg, multi arg, partial match, no match,
+  trailing space), 1 serializer flag test (entity arg has ask_server), 1 updated existing.
+- Workspace total: 1460 tests (up from 1454).
