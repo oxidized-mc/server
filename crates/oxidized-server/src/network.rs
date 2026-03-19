@@ -5,8 +5,12 @@
 //! LOGIN, and CONFIGURATION protocol states.
 
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 
+use oxidized_game::player::{
+    GameMode, PlayerList, ServerPlayer, build_login_sequence, handle_accept_teleportation,
+};
 use oxidized_protocol::auth;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
 use oxidized_protocol::crypto::{
@@ -25,6 +29,7 @@ use oxidized_protocol::packets::login::{
     ClientboundLoginFinishedPacket, ServerboundHelloPacket, ServerboundKeyPacket,
     ServerboundLoginAcknowledgedPacket,
 };
+use oxidized_protocol::packets::play::ServerboundAcceptTeleportationPacket;
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
     ServerboundStatusRequestPacket,
@@ -32,6 +37,8 @@ use oxidized_protocol::packets::status::{
 use oxidized_protocol::registry;
 use oxidized_protocol::status::ServerStatus;
 use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::storage::PrimaryLevelData;
+use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
@@ -50,6 +57,21 @@ pub struct LoginContext {
     pub prevent_proxy_connections: bool,
     /// Reusable HTTP client for Mojang session server requests.
     pub http_client: reqwest::Client,
+    /// Shared game server state for PLAY-state operations.
+    pub server_ctx: Arc<ServerContext>,
+}
+
+/// Shared game server state accessible to all connection handlers.
+///
+/// Holds the player list, world metadata, and dimension registry needed
+/// when a client transitions from CONFIGURATION to PLAY state.
+pub struct ServerContext {
+    /// Server-wide player roster (thread-safe via interior mutability).
+    pub player_list: RwLock<PlayerList>,
+    /// World metadata loaded from `level.dat` (or defaults for new worlds).
+    pub level_data: PrimaryLevelData,
+    /// All registered dimension identifiers (e.g., `minecraft:overworld`).
+    pub dimensions: Vec<ResourceLocation>,
 }
 
 /// Starts the TCP listener and accepts connections until a shutdown signal
@@ -138,11 +160,13 @@ async fn handle_connection(
                         }
                     },
                     ConnectionState::Login => {
-                        handle_login(&mut conn, pkt, ctx).await?;
+                        let profile = handle_login(&mut conn, pkt, ctx).await?;
                         // Login transitions to Configuration — handle it immediately
                         // (server drives the configuration flow, not client)
-                        handle_configuration(&mut conn, ctx).await?;
-                        info!(peer = %addr, "Configuration complete — entering play");
+                        let client_info = handle_configuration(&mut conn, ctx).await?;
+                        // Configuration transitions to Play — send login sequence
+                        handle_play_entry(&mut conn, profile, client_info, ctx).await?;
+                        info!(peer = %addr, "Player session ended");
                         return Ok(());
                     },
                     ConnectionState::Configuration | ConnectionState::Play => {
@@ -208,6 +232,9 @@ async fn handle_handshake(conn: &mut Connection, pkt: RawPacket) -> Result<(), C
 /// [`ClientboundLoginFinishedPacket`], and transitions to
 /// [`ConnectionState::Configuration`].
 ///
+/// Returns the authenticated [`GameProfile`] for use in subsequent
+/// protocol states.
+///
 /// # Errors
 ///
 /// Returns a [`ConnectionError`] if any I/O, decoding, or authentication
@@ -217,13 +244,13 @@ async fn handle_login(
     conn: &mut Connection,
     hello_pkt: RawPacket,
     ctx: &LoginContext,
-) -> Result<(), ConnectionError> {
+) -> Result<auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
 
     // 1. Decode ServerboundHelloPacket (the first Login packet).
     if hello_pkt.id != ServerboundHelloPacket::PACKET_ID {
         warn!(peer = %addr, packet_id = hello_pkt.id, "Expected login hello packet (0x00)");
-        return disconnect(conn, "Unexpected packet during login").await;
+        return Err(disconnect_err(conn, "Unexpected packet during login").await);
     }
 
     let hello = ServerboundHelloPacket::decode(hello_pkt.data).map_err(|e| {
@@ -238,17 +265,25 @@ async fn handle_login(
     // 2. Validate player name length (1–16 characters).
     if hello.name.is_empty() || hello.name.len() > 16 {
         warn!(peer = %addr, name = %hello.name, "Invalid player name length");
-        return disconnect(conn, "Invalid player name").await;
+        return Err(disconnect_err(conn, "Invalid player name").await);
     }
 
     // 3. Authenticate (online) or generate offline UUID.
-    let (uuid, username, properties) = if ctx.online_mode {
+    let profile = if ctx.online_mode {
         authenticate_online(conn, &hello, ctx).await?
     } else {
         let uuid = offline_uuid(&hello.name);
         debug!(peer = %addr, uuid = %uuid, name = %hello.name, "Offline-mode UUID generated");
-        (uuid, hello.name.clone(), Vec::new())
+        auth::GameProfile::new(uuid, hello.name.clone())
     };
+
+    let uuid = profile.uuid().ok_or_else(|| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Profile has invalid UUID",
+        ))
+    })?;
+    let username = profile.name().to_string();
 
     // 4. Enable compression if threshold >= 0.
     if ctx.compression_threshold >= 0 {
@@ -266,6 +301,16 @@ async fn handle_login(
     }
 
     // 5. Send LoginFinished packet.
+    let properties: Vec<ProfileProperty> = profile
+        .properties()
+        .iter()
+        .map(|p| ProfileProperty {
+            name: p.name().to_string(),
+            value: p.value().to_string(),
+            signature: p.signature().map(String::from),
+        })
+        .collect();
+
     let finished = ClientboundLoginFinishedPacket {
         uuid,
         username: username.clone(),
@@ -282,7 +327,7 @@ async fn handle_login(
     let ack_pkt = conn.read_raw_packet().await?;
     if ack_pkt.id != ServerboundLoginAcknowledgedPacket::PACKET_ID {
         warn!(peer = %addr, packet_id = ack_pkt.id, "Expected login acknowledged (0x03)");
-        return disconnect(conn, "Unexpected packet — expected login acknowledged").await;
+        return Err(disconnect_err(conn, "Unexpected packet — expected login acknowledged").await);
     }
     let _ack = ServerboundLoginAcknowledgedPacket::decode(ack_pkt.data);
 
@@ -290,13 +335,13 @@ async fn handle_login(
     conn.state = ConnectionState::Configuration;
     info!(peer = %addr, uuid = %uuid, name = %username, "Player login complete — entering configuration");
 
-    Ok(())
+    Ok(profile)
 }
 
 /// Performs online-mode authentication: encryption handshake, shared secret
 /// exchange, and Mojang session server verification.
 ///
-/// Returns the authenticated player's UUID, username, and profile properties.
+/// Returns the authenticated [`GameProfile`] from Mojang's session server.
 ///
 /// # Errors
 ///
@@ -306,7 +351,7 @@ async fn authenticate_online(
     conn: &mut Connection,
     hello: &ServerboundHelloPacket,
     ctx: &LoginContext,
-) -> Result<(uuid::Uuid, String, Vec<ProfileProperty>), ConnectionError> {
+) -> Result<auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
 
     // a. Generate 4-byte challenge.
@@ -400,27 +445,10 @@ async fn authenticate_online(
         },
     };
 
-    // i. Extract profile data.
-    let uuid = profile.uuid().ok_or_else(|| {
-        ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Mojang returned invalid UUID",
-        ))
-    })?;
+    // i. Return the authenticated profile.
+    info!(peer = %addr, name = %profile.name(), "Player authenticated");
 
-    let properties = profile
-        .properties()
-        .iter()
-        .map(|p| ProfileProperty {
-            name: p.name().to_string(),
-            value: p.value().to_string(),
-            signature: p.signature().map(String::from),
-        })
-        .collect();
-
-    info!(peer = %addr, uuid = %uuid, name = %profile.name(), "Player authenticated");
-
-    Ok((uuid, profile.name().to_string(), properties))
+    Ok(profile)
 }
 
 /// Handles the CONFIGURATION state — sends registry data, tags, features,
@@ -436,13 +464,16 @@ async fn authenticate_online(
 /// 7. Receive `ServerboundFinishConfigurationPacket`
 /// 8. Transition to PLAY state
 ///
+/// Returns the [`ClientInformation`] received from the client (language,
+/// view distance, etc.) for use in player setup.
+///
 /// # Errors
 ///
 /// Returns a [`ConnectionError`] if any I/O, decoding, or protocol step fails.
 async fn handle_configuration(
     conn: &mut Connection,
     _ctx: &LoginContext,
-) -> Result<(), ConnectionError> {
+) -> Result<ClientInformation, ConnectionError> {
     let addr = conn.remote_addr();
     let mut client_info: Option<ClientInformation> = None;
 
@@ -501,7 +532,7 @@ async fn handle_configuration(
             },
             _ => {
                 warn!(peer = %addr, id = pkt.id, "Unexpected packet during configuration");
-                return disconnect(conn, "Unexpected packet during configuration").await;
+                return Err(disconnect_err(conn, "Unexpected packet during configuration").await);
             },
         }
     }
@@ -623,17 +654,168 @@ async fn handle_configuration(
             },
             _ => {
                 warn!(peer = %addr, id = finish_pkt.id, "Expected FinishConfiguration");
-                return disconnect(conn, "Unexpected packet — expected finish configuration").await;
+                return Err(disconnect_err(conn, "Unexpected packet — expected finish configuration").await);
             },
         }
     }
 
     // Use client_info (or defaults) for this session
-    let _client_info = client_info.unwrap_or_else(ClientInformation::create_default);
+    let client_info = client_info.unwrap_or_else(ClientInformation::create_default);
 
     // 8. Transition to Play
     conn.state = ConnectionState::Play;
     info!(peer = %addr, "Configuration complete — client entering PLAY state");
+
+    Ok(client_info)
+}
+
+/// Handles the PLAY-state login sequence for a newly joined player.
+///
+/// Creates a [`ServerPlayer`], loads saved player data (if available),
+/// builds the 8-packet login sequence via [`build_login_sequence`], and
+/// sends them to the client. Then enters a minimal read loop to process
+/// incoming PLAY packets (currently only handles teleport confirmations).
+///
+/// # Errors
+///
+/// Returns a [`ConnectionError`] if any I/O or protocol step fails.
+async fn handle_play_entry(
+    conn: &mut Connection,
+    profile: auth::GameProfile,
+    client_info: ClientInformation,
+    ctx: &LoginContext,
+) -> Result<(), ConnectionError> {
+    let addr = conn.remote_addr();
+    let server_ctx = &ctx.server_ctx;
+
+    let uuid = profile.uuid().ok_or_else(|| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Profile has invalid UUID",
+        ))
+    })?;
+
+    // Create ServerPlayer with entity ID from the player list.
+    let entity_id = server_ctx.player_list.read().next_entity_id();
+    let game_mode = GameMode::from_id(server_ctx.level_data.game_type);
+    let dimension = ResourceLocation::from_string("minecraft:overworld").map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            e.to_string(),
+        ))
+    })?;
+
+    let mut player = ServerPlayer::new(entity_id, profile, dimension, game_mode);
+
+    // Apply client preferences.
+    player.view_distance = i32::from(client_info.view_distance);
+    player.simulation_distance = i32::from(client_info.view_distance).min(10);
+
+    // Try to load saved player data from playerdata/<uuid>.dat.
+    let playerdata_path = format!("world/playerdata/{uuid}.dat");
+    if Path::new(&playerdata_path).exists() {
+        match oxidized_nbt::read_file(Path::new(&playerdata_path)) {
+            Ok(nbt) => {
+                player.load_from_nbt(&nbt);
+                debug!(peer = %addr, uuid = %uuid, "Loaded player data from disk");
+            },
+            Err(e) => {
+                warn!(peer = %addr, uuid = %uuid, error = %e, "Failed to load player data — using defaults");
+            },
+        }
+    } else {
+        // New player — spawn at world spawn.
+        let (sx, sy, sz) = server_ctx.level_data.spawn_pos();
+        player.pos = oxidized_protocol::types::Vec3::new(f64::from(sx), f64::from(sy), f64::from(sz));
+        debug!(peer = %addr, uuid = %uuid, "New player — spawning at world spawn");
+    }
+
+    // Assign a teleport ID for the initial position packet.
+    let teleport_id = player.next_teleport_id();
+    player.pending_teleports.push_back(teleport_id);
+
+    let player_name = player.name.clone();
+
+    // Build the 8-packet login sequence.
+    let dimension_type_id = 0; // overworld = 0 in registry order
+    let packets = {
+        let player_list = server_ctx.player_list.read();
+        build_login_sequence(
+            &player,
+            teleport_id,
+            &server_ctx.level_data,
+            &player_list,
+            &server_ctx.dimensions,
+            dimension_type_id,
+        )
+    };
+
+    // Send all login packets before adding player to the list.
+    // This prevents a "ghost" player entry if sending fails.
+    for pkt in &packets {
+        conn.send_raw(pkt.id, &pkt.body).await?;
+    }
+    conn.flush().await?;
+
+    // Add player to the server player list (only after successful send).
+    let player_arc = server_ctx.player_list.write().add(player);
+
+    info!(
+        peer = %addr,
+        uuid = %uuid,
+        name = %player_name,
+        entity_id = entity_id,
+        packets = packets.len(),
+        "PLAY login sequence sent",
+    );
+
+    // Minimal PLAY read loop — handles teleport confirmations and logs
+    // other packets. Full PLAY handling is Phase 14+.
+    loop {
+        match conn.read_raw_packet().await {
+            Ok(pkt) => {
+                if pkt.id == ServerboundAcceptTeleportationPacket::PACKET_ID {
+                    match ServerboundAcceptTeleportationPacket::decode(pkt.data) {
+                        Ok(ack) => {
+                            let mut p = player_arc.write();
+                            let accepted = handle_accept_teleportation(&mut p, ack.teleport_id);
+                            debug!(
+                                peer = %addr,
+                                teleport_id = ack.teleport_id,
+                                accepted = accepted,
+                                pending = p.pending_teleports.len(),
+                                "Teleport confirmation",
+                            );
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, error = %e, "Failed to decode teleport ack");
+                        },
+                    }
+                } else {
+                    debug!(
+                        peer = %addr,
+                        packet_id = format_args!("0x{:02X}", pkt.id),
+                        size = pkt.data.len(),
+                        "PLAY packet (unhandled)",
+                    );
+                }
+            },
+            Err(ConnectionError::Io(ref e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                info!(peer = %addr, name = %player_name, "Player disconnected");
+                break;
+            },
+            Err(e) => {
+                debug!(peer = %addr, error = %e, "PLAY connection error");
+                break;
+            },
+        }
+    }
+
+    // Clean up — remove player from the list.
+    server_ctx.player_list.write().remove(&uuid);
+    info!(peer = %addr, name = %player_name, "Player removed from player list");
 
     Ok(())
 }
@@ -769,6 +951,13 @@ mod tests {
             compression_threshold: -1,
             prevent_proxy_connections: false,
             http_client: reqwest::Client::new(),
+            server_ctx: Arc::new(ServerContext {
+                player_list: RwLock::new(PlayerList::new(20)),
+                level_data: PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                dimensions: vec![
+                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
+                ],
+            }),
         })
     }
 
