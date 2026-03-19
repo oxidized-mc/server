@@ -23,13 +23,11 @@ use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
     ClientboundCommandsPacket, ClientboundGameEventPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundSetChunkCacheRadiusPacket,
-    GameEventType, PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry,
-    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
-    ServerboundChatCommandSignedPacket, ServerboundChatPacket,
-    ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
-    ServerboundKeepAlivePacket, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
-    ServerboundPlayerInputPacket,
+    ClientboundSetChunkCacheRadiusPacket, GameEventType, PlayerCommandAction, PlayerInfoActions,
+    PlayerInfoEntry, ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
+    ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
+    ServerboundCommandSuggestionPacket, ServerboundKeepAlivePacket, ServerboundMovePlayerPacket,
+    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -37,7 +35,7 @@ use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
-use crate::network::{ChatBroadcastMessage, LoginContext, ServerContext, MAX_SERVERBOUND_PLAY_ID};
+use crate::network::{ChatBroadcastMessage, LoginContext, MAX_SERVERBOUND_PLAY_ID, ServerContext};
 
 use crate::network::helpers::decode_packet;
 
@@ -183,7 +181,8 @@ pub async fn handle_play_entry(
 
     // Send initial chunk batch — empty air chunks in a spiral pattern.
     let chunk_center = ChunkPos::from_block(player_chunk_x, player_chunk_z);
-    let chunk_count = helpers::send_initial_chunks(conn, chunk_center, player_view_distance).await?;
+    let chunk_count =
+        helpers::send_initial_chunks(conn, chunk_center, player_view_distance).await?;
 
     // Signal the client that initial chunks have been sent.
     let chunks_load_start = ClientboundGameEventPacket {
@@ -457,9 +456,7 @@ pub async fn handle_play_entry(
     // Clean up — remove player from the list and broadcast removal to tab lists.
     server_ctx.player_list.write().remove(&uuid);
     {
-        let remove_pkt = ClientboundPlayerInfoRemovePacket {
-            uuids: vec![uuid],
-        };
+        let remove_pkt = ClientboundPlayerInfoRemovePacket { uuids: vec![uuid] };
         let encoded = remove_pkt.encode();
         let broadcast = ChatBroadcastMessage {
             packet_id: ClientboundPlayerInfoRemovePacket::PACKET_ID,
@@ -483,7 +480,9 @@ fn handle_keepalive(
 ) {
     if let Ok(ka) = decode_packet(
         ServerboundKeepAlivePacket::decode(data.clone()),
-        addr, player_name, "KeepAlive",
+        addr,
+        player_name,
+        "KeepAlive",
     ) {
         if *keepalive_pending && ka.id == keepalive_challenge {
             *keepalive_pending = false;
@@ -506,7 +505,9 @@ fn handle_keepalive(
 fn handle_accept_teleport(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     if let Ok(ack) = decode_packet(
         ServerboundAcceptTeleportationPacket::decode(data),
-        ctx.addr, ctx.player_name, "AcceptTeleportation",
+        ctx.addr,
+        ctx.player_name,
+        "AcceptTeleportation",
     ) {
         let mut p = ctx.player.write();
         let accepted = handle_accept_teleportation(&mut p, ack.teleport_id);
@@ -525,7 +526,9 @@ fn handle_accept_teleport(ctx: &PlayContext<'_>, data: bytes::Bytes) {
 fn handle_chunk_batch_ack(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     if let Ok(batch_ack) = decode_packet(
         ServerboundChunkBatchReceivedPacket::decode(data),
-        ctx.addr, ctx.player_name, "ChunkBatchReceived",
+        ctx.addr,
+        ctx.player_name,
+        "ChunkBatchReceived",
     ) {
         let rate = batch_ack.desired_chunks_per_tick;
         if rate.is_finite() && rate > 0.0 {
@@ -546,7 +549,9 @@ fn handle_chunk_batch_ack(ctx: &PlayContext<'_>, data: bytes::Bytes) {
 fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     if let Ok(cmd) = decode_packet(
         ServerboundPlayerCommandPacket::decode(data),
-        ctx.addr, ctx.player_name, "PlayerCommand",
+        ctx.addr,
+        ctx.player_name,
+        "PlayerCommand",
     ) {
         match cmd.action {
             PlayerCommandAction::StartSprinting => {
@@ -573,7 +578,9 @@ fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
 fn handle_player_input(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     if let Ok(input_pkt) = decode_packet(
         ServerboundPlayerInputPacket::decode(data),
-        ctx.addr, ctx.player_name, "PlayerInput",
+        ctx.addr,
+        ctx.player_name,
+        "PlayerInput",
     ) {
         let mut p = ctx.player.write();
         p.sneaking = input_pkt.input.shift;

@@ -62,8 +62,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                             let targets = get_entities(ctx, "targets")?;
                             let reason = get_string(ctx, "reason")?;
                             for target in &targets {
-                                let kicked =
-                                    ctx.source.server.kick_player(&target.name, reason);
+                                let kicked = ctx.source.server.kick_player(&target.name, reason);
                                 if kicked {
                                     ctx.source.send_success(
                                         &Component::translatable(

@@ -15,10 +15,7 @@ use super::commands::make_command_source_for_player;
 use crate::network::{ChatBroadcastMessage, ServerContext};
 
 /// Handles an incoming chat message from a player.
-pub async fn handle_chat(
-    ctx: &mut PlayContext<'_>,
-    message: &str,
-) -> Result<(), ConnectionError> {
+pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(), ConnectionError> {
     if !ctx.rate_limiter.try_acquire(std::time::Instant::now()) {
         warn!(peer = %ctx.addr, name = %ctx.player_name, "Chat rate-limited");
         let kick_msg = ClientboundSystemChatPacket {

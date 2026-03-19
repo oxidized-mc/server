@@ -4,8 +4,8 @@
 //! the online player list. Filter syntax (`[key=value,...]`) is deferred
 //! to a future phase.
 
-use crate::commands::source::{CommandSourceKind, CommandSourceStack};
 use crate::commands::CommandError;
+use crate::commands::source::{CommandSourceKind, CommandSourceStack};
 
 /// The type of entity selector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,9 +74,7 @@ pub fn resolve_selector(
         SelectorKind::AllPlayers | SelectorKind::AllEntities => {
             let names = source.server.online_player_names();
             if names.is_empty() {
-                return Err(CommandError::Execution(
-                    "No players found".to_string(),
-                ));
+                return Err(CommandError::Execution("No players found".to_string()));
             }
             let mut targets = Vec::with_capacity(names.len());
             for name in &names {
@@ -100,9 +98,9 @@ pub fn resolve_selector(
                 }]);
             }
             let names = source.server.online_player_names();
-            let first = names.first().ok_or_else(|| {
-                CommandError::Execution("No players found".to_string())
-            })?;
+            let first = names
+                .first()
+                .ok_or_else(|| CommandError::Execution("No players found".to_string()))?;
             let uuid = source.server.find_player_uuid(first).ok_or_else(|| {
                 CommandError::Execution(format!("Could not resolve UUID for '{first}'"))
             })?;
@@ -115,9 +113,9 @@ pub fn resolve_selector(
             // TODO: Use a proper random source once `rand` is available.
             // For now, deterministically return the first online player.
             let names = source.server.online_player_names();
-            let first = names.first().ok_or_else(|| {
-                CommandError::Execution("No players found".to_string())
-            })?;
+            let first = names
+                .first()
+                .ok_or_else(|| CommandError::Execution("No players found".to_string()))?;
             let uuid = source.server.find_player_uuid(first).ok_or_else(|| {
                 CommandError::Execution(format!("Could not resolve UUID for '{first}'"))
             })?;
@@ -158,9 +156,7 @@ pub fn resolve_entities(
                 uuid,
             }])
         } else {
-            Err(CommandError::Parse(format!(
-                "No player found: '{input}'"
-            )))
+            Err(CommandError::Parse(format!("No player found: '{input}'")))
         }
     }
 }

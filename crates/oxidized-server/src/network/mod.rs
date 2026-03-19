@@ -286,8 +286,12 @@ mod tests {
     use oxidized_protocol::constants;
     use oxidized_protocol::crypto::ServerKeyPair;
     use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
-    use oxidized_protocol::packets::status::{ServerboundPingRequestPacket, ServerboundStatusRequestPacket};
-    use oxidized_protocol::packets::status::{ClientboundPongResponsePacket, ClientboundStatusResponsePacket};
+    use oxidized_protocol::packets::status::{
+        ClientboundPongResponsePacket, ClientboundStatusResponsePacket,
+    };
+    use oxidized_protocol::packets::status::{
+        ServerboundPingRequestPacket, ServerboundStatusRequestPacket,
+    };
     use oxidized_protocol::status::{Component, StatusPlayers, StatusVersion};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;

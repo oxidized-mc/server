@@ -16,13 +16,10 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             .requires(|s: &CommandSourceStack| s.has_permission(4))
             .executes(|ctx: &CommandContext<CommandSourceStack>| {
                 // TODO: Implement /save-on
-                ctx.source.send_failure(&Component::translatable(
-                    "commands.help.failed",
-                    vec![],
-                ));
-                ctx.source.send_failure(&Component::text(
-                    "/save-on is not yet implemented",
-                ));
+                ctx.source
+                    .send_failure(&Component::translatable("commands.help.failed", vec![]));
+                ctx.source
+                    .send_failure(&Component::text("/save-on is not yet implemented"));
                 Ok(0)
             }),
     );
