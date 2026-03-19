@@ -91,6 +91,38 @@ impl Aabb {
         (self.x_size() + self.y_size() + self.z_size()) / 3.0
     }
 
+    /// Returns the volume of this bounding box.
+    pub fn volume(&self) -> f64 {
+        self.x_size() * self.y_size() * self.z_size()
+    }
+
+    /// Creates an AABB centered at `(x, y_bottom, z)` with the given
+    /// `width` and `height`.
+    ///
+    /// The box extends `width/2` in the X and Z directions from center,
+    /// and `height` upward from `y` (entities stand on their Y position).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxidized_protocol::types::aabb::Aabb;
+    ///
+    /// let bbox = Aabb::from_center(5.0, 64.0, 5.0, 0.6, 1.8);
+    /// assert!((bbox.min_x - 4.7).abs() < 1e-10);
+    /// assert!((bbox.max_y - 65.8).abs() < 1e-10);
+    /// ```
+    pub fn from_center(x: f64, y: f64, z: f64, width: f64, height: f64) -> Self {
+        let half_w = width / 2.0;
+        Self {
+            min_x: x - half_w,
+            min_y: y,
+            min_z: z - half_w,
+            max_x: x + half_w,
+            max_y: y + height,
+            max_z: z + half_w,
+        }
+    }
+
     /// Returns the center of this bounding box.
     pub fn get_center(&self) -> Vec3 {
         Vec3::new(
