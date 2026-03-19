@@ -1,4 +1,4 @@
-//! ClientboundPlayerChatPacket (0x40) — signed player chat message.
+//! ClientboundPlayerChatPacket (0x41) — signed player chat message.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
@@ -18,7 +18,7 @@ pub enum FilterMask {
     PartiallyFiltered(Vec<i64>),
 }
 
-/// 0x40 — Signed player chat message.
+/// 0x41 — Signed player chat message.
 #[derive(Debug, Clone)]
 pub struct ClientboundPlayerChatPacket {
     /// Sender UUID.
@@ -47,7 +47,7 @@ pub struct ClientboundPlayerChatPacket {
 
 impl ClientboundPlayerChatPacket {
     /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x40;
+    pub const PACKET_ID: i32 = 0x41;
 
     /// Encodes the packet body (without packet ID).
     pub fn encode(&self) -> BytesMut {
@@ -235,7 +235,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundPlayerChatPacket::PACKET_ID, 0x40);
+        assert_eq!(ClientboundPlayerChatPacket::PACKET_ID, 0x41);
     }
 
     #[test]

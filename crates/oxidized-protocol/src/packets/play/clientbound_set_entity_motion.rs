@@ -13,7 +13,7 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
-/// Set entity motion packet (0x64).
+/// Set entity motion packet (0x65).
 ///
 /// # Wire Format
 ///
@@ -35,7 +35,7 @@ pub struct ClientboundSetEntityMotionPacket {
 
 impl ClientboundSetEntityMotionPacket {
     /// Packet ID for `ClientboundSetEntityMotionPacket` in the PLAY state.
-    pub const PACKET_ID: i32 = 0x64;
+    pub const PACKET_ID: i32 = 0x65;
 
     /// Creates a new set-entity-motion packet.
     pub fn new(entity_id: i32, vx: f64, vy: f64, vz: f64) -> Self {
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundSetEntityMotionPacket::PACKET_ID, 0x64);
+        assert_eq!(ClientboundSetEntityMotionPacket::PACKET_ID, 0x65);
     }
 
     #[test]
