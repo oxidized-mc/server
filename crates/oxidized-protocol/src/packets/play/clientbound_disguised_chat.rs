@@ -1,4 +1,4 @@
-//! ClientboundDisguisedChatPacket (0x20) — disguised chat message.
+//! ClientboundDisguisedChatPacket (0x21) — disguised chat message.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
@@ -7,7 +7,7 @@ use crate::codec::varint;
 use crate::packets::play::PlayPacketError;
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
 
-/// 0x20 — Disguised chat (chat type + sender name, no UUID/signature).
+/// 0x21 — Disguised chat (chat type + sender name, no UUID/signature).
 #[derive(Debug, Clone)]
 pub struct ClientboundDisguisedChatPacket {
     /// The message content.
@@ -22,7 +22,7 @@ pub struct ClientboundDisguisedChatPacket {
 
 impl ClientboundDisguisedChatPacket {
     /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x20;
+    pub const PACKET_ID: i32 = 0x21;
 
     /// Encodes the packet body (without packet ID).
     pub fn encode(&self) -> BytesMut {
@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundDisguisedChatPacket::PACKET_ID, 0x20);
+        assert_eq!(ClientboundDisguisedChatPacket::PACKET_ID, 0x21);
     }
 
     #[test]

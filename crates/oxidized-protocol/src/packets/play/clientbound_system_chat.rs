@@ -1,11 +1,11 @@
-//! ClientboundSystemChatPacket (0x78) — server-originated system message.
+//! ClientboundSystemChatPacket (0x79) — server-originated system message.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
 use crate::packets::play::PlayPacketError;
 
-/// 0x78 — System chat message (no signature, no player sender).
+/// 0x79 — System chat message (no signature, no player sender).
 #[derive(Debug, Clone)]
 pub struct ClientboundSystemChatPacket {
     /// The message content.
@@ -16,7 +16,7 @@ pub struct ClientboundSystemChatPacket {
 
 impl ClientboundSystemChatPacket {
     /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x78;
+    pub const PACKET_ID: i32 = 0x79;
 
     /// Encodes the packet body (without packet ID).
     pub fn encode(&self) -> BytesMut {
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundSystemChatPacket::PACKET_ID, 0x78);
+        assert_eq!(ClientboundSystemChatPacket::PACKET_ID, 0x79);
     }
 
     #[test]

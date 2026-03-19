@@ -1,11 +1,11 @@
-//! ClientboundDeleteChatPacket (0x1E) — delete a chat message by index.
+//! ClientboundDeleteChatPacket (0x1F) — delete a chat message by index.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::varint;
 use crate::packets::play::PlayPacketError;
 
-/// 0x1E — Server requests client to delete a chat message.
+/// 0x1F — Server requests client to delete a chat message.
 ///
 /// If `packed_message_id` is 0, the message is identified by its full 256-byte
 /// signature. Otherwise the value is a cache index (wire value − 1).
@@ -21,7 +21,7 @@ pub struct ClientboundDeleteChatPacket {
 
 impl ClientboundDeleteChatPacket {
     /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x1E;
+    pub const PACKET_ID: i32 = 0x1F;
 
     /// Encodes the packet body (without packet ID).
     pub fn encode(&self) -> BytesMut {
@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundDeleteChatPacket::PACKET_ID, 0x1E);
+        assert_eq!(ClientboundDeleteChatPacket::PACKET_ID, 0x1F);
     }
 
     #[test]
