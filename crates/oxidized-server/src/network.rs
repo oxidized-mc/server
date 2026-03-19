@@ -59,7 +59,7 @@ use oxidized_world::storage::PrimaryLevelData;
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 /// Shared state for login operations, passed to each connection handler.
 pub struct LoginContext {
@@ -109,6 +109,10 @@ pub struct ChatBroadcastMessage {
     pub data: bytes::Bytes,
 }
 
+/// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.
+/// There are 58 registered serverbound packets (IDs 0x00–0x39).
+const MAX_SERVERBOUND_PLAY_ID: i32 = 0x39;
+
 /// Starts the TCP listener and accepts connections until a shutdown signal
 /// is received.
 ///
@@ -139,7 +143,7 @@ pub async fn listen(
                         let ctx = Arc::clone(&ctx);
                         tokio::spawn(async move {
                             if let Err(e) = handle_connection(stream, peer_addr, &ctx).await {
-                                debug!(peer = %peer_addr, error = %e, "Connection closed");
+                debug!(peer = %peer_addr, error = %e, "Connection handler finished with error");
                             }
                         });
                     }
@@ -211,11 +215,11 @@ async fn handle_connection(
                 }
             },
             Err(ConnectionError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                debug!(peer = %addr, "Client disconnected");
+                debug!(peer = %addr, state = %conn.state, "Client disconnected (EOF)");
                 return Ok(());
             },
             Err(e) => {
-                debug!(peer = %addr, error = %e, "Connection error");
+                debug!(peer = %addr, state = %conn.state, error = %e, "Connection error");
                 return Err(e);
             },
         }
@@ -481,7 +485,7 @@ async fn authenticate_online(
     };
 
     // i. Return the authenticated profile.
-    info!(peer = %addr, name = %profile.name(), "Player authenticated");
+    info!(peer = %addr, uuid = %profile.uuid().unwrap_or_default(), name = %profile.name(), "Player authenticated");
 
     Ok(profile)
 }
@@ -894,11 +898,11 @@ async fn handle_play_entry(
                         ClientboundKeepAlivePacket::PACKET_ID,
                         &pkt.encode(),
                     ).await {
-                        debug!(peer = %addr, error = %e, "Failed to send keepalive");
+                        debug!(peer = %addr, name = %player_name, error = %e, "Failed to send keepalive");
                         break;
                     }
                     if let Err(e) = conn.flush().await {
-                        debug!(peer = %addr, error = %e, "Failed to flush keepalive");
+                        debug!(peer = %addr, name = %player_name, error = %e, "Failed to flush keepalive");
                         break;
                     }
                 }
@@ -908,19 +912,19 @@ async fn handle_play_entry(
                 match broadcast_result {
                     Ok(msg) => {
                         if let Err(e) = conn.send_raw(msg.packet_id, &msg.data).await {
-                            debug!(peer = %addr, error = %e, "Failed to send broadcast chat");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to send broadcast chat");
                             break;
                         }
                         if let Err(e) = conn.flush().await {
-                            debug!(peer = %addr, error = %e, "Failed to flush broadcast chat");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to flush broadcast chat");
                             break;
                         }
                     },
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        debug!(peer = %addr, missed = n, "Chat broadcast lagged — dropped messages");
+                        debug!(peer = %addr, name = %player_name, missed = n, "Chat broadcast lagged — dropped messages");
                     },
                     Err(broadcast::error::RecvError::Closed) => {
-                        debug!(peer = %addr, "Chat broadcast channel closed");
+                        debug!(peer = %addr, name = %player_name, "Chat broadcast channel closed");
                         break;
                     },
                 }
@@ -935,10 +939,11 @@ async fn handle_play_entry(
                             if keepalive_pending && ka.id == keepalive_challenge {
                                 keepalive_pending = false;
                                 let latency = keepalive_sent_at.elapsed().as_millis();
-                                debug!(peer = %addr, latency_ms = latency, "Keepalive response");
+                                debug!(peer = %addr, name = %player_name, latency_ms = latency, "Keepalive response");
                             } else {
                                 debug!(
                                     peer = %addr,
+                                    name = %player_name,
                                     expected = keepalive_challenge,
                                     got = ka.id,
                                     pending = keepalive_pending,
@@ -947,7 +952,7 @@ async fn handle_play_entry(
                             }
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode keepalive");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode keepalive");
                         },
                     }
                 } else if pkt.id == ServerboundAcceptTeleportationPacket::PACKET_ID {
@@ -957,6 +962,7 @@ async fn handle_play_entry(
                             let accepted = handle_accept_teleportation(&mut p, ack.teleport_id);
                             debug!(
                                 peer = %addr,
+                                name = %player_name,
                                 teleport_id = ack.teleport_id,
                                 accepted = accepted,
                                 pending = p.pending_teleports.len(),
@@ -964,7 +970,7 @@ async fn handle_play_entry(
                             );
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode teleport ack");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode teleport ack");
                         },
                     }
                 } else if pkt.id == ServerboundChunkBatchReceivedPacket::PACKET_ID {
@@ -973,17 +979,18 @@ async fn handle_play_entry(
                             let rate = batch_ack.desired_chunks_per_tick;
                             if rate.is_finite() && rate > 0.0 {
                                 player_arc.write().chunk_send_rate = rate.clamp(0.1, 100.0);
-                                debug!(peer = %addr, rate, "Chunk batch rate update");
+                                debug!(peer = %addr, name = %player_name, rate, "Chunk batch rate update");
                             } else {
                                 debug!(
                                     peer = %addr,
+                                    name = %player_name,
                                     invalid_rate = rate,
                                     "Ignored invalid chunk send rate",
                                 );
                             }
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode chunk batch ack");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode chunk batch ack");
                         },
                     }
                 } else if pkt.id == ServerboundMovePlayerPacket::PACKET_ID_POS
@@ -1007,7 +1014,7 @@ async fn handle_play_entry(
                     match move_pkt {
                         Ok(move_pkt) => {
                             if move_pkt.contains_invalid_values() {
-                                debug!(peer = %addr, "Movement packet contains invalid values");
+                                debug!(peer = %addr, name = %player_name, "Movement packet contains invalid values");
                                 continue;
                             }
 
@@ -1049,7 +1056,7 @@ async fn handle_play_entry(
                                 )
                                 .await?;
                                 conn.flush().await?;
-                                debug!(peer = %addr, "Position correction sent");
+                                debug!(peer = %addr, name = %player_name, "Position correction sent");
                             } else {
                                 {
                                     let mut p = player_arc.write();
@@ -1058,6 +1065,16 @@ async fn handle_play_entry(
                                     p.pitch = result.new_pitch;
                                     p.on_ground = move_pkt.on_ground;
                                 }
+
+                                trace!(
+                                    peer = %addr,
+                                    name = %player_name,
+                                    x = result.new_pos.x,
+                                    y = result.new_pos.y,
+                                    z = result.new_pos.z,
+                                    on_ground = move_pkt.on_ground,
+                                    "Position updated",
+                                );
 
                                 // Check if player crossed a chunk boundary
                                 if move_pkt.has_pos() {
@@ -1123,6 +1140,7 @@ async fn handle_play_entry(
 
                                         debug!(
                                             peer = %addr,
+                                            name = %player_name,
                                             loaded = to_load.len(),
                                             unloaded = to_unload.len(),
                                             center_x = new_chunk.x,
@@ -1134,7 +1152,7 @@ async fn handle_play_entry(
                             }
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode movement packet");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode movement packet");
                         },
                     }
                 } else if pkt.id == ServerboundPlayerCommandPacket::PACKET_ID {
@@ -1142,22 +1160,23 @@ async fn handle_play_entry(
                         Ok(cmd) => match cmd.action {
                             PlayerCommandAction::StartSprinting => {
                                 player_arc.write().sprinting = true;
-                                debug!(peer = %addr, "Player started sprinting");
+                                debug!(peer = %addr, name = %player_name, "Player started sprinting");
                             },
                             PlayerCommandAction::StopSprinting => {
                                 player_arc.write().sprinting = false;
-                                debug!(peer = %addr, "Player stopped sprinting");
+                                debug!(peer = %addr, name = %player_name, "Player stopped sprinting");
                             },
                             _ => {
                                 debug!(
                                     peer = %addr,
+                                    name = %player_name,
                                     action = ?cmd.action,
                                     "Player command (unhandled action)",
                                 );
                             },
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode player command");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode player command");
                         },
                     }
                 } else if pkt.id == ServerboundPlayerInputPacket::PACKET_ID {
@@ -1168,7 +1187,7 @@ async fn handle_play_entry(
                             p.sprinting = input_pkt.input.sprint;
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode player input");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode player input");
                         },
                     }
                 } else if pkt.id == ServerboundChatPacket::PACKET_ID {
@@ -1216,7 +1235,7 @@ async fn handle_play_entry(
                             }
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode chat packet");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode chat packet");
                         },
                     }
                 } else if pkt.id == ServerboundChatCommandPacket::PACKET_ID {
@@ -1234,12 +1253,21 @@ async fn handle_play_entry(
                             }
                         },
                         Err(e) => {
-                            debug!(peer = %addr, error = %e, "Failed to decode chat command");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode chat command");
                         },
                     }
+                } else if pkt.id < 0 || pkt.id > MAX_SERVERBOUND_PLAY_ID {
+                    warn!(
+                        peer = %addr,
+                        name = %player_name,
+                        packet_id = format_args!("0x{:02X}", pkt.id),
+                        size = pkt.data.len(),
+                        "Unknown or unregistered packet from client",
+                    );
                 } else {
                     debug!(
                         peer = %addr,
+                        name = %player_name,
                         packet_id = format_args!("0x{:02X}", pkt.id),
                         size = pkt.data.len(),
                         "PLAY packet (unhandled)",
@@ -1251,7 +1279,7 @@ async fn handle_play_entry(
                 break;
             },
             Err(e) => {
-                debug!(peer = %addr, error = %e, "PLAY connection error");
+                warn!(peer = %addr, name = %player_name, error = %e, "PLAY connection error");
                 break;
             },
         }
@@ -1261,7 +1289,7 @@ async fn handle_play_entry(
 
     // Clean up — remove player from the list.
     server_ctx.player_list.write().remove(&uuid);
-    info!(peer = %addr, name = %player_name, "Player removed from player list");
+    info!(peer = %addr, uuid = %uuid, name = %player_name, "Player removed from player list");
 
     Ok(())
 }
