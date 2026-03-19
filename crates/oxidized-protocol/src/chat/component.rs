@@ -12,8 +12,8 @@
 use std::fmt;
 
 use oxidized_nbt::{NbtCompound, NbtList, NbtTag};
-use serde::ser::SerializeMap;
 use serde::Serialize;
+use serde::ser::SerializeMap;
 
 use super::formatting::ChatFormatting;
 use super::style::{ClickEvent, HoverEvent, Style, TextColor};
@@ -142,10 +142,7 @@ impl ComponentContent {
     }
 
     /// Write content-specific fields into a JSON serialize map.
-    pub(crate) fn write_json_fields<S: SerializeMap>(
-        &self,
-        map: &mut S,
-    ) -> Result<(), S::Error> {
+    pub(crate) fn write_json_fields<S: SerializeMap>(&self, map: &mut S) -> Result<(), S::Error> {
         match self {
             Self::Text(t) => {
                 map.serialize_entry("text", t)?;

@@ -126,9 +126,8 @@ impl<'de> Deserialize<'de> for ClickEvent {
             value: String,
         }
         let raw = Raw::deserialize(d)?;
-        Self::from_action_value(&raw.action, &raw.value).ok_or_else(|| {
-            de::Error::custom(format!("unknown click event action: {}", raw.action))
-        })
+        Self::from_action_value(&raw.action, &raw.value)
+            .ok_or_else(|| de::Error::custom(format!("unknown click event action: {}", raw.action)))
     }
 }
 
@@ -227,10 +226,7 @@ impl HoverEvent {
                         .transpose()?
                         .map(Box::new);
                     Ok(Some(Self::ShowEntity(HoverEntity {
-                        entity_type: ent
-                            .get_string("type")
-                            .unwrap_or_default()
-                            .to_string(),
+                        entity_type: ent.get_string("type").unwrap_or_default().to_string(),
                         id: ent.get_string("id").unwrap_or_default().to_string(),
                         name,
                     })))
@@ -416,10 +412,7 @@ impl Style {
     }
 
     /// Write style fields into an existing JSON serialize map.
-    pub(crate) fn write_json_fields<S: SerializeMap>(
-        &self,
-        map: &mut S,
-    ) -> Result<(), S::Error> {
+    pub(crate) fn write_json_fields<S: SerializeMap>(&self, map: &mut S) -> Result<(), S::Error> {
         if let Some(ref c) = self.color {
             map.serialize_entry("color", c)?;
         }
@@ -529,9 +522,7 @@ impl Style {
             style.insertion = Some(ins.to_string());
         }
         if let Some(NbtTag::Compound(ce)) = compound.get("clickEvent") {
-            if let (Some(action), Some(value)) =
-                (ce.get_string("action"), ce.get_string("value"))
-            {
+            if let (Some(action), Some(value)) = (ce.get_string("action"), ce.get_string("value")) {
                 style.click_event = ClickEvent::from_action_value(action, value);
             }
         }
