@@ -95,21 +95,9 @@ mod tests {
         let decoded = ClientboundSetEntityMotionPacket::decode(encoded).unwrap();
         assert_eq!(decoded.entity_id, 42);
         // LpVec3 has limited precision, so compare with tolerance.
-        assert!(
-            (decoded.vx - 1.5).abs() < 0.01,
-            "vx: {}",
-            decoded.vx
-        );
-        assert!(
-            (decoded.vy - (-0.08)).abs() < 0.01,
-            "vy: {}",
-            decoded.vy
-        );
-        assert!(
-            (decoded.vz - 0.0).abs() < 0.01,
-            "vz: {}",
-            decoded.vz
-        );
+        assert!((decoded.vx - 1.5).abs() < 0.01, "vx: {}", decoded.vx);
+        assert!((decoded.vy - (-0.08)).abs() < 0.01, "vy: {}", decoded.vy);
+        assert!((decoded.vz - 0.0).abs() < 0.01, "vz: {}", decoded.vz);
     }
 
     #[test]
