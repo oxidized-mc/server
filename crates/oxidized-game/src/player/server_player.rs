@@ -59,6 +59,10 @@ pub struct ServerPlayer {
     pub pitch: f32,
     /// Whether the player is on the ground.
     pub on_ground: bool,
+    /// Whether the player is currently sneaking (shift held).
+    pub sneaking: bool,
+    /// Whether the player is currently sprinting.
+    pub sprinting: bool,
 
     // -- Game state --
     /// Current game mode.
@@ -124,6 +128,8 @@ impl ServerPlayer {
             yaw: 0.0,
             pitch: 0.0,
             on_ground: false,
+            sneaking: false,
+            sprinting: false,
             game_mode,
             previous_game_mode: None,
             abilities,
@@ -220,6 +226,7 @@ impl ServerPlayer {
         }
 
         self.on_ground = nbt.get_byte("OnGround").unwrap_or(0) != 0;
+        self.sneaking = nbt.get_byte("Sneaking").unwrap_or(0) != 0;
     }
 
     /// Saves player state to an NBT compound for disk persistence.
@@ -247,6 +254,7 @@ impl ServerPlayer {
         nbt.put_int("foodLevel", self.food_level);
         nbt.put_float("foodSaturationLevel", self.food_saturation);
         nbt.put_byte("OnGround", u8::from(self.on_ground) as i8);
+        nbt.put_byte("Sneaking", u8::from(self.sneaking) as i8);
 
         // Spawn position
         nbt.put_int("SpawnX", self.spawn_pos.x);

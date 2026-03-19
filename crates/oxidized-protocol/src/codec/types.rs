@@ -105,6 +105,43 @@ pub fn write_string(buf: &mut BytesMut, s: &str) {
     buf.put_slice(s.as_bytes());
 }
 
+/// Reads a single `u8` from `buf`.
+///
+/// # Errors
+///
+/// Returns [`TypeError::UnexpectedEof`] if the buffer is empty.
+pub fn read_u8(buf: &mut Bytes) -> Result<u8, TypeError> {
+    if !buf.has_remaining() {
+        return Err(TypeError::UnexpectedEof { need: 1, have: 0 });
+    }
+    Ok(buf.get_u8())
+}
+
+/// Writes a single `u8` to `buf`.
+pub fn write_u8(buf: &mut BytesMut, value: u8) {
+    buf.put_u8(value);
+}
+
+/// Reads a big-endian `i16` from `buf`.
+///
+/// # Errors
+///
+/// Returns [`TypeError::UnexpectedEof`] if fewer than 2 bytes remain.
+pub fn read_i16(buf: &mut Bytes) -> Result<i16, TypeError> {
+    if buf.remaining() < 2 {
+        return Err(TypeError::UnexpectedEof {
+            need: 2,
+            have: buf.remaining(),
+        });
+    }
+    Ok(buf.get_i16())
+}
+
+/// Writes a big-endian `i16` to `buf`.
+pub fn write_i16(buf: &mut BytesMut, value: i16) {
+    buf.put_i16(value);
+}
+
 /// Reads a big-endian `u16` from `buf`.
 ///
 /// # Errors
@@ -312,10 +349,7 @@ mod tests {
     fn test_error_display_snapshots() {
         insta::assert_snapshot!(
             "string_too_long",
-            format!(
-                "{}",
-                TypeError::StringTooLong { len: 300, max: 255 }
-            )
+            format!("{}", TypeError::StringTooLong { len: 300, max: 255 })
         );
         insta::assert_snapshot!(
             "negative_length",
@@ -323,13 +357,7 @@ mod tests {
         );
         insta::assert_snapshot!(
             "unexpected_eof",
-            format!(
-                "{}",
-                TypeError::UnexpectedEof {
-                    need: 16,
-                    have: 4,
-                }
-            )
+            format!("{}", TypeError::UnexpectedEof { need: 16, have: 4 })
         );
     }
 

@@ -502,10 +502,7 @@ mod tests {
             "too_large",
             format!("{}", VarIntError::TooLarge { max_bytes: 5 })
         );
-        insta::assert_snapshot!(
-            "unexpected_eof",
-            format!("{}", VarIntError::UnexpectedEof)
-        );
+        insta::assert_snapshot!("unexpected_eof", format!("{}", VarIntError::UnexpectedEof));
     }
 
     // -----------------------------------------------------------------------
