@@ -38,15 +38,14 @@ use oxidized_protocol::packets::login::{
 };
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
-    ClientboundDisguisedChatPacket, ClientboundForgetLevelChunkPacket,
-    ClientboundGameEventPacket, ClientboundKeepAlivePacket,
-    ClientboundLevelChunkWithLightPacket, ClientboundPlayerPositionPacket,
-    ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
-    ClientboundSystemChatPacket, GameEventType, PlayerCommandAction, RelativeFlags,
-    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket, ServerboundChatPacket,
-    ServerboundChunkBatchReceivedPacket, ServerboundKeepAlivePacket,
-    ServerboundMovePlayerPacket,
-    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ClientboundDisguisedChatPacket, ClientboundForgetLevelChunkPacket, ClientboundGameEventPacket,
+    ClientboundKeepAlivePacket, ClientboundLevelChunkWithLightPacket,
+    ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket,
+    ClientboundSetChunkCacheRadiusPacket, ClientboundSystemChatPacket, GameEventType,
+    PlayerCommandAction, RelativeFlags, ServerboundAcceptTeleportationPacket,
+    ServerboundChatCommandPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
+    ServerboundKeepAlivePacket, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
+    ServerboundPlayerInputPacket,
 };
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,

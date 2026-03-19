@@ -1135,3 +1135,22 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - **Vanilla commands send message content only** — the chat type decoration (defined in
   the registry) handles formatting. Don't construct formatted strings server-side for
   commands that have a registered chat type.
+
+### Keepalive & Color System (Ad-hoc)
+
+#### What was implemented
+- **Keepalive packets**: CB 0x16, SB 0x1C — both are single `i64` field (read/writeLong).
+  Located in `common` package in vanilla (shared between game/config states).
+- **Keepalive timer**: 15s interval via `tokio::time::interval`, challenge = `SystemTime`
+  millis since epoch. Disconnect after 30s with no valid response.
+- **Unified color parsing**: `Component::from_legacy_with_char(s, char)` accepts both `§`
+  and a custom prefix character. Applied to MOTD, chat messages, /say, /me commands.
+- **Config**: `[chat]` section with `color_char` field (default `"&"`). Validated: single
+  non-alphanumeric ASCII char or empty string (disabled).
+
+#### Gotchas
+- **`Instant::now().elapsed()` is always ~0** — Don't use it for challenge generation.
+  Use `SystemTime::now().duration_since(UNIX_EPOCH).as_millis() as i64` instead.
+- **Keepalive packet IDs determined by counting**: CB 0x16 and SB 0x1C were found by
+  counting `addPacket()` calls in GameProtocols.java. If client doesn't respond,
+  verify these IDs against wiki.vg or actual packet captures.

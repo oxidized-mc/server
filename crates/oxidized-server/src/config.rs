@@ -521,9 +521,7 @@ impl ServerConfig {
         if !self.chat.color_char.is_empty() {
             let chars: Vec<char> = self.chat.color_char.chars().collect();
             if chars.len() != 1 || !chars[0].is_ascii() || chars[0].is_ascii_alphanumeric() {
-                return Err(ConfigError::InvalidColorChar(
-                    self.chat.color_char.clone(),
-                ));
+                return Err(ConfigError::InvalidColorChar(self.chat.color_char.clone()));
             }
         }
         Ok(())
@@ -538,7 +536,8 @@ impl ServerConfig {
 #[allow(
     clippy::unwrap_used,
     clippy::expect_used,
-    clippy::needless_pass_by_value
+    clippy::needless_pass_by_value,
+    clippy::panic
 )]
 mod tests {
     use super::*;
@@ -1079,7 +1078,8 @@ online_mode   =   false
         for ch in ['&', '#', '!', '@', '$', '%', '^', '~'] {
             let mut cfg = ServerConfig::default();
             cfg.chat.color_char = ch.to_string();
-            cfg.validate().unwrap_or_else(|e| panic!("'{ch}' should be valid: {e}"));
+            cfg.validate()
+                .unwrap_or_else(|e| panic!("'{ch}' should be valid: {e}"));
         }
     }
 
