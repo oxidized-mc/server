@@ -169,9 +169,9 @@ proptest! {
 // ---------------------------------------------------------------------------
 
 use oxidized_game::net::entity_movement::{
-    classify_move, encode_delta, pack_degrees, unpack_degrees, EntityMoveKind, DELTA_SCALE,
+    DELTA_SCALE, EntityMoveKind, classify_move, encode_delta, pack_degrees, unpack_degrees,
 };
-use oxidized_game::player::movement::{validate_movement, MAX_COORDINATE, MAX_MOVEMENT_PER_TICK};
+use oxidized_game::player::movement::{MAX_COORDINATE, MAX_MOVEMENT_PER_TICK, validate_movement};
 use oxidized_protocol::types::Vec3;
 
 proptest! {
