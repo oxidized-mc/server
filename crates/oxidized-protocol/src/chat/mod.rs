@@ -5,6 +5,8 @@
 //! See ADR-028 for design rationale.
 
 pub mod component;
+pub mod component_json;
+pub mod component_nbt;
 pub mod formatting;
 pub mod style;
 
