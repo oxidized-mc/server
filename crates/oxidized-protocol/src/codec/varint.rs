@@ -52,9 +52,15 @@ trait VarEncoding: Copy + PartialEq {
 impl VarEncoding for i32 {
     const MAX_BYTES: usize = VARINT_MAX_BYTES;
     const BIT_SIZE: u32 = 32;
-    fn zero() -> Self { 0 }
-    fn low_7_bits(self) -> u8 { (self & 0x7F) as u8 }
-    fn unsigned_shr_7(self) -> Self { ((self as u32) >> 7) as i32 }
+    fn zero() -> Self {
+        0
+    }
+    fn low_7_bits(self) -> u8 {
+        (self & 0x7F) as u8
+    }
+    fn unsigned_shr_7(self) -> Self {
+        ((self as u32) >> 7) as i32
+    }
     fn or_shifted_byte(self, byte: u8, shift: u32) -> Self {
         self | (((byte & 0x7F) as i32) << shift)
     }
@@ -63,9 +69,15 @@ impl VarEncoding for i32 {
 impl VarEncoding for i64 {
     const MAX_BYTES: usize = VARLONG_MAX_BYTES;
     const BIT_SIZE: u32 = 64;
-    fn zero() -> Self { 0 }
-    fn low_7_bits(self) -> u8 { (self & 0x7F) as u8 }
-    fn unsigned_shr_7(self) -> Self { ((self as u64) >> 7) as i64 }
+    fn zero() -> Self {
+        0
+    }
+    fn low_7_bits(self) -> u8 {
+        (self & 0x7F) as u8
+    }
+    fn unsigned_shr_7(self) -> Self {
+        ((self as u64) >> 7) as i64
+    }
     fn or_shifted_byte(self, byte: u8, shift: u32) -> Self {
         self | (((byte & 0x7F) as i64) << shift)
     }

@@ -221,7 +221,14 @@ impl Aabb {
         let (min_x, max_x) = expand_axis(self.min_x, self.max_x, dx);
         let (min_y, max_y) = expand_axis(self.min_y, self.max_y, dy);
         let (min_z, max_z) = expand_axis(self.min_z, self.max_z, dz);
-        Self { min_x, min_y, min_z, max_x, max_y, max_z }
+        Self {
+            min_x,
+            min_y,
+            min_z,
+            max_x,
+            max_y,
+            max_z,
+        }
     }
 
     /// Returns a new [`Aabb`] contracted by the given amounts.
@@ -232,7 +239,14 @@ impl Aabb {
         let (min_x, max_x) = contract_axis(self.min_x, self.max_x, dx);
         let (min_y, max_y) = contract_axis(self.min_y, self.max_y, dy);
         let (min_z, max_z) = contract_axis(self.min_z, self.max_z, dz);
-        Self { min_x, min_y, min_z, max_x, max_y, max_z }
+        Self {
+            min_x,
+            min_y,
+            min_z,
+            max_x,
+            max_y,
+            max_z,
+        }
     }
 
     /// Returns a new [`Aabb`] translated by `(dx, dy, dz)`.
