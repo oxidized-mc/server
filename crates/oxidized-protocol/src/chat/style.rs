@@ -67,6 +67,10 @@ pub enum ClickEvent {
     CopyToClipboard(String),
     /// Change the page in a book (string representation of page number).
     ChangePage(String),
+    /// Show a dialog (new in 26.1).
+    ShowDialog(String),
+    /// Custom click action (new in 26.1).
+    Custom(String),
 }
 
 impl Serialize for ClickEvent {
@@ -78,6 +82,8 @@ impl Serialize for ClickEvent {
             Self::SuggestCommand(v) => ("suggest_command", v),
             Self::CopyToClipboard(v) => ("copy_to_clipboard", v),
             Self::ChangePage(v) => ("change_page", v),
+            Self::ShowDialog(v) => ("show_dialog", v),
+            Self::Custom(v) => ("custom", v),
         };
         map.serialize_entry("action", action)?;
         map.serialize_entry("value", value)?;
@@ -99,6 +105,8 @@ impl<'de> Deserialize<'de> for ClickEvent {
             "suggest_command" => Ok(Self::SuggestCommand(raw.value)),
             "copy_to_clipboard" => Ok(Self::CopyToClipboard(raw.value)),
             "change_page" => Ok(Self::ChangePage(raw.value)),
+            "show_dialog" => Ok(Self::ShowDialog(raw.value)),
+            "custom" => Ok(Self::Custom(raw.value)),
             other => Err(de::Error::custom(format!(
                 "unknown click event action: {other}"
             ))),

@@ -42,10 +42,13 @@ use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
     ClientboundCommandSuggestionsPacket, ClientboundCommandsPacket,
     ClientboundForgetLevelChunkPacket, ClientboundGameEventPacket, ClientboundKeepAlivePacket,
-    ClientboundLevelChunkWithLightPacket, ClientboundPlayerPositionPacket,
+    ClientboundLevelChunkWithLightPacket, ClientboundPlayerInfoRemovePacket,
+    ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
     ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
-    ClientboundSystemChatPacket, GameEventType, PlayerCommandAction, RelativeFlags,
-    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket, ServerboundChatPacket,
+    ClientboundSystemChatPacket, GameEventType, PlayerCommandAction, PlayerInfoActions,
+    PlayerInfoEntry, RelativeFlags,
+    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
+    ServerboundChatCommandSignedPacket, ServerboundChatPacket,
     ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
     ServerboundPlayerInputPacket,
@@ -281,7 +284,7 @@ async fn handle_connection(
                         handle_handshake(&mut conn, pkt).await?;
                     },
                     ConnectionState::Status => {
-                        let done = handle_status(&mut conn, pkt, &ctx.server_status).await?;
+                        let done = handle_status(&mut conn, pkt, ctx).await?;
                         if done {
                             debug!(peer = %addr, "Status exchange complete");
                             return Ok(());
@@ -941,6 +944,38 @@ async fn handle_play_entry(
     // Add player to the server player list (only after successful send).
     let player_arc = server_ctx.player_list.write().add(player);
 
+    // Broadcast the new player to all existing players' tab lists.
+    {
+        let p = player_arc.read();
+        let join_info = ClientboundPlayerInfoUpdatePacket {
+            actions: PlayerInfoActions(
+                PlayerInfoActions::ADD_PLAYER
+                    | PlayerInfoActions::INITIALIZE_CHAT
+                    | PlayerInfoActions::UPDATE_GAME_MODE
+                    | PlayerInfoActions::UPDATE_LISTED
+                    | PlayerInfoActions::UPDATE_LATENCY,
+            ),
+            entries: vec![PlayerInfoEntry {
+                uuid,
+                name: player_name.clone(),
+                properties: p.profile.properties().to_vec(),
+                game_mode: p.game_mode as i32,
+                latency: 0,
+                listed: true,
+                has_display_name: false,
+                show_hat: false,
+                list_order: 0,
+            }],
+        };
+        drop(p);
+        let encoded = join_info.encode();
+        let broadcast = ChatBroadcastMessage {
+            packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
+            data: encoded.freeze(),
+        };
+        let _ = server_ctx.chat_tx.send(broadcast);
+    }
+
     // Track which chunks the player has loaded so we can send/forget on boundary crossings.
     let initial_chunk = ChunkPos::from_block(player_chunk_x, player_chunk_z);
     let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, player_view_distance);
@@ -1362,6 +1397,35 @@ async fn handle_play_entry(
                             debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode chat command");
                         },
                     }
+                } else if pkt.id == ServerboundChatCommandSignedPacket::PACKET_ID {
+                    // Signed command — sent when clicking RunCommand in chat.
+                    // We only extract the command string and dispatch identically
+                    // to the unsigned variant.
+                    match ServerboundChatCommandSignedPacket::decode(pkt.data) {
+                        Ok(cmd_pkt) => {
+                            if !rate_limiter.try_acquire(std::time::Instant::now()) {
+                                warn!(peer = %addr, name = %player_name, "Command rate-limited (signed)");
+                            } else {
+                                let (pos, rot) = {
+                                    let p = player_arc.read();
+                                    ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
+                                };
+                                handle_chat_command(
+                                    conn,
+                                    &cmd_pkt.command,
+                                    &player_name,
+                                    uuid,
+                                    pos,
+                                    rot,
+                                    4, // TODO: read actual permission level
+                                    server_ctx,
+                                ).await;
+                            }
+                        },
+                        Err(e) => {
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode signed chat command");
+                        },
+                    }
                 } else if pkt.id == ServerboundCommandSuggestionPacket::PACKET_ID {
                     match ServerboundCommandSuggestionPacket::decode(pkt.data) {
                         Ok(suggestion_pkt) => {
@@ -1369,13 +1433,14 @@ async fn handle_play_entry(
                                 let p = player_arc.read();
                                 ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
                             };
+                            let (feedback_tx, _) = std::sync::mpsc::channel::<Component>();
                             let source = make_command_source_for_player(
                                 &player_name,
                                 uuid,
                                 pos,
                                 rot,
                                 4, // TODO: read actual permission level
-                                conn,
+                                feedback_tx,
                                 server_ctx,
                             );
                             // Client sends command with leading `/` — strip it
@@ -1448,8 +1513,19 @@ async fn handle_play_entry(
         } // end tokio::select!
     }
 
-    // Clean up — remove player from the list.
+    // Clean up — remove player from the list and broadcast removal to tab lists.
     server_ctx.player_list.write().remove(&uuid);
+    {
+        let remove_pkt = ClientboundPlayerInfoRemovePacket {
+            uuids: vec![uuid],
+        };
+        let encoded = remove_pkt.encode();
+        let broadcast = ChatBroadcastMessage {
+            packet_id: ClientboundPlayerInfoRemovePacket::PACKET_ID,
+            data: encoded.freeze(),
+        };
+        let _ = server_ctx.chat_tx.send(broadcast);
+    }
     info!(peer = %addr, uuid = %uuid, name = %player_name, "Player removed from player list");
 
     Ok(())
@@ -1470,22 +1546,39 @@ async fn handle_chat_command(
     permission_level: u32,
     server_ctx: &Arc<ServerContext>,
 ) {
+    // Collect feedback messages via a channel so they go ONLY to the
+    // executing player, not broadcast to everyone.
+    let (feedback_tx, feedback_rx) = std::sync::mpsc::channel::<Component>();
     let source = make_command_source_for_player(
         player_name,
         player_uuid,
         player_pos,
         player_rot,
         permission_level,
-        conn,
+        feedback_tx,
         server_ctx,
     );
 
-    match server_ctx.commands.dispatch(command, source) {
-        Ok(result) => {
+    let result = server_ctx.commands.dispatch(command, source);
+
+    // Drain all feedback messages and send to this player only.
+    while let Ok(component) = feedback_rx.try_recv() {
+        let pkt = ClientboundSystemChatPacket {
+            content: component,
+            overlay: false,
+        };
+        let _ = conn
+            .send_raw(ClientboundSystemChatPacket::PACKET_ID, &pkt.encode())
+            .await;
+    }
+    let _ = conn.flush().await;
+
+    match result {
+        Ok(r) => {
             debug!(
                 player = %player_name,
                 command = %command,
-                result = result,
+                result = r,
                 "Command executed",
             );
         },
@@ -1536,13 +1629,9 @@ fn make_command_source_for_player(
     pos: (f64, f64, f64),
     rot: (f32, f32),
     permission_level: u32,
-    _conn: &Connection,
+    feedback_tx: std::sync::mpsc::Sender<Component>,
     server_ctx: &Arc<ServerContext>,
 ) -> CommandSourceStack {
-    // Feedback messages are sent as system chat packets via broadcast.
-    // For now, we log them — real per-player packet sending requires
-    // owning the connection, which is done via broadcast channel.
-    let chat_tx = server_ctx.chat_tx.clone();
     let name = player_name.to_string();
     CommandSourceStack {
         source: CommandSourceKind::Player {
@@ -1555,17 +1644,8 @@ fn make_command_source_for_player(
         display_name: player_name.to_string(),
         server: server_ctx.clone(),
         feedback_sender: Arc::new(move |component: &Component| {
-            let pkt = ClientboundSystemChatPacket {
-                content: component.clone(),
-                overlay: false,
-            };
-            let encoded = pkt.encode();
-            let broadcast = ChatBroadcastMessage {
-                packet_id: ClientboundSystemChatPacket::PACKET_ID,
-                data: encoded.freeze(),
-            };
-            let _ = chat_tx.send(broadcast);
-            debug!(player = %name, "Command feedback sent");
+            let _ = feedback_tx.send(component.clone());
+            debug!(player = %name, "Command feedback queued");
         }),
         silent: false,
     }
@@ -1682,14 +1762,47 @@ async fn disconnect_err(conn: &mut Connection, reason: &str) -> ConnectionError 
 async fn handle_status(
     conn: &mut Connection,
     pkt: RawPacket,
-    server_status: &ServerStatus,
+    ctx: &LoginContext,
 ) -> Result<bool, ConnectionError> {
     match pkt.id {
         ServerboundStatusRequestPacket::PACKET_ID => {
             let _request = ServerboundStatusRequestPacket::decode(pkt.data);
 
+            // Build the status dynamically from live server state so
+            // player count and sample are always up to date.
+            let server_ctx = &ctx.server_ctx;
+            let (online, sample) = {
+                let player_list = server_ctx.player_list.read();
+                let count = player_list.player_count() as u32;
+                let entries: Vec<_> = player_list
+                    .iter()
+                    .take(12) // Vanilla caps the sample at 12
+                    .map(|p| {
+                        let p = p.read();
+                        oxidized_protocol::status::PlayerSample {
+                            name: p.name.clone(),
+                            id: p.uuid,
+                        }
+                    })
+                    .collect();
+                (count, entries)
+            };
+
+            let base = &*ctx.server_status;
+            let live_status = ServerStatus {
+                version: base.version.clone(),
+                players: oxidized_protocol::status::StatusPlayers {
+                    max: server_ctx.max_players as u32,
+                    online,
+                    sample,
+                },
+                description: base.description.clone(),
+                favicon: base.favicon.clone(),
+                enforces_secure_chat: base.enforces_secure_chat,
+            };
+
             let response = ClientboundStatusResponsePacket {
-                status_json: server_status
+                status_json: live_status
                     .to_json()
                     .map_err(|e| ConnectionError::Io(std::io::Error::other(e.to_string())))?,
             };
@@ -1700,6 +1813,7 @@ async fn handle_status(
 
             debug!(
                 peer = %conn.remote_addr(),
+                online = online,
                 json_len = response.status_json.len(),
                 "Sent status response",
             );
