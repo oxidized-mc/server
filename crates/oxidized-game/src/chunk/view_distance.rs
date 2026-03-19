@@ -34,11 +34,7 @@ pub fn chunks_to_load(old_center: ChunkPos, new_center: ChunkPos, radius: i32) -
 }
 
 /// Returns chunks in the old view that are no longer in the new view.
-pub fn chunks_to_unload(
-    old_center: ChunkPos,
-    new_center: ChunkPos,
-    radius: i32,
-) -> Vec<ChunkPos> {
+pub fn chunks_to_unload(old_center: ChunkPos, new_center: ChunkPos, radius: i32) -> Vec<ChunkPos> {
     spiral_chunks(old_center, radius)
         .filter(|&pos| chebyshev(pos, new_center) > radius)
         .collect()
@@ -104,10 +100,7 @@ mod tests {
         let to_load = chunks_to_load(old, new, r);
         let to_unload = chunks_to_unload(old, new, r);
         for pos in &to_load {
-            assert!(
-                !to_unload.contains(pos),
-                "{pos:?} in both load and unload"
-            );
+            assert!(!to_unload.contains(pos), "{pos:?} in both load and unload");
         }
     }
 
@@ -149,9 +142,6 @@ mod tests {
         assert_eq!(chebyshev(ChunkPos::new(0, 0), ChunkPos::new(3, 2)), 3);
         assert_eq!(chebyshev(ChunkPos::new(0, 0), ChunkPos::new(2, 5)), 5);
         assert_eq!(chebyshev(ChunkPos::new(0, 0), ChunkPos::new(0, 0)), 0);
-        assert_eq!(
-            chebyshev(ChunkPos::new(-1, -1), ChunkPos::new(1, 1)),
-            2
-        );
+        assert_eq!(chebyshev(ChunkPos::new(-1, -1), ChunkPos::new(1, 1)), 2);
     }
 }

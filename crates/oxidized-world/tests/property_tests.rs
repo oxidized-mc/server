@@ -4,9 +4,9 @@
 
 use proptest::prelude::*;
 
-use oxidized_world::chunk::{BitStorage, Heightmap, HeightmapType, PalettedContainer};
-use oxidized_world::chunk::paletted_container::Strategy;
 use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
+use oxidized_world::chunk::paletted_container::Strategy;
+use oxidized_world::chunk::{BitStorage, Heightmap, HeightmapType, PalettedContainer};
 
 proptest! {
     #[test]

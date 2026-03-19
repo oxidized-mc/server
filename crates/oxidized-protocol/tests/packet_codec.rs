@@ -7,11 +7,11 @@ use uuid::Uuid;
 
 use oxidized_protocol::codec::types;
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
+use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
 use oxidized_protocol::packets::login::{
     ClientboundHelloPacket, ClientboundLoginCompressionPacket, ClientboundLoginFinishedPacket,
     ServerboundHelloPacket, ServerboundKeyPacket,
 };
-use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
 use oxidized_protocol::packets::status::{
     ClientboundStatusResponsePacket, ServerboundPingRequestPacket,
 };
@@ -83,7 +83,10 @@ fn test_login_hello_encode_decode() {
     let encoded = pkt.encode();
     let decoded = ClientboundHelloPacket::decode(encoded.freeze()).unwrap();
     assert_eq!(decoded.server_id, "oxidized");
-    assert_eq!(decoded.public_key, [0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04]);
+    assert_eq!(
+        decoded.public_key,
+        [0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04]
+    );
     assert_eq!(decoded.challenge, [0xCA, 0xFE, 0xBA, 0xBE]);
     assert!(decoded.should_authenticate);
 }
@@ -138,7 +141,10 @@ fn test_login_finished_with_properties() {
     assert_eq!(decoded.properties.len(), 1);
     assert_eq!(decoded.properties[0].name, "textures");
     assert_eq!(decoded.properties[0].value, "base64data==");
-    assert_eq!(decoded.properties[0].signature.as_deref(), Some("sigdata=="));
+    assert_eq!(
+        decoded.properties[0].signature.as_deref(),
+        Some("sigdata==")
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,6 +176,9 @@ fn test_serverbound_key_encode_decode() {
     };
     let encoded = pkt.encode();
     let decoded = ServerboundKeyPacket::decode(encoded.freeze()).unwrap();
-    assert_eq!(decoded.key_bytes, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    assert_eq!(
+        decoded.key_bytes,
+        [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    );
     assert_eq!(decoded.encrypted_challenge, [0xAA, 0xBB, 0xCC, 0xDD]);
 }

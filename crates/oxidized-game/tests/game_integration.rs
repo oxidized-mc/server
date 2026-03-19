@@ -232,10 +232,7 @@ fn test_spiral_chunks_count() {
 fn test_spiral_chunks_center_first() {
     let center = ChunkPos::new(10, -5);
     let chunks: Vec<_> = spiral_chunks(center, 3).collect();
-    assert_eq!(
-        chunks[0], center,
-        "first chunk yielded must be the center"
-    );
+    assert_eq!(chunks[0], center, "first chunk yielded must be the center");
 }
 
 // ---------------------------------------------------------------------------
@@ -264,10 +261,7 @@ fn test_chunks_to_load_unload_disjoint() {
     let old_view: HashSet<_> = spiral_chunks(old_center, radius).collect();
     let new_view: HashSet<_> = spiral_chunks(new_center, radius).collect();
     for pos in &to_load {
-        assert!(
-            new_view.contains(pos),
-            "{pos:?} loaded but not in new view"
-        );
+        assert!(new_view.contains(pos), "{pos:?} loaded but not in new view");
         assert!(
             !old_view.contains(pos),
             "{pos:?} loaded but was already in old view"
