@@ -136,6 +136,44 @@ impl ServerHandle for ServerContext {
     fn max_players(&self) -> usize {
         self.max_players
     }
+
+    fn difficulty(&self) -> i32 {
+        self.level_data.difficulty
+    }
+
+    fn game_time(&self) -> i64 {
+        self.level_data.time
+    }
+
+    fn day_time(&self) -> i64 {
+        self.level_data.day_time
+    }
+
+    fn is_raining(&self) -> bool {
+        self.level_data.is_raining
+    }
+
+    fn is_thundering(&self) -> bool {
+        self.level_data.is_thundering
+    }
+
+    fn kick_player(&self, name: &str, reason: &str) -> bool {
+        // TODO: Implement actual kick via a dedicated kick channel
+        let _ = (name, reason);
+        info!("Kick requested for player '{}': {}", name, reason);
+        false
+    }
+
+    fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid> {
+        let player_list = self.player_list.read();
+        for player_arc in player_list.iter() {
+            let player = player_arc.read();
+            if player.name == name {
+                return Some(player.uuid);
+            }
+        }
+        None
+    }
 }
 
 /// A chat message broadcast to all connected players.

@@ -1,6 +1,7 @@
 //! Command dispatcher: parse input against the graph, execute, and suggest.
 
 use crate::commands::CommandError;
+use crate::commands::arguments::ArgumentType;
 use crate::commands::context::{
     CommandContext, ParseResults, ParsedArgument, StringRange, StringReader, Suggestion,
     parse_argument,
@@ -155,7 +156,12 @@ impl<S: Clone + Send + Sync + 'static> CommandDispatcher<S> {
     }
 
     /// Collects tab-completion suggestions for the given input.
-    pub fn get_completions(&self, input: &str, source: &S) -> Vec<Suggestion> {
+    pub fn get_completions(
+        &self,
+        input: &str,
+        source: &S,
+        player_names: &[String],
+    ) -> Vec<Suggestion> {
         let parts: Vec<&str> = input.splitn(2, ' ').collect();
         let partial_cmd = parts[0];
 
@@ -187,7 +193,7 @@ impl<S: Clone + Send + Sync + 'static> CommandDispatcher<S> {
                 return Vec::new();
             }
             let remaining = if parts.len() > 1 { parts[1] } else { "" };
-            return collect_child_suggestions(node, remaining, source);
+            return collect_child_suggestions(node, remaining, source, player_names);
         }
 
         Vec::new()
@@ -211,6 +217,7 @@ fn collect_child_suggestions<S>(
     node: &CommandNode<S>,
     remaining: &str,
     source: &S,
+    player_names: &[String],
 ) -> Vec<Suggestion> {
     let parts: Vec<&str> = remaining.splitn(2, ' ').collect();
     let current_word = parts[0];
@@ -224,13 +231,13 @@ fn collect_child_suggestions<S>(
                     if !child.can_use(source) {
                         continue;
                     }
-                    return collect_child_suggestions(child, parts[1], source);
+                    return collect_child_suggestions(child, parts[1], source, player_names);
                 },
                 CommandNode::Argument(_) => {
                     if !child.can_use(source) {
                         continue;
                     }
-                    return collect_child_suggestions(child, parts[1], source);
+                    return collect_child_suggestions(child, parts[1], source, player_names);
                 },
                 _ => {},
             }
@@ -255,12 +262,26 @@ fn collect_child_suggestions<S>(
                 }
             },
             CommandNode::Argument(arg) => {
-                // For argument nodes, suggest the argument name as a hint.
-                suggestions.push(Suggestion {
-                    range: StringRange::new(0, current_word.len()),
-                    text: format!("<{}>", arg.name),
-                    tooltip: None,
-                });
+                match &arg.argument_type {
+                    ArgumentType::Entity { .. } | ArgumentType::GameProfile => {
+                        for name in player_names {
+                            if name.to_lowercase().starts_with(&current_word.to_lowercase()) {
+                                suggestions.push(Suggestion {
+                                    range: StringRange::new(0, current_word.len()),
+                                    text: name.clone(),
+                                    tooltip: None,
+                                });
+                            }
+                        }
+                    },
+                    _ => {
+                        suggestions.push(Suggestion {
+                            range: StringRange::new(0, current_word.len()),
+                            text: format!("<{}>", arg.name),
+                            tooltip: None,
+                        });
+                    },
+                }
             },
             _ => {},
         }
@@ -297,6 +318,27 @@ mod tests {
         }
         fn max_players(&self) -> usize {
             20
+        }
+        fn difficulty(&self) -> i32 {
+            2
+        }
+        fn game_time(&self) -> i64 {
+            0
+        }
+        fn day_time(&self) -> i64 {
+            0
+        }
+        fn is_raining(&self) -> bool {
+            false
+        }
+        fn is_thundering(&self) -> bool {
+            false
+        }
+        fn kick_player(&self, _name: &str, _reason: &str) -> bool {
+            false
+        }
+        fn find_player_uuid(&self, _name: &str) -> Option<uuid::Uuid> {
+            None
         }
     }
 
@@ -495,7 +537,7 @@ mod tests {
         d.register(literal("help").executes(|_| Ok(1)));
         d.register(literal("stop").executes(|_| Ok(1)));
         let src = make_source(4);
-        let completions = d.get_completions("", &src);
+        let completions = d.get_completions("", &src, &[]);
         let texts: Vec<_> = completions.iter().map(|s| s.text.as_str()).collect();
         assert!(texts.contains(&"help"));
         assert!(texts.contains(&"stop"));
@@ -508,7 +550,7 @@ mod tests {
         d.register(literal("gamemode").executes(|_| Ok(1)));
         d.register(literal("kill").executes(|_| Ok(1)));
         let src = make_source(4);
-        let completions = d.get_completions("g", &src);
+        let completions = d.get_completions("g", &src, &[]);
         let texts: Vec<_> = completions.iter().map(|s| s.text.as_str()).collect();
         assert!(texts.contains(&"give"), "should include give");
         assert!(texts.contains(&"gamemode"), "should include gamemode");
@@ -525,7 +567,7 @@ mod tests {
                 .executes(|_| Ok(1)),
         );
         let src = make_source(0);
-        let completions = d.get_completions("", &src);
+        let completions = d.get_completions("", &src, &[]);
         let texts: Vec<_> = completions.iter().map(|s| s.text.as_str()).collect();
         assert!(texts.contains(&"help"), "should include help");
         assert!(!texts.contains(&"stop"), "should not include stop");
