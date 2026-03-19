@@ -7,10 +7,10 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
 use crate::codec::varint;
-use crate::codec::Packet;
 
 use super::clientbound_login::PlayPacketError;
 
@@ -113,16 +113,12 @@ mod tests {
             head_yaw: 128,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundRotateHeadPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundRotateHeadPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundRotateHeadPacket as Packet>::PACKET_ID,
-            0x53
-        );
+        assert_eq!(<ClientboundRotateHeadPacket as Packet>::PACKET_ID, 0x53);
     }
 }

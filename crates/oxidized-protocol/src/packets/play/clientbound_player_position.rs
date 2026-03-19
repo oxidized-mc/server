@@ -12,8 +12,8 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Bitflags indicating which position/rotation fields are relative.
 ///
@@ -268,9 +268,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundPlayerPositionPacket as Packet>::PACKET_ID,
-            0x48
-        );
+        assert_eq!(<ClientboundPlayerPositionPacket as Packet>::PACKET_ID, 0x48);
     }
 }

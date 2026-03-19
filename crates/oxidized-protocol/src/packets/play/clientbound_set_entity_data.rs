@@ -8,9 +8,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::codec::Packet;
 
 use super::clientbound_login::PlayPacketError;
 
@@ -277,16 +277,12 @@ mod tests {
     fn test_packet_trait_roundtrip() {
         let pkt = ClientboundSetEntityDataPacket::single_byte(42, 0, 0x05);
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSetEntityDataPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundSetEntityDataPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundSetEntityDataPacket as Packet>::PACKET_ID,
-            0x63
-        );
+        assert_eq!(<ClientboundSetEntityDataPacket as Packet>::PACKET_ID, 0x63);
     }
 }

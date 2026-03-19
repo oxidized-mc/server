@@ -5,9 +5,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
-use crate::codec::Packet;
 
 /// Errors from decoding a [`ServerboundPingRequestPacket`].
 #[derive(Debug, Error)]
@@ -92,8 +92,7 @@ mod tests {
             time: 1_719_000_000_000,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundPingRequestPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ServerboundPingRequestPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

@@ -2,9 +2,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x07 — Client dispatches an unsigned command (leading `/` already stripped).
@@ -86,19 +86,12 @@ mod tests {
             command: "say hello".to_string(),
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundChatCommandPacket as Packet>::decode(
-                encoded.freeze(),
-            )
-            .unwrap();
+        let decoded = <ServerboundChatCommandPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.command, "say hello");
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundChatCommandPacket as Packet>::PACKET_ID,
-            0x07
-        );
+        assert_eq!(<ServerboundChatCommandPacket as Packet>::PACKET_ID, 0x07);
     }
 }

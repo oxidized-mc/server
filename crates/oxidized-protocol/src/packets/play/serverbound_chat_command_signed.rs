@@ -7,9 +7,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 
 /// 0x08 — Signed chat command.
@@ -128,10 +128,8 @@ mod tests {
             command: "help 2".into(),
         };
         let encoded = Packet::encode(&pkt);
-        let decoded = <ServerboundChatCommandSignedPacket as Packet>::decode(
-            encoded.freeze(),
-        )
-        .unwrap();
+        let decoded =
+            <ServerboundChatCommandSignedPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.command, "help 2");
     }
 

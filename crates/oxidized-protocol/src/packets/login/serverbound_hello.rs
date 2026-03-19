@@ -5,9 +5,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
-use crate::codec::Packet;
 
 /// Errors from decoding a [`ServerboundHelloPacket`].
 #[derive(Debug, Error)]

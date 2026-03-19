@@ -14,8 +14,8 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Position-only delta movement (0x35).
 ///
@@ -336,8 +336,7 @@ mod tests {
             on_ground: true,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundMoveEntityPosPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundMoveEntityPosPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 
@@ -380,8 +379,7 @@ mod tests {
             on_ground: true,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundMoveEntityRotPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundMoveEntityRotPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

@@ -4,9 +4,9 @@
 
 use bytes::{Bytes, BytesMut};
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
-use crate::codec::Packet;
 
 /// Clientbound packet `0x00` in the STATUS state — the server status as JSON.
 ///
@@ -78,9 +78,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundStatusResponsePacket as Packet>::PACKET_ID,
-            0x00
-        );
+        assert_eq!(<ClientboundStatusResponsePacket as Packet>::PACKET_ID, 0x00);
     }
 }

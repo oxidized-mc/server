@@ -14,8 +14,8 @@ use crate::types::resource_location::ResourceLocation;
 
 use super::clientbound_login::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Sets the world spawn position (compass target).
 ///
@@ -126,8 +126,7 @@ mod tests {
         };
         let encoded = Packet::encode(&pkt);
         let decoded =
-            <ClientboundSetDefaultSpawnPositionPacket as Packet>::decode(encoded.freeze())
-                .unwrap();
+            <ClientboundSetDefaultSpawnPositionPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

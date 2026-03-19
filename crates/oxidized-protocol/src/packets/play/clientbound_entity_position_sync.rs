@@ -12,8 +12,8 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Full position sync for an entity (0x23).
 ///

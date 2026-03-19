@@ -6,10 +6,10 @@
 use bytes::{Buf, Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint::{self, VarIntError};
-use crate::codec::Packet;
 use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
 
 /// Errors from decoding a [`ClientboundRegistryDataPacket`].
@@ -244,16 +244,12 @@ mod tests {
             }],
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundRegistryDataPacket as Packet>::PACKET_ID,
-            0x07
-        );
+        assert_eq!(<ClientboundRegistryDataPacket as Packet>::PACKET_ID, 0x07);
     }
 }

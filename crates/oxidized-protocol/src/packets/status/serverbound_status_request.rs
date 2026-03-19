@@ -5,8 +5,8 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Serverbound packet `0x00` in the STATUS state — requests the server status JSON.
 ///
@@ -64,8 +64,7 @@ mod tests {
     fn test_packet_trait_roundtrip() {
         let pkt = ServerboundStatusRequestPacket;
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundStatusRequestPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ServerboundStatusRequestPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

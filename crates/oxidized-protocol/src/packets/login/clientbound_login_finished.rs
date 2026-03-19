@@ -6,10 +6,10 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
 use crate::codec::varint::{self, VarIntError};
-use crate::codec::Packet;
 
 /// Errors from decoding a [`ClientboundLoginFinishedPacket`].
 #[derive(Debug, Error)]
@@ -205,16 +205,12 @@ mod tests {
             }],
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundLoginFinishedPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundLoginFinishedPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundLoginFinishedPacket as Packet>::PACKET_ID,
-            0x02
-        );
+        assert_eq!(<ClientboundLoginFinishedPacket as Packet>::PACKET_ID, 0x02);
     }
 }

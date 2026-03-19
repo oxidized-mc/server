@@ -7,8 +7,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Client response to a chunk batch.
 ///

@@ -6,9 +6,9 @@
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{self, TypeError};
-use crate::codec::Packet;
 
 /// Errors from decoding a [`ClientboundDisconnectPacket`].
 #[derive(Debug, Error)]
@@ -89,8 +89,7 @@ mod tests {
             reason: r#"{"text":"Kicked"}"#.to_string(),
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundDisconnectPacket as Packet>::decode(encoded.freeze()).unwrap();
+        let decoded = <ClientboundDisconnectPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
     }
 

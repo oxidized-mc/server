@@ -3,9 +3,9 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::chat::Component;
+use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::{types, varint};
-use crate::codec::Packet;
 use crate::packets::play::PlayPacketError;
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
 
@@ -228,13 +228,9 @@ impl Packet for ClientboundPlayerChatPacket {
         let map_err = |e: PlayPacketError| -> PacketDecodeError {
             match e {
                 PlayPacketError::UnexpectedEof => {
-                    PacketDecodeError::InvalidData(
-                        "unexpected end of packet data".into(),
-                    )
+                    PacketDecodeError::InvalidData("unexpected end of packet data".into())
                 },
-                PlayPacketError::InvalidData(s) => {
-                    PacketDecodeError::InvalidData(s)
-                },
+                PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
                 PlayPacketError::VarInt(e) => e.into(),
                 PlayPacketError::Type(e) => e.into(),
                 PlayPacketError::ResourceLocation(e) => e.into(),
@@ -281,9 +277,7 @@ impl Packet for ClientboundPlayerChatPacket {
 
         let has_unsigned = types::read_bool(&mut data)?;
         let unsigned_content = if has_unsigned {
-            Some(
-                read_component_nbt(&mut data).map_err(&map_err)?,
-            )
+            Some(read_component_nbt(&mut data).map_err(&map_err)?)
         } else {
             None
         };
@@ -295,43 +289,35 @@ impl Packet for ClientboundPlayerChatPacket {
             2 => {
                 let len = varint::read_varint_buf(&mut data)?;
                 if !(0..=256).contains(&len) {
-                    return Err(PacketDecodeError::InvalidData(
-                        format!(
-                            "filter mask bitset length out of \
+                    return Err(PacketDecodeError::InvalidData(format!(
+                        "filter mask bitset length out of \
                              range: {len}"
-                        ),
-                    ));
+                    )));
                 }
                 let mut bits = Vec::with_capacity(len as usize);
                 for _ in 0..len {
                     if data.remaining() < 8 {
-                        return Err(
-                            PacketDecodeError::InvalidData(
-                                "unexpected end of packet data"
-                                    .into(),
-                            ),
-                        );
+                        return Err(PacketDecodeError::InvalidData(
+                            "unexpected end of packet data".into(),
+                        ));
                     }
                     bits.push(data.get_i64());
                 }
                 FilterMask::PartiallyFiltered(bits)
             },
             other => {
-                return Err(PacketDecodeError::InvalidData(
-                    format!("unknown filter mask type: {other}"),
-                ));
+                return Err(PacketDecodeError::InvalidData(format!(
+                    "unknown filter mask type: {other}"
+                )));
             },
         };
 
         let holder_id = varint::read_varint_buf(&mut data)?;
         let chat_type_id = holder_id - 1;
-        let sender_name =
-            read_component_nbt(&mut data).map_err(&map_err)?;
+        let sender_name = read_component_nbt(&mut data).map_err(&map_err)?;
         let has_target = types::read_bool(&mut data)?;
         let target_name = if has_target {
-            Some(
-                read_component_nbt(&mut data).map_err(&map_err)?,
-            )
+            Some(read_component_nbt(&mut data).map_err(&map_err)?)
         } else {
             None
         };
@@ -443,11 +429,7 @@ mod tests {
             target_name: None,
         };
         let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundPlayerChatPacket as Packet>::decode(
-                encoded.freeze(),
-            )
-            .unwrap();
+        let decoded = <ClientboundPlayerChatPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.message_content, "test");
         assert_eq!(decoded.sender, uuid::Uuid::nil());
         assert_eq!(decoded.chat_type_id, 0);
@@ -456,9 +438,6 @@ mod tests {
 
     #[test]
     fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundPlayerChatPacket as Packet>::PACKET_ID,
-            0x41
-        );
+        assert_eq!(<ClientboundPlayerChatPacket as Packet>::PACKET_ID, 0x41);
     }
 }

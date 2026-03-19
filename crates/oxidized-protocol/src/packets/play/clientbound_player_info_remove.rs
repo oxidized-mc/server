@@ -6,8 +6,8 @@ use uuid::Uuid;
 use crate::codec::{types, varint};
 use crate::packets::play::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// 0x45 — Removes one or more players from the tab list.
 #[derive(Debug, Clone, PartialEq)]

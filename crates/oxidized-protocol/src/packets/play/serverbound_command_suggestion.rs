@@ -3,7 +3,7 @@
 use bytes::{Bytes, BytesMut};
 
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::{types, varint, Packet};
+use crate::codec::{Packet, types, varint};
 use crate::packets::play::PlayPacketError;
 
 /// 0x0F — Client requests tab-completion suggestions.
@@ -61,10 +61,8 @@ mod tests {
             command: "/tp Steve".into(),
         };
         let encoded = Packet::encode(&pkt);
-        let decoded = <ServerboundCommandSuggestionPacket as Packet>::decode(
-            encoded.freeze(),
-        )
-        .unwrap();
+        let decoded =
+            <ServerboundCommandSuggestionPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.id, 42);
         assert_eq!(decoded.command, "/tp Steve");
     }

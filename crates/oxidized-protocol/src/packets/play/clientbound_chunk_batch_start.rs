@@ -8,8 +8,8 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Signals the start of a chunk batch. Has no payload.
 ///

@@ -12,8 +12,8 @@ use crate::codec::varint;
 
 use super::clientbound_login::PlayPacketError;
 
-use crate::codec::packet::PacketDecodeError;
 use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
 
 /// Action flags indicating which fields are present in each entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
