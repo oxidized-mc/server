@@ -35,7 +35,11 @@ impl ClientboundPlayerAbilitiesPacket {
         let flags = data.get_u8();
         let fly_speed = data.get_f32();
         let walk_speed = data.get_f32();
-        Ok(Self { flags, fly_speed, walk_speed })
+        Ok(Self {
+            flags,
+            fly_speed,
+            walk_speed,
+        })
     }
 
     /// Encodes the packet body (without packet ID).

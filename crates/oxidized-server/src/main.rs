@@ -158,9 +158,9 @@ fn main() -> anyhow::Result<()> {
         ];
 
         let server_ctx = Arc::new(ServerContext {
-            player_list: parking_lot::RwLock::new(
-                PlayerList::new(config.gameplay.max_players as usize),
-            ),
+            player_list: parking_lot::RwLock::new(PlayerList::new(
+                config.gameplay.max_players as usize,
+            )),
             level_data,
             dimensions,
         });
