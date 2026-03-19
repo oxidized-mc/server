@@ -1101,3 +1101,37 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - Rate limiter sends warning but doesn't disconnect persistent spammers
 - `read_component_nbt` uses unlimited NbtAccounter — fine for server-created clientbound
   packets but should be bounded if ever used for untrusted input
+
+---
+
+### Phase 17 Re-verification (post-audit)
+
+#### Issues Found & Fixed
+1. **LastSeenMessagesUpdate missing checksum byte** — Java `LastSeenMessages.Update` has
+   `(VarInt offset, FixedBitSet(20) acknowledged, byte checksum)`. The trailing checksum
+   byte was missing, which would misalign parsing of `ServerboundChatPacket`. Fixed.
+2. **ClientboundPlayerChatPacket missing globalIndex** — Java has `globalIndex` (VarInt) as
+   the first field; it's a per-connection counter. Was missing from the Rust struct. Fixed.
+3. **/say used plain text SystemChatPacket** — Should use `ClientboundDisguisedChatPacket`
+   with `SAY_COMMAND` chat type (registry id 1). Client-side decoration handles
+   `[%s] %s` formatting. Fixed.
+4. **/me used plain text SystemChatPacket** — Should use `ClientboundDisguisedChatPacket`
+   with `EMOTE_COMMAND` chat type (registry id 6). Client-side decoration handles
+   `* %s %s` formatting. Fixed.
+
+#### Verified Correct
+- All 7 chat packet IDs match GameProtocols.java (bundle delimiter offsets CB IDs by 1)
+- Component system (component.rs, style.rs, formatting.rs) — no changes needed
+- Chat type registry: 0=chat, 1=say_command, 2=msg_command_incoming, 3=msg_command_outgoing,
+  4=team_msg_command_incoming, 5=team_msg_command_outgoing, 6=emote_command
+- ChatType.Bound encoding: Holder VarInt (id+1) + NBT sender name + optional NBT target
+- Regular chat broadcast as SystemChatPacket with `chat.type.text` translatable is acceptable
+  for unsigned mode (PlayerChatPacket is for signed chat flow)
+
+#### Lessons Learned
+- **Always verify sub-fields of composite types** against the Java reference. The
+  `LastSeenMessagesUpdate` looked complete with offset + bitset, but the checksum byte
+  at the end was invisible unless reading the actual Java `Update` record definition.
+- **Vanilla commands send message content only** — the chat type decoration (defined in
+  the registry) handles formatting. Don't construct formatted strings server-side for
+  commands that have a registered chat type.
