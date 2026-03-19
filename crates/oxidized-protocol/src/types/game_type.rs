@@ -45,6 +45,17 @@ impl GameType {
         }
     }
 
+    /// Returns the vanilla translation key for this game type (e.g.,
+    /// `"gameMode.survival"`).
+    pub const fn translation_key(self) -> &'static str {
+        match self {
+            GameType::Survival => "gameMode.survival",
+            GameType::Creative => "gameMode.creative",
+            GameType::Adventure => "gameMode.adventure",
+            GameType::Spectator => "gameMode.spectator",
+        }
+    }
+
     /// Looks up a game type by numeric ID.
     ///
     /// Returns `None` if `id` is not in 0–3.

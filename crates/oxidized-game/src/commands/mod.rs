@@ -90,6 +90,11 @@ impl Commands {
     pub fn serialize_tree(&self, source: &CommandSourceStack) -> CommandTreeData {
         self.dispatcher.serialize_tree(source)
     }
+
+    /// Returns a reference to the underlying dispatcher.
+    pub fn dispatcher(&self) -> &CommandDispatcher<CommandSourceStack> {
+        &self.dispatcher
+    }
 }
 
 impl Default for Commands {

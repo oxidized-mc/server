@@ -294,9 +294,9 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use crate::commands::arguments::ArgumentType;
+    use crate::commands::arguments::{ArgumentType, StringKind};
     use crate::commands::context::get_integer;
-    use crate::commands::nodes::{argument, literal};
+    use crate::commands::nodes::{CommandNode, argument, literal};
     use crate::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
     use oxidized_protocol::chat::Component;
     use std::sync::Arc;
@@ -339,6 +339,9 @@ mod tests {
         }
         fn find_player_uuid(&self, _name: &str) -> Option<uuid::Uuid> {
             None
+        }
+        fn command_descriptions(&self) -> Vec<(String, Option<String>)> {
+            vec![]
         }
     }
 
@@ -571,5 +574,94 @@ mod tests {
         let texts: Vec<_> = completions.iter().map(|s| s.text.as_str()).collect();
         assert!(texts.contains(&"help"), "should include help");
         assert!(!texts.contains(&"stop"), "should not include stop");
+    }
+
+    // ── Description field ───────────────────────────────────────────────
+
+    #[test]
+    fn literal_node_stores_description() {
+        let mut d: CommandDispatcher<CommandSourceStack> = CommandDispatcher::new();
+        d.register(
+            literal("help")
+                .description("Shows the help menu")
+                .executes(|_| Ok(1)),
+        );
+        let node = CommandNode::Root(d.root);
+        let desc = node.children().get("help").unwrap().description();
+        assert_eq!(desc.as_deref(), Some("Shows the help menu"));
+    }
+
+    #[test]
+    fn argument_node_stores_description() {
+        let mut d: CommandDispatcher<CommandSourceStack> = CommandDispatcher::new();
+        d.register(
+            literal("test").then(
+                argument("name", ArgumentType::String(StringKind::SingleWord))
+                    .description("Player name")
+                    .executes(|_| Ok(1)),
+            ),
+        );
+        let node = CommandNode::Root(d.root);
+        let test_node = node.children().get("test").unwrap();
+        let name_node = test_node.children().get("name").unwrap();
+        let desc = name_node.description();
+        assert_eq!(desc.as_deref(), Some("Player name"));
+    }
+
+    #[test]
+    fn node_without_description_returns_none() {
+        let mut d: CommandDispatcher<CommandSourceStack> = CommandDispatcher::new();
+        d.register(literal("ping").executes(|_| Ok(1)));
+        let node = CommandNode::Root(d.root);
+        let desc = node.children().get("ping").unwrap().description();
+        assert_eq!(desc, None);
+    }
+
+    // ── Username autocomplete ───────────────────────────────────────────
+
+    #[test]
+    fn completions_suggest_player_names_for_entity_arg() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kick").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: true,
+                        player_only: true,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        let names = vec!["Alice".to_string(), "Bob".to_string()];
+        let completions = d.get_completions("kick ", &src, &names);
+        let texts: Vec<_> = completions.iter().map(|s| s.text.as_str()).collect();
+        assert!(texts.contains(&"Alice"), "should suggest Alice");
+        assert!(texts.contains(&"Bob"), "should suggest Bob");
+    }
+
+    #[test]
+    fn completions_filter_player_names_by_prefix() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kick").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: true,
+                        player_only: true,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        let names = vec!["Alice".to_string(), "Bob".to_string()];
+        let completions = d.get_completions("kick A", &src, &names);
+        let texts: Vec<_> = completions.iter().map(|s| s.text.as_str()).collect();
+        assert!(texts.contains(&"Alice"), "should suggest Alice");
+        assert!(!texts.contains(&"Bob"), "should not suggest Bob");
     }
 }

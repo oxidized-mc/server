@@ -1,4 +1,8 @@
 //! `/effect` command — give or clear status effects.
+//!
+//! TODO: Requires a status-effect system on entities (ECS components for
+//! active effects, tick-based duration, amplifier, particle visibility).
+//! Also needs `ClientboundUpdateMobEffectPacket` / `ClientboundRemoveMobEffectPacket`.
 
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::{CommandContext, get_integer, get_string};
@@ -11,6 +15,7 @@ use oxidized_protocol::chat::Component;
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("effect")
+            .description("Add or remove status effects")
             .requires(|s: &CommandSourceStack| s.has_permission(2))
             // /effect give <targets> <effect> [seconds] [amplifier] [hideParticles]
             .then(
@@ -29,15 +34,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                 registry: "minecraft:mob_effect".to_string(),
                             },
                         )
-                        .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                            let targets = get_string(ctx, "targets")?;
-                            let effect = get_string(ctx, "effect")?;
-                            ctx.source.send_success(
-                                &Component::text(format!("Applied effect {effect} to {targets}")),
-                                true,
-                            );
-                            Ok(1)
-                        })
+                        .executes(effect_give)
                         .then(
                             argument(
                                 "seconds",
@@ -46,20 +43,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                     max: Some(1_000_000),
                                 },
                             )
-                            .executes(
-                                |ctx: &CommandContext<CommandSourceStack>| {
-                                    let targets = get_string(ctx, "targets")?;
-                                    let effect = get_string(ctx, "effect")?;
-                                    let seconds = get_integer(ctx, "seconds")?;
-                                    ctx.source.send_success(
-                                        &Component::text(format!(
-                                            "Applied effect {effect} for {seconds}s to {targets}"
-                                        )),
-                                        true,
-                                    );
-                                    Ok(1)
-                                },
-                            ),
+                            .executes(effect_give),
                         ),
                     ),
                 ),
@@ -68,8 +52,16 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             .then(
                 literal("clear")
                     .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                        ctx.source
-                            .send_success(&Component::text("Removed every effect"), true);
+                        // TODO: Clear all effects from command sender
+                        ctx.source.send_success(
+                            &Component::translatable(
+                                "commands.effect.clear.everything.success.single",
+                                vec![Component::text(
+                                    ctx.source.display_name.clone(),
+                                )],
+                            ),
+                            true,
+                        );
                         Ok(1)
                     })
                     .then(
@@ -80,19 +72,41 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                 player_only: false,
                             },
                         )
-                        .executes(
-                            |ctx: &CommandContext<CommandSourceStack>| {
-                                let targets = get_string(ctx, "targets")?;
-                                ctx.source.send_success(
-                                    &Component::text(format!(
-                                        "Removed every effect from {targets}"
-                                    )),
-                                    true,
-                                );
-                                Ok(1)
-                            },
-                        ),
+                        .executes(|ctx: &CommandContext<CommandSourceStack>| {
+                            let targets = get_string(ctx, "targets")?;
+                            // TODO: Clear all effects from targets
+                            ctx.source.send_success(
+                                &Component::translatable(
+                                    "commands.effect.clear.everything.success.single",
+                                    vec![Component::text(targets)],
+                                ),
+                                true,
+                            );
+                            Ok(1)
+                        }),
                     ),
             ),
     );
+}
+
+fn effect_give(
+    ctx: &CommandContext<CommandSourceStack>,
+) -> Result<i32, crate::commands::CommandError> {
+    let targets = get_string(ctx, "targets")?;
+    let effect = get_string(ctx, "effect")?;
+    let seconds = get_integer(ctx, "seconds").unwrap_or(30);
+    // TODO: Apply status effect to targets
+    // Vanilla arg order: effect name, target name, duration in seconds
+    ctx.source.send_success(
+        &Component::translatable(
+            "commands.effect.give.success.single",
+            vec![
+                Component::text(effect),
+                Component::text(targets),
+                Component::text(seconds.to_string()),
+            ],
+        ),
+        true,
+    );
+    Ok(1)
 }

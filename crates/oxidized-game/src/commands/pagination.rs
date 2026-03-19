@@ -109,3 +109,97 @@ impl PaginatedMessage {
         output
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+
+    fn make_msg(n: usize, per_page: usize) -> PaginatedMessage {
+        let mut msg = PaginatedMessage::new("Test", "/test");
+        msg = msg.per_page(per_page);
+        for i in 0..n {
+            msg.add_line(Component::text(format!("Line {i}")));
+        }
+        msg
+    }
+
+    #[test]
+    fn test_pagination_single_page() {
+        let msg = make_msg(3, 7);
+        assert_eq!(msg.page_count(), 1);
+        let lines = msg.render_page(1);
+        // Header + 3 lines, no footer (single page)
+        assert_eq!(lines.len(), 4);
+    }
+
+    #[test]
+    fn test_pagination_multi_page_count() {
+        let msg = make_msg(15, 7);
+        assert_eq!(msg.page_count(), 3);
+    }
+
+    #[test]
+    fn test_pagination_page_1_has_next_only() {
+        let msg = make_msg(15, 7);
+        let lines = msg.render_page(1);
+        // Header + 7 lines + footer
+        assert_eq!(lines.len(), 9);
+        // Footer should contain "Next" but not "Previous"
+        let footer = &lines[8];
+        let footer_text = format!("{footer:?}");
+        assert!(footer_text.contains("Next"), "footer should have Next");
+    }
+
+    #[test]
+    fn test_pagination_last_page_has_prev_only() {
+        let msg = make_msg(15, 7);
+        let lines = msg.render_page(3);
+        // Header + 1 line (15 - 14) + footer
+        assert_eq!(lines.len(), 3);
+        let footer = &lines[2];
+        let footer_text = format!("{footer:?}");
+        assert!(
+            footer_text.contains("Previous"),
+            "footer should have Previous"
+        );
+    }
+
+    #[test]
+    fn test_pagination_middle_page_has_both_nav() {
+        let msg = make_msg(15, 7);
+        let lines = msg.render_page(2);
+        // Header + 7 lines + footer
+        assert_eq!(lines.len(), 9);
+        let footer = &lines[8];
+        let footer_text = format!("{footer:?}");
+        assert!(
+            footer_text.contains("Previous"),
+            "footer should have Previous"
+        );
+        assert!(footer_text.contains("Next"), "footer should have Next");
+    }
+
+    #[test]
+    fn test_pagination_empty_has_one_page() {
+        let msg = make_msg(0, 7);
+        assert_eq!(msg.page_count(), 1);
+        let lines = msg.render_page(1);
+        // Header only
+        assert_eq!(lines.len(), 1);
+    }
+
+    #[test]
+    fn test_pagination_clamps_out_of_range_page() {
+        let msg = make_msg(5, 7);
+        // Page 99 should clamp to page 1 (only 1 page)
+        let lines = msg.render_page(99);
+        assert_eq!(lines.len(), 6); // header + 5 lines
+    }
+
+    #[test]
+    fn test_pagination_per_page_min_one() {
+        let msg = make_msg(3, 0); // 0 should clamp to 1
+        assert_eq!(msg.page_count(), 3);
+    }
+}
