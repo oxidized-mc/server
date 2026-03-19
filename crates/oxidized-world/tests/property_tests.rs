@@ -90,7 +90,7 @@ proptest! {
             let mixed = std::num::Wrapping(seed) * std::num::Wrapping(6364136223846793005u64)
                 + std::num::Wrapping(i) * std::num::Wrapping(1442695040888963407u64);
             let mixed = mixed.0;
-            let x = ((mixed >> 0) % 16) as usize;
+            let x = (mixed % 16) as usize;
             let y = ((mixed >> 8) % 16) as usize;
             let z = ((mixed >> 16) % 16) as usize;
             let value = ((mixed >> 24) % 50) as u32;

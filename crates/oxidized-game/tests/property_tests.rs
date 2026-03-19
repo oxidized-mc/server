@@ -221,7 +221,7 @@ proptest! {
     #[test]
     fn proptest_unpack_degrees_range(byte: u8) {
         let degrees = unpack_degrees(byte);
-        prop_assert!(degrees >= 0.0 && degrees < 360.0,
+        prop_assert!((0.0..360.0).contains(&degrees),
             "unpack_degrees({byte}) = {degrees} out of [0, 360)");
     }
 
