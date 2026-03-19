@@ -174,6 +174,19 @@ impl ServerHandle for ServerContext {
         }
         None
     }
+
+    fn command_descriptions(&self) -> Vec<(String, Option<String>)> {
+        let mut cmds: Vec<(String, Option<String>)> = self
+            .commands
+            .dispatcher()
+            .root
+            .children
+            .iter()
+            .map(|(name, node)| (name.clone(), node.description().map(String::from)))
+            .collect();
+        cmds.sort_by(|a, b| a.0.cmp(&b.0));
+        cmds
+    }
 }
 
 /// A chat message broadcast to all connected players.

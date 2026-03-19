@@ -31,6 +31,8 @@ pub trait ServerHandle: Send + Sync {
     fn kick_player(&self, name: &str, reason: &str) -> bool;
     /// Finds a player UUID by name.
     fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid>;
+    /// Returns registered command names with optional descriptions, sorted.
+    fn command_descriptions(&self) -> Vec<(String, Option<String>)>;
 }
 
 /// The kind of entity that is executing a command.

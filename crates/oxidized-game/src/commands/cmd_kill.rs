@@ -1,4 +1,7 @@
 //! `/kill` command — kill entities.
+//!
+//! TODO: Actually killing entities requires health/damage system and death
+//! event handling. Needs `ServerHandle::kill_entity()` or similar.
 
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::{CommandContext, get_string};
@@ -11,11 +14,16 @@ use oxidized_protocol::chat::Component;
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("kill")
+            .description("Kills entities")
             .requires(|s: &CommandSourceStack| s.has_permission(2))
             // /kill — kill self
             .executes(|ctx: &CommandContext<CommandSourceStack>| {
+                // TODO: Actually kill the source player
                 ctx.source.send_success(
-                    &Component::text(format!("Killed {}", ctx.source.display_name)),
+                    &Component::translatable(
+                        "commands.kill.success.single",
+                        vec![Component::text(&ctx.source.display_name)],
+                    ),
                     true,
                 );
                 Ok(1)
@@ -31,8 +39,14 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                 )
                 .executes(|ctx: &CommandContext<CommandSourceStack>| {
                     let targets = get_string(ctx, "targets")?;
-                    ctx.source
-                        .send_success(&Component::text(format!("Killed {targets}")), true);
+                    // TODO: Resolve entity selector and kill matching entities
+                    ctx.source.send_success(
+                        &Component::translatable(
+                            "commands.kill.success.single",
+                            vec![Component::text(targets)],
+                        ),
+                        true,
+                    );
                     Ok(1)
                 }),
             ),

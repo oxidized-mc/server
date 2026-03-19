@@ -1,4 +1,8 @@
 //! `/give` command — give items to players.
+//!
+//! TODO: Requires inventory system (player inventory component in ECS),
+//! item stack creation from registry ID, and `ClientboundContainerSetSlotPacket`
+//! to sync the slot to the client.
 
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::{CommandContext, get_integer, get_string};
@@ -11,6 +15,7 @@ use oxidized_protocol::chat::Component;
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("give")
+            .description("Gives an item to a player")
             .requires(|s: &CommandSourceStack| s.has_permission(2))
             .then(
                 argument(
@@ -23,15 +28,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                 .then(
                     argument("item", ArgumentType::ItemStack)
                         // /give <targets> <item>
-                        .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                            let targets = get_string(ctx, "targets")?;
-                            let item = get_string(ctx, "item")?;
-                            ctx.source.send_success(
-                                &Component::text(format!("Gave 1 [{item}] to {targets}")),
-                                true,
-                            );
-                            Ok(1)
-                        })
+                        .executes(give_exec)
                         // /give <targets> <item> <count>
                         .then(
                             argument(
@@ -41,22 +38,30 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                     max: Some(2_147_483_647),
                                 },
                             )
-                            .executes(
-                                |ctx: &CommandContext<CommandSourceStack>| {
-                                    let targets = get_string(ctx, "targets")?;
-                                    let item = get_string(ctx, "item")?;
-                                    let count = get_integer(ctx, "count")?;
-                                    ctx.source.send_success(
-                                        &Component::text(format!(
-                                            "Gave {count} [{item}] to {targets}"
-                                        )),
-                                        true,
-                                    );
-                                    Ok(count)
-                                },
-                            ),
+                            .executes(give_exec),
                         ),
                 ),
             ),
     );
+}
+
+fn give_exec(
+    ctx: &CommandContext<CommandSourceStack>,
+) -> Result<i32, crate::commands::CommandError> {
+    let targets = get_string(ctx, "targets")?;
+    let item = get_string(ctx, "item")?;
+    let count = get_integer(ctx, "count").unwrap_or(1);
+    // TODO: Actually give items to target players
+    ctx.source.send_success(
+        &Component::translatable(
+            "commands.give.success.single",
+            vec![
+                Component::text(count.to_string()),
+                Component::text(format!("[{item}]")),
+                Component::text(targets),
+            ],
+        ),
+        true,
+    );
+    Ok(count)
 }

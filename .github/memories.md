@@ -1218,3 +1218,51 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - 32 unit tests: 20 dispatcher (parse, execute, permissions, completions, serialization),
   6 arguments (registry IDs, property encoding), 6 context (escapes, time overflow).
 - All pass alongside existing 1409 workspace tests (1441 total).
+
+### 2026-07-XX — Phase 18b: Command System Improvements
+
+**Context:** Post-phase-18 improvements to the Brigadier command framework.
+
+#### Key Learnings
+
+- **Vanilla translation keys for commands**: All command feedback should use
+  `Component::translatable(key, args)` with vanilla keys like `"commands.time.query"`,
+  `"commands.difficulty.success"`, etc. The vanilla arg order is verified in the Java
+  decompiled source — never guess, always check `mc-server-ref/decompiled`.
+- **Effect give translation args order**: `[effect_name, target_name, duration_seconds]` — 
+  verified from `EffectCommands.java`.
+- **Kick failure key**: Use `"argument.entity.notfound.player"` when the target player isn't
+  found, NOT the success key.
+- **`display_name` is a field, not a method** on `CommandSourceStack` — easy to confuse
+  with accessor methods. Access as `ctx.source.display_name.clone()`.
+- **RootCommandNode.children is a direct field** (`BTreeMap`), not accessed via `.children()`
+  method. The `.children()` method exists only on the `CommandNode` enum, not the inner
+  struct types.
+
+#### Patterns Established
+
+- **Command descriptions**: `literal("cmd").description("...")` stores description in
+  `Option<String>` on the node. `ServerHandle::command_descriptions()` returns
+  `Vec<(String, Option<String>)>` for dynamic help enumeration.
+- **Pagination pattern**: `PaginatedMessage::new(title, cmd_prefix).per_page(7)` then
+  `.add_line()` and `.render_page(n)`. Navigation uses `ClickEvent::RunCommand` for
+  `«« Previous` / `Next »»` buttons.
+- **Interactive help entries**: Each command in `/help` uses `ClickEvent::SuggestCommand`
+  (pre-fills the chat) + `HoverEvent::ShowText` (shows description tooltip).
+- **Username autocomplete**: `get_completions` on the dispatcher takes `player_names: &[String]`
+  parameter. Entity and GameProfile argument types use these to suggest online player names.
+- **GameType::translation_key()**: Returns `"gameMode.survival"` etc. for use in translatable
+  components where vanilla expects a translatable game mode name.
+
+#### Architecture Decisions
+
+- `command_descriptions()` lives on `ServerHandle` (returns data) rather than being a method
+  on `Commands` — avoids needing `Commands` reference inside command execution closures.
+- `Commands::dispatcher()` exposes `&CommandDispatcher` for `ServerContext` to enumerate the
+  command tree when implementing `command_descriptions()`.
+
+#### Test Coverage
+
+- 13 new tests added: 8 pagination (single/multi-page, navigation, empty, boundary, min-per-page),
+  3 description field (literal, argument, none), 2 username autocomplete (suggest + filter).
+- Workspace total: 1454 tests (up from 1441).
