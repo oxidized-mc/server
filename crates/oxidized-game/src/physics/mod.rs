@@ -7,6 +7,7 @@
 //!
 //! # Module Layout
 //!
+//! - [`block_properties`] — per-block physics lookups (friction, speed, jump)
 //! - [`constants`] — all physics constants (gravity, drag, friction, etc.)
 //! - [`voxel_shape`] — block collision geometry representation
 //! - [`collision`] — per-axis sweep collision and obstacle collection
@@ -14,6 +15,7 @@
 //! - [`slow_blocks`] — block speed/jump factor modifiers
 //! - [`jump`] — jump impulse application
 
+pub mod block_properties;
 pub mod collision;
 pub mod constants;
 pub mod jump;

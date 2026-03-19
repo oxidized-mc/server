@@ -153,6 +153,19 @@ impl BlockRegistry {
     pub fn state_count(&self) -> usize {
         self.states.iter().filter(|s| s.is_some()).count()
     }
+
+    /// Length of the internal state array.
+    ///
+    /// Use this to allocate dense arrays indexed by state ID
+    /// (e.g., collision shape caches, physics property tables).
+    pub fn state_array_size(&self) -> usize {
+        self.states.len()
+    }
+
+    /// Gets a block definition by its internal index.
+    pub fn get_block_by_index(&self, index: u16) -> Option<&Block> {
+        self.blocks.get(index as usize)
+    }
 }
 
 /// Parse property definitions from a block JSON value.

@@ -10,13 +10,14 @@
 //! 3. Apply gravity (or fluid buoyancy)
 //! 4. Sweep-collide the entity AABB against block shapes
 //! 5. Detect on_ground from vertical collision
-//! 6. Zero velocity on collision axes
+//! 6. Zero velocity on collision axes (slime bounce negates Y)
 //! 7. Apply horizontal and vertical drag
 //! 8. Track fall distance
 
 use crate::entity::Entity;
 use crate::level::traits::BlockGetter;
 
+use super::block_properties::PhysicsBlockProperties;
 use super::collision::{collect_obstacles, collide_with_shapes};
 use super::constants::*;
 use super::voxel_shape::BlockShapeProvider;
@@ -25,9 +26,14 @@ use oxidized_protocol::types::BlockPos;
 
 /// Applies one tick of physics to an entity.
 ///
-/// Handles gravity, sweep collision, on_ground detection, drag, and
-/// fall distance tracking. Fluid effects (buoyancy and drag) are
-/// applied when `in_water` or `in_lava` is true.
+/// Handles gravity, sweep collision, on_ground detection, drag,
+/// slime bounce, and fall distance tracking. Fluid effects (buoyancy
+/// and drag) are applied when `in_water` or `in_lava` is true.
+///
+/// `block_physics` provides per-block friction, speed factor, and
+/// slime bounce lookups. Use [`PhysicsBlockProperties::from_registry`]
+/// to build from a block registry, or [`PhysicsBlockProperties::defaults`]
+/// for testing.
 ///
 /// This function does **not** handle player input, step-up, or
 /// knockback — those are applied externally before calling this.
@@ -35,11 +41,12 @@ pub fn physics_tick(
     entity: &mut Entity,
     level: &impl BlockGetter,
     shape_provider: &impl BlockShapeProvider,
+    block_physics: &PhysicsBlockProperties,
     in_water: bool,
     in_lava: bool,
 ) {
     // 1. Determine block friction (from block below entity feet).
-    let block_friction = get_block_friction(level, entity);
+    let block_friction = get_block_friction(level, entity, block_physics);
 
     // 2. Apply gravity (or fluid modifiers).
     if in_water {
@@ -78,12 +85,17 @@ pub fn physics_tick(
     // 5. Detect on_ground: downward movement was reduced by collision.
     entity.on_ground = dy < 0.0 && (actual_dy - dy).abs() > COLLISION_EPSILON;
 
-    // 6. Zero velocity on collision axes.
+    // 6. Zero velocity on collision axes, with slime bounce for Y.
     if (actual_dx - dx).abs() > COLLISION_EPSILON {
         entity.vx = 0.0;
     }
     if (actual_dy - dy).abs() > COLLISION_EPSILON {
-        entity.vy = 0.0;
+        // Check for slime bounce: if landing on a slime block, negate Y velocity.
+        if entity.on_ground && is_on_slime(level, entity, block_physics) {
+            entity.vy = -entity.vy;
+        } else {
+            entity.vy = 0.0;
+        }
     }
     if (actual_dz - dz).abs() > COLLISION_EPSILON {
         entity.vz = 0.0;
@@ -113,9 +125,13 @@ pub fn physics_tick(
 
 /// Returns the friction value of the block below the entity's feet.
 ///
-/// Special blocks (ice, slime) have non-default friction. All others
-/// return [`BLOCK_FRICTION_DEFAULT`] (0.6).
-fn get_block_friction(level: &impl BlockGetter, entity: &Entity) -> f64 {
+/// Uses [`PhysicsBlockProperties`] for per-block friction lookups.
+/// Returns 1.0 when not on ground (no block friction applies in air).
+fn get_block_friction(
+    level: &impl BlockGetter,
+    entity: &Entity,
+    block_physics: &PhysicsBlockProperties,
+) -> f64 {
     if !entity.on_ground {
         return 1.0;
     }
@@ -127,20 +143,27 @@ fn get_block_friction(level: &impl BlockGetter, entity: &Entity) -> f64 {
     );
 
     match level.get_block_state(below) {
-        Ok(state_id) => friction_for_state(state_id),
+        Ok(state_id) => block_physics.friction(state_id),
         Err(_) => BLOCK_FRICTION_DEFAULT,
     }
 }
 
-/// Maps known block state IDs to their friction values.
-///
-/// In a full implementation, this would be driven by the block registry.
-/// For now, we use placeholder state IDs for known special-friction blocks.
-fn friction_for_state(_state_id: u32) -> f64 {
-    // TODO(p08): Once the block registry is available, look up friction
-    // from the registry instead of hardcoding. For now all blocks use
-    // default friction.
-    BLOCK_FRICTION_DEFAULT
+/// Returns `true` if the block below the entity's feet is a slime block.
+fn is_on_slime(
+    level: &impl BlockGetter,
+    entity: &Entity,
+    block_physics: &PhysicsBlockProperties,
+) -> bool {
+    let below = BlockPos::new(
+        entity.x.floor() as i32,
+        (entity.bounding_box.min_y - 0.5000001).floor() as i32,
+        entity.z.floor() as i32,
+    );
+
+    match level.get_block_state(below) {
+        Ok(state_id) => block_physics.is_slime_block(state_id),
+        Err(_) => false,
+    }
 }
 
 /// Returns `true` if the velocity changed significantly between two states.
@@ -157,8 +180,10 @@ mod tests {
 
     use super::*;
     use crate::level::error::LevelError;
+    use crate::physics::block_properties::PhysicsBlockProperties;
     use crate::physics::voxel_shape::FullCubeShapeProvider;
     use oxidized_protocol::types::resource_location::ResourceLocation;
+    use oxidized_world::registry::BlockRegistry;
 
     /// A level with no blocks (everything is air / unloaded).
     struct EmptyLevel;
@@ -198,6 +223,30 @@ mod tests {
         }
     }
 
+    /// A floor made of a specific block state.
+    struct SpecificFloorLevel {
+        floor_state_id: u32,
+    }
+
+    impl BlockGetter for SpecificFloorLevel {
+        fn get_block_state(&self, pos: BlockPos) -> Result<u32, LevelError> {
+            if pos.y == 0 {
+                Ok(self.floor_state_id)
+            } else {
+                Ok(0)
+            }
+        }
+    }
+
+    fn default_physics() -> PhysicsBlockProperties {
+        PhysicsBlockProperties::defaults()
+    }
+
+    fn registry_physics() -> PhysicsBlockProperties {
+        let reg = BlockRegistry::load().expect("block registry");
+        PhysicsBlockProperties::from_registry(&reg)
+    }
+
     fn make_floating_entity() -> Entity {
         let mut e = Entity::new(ResourceLocation::minecraft("pig"), 0.6, 1.8);
         e.set_pos(8.0, 100.0, 8.0);
@@ -214,12 +263,13 @@ mod tests {
     #[test]
     fn test_gravity_acceleration() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let mut entity = make_floating_entity();
         entity.vy = 0.0;
 
         // Tick 1: gravity: vy = 0 - 0.08 = -0.08
         // After drag: vy = -0.08 * 0.98 = -0.0784
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        physics_tick(&mut entity, &EmptyLevel, &shapes, &bp, false, false);
         assert!(
             (entity.vy - (-0.0784)).abs() < 0.0001,
             "After tick 1: vy = {} (expected ≈ -0.0784)",
@@ -228,7 +278,7 @@ mod tests {
 
         // Tick 2: gravity: vy = -0.0784 - 0.08 = -0.1584
         // After drag: vy ≈ -0.1584 * 0.98 ≈ -0.155232
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        physics_tick(&mut entity, &EmptyLevel, &shapes, &bp, false, false);
         assert!(
             entity.vy < -0.15,
             "After tick 2: vy = {} (should be < -0.15)",
@@ -239,10 +289,11 @@ mod tests {
     #[test]
     fn test_collision_stops_downward_movement() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let mut entity = make_entity_above_floor(0.5);
         entity.vy = -5.0;
 
-        physics_tick(&mut entity, &FloorLevel, &shapes, false, false);
+        physics_tick(&mut entity, &FloorLevel, &shapes, &bp, false, false);
 
         assert!(entity.on_ground, "Entity should be on ground");
         assert!(
@@ -260,11 +311,12 @@ mod tests {
     #[test]
     fn test_water_buoyancy() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let mut entity = make_floating_entity();
         entity.vy = 0.0;
         entity.vx = 1.0;
 
-        physics_tick(&mut entity, &EmptyLevel, &shapes, true, false);
+        physics_tick(&mut entity, &EmptyLevel, &shapes, &bp, true, false);
 
         // In water: buoyancy pushes up, no gravity.
         assert!(entity.vy > 0.0, "Water buoyancy should push upward");
@@ -275,17 +327,18 @@ mod tests {
     #[test]
     fn test_fall_distance_accumulates() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let mut entity = make_floating_entity();
         entity.vy = 0.0;
 
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        physics_tick(&mut entity, &EmptyLevel, &shapes, &bp, false, false);
         assert!(
             entity.fall_distance > 0.0,
             "Fall distance should increase while falling"
         );
 
         let fd1 = entity.fall_distance;
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        physics_tick(&mut entity, &EmptyLevel, &shapes, &bp, false, false);
         assert!(
             entity.fall_distance > fd1,
             "Fall distance should keep increasing"
@@ -295,11 +348,12 @@ mod tests {
     #[test]
     fn test_fall_distance_resets_on_landing() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let mut entity = make_entity_above_floor(0.5);
         entity.vy = -1.0;
         entity.fall_distance = 5.0;
 
-        physics_tick(&mut entity, &FloorLevel, &shapes, false, false);
+        physics_tick(&mut entity, &FloorLevel, &shapes, &bp, false, false);
 
         assert!(entity.on_ground, "Entity should land");
         assert!(
@@ -328,6 +382,7 @@ mod tests {
     #[test]
     fn test_entity_at_rest_on_ground() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let mut entity = make_entity_above_floor(0.0);
         entity.on_ground = true;
         entity.vx = 0.0;
@@ -335,7 +390,7 @@ mod tests {
         entity.vz = 0.0;
 
         let y_before = entity.y;
-        physics_tick(&mut entity, &FloorLevel, &shapes, false, false);
+        physics_tick(&mut entity, &FloorLevel, &shapes, &bp, false, false);
 
         // Entity should stay on ground (gravity pulls down, floor stops it).
         assert!(entity.on_ground, "Entity should remain on ground");
@@ -349,10 +404,11 @@ mod tests {
     #[test]
     fn test_lava_buoyancy() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let mut entity = make_floating_entity();
         entity.vy = 0.0;
 
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, true);
+        physics_tick(&mut entity, &EmptyLevel, &shapes, &bp, false, true);
 
         // Lava buoyancy is less than water.
         assert!(
@@ -365,6 +421,7 @@ mod tests {
     #[test]
     fn test_single_block_collision() {
         let shapes = FullCubeShapeProvider::new();
+        let bp = default_physics();
         let level = SingleBlockLevel {
             pos: BlockPos::new(0, 0, 0),
             state_id: 1, // stone
@@ -375,13 +432,82 @@ mod tests {
         entity.set_pos(0.5, 1.5, 0.5);
         entity.vy = -5.0;
 
-        physics_tick(&mut entity, &level, &shapes, false, false);
+        physics_tick(&mut entity, &level, &shapes, &bp, false, false);
 
         assert!(entity.on_ground, "Entity should land on single block");
         assert!(
             entity.y >= 1.0 - 0.001,
             "Entity should not pass through block: y={}",
             entity.y
+        );
+    }
+
+    #[test]
+    fn test_ice_reduces_friction() {
+        let shapes = FullCubeShapeProvider::new();
+        let bp = registry_physics();
+        let reg = BlockRegistry::load().unwrap();
+        let ice_id = reg.default_state("minecraft:ice").unwrap().0 as u32;
+        let ice_level = SpecificFloorLevel {
+            floor_state_id: ice_id,
+        };
+
+        let mut entity = make_entity_above_floor(0.0);
+        entity.on_ground = true;
+        entity.vx = 1.0;
+        entity.vy = 0.0;
+        entity.vz = 0.0;
+
+        physics_tick(&mut entity, &ice_level, &shapes, &bp, false, false);
+
+        // On ice: drag = 0.98 * 0.91 = 0.8918
+        // On normal: drag = 0.6 * 0.91 = 0.546
+        // Ice should preserve more velocity.
+        let ice_vx = entity.vx;
+        assert!(
+            ice_vx > 0.8,
+            "Ice should preserve high velocity: vx={ice_vx}"
+        );
+
+        // Compare with stone floor.
+        let mut entity2 = make_entity_above_floor(0.0);
+        entity2.on_ground = true;
+        entity2.vx = 1.0;
+        entity2.vy = 0.0;
+        entity2.vz = 0.0;
+
+        physics_tick(&mut entity2, &FloorLevel, &shapes, &bp, false, false);
+        let stone_vx = entity2.vx;
+
+        assert!(
+            ice_vx > stone_vx,
+            "Ice should be more slippery: ice_vx={ice_vx} > stone_vx={stone_vx}"
+        );
+    }
+
+    #[test]
+    fn test_slime_bounce() {
+        let shapes = FullCubeShapeProvider::new();
+        let bp = registry_physics();
+        let reg = BlockRegistry::load().unwrap();
+        let slime_id = reg.default_state("minecraft:slime_block").unwrap().0 as u32;
+        let slime_level = SpecificFloorLevel {
+            floor_state_id: slime_id,
+        };
+
+        let mut entity = make_entity_above_floor(0.5);
+        entity.vy = -1.0;
+
+        physics_tick(&mut entity, &slime_level, &shapes, &bp, false, false);
+
+        // Entity should bounce: vy negated then drag applied.
+        // Pre-bounce vy was some negative value after gravity.
+        // After negate, it should be positive. After * VERTICAL_DRAG, still positive.
+        assert!(entity.on_ground, "Entity should land on slime");
+        assert!(
+            entity.vy > 0.0,
+            "Slime should bounce entity upward: vy={}",
+            entity.vy
         );
     }
 }
