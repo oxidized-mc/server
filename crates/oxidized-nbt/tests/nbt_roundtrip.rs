@@ -18,7 +18,7 @@ fn all_types_compound() -> NbtCompound {
     c.put_int("int", 1_000_000);
     c.put_long("long", 9_000_000_000i64);
     c.put_float("float", 3.14);
-    c.put_double("double", 2.718281828);
+    c.put_double("double", std::f64::consts::E);
     c.put("byte_array", NbtTag::ByteArray(vec![1, 2, 3, -1]));
     c.put_string("string", "Hello, NBT!");
 
@@ -57,7 +57,7 @@ fn test_binary_roundtrip_complex_compound() {
     assert_eq!(result.get_int("int"), Some(1_000_000));
     assert_eq!(result.get_long("long"), Some(9_000_000_000));
     assert_eq!(result.get_float("float"), Some(3.14));
-    assert_eq!(result.get_double("double"), Some(2.718281828));
+    assert_eq!(result.get_double("double"), Some(std::f64::consts::E));
     assert_eq!(
         result.get_byte_array("byte_array"),
         Some(&[1i8, 2, 3, -1][..])
