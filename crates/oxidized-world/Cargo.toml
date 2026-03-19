@@ -29,7 +29,9 @@ rayon        = { workspace = true }
 bumpalo      = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
+tokio    = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

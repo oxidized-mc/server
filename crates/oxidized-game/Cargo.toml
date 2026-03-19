@@ -29,7 +29,8 @@ indexmap      = { workspace = true }
 lru           = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true }
+tokio    = { workspace = true }
+proptest = { workspace = true }
 
 [lints]
 workspace = true
