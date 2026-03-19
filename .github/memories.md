@@ -1407,3 +1407,30 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 
 - Phase R1 doc at `docs/phases/phase-r1-refactoring.md`. Should be done between P18 and P19.
 - 6 sub-phases (R1–R6), 27 work items. Critical path: ADRs → network.rs split → component split.
+
+### Phase R2 Retrospective — network.rs → network/ Module Split
+
+**Completed:** Split 2079-LOC `network.rs` into 11 files in `network/` module tree.
+
+**What went well:**
+- `mod network;` in main.rs automatically picks up `network/mod.rs` — zero changes to main.rs
+- The `decode_packet()` helper pattern (log + return `Result`) works cleanly with both
+  `?` propagation (hard errors) and `if let Ok()` (soft errors / log-and-continue)
+- PlayContext struct bundles connection state cleanly; keepalive state stays as locals in
+  the select! loop since it's modified across branches
+
+**Gotchas discovered:**
+- Borrow splitting with PlayContext in select!: handler functions that need `&mut Connection`
+  separately from other PlayContext fields must take individual params, not `&mut PlayContext`
+  (e.g., `handle_chat_command` takes `conn, command, name, uuid, ...` separately)
+- Zero-field packets (StatusRequest, LoginAcknowledged) — `let _ack = Packet::decode(data)`
+  is intentional, not a missed error. decode_packet is overkill for empty payloads.
+- Movement has 4 decode variants (pos/pos_rot/rot/status_only) requiring a match before
+  decode_packet — the helper still works, just pass the match result in
+
+**File sizes (LOC):**
+- `mod.rs`: 508 (soft limit, acceptable — contains tests)
+- `play/mod.rs`: 582 (soft limit, acceptable — dispatch + small handlers)
+- All others: 50–280 LOC, well under limits
+
+**Status:** R2 complete. Next: R3 (ECS component split) per phase doc.
