@@ -36,9 +36,12 @@ impl HeightmapType {
         }
     }
 
-    /// The types that must be sent to the client.
-    pub const CLIENT_TYPES: &[HeightmapType] =
-        &[HeightmapType::MotionBlocking, HeightmapType::WorldSurface];
+    /// The types that must be sent to the client (`Usage.CLIENT` in Java).
+    pub const CLIENT_TYPES: &[HeightmapType] = &[
+        HeightmapType::MotionBlocking,
+        HeightmapType::WorldSurface,
+        HeightmapType::MotionBlockingNoLeaves,
+    ];
 }
 
 /// Heightmap storing the highest Y for each (x, z) column in a chunk.
@@ -183,6 +186,6 @@ mod tests {
 
     #[test]
     fn test_client_types() {
-        assert_eq!(HeightmapType::CLIENT_TYPES.len(), 2);
+        assert_eq!(HeightmapType::CLIENT_TYPES.len(), 3);
     }
 }

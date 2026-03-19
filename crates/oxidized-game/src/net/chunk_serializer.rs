@@ -14,6 +14,7 @@ use super::light_serializer::build_light_data;
 /// Heightmap type IDs matching Java's `Heightmap.Types` enum ordinals.
 const HEIGHTMAP_TYPE_ID_WORLD_SURFACE: i32 = 1;
 const HEIGHTMAP_TYPE_ID_MOTION_BLOCKING: i32 = 4;
+const HEIGHTMAP_TYPE_ID_MOTION_BLOCKING_NO_LEAVES: i32 = 5;
 
 /// Builds a full chunk packet from a [`LevelChunk`].
 #[must_use]
@@ -39,13 +40,16 @@ fn build_chunk_data(chunk: &LevelChunk) -> ChunkPacketData {
 /// Only `MOTION_BLOCKING` and `WORLD_SURFACE` are sent to the client,
 /// matching Java's `Heightmap.Types.sendToClient()` filter.
 fn build_heightmap_entries(chunk: &LevelChunk) -> Vec<HeightmapEntry> {
-    let mut entries = Vec::with_capacity(2);
+    let mut entries = Vec::with_capacity(3);
 
     for &htype in HeightmapType::CLIENT_TYPES {
         if let Some(hm) = chunk.heightmap(htype) {
             let type_id = match htype {
                 HeightmapType::WorldSurface => HEIGHTMAP_TYPE_ID_WORLD_SURFACE,
                 HeightmapType::MotionBlocking => HEIGHTMAP_TYPE_ID_MOTION_BLOCKING,
+                HeightmapType::MotionBlockingNoLeaves => {
+                    HEIGHTMAP_TYPE_ID_MOTION_BLOCKING_NO_LEAVES
+                }
                 _ => continue,
             };
             entries.push(HeightmapEntry {
