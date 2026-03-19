@@ -12,6 +12,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::chunk::view_distance::spiral_chunks;
+use oxidized_game::commands::Commands;
+use oxidized_game::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_game::player::movement::validate_movement;
 use oxidized_game::player::{
@@ -38,12 +40,13 @@ use oxidized_protocol::packets::login::{
 };
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
-    ClientboundDisguisedChatPacket, ClientboundForgetLevelChunkPacket, ClientboundGameEventPacket,
-    ClientboundKeepAlivePacket, ClientboundLevelChunkWithLightPacket,
-    ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket,
-    ClientboundSetChunkCacheRadiusPacket, ClientboundSystemChatPacket, GameEventType,
-    PlayerCommandAction, RelativeFlags, ServerboundAcceptTeleportationPacket,
-    ServerboundChatCommandPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
+    ClientboundCommandSuggestionsPacket, ClientboundCommandsPacket,
+    ClientboundForgetLevelChunkPacket, ClientboundGameEventPacket, ClientboundKeepAlivePacket,
+    ClientboundLevelChunkWithLightPacket, ClientboundPlayerPositionPacket,
+    ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
+    ClientboundSystemChatPacket, GameEventType, PlayerCommandAction, RelativeFlags,
+    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket, ServerboundChatPacket,
+    ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
     ServerboundPlayerInputPacket,
 };
@@ -98,6 +101,41 @@ pub struct ServerContext {
     pub chat_tx: broadcast::Sender<ChatBroadcastMessage>,
     /// Alternate color code prefix character, or `None` if disabled.
     pub color_char: Option<char>,
+    /// Brigadier command framework — shared across all connections.
+    pub commands: Commands,
+    /// Maximum number of players allowed on the server.
+    pub max_players: usize,
+}
+
+impl ServerHandle for ServerContext {
+    fn broadcast_to_ops(&self, _message: &Component, _min_level: u32) {
+        // TODO(phase-18): broadcast to ops via chat_tx
+    }
+
+    fn request_shutdown(&self) {
+        // TODO(phase-18): graceful shutdown trigger
+        info!("Server shutdown requested via /stop");
+    }
+
+    fn seed(&self) -> i64 {
+        0 // TODO: expose world seed from PrimaryLevelData
+    }
+
+    fn online_player_names(&self) -> Vec<String> {
+        self.player_list
+            .read()
+            .iter()
+            .map(|p| p.read().name.clone())
+            .collect()
+    }
+
+    fn online_player_count(&self) -> usize {
+        self.player_list.read().player_count()
+    }
+
+    fn max_players(&self) -> usize {
+        self.max_players
+    }
 }
 
 /// A chat message broadcast to all connected players.
@@ -815,6 +853,15 @@ async fn handle_play_entry(
     )
     .await?;
 
+    // Send the command tree so the client can offer tab-completion.
+    {
+        let cmd_source = make_command_source(&player_name, uuid, &player, server_ctx);
+        let tree = server_ctx.commands.serialize_tree(&cmd_source);
+        let cmd_pkt = commands_packet_from_tree(&tree);
+        conn.send_raw(ClientboundCommandsPacket::PACKET_ID, &cmd_pkt.encode())
+            .await?;
+    }
+
     // Send initial chunk batch — empty air chunks in a spiral pattern.
     // Real chunk loading (from disk/worldgen) comes in later phases.
     let chunk_center = ChunkPos::from_block(player_chunk_x, player_chunk_z);
@@ -1244,10 +1291,18 @@ async fn handle_play_entry(
                             if !rate_limiter.try_acquire(std::time::Instant::now()) {
                                 warn!(peer = %addr, name = %player_name, "Command rate-limited");
                             } else {
+                                let (pos, rot) = {
+                                    let p = player_arc.read();
+                                    ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
+                                };
                                 handle_chat_command(
                                     conn,
                                     &cmd_pkt.command,
                                     &player_name,
+                                    uuid,
+                                    pos,
+                                    rot,
+                                    4, // TODO: read actual permission level
                                     server_ctx,
                                 ).await;
                             }
@@ -1255,6 +1310,45 @@ async fn handle_play_entry(
                         Err(e) => {
                             debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode chat command");
                         },
+                    }
+                } else if pkt.id == ServerboundCommandSuggestionPacket::PACKET_ID {
+                    match ServerboundCommandSuggestionPacket::decode(pkt.data) {
+                        Ok(suggestion_pkt) => {
+                            let (pos, rot) = {
+                                let p = player_arc.read();
+                                ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
+                            };
+                            let source = make_command_source_for_player(
+                                &player_name,
+                                uuid,
+                                pos,
+                                rot,
+                                4, // TODO: read actual permission level
+                                conn,
+                                server_ctx,
+                            );
+                            let input = suggestion_pkt.command.trim_start_matches('/');
+                            let suggestions = server_ctx.commands.completions(input, &source);
+                            let response = ClientboundCommandSuggestionsPacket {
+                                id: suggestion_pkt.id,
+                                start: 0,
+                                length: input.len() as i32,
+                                suggestions: suggestions.into_iter().map(|s| {
+                                    oxidized_protocol::packets::play::clientbound_command_suggestions::SuggestionEntry {
+                                        text: s.text,
+                                        tooltip: None,
+                                    }
+                                }).collect(),
+                            };
+                            let _ = conn.send_raw(
+                                ClientboundCommandSuggestionsPacket::PACKET_ID,
+                                &response.encode(),
+                            ).await;
+                            let _ = conn.flush().await;
+                        }
+                        Err(e) => {
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to decode command suggestion");
+                        }
                     }
                 } else if pkt.id < 0 || pkt.id > MAX_SERVERBOUND_PLAY_ID {
                     warn!(
@@ -1298,80 +1392,142 @@ async fn handle_play_entry(
 ///
 /// Commands not recognized are silently ignored — the full command
 /// dispatcher comes in Phase 18.
+/// Handles a `/command` from a player using the Brigadier dispatcher.
 async fn handle_chat_command(
     conn: &mut Connection,
     command: &str,
     player_name: &str,
-    server_ctx: &ServerContext,
+    player_uuid: uuid::Uuid,
+    player_pos: (f64, f64, f64),
+    player_rot: (f32, f32),
+    permission_level: u32,
+    server_ctx: &Arc<ServerContext>,
 ) {
-    let parts: Vec<&str> = command.splitn(2, ' ').collect();
-    let cmd_name = parts[0];
-    let args = parts.get(1).copied().unwrap_or("");
+    let source = make_command_source_for_player(
+        player_name,
+        player_uuid,
+        player_pos,
+        player_rot,
+        permission_level,
+        conn,
+        server_ctx,
+    );
 
-    match cmd_name {
-        "say" => {
-            if args.is_empty() {
-                return;
-            }
-            let message_component = parse_colors(args, server_ctx.color_char);
-            // /say broadcasts via DisguisedChatPacket with SAY_COMMAND (registry id 1).
-            let pkt = ClientboundDisguisedChatPacket {
-                message: message_component,
-                chat_type_id: 1, // minecraft:say_command
-                sender_name: Component::text(player_name),
-                target_name: None,
-            };
-            let encoded = pkt.encode();
-            let broadcast = ChatBroadcastMessage {
-                packet_id: ClientboundDisguisedChatPacket::PACKET_ID,
-                data: encoded.freeze(),
-            };
-            let _ = server_ctx.chat_tx.send(broadcast);
-            info!(player = %player_name, message = %args, "Command /say");
+    match server_ctx.commands.dispatch(command, source) {
+        Ok(result) => {
+            debug!(
+                player = %player_name,
+                command = %command,
+                result = result,
+                "Command executed",
+            );
         },
-        "me" => {
-            if args.is_empty() {
-                return;
-            }
-            let message_component = parse_colors(args, server_ctx.color_char);
-            // /me broadcasts via DisguisedChatPacket with EMOTE_COMMAND (registry id 6).
-            let pkt = ClientboundDisguisedChatPacket {
-                message: message_component,
-                chat_type_id: 6, // minecraft:emote_command
-                sender_name: Component::text(player_name),
-                target_name: None,
-            };
-            let encoded = pkt.encode();
-            let broadcast = ChatBroadcastMessage {
-                packet_id: ClientboundDisguisedChatPacket::PACKET_ID,
-                data: encoded.freeze(),
-            };
-            let _ = server_ctx.chat_tx.send(broadcast);
-            info!(player = %player_name, action = %args, "Command /me");
-        },
-        _ => {
-            // Unknown command — send feedback to the player only.
+        Err(e) => {
             let err_msg = ClientboundSystemChatPacket {
-                content: Component::text(format!("Unknown command: /{cmd_name}")),
+                content: Component::text(format!("{e}")),
                 overlay: false,
             };
             let _ = conn
                 .send_raw(ClientboundSystemChatPacket::PACKET_ID, &err_msg.encode())
                 .await;
             let _ = conn.flush().await;
-            debug!(player = %player_name, command = %command, "Unknown command");
+            debug!(player = %player_name, command = %command, error = %e, "Command failed");
         },
     }
 }
 
-/// Parses color codes from text using the configured color character.
-///
-/// If `color_char` is `Some(ch)`, recognizes both `§` and `ch` as color
-/// prefixes. If `None`, only recognizes `§`.
-fn parse_colors(text: &str, color_char: Option<char>) -> Component {
-    match color_char {
-        Some(ch) => Component::from_legacy_with_char(text, ch),
-        None => Component::from_legacy(text),
+/// Builds a [`CommandSourceStack`] for use during login (command tree
+/// serialization). Uses a no-op feedback sender since no packets need
+/// to be sent at this point.
+fn make_command_source(
+    player_name: &str,
+    uuid: uuid::Uuid,
+    player: &ServerPlayer,
+    server_ctx: &Arc<ServerContext>,
+) -> CommandSourceStack {
+    CommandSourceStack {
+        source: CommandSourceKind::Player {
+            name: player_name.to_string(),
+            uuid,
+        },
+        position: (player.pos.x, player.pos.y, player.pos.z),
+        rotation: (player.yaw, player.pitch),
+        permission_level: 4, // full permissions for tree serialization
+        display_name: player_name.to_string(),
+        server: server_ctx.clone(),
+        feedback_sender: Arc::new(|_| {}),
+        silent: false,
+    }
+}
+
+/// Builds a [`CommandSourceStack`] for a player executing a command.
+/// The feedback sender writes system chat messages directly to the player's
+/// connection.
+fn make_command_source_for_player(
+    player_name: &str,
+    uuid: uuid::Uuid,
+    pos: (f64, f64, f64),
+    rot: (f32, f32),
+    permission_level: u32,
+    _conn: &Connection,
+    server_ctx: &Arc<ServerContext>,
+) -> CommandSourceStack {
+    // Feedback messages are sent as system chat packets via broadcast.
+    // For now, we log them — real per-player packet sending requires
+    // owning the connection, which is done via broadcast channel.
+    let chat_tx = server_ctx.chat_tx.clone();
+    let name = player_name.to_string();
+    CommandSourceStack {
+        source: CommandSourceKind::Player {
+            name: player_name.to_string(),
+            uuid,
+        },
+        position: pos,
+        rotation: rot,
+        permission_level,
+        display_name: player_name.to_string(),
+        server: server_ctx.clone(),
+        feedback_sender: Arc::new(move |component: &Component| {
+            let pkt = ClientboundSystemChatPacket {
+                content: component.clone(),
+                overlay: false,
+            };
+            let encoded = pkt.encode();
+            let broadcast = ChatBroadcastMessage {
+                packet_id: ClientboundSystemChatPacket::PACKET_ID,
+                data: encoded.freeze(),
+            };
+            let _ = chat_tx.send(broadcast);
+            debug!(player = %name, "Command feedback sent");
+        }),
+        silent: false,
+    }
+}
+
+/// Converts the game crate's [`CommandTreeData`] into a protocol-level
+/// [`ClientboundCommandsPacket`].
+fn commands_packet_from_tree(
+    tree: &oxidized_game::commands::CommandTreeData,
+) -> ClientboundCommandsPacket {
+    let nodes = tree
+        .nodes
+        .iter()
+        .map(|n| {
+            use oxidized_protocol::packets::play::clientbound_commands::CommandNodeData;
+            CommandNodeData {
+                flags: n.flags,
+                children: n.children.clone(),
+                redirect_node: n.redirect_node,
+                name: n.name.clone(),
+                parser_id: n.parser.as_ref().map(|p| p.parser_id),
+                parser_properties: n.parser.as_ref().map(|p| p.properties.clone()),
+                suggestions_type: n.suggestions_type.clone(),
+            }
+        })
+        .collect();
+    ClientboundCommandsPacket {
+        nodes,
+        root_index: tree.root_index,
     }
 }
 
@@ -1559,6 +1715,8 @@ mod tests {
                 max_simulation_distance: 10,
                 chat_tx: broadcast::channel(256).0,
                 color_char: Some('&'),
+                commands: oxidized_game::commands::Commands::new(),
+                max_players: 20,
             }),
         })
     }

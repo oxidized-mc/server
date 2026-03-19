@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use clap::Parser;
 use mimalloc::MiMalloc;
+use oxidized_game::commands::Commands;
 use oxidized_game::player::PlayerList;
 use oxidized_nbt::NbtCompound;
 use oxidized_protocol::constants;
@@ -172,6 +173,8 @@ fn main() -> anyhow::Result<()> {
             max_simulation_distance: config.world.simulation_distance as i32,
             chat_tx: broadcast::channel(256).0,
             color_char,
+            commands: Commands::new(),
+            max_players: config.gameplay.max_players as usize,
         });
 
         // Build the shared login context.

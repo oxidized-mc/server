@@ -5,6 +5,7 @@
 
 pub mod chat;
 pub mod chunk;
+pub mod commands;
 pub mod entity;
 pub mod level;
 pub mod net;
