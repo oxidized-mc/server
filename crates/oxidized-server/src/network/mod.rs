@@ -1,0 +1,508 @@
+//! TCP listener and per-connection handler for the Oxidized server.
+//!
+//! Binds to the configured address, accepts incoming connections, and
+//! spawns a Tokio task per client. Dispatches through the protocol
+//! state machine: HANDSHAKING → STATUS/LOGIN → CONFIGURATION → PLAY.
+
+mod configuration;
+mod handshake;
+pub mod helpers;
+mod login;
+mod play;
+mod status;
+
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+use oxidized_game::commands::Commands;
+use oxidized_game::commands::source::ServerHandle;
+use oxidized_protocol::chat::Component;
+use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
+use oxidized_protocol::crypto::ServerKeyPair;
+use oxidized_protocol::status::ServerStatus;
+use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::storage::PrimaryLevelData;
+use parking_lot::RwLock;
+use tokio::net::TcpListener;
+use tokio::sync::broadcast;
+use tracing::{debug, info, warn};
+
+use oxidized_game::player::PlayerList;
+
+/// Shared state for login operations, passed to each connection handler.
+pub struct LoginContext {
+    /// Pre-built server status for the multiplayer list.
+    pub server_status: Arc<ServerStatus>,
+    /// RSA-1024 keypair used for encryption handshake.
+    pub keypair: Arc<ServerKeyPair>,
+    /// Whether the server authenticates players against Mojang session servers.
+    pub online_mode: bool,
+    /// Minimum packet size (in bytes) before compression is applied. `-1` disables compression.
+    pub compression_threshold: i32,
+    /// Whether to block connections through proxies by verifying the client IP.
+    pub prevent_proxy_connections: bool,
+    /// Reusable HTTP client for Mojang session server requests.
+    pub http_client: reqwest::Client,
+    /// Shared game server state for PLAY-state operations.
+    pub server_ctx: Arc<ServerContext>,
+}
+
+/// Shared game server state accessible to all connection handlers.
+///
+/// Holds the player list, world metadata, and dimension registry needed
+/// when a client transitions from CONFIGURATION to PLAY state.
+pub struct ServerContext {
+    /// Server-wide player roster (thread-safe via interior mutability).
+    pub player_list: RwLock<PlayerList>,
+    /// World metadata loaded from `level.dat` (or defaults for new worlds).
+    pub level_data: PrimaryLevelData,
+    /// All registered dimension identifiers (e.g., `minecraft:overworld`).
+    pub dimensions: Vec<ResourceLocation>,
+    /// Maximum view distance allowed by the server config (2–32 chunks).
+    pub max_view_distance: i32,
+    /// Maximum simulation distance allowed by the server config (2–32 chunks).
+    pub max_simulation_distance: i32,
+    /// Broadcast channel for chat messages sent to all connected players.
+    pub chat_tx: broadcast::Sender<ChatBroadcastMessage>,
+    /// Alternate color code prefix character, or `None` if disabled.
+    pub color_char: Option<char>,
+    /// Brigadier command framework — shared across all connections.
+    pub commands: Commands,
+    /// Maximum number of players allowed on the server.
+    pub max_players: usize,
+}
+
+impl ServerHandle for ServerContext {
+    fn broadcast_to_ops(&self, _message: &Component, _min_level: u32) {
+        // TODO(phase-18): broadcast to ops via chat_tx
+    }
+
+    fn request_shutdown(&self) {
+        // TODO(phase-18): graceful shutdown trigger
+        info!("Server shutdown requested via /stop");
+    }
+
+    fn seed(&self) -> i64 {
+        0 // TODO: expose world seed from PrimaryLevelData
+    }
+
+    fn online_player_names(&self) -> Vec<String> {
+        self.player_list
+            .read()
+            .iter()
+            .map(|p| p.read().name.clone())
+            .collect()
+    }
+
+    fn online_player_count(&self) -> usize {
+        self.player_list.read().player_count()
+    }
+
+    fn max_players(&self) -> usize {
+        self.max_players
+    }
+
+    fn difficulty(&self) -> i32 {
+        self.level_data.difficulty
+    }
+
+    fn game_time(&self) -> i64 {
+        self.level_data.time
+    }
+
+    fn day_time(&self) -> i64 {
+        self.level_data.day_time
+    }
+
+    fn is_raining(&self) -> bool {
+        self.level_data.is_raining
+    }
+
+    fn is_thundering(&self) -> bool {
+        self.level_data.is_thundering
+    }
+
+    fn kick_player(&self, name: &str, reason: &str) -> bool {
+        // TODO: Implement actual kick via a dedicated kick channel
+        let _ = (name, reason);
+        info!("Kick requested for player '{}': {}", name, reason);
+        false
+    }
+
+    fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid> {
+        let player_list = self.player_list.read();
+        for player_arc in player_list.iter() {
+            let player = player_arc.read();
+            if player.name == name {
+                return Some(player.uuid);
+            }
+        }
+        None
+    }
+
+    fn command_descriptions(&self) -> Vec<(String, Option<String>)> {
+        let mut cmds: Vec<(String, Option<String>)> = self
+            .commands
+            .dispatcher()
+            .root
+            .children
+            .iter()
+            .map(|(name, node)| (name.clone(), node.description().map(String::from)))
+            .collect();
+        cmds.sort_by(|a, b| a.0.cmp(&b.0));
+        cmds
+    }
+}
+
+/// A chat message broadcast to all connected players.
+#[derive(Debug, Clone)]
+pub struct ChatBroadcastMessage {
+    /// Pre-encoded packet bytes (packet ID + body) ready for `send_raw`.
+    pub packet_id: i32,
+    /// Encoded packet body bytes.
+    pub data: bytes::Bytes,
+}
+
+/// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.
+/// There are 58 registered serverbound packets (IDs 0x00–0x39).
+const MAX_SERVERBOUND_PLAY_ID: i32 = 0x39;
+
+/// Starts the TCP listener and accepts connections until a shutdown signal
+/// is received.
+///
+/// # Errors
+///
+/// Returns an error if the listener fails to bind to `addr`.
+pub async fn listen(
+    addr: SocketAddr,
+    ctx: Arc<LoginContext>,
+    mut shutdown_rx: broadcast::Receiver<()>,
+) -> std::io::Result<()> {
+    let listener = TcpListener::bind(addr).await?;
+    info!(address = %addr, "Listening for connections");
+
+    loop {
+        tokio::select! {
+            biased;
+
+            _ = shutdown_rx.recv() => {
+                info!("Shutdown signal received — stopping listener");
+                break;
+            }
+
+            result = listener.accept() => {
+                match result {
+                    Ok((stream, peer_addr)) => {
+                        info!(peer = %peer_addr, "New connection");
+                        let ctx = Arc::clone(&ctx);
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_connection(stream, peer_addr, &ctx).await {
+                debug!(peer = %peer_addr, error = %e, "Connection handler finished with error");
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Failed to accept connection");
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Handles a single client connection through the protocol state machine.
+///
+/// Dispatches packets based on the current [`ConnectionState`]:
+/// - **Handshaking** → parse [`ClientIntentionPacket`], transition state
+/// - **Status** → respond with server status JSON and pong
+/// - **Login** → authenticate, enable encryption/compression, finish login
+async fn handle_connection(
+    stream: tokio::net::TcpStream,
+    addr: SocketAddr,
+    ctx: &LoginContext,
+) -> Result<(), ConnectionError> {
+    let mut conn = Connection::new(stream, addr)?;
+    debug!(
+        peer = %addr,
+        state = %conn.state,
+        "Connection established",
+    );
+
+    loop {
+        match conn.read_raw_packet().await {
+            Ok(pkt) => {
+                debug!(
+                    peer = %addr,
+                    state = %conn.state,
+                    packet_id = format_args!("0x{:02X}", pkt.id),
+                    size = pkt.data.len(),
+                    "Received packet",
+                );
+
+                match conn.state {
+                    ConnectionState::Handshaking => {
+                        handshake::handle_handshake(&mut conn, pkt).await?;
+                    },
+                    ConnectionState::Status => {
+                        let done = status::handle_status(&mut conn, pkt, ctx).await?;
+                        if done {
+                            debug!(peer = %addr, "Status exchange complete");
+                            return Ok(());
+                        }
+                    },
+                    ConnectionState::Login => {
+                        let profile = login::handle_login(&mut conn, pkt, ctx).await?;
+                        let client_info = configuration::handle_configuration(&mut conn).await?;
+                        play::handle_play_entry(&mut conn, profile, client_info, ctx).await?;
+                        info!(peer = %addr, "Player session ended");
+                        return Ok(());
+                    },
+                    ConnectionState::Configuration | ConnectionState::Play => {
+                        debug!(peer = %addr, state = %conn.state, "Unhandled state");
+                        return Ok(());
+                    },
+                }
+            },
+            Err(ConnectionError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                debug!(peer = %addr, state = %conn.state, "Client disconnected (EOF)");
+                return Ok(());
+            },
+            Err(e) => {
+                debug!(peer = %addr, state = %conn.state, error = %e, "Connection error");
+                return Err(e);
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use bytes::BytesMut;
+    use oxidized_protocol::codec::{frame, varint};
+    use oxidized_protocol::constants;
+    use oxidized_protocol::crypto::ServerKeyPair;
+    use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
+    use oxidized_protocol::packets::status::{ServerboundPingRequestPacket, ServerboundStatusRequestPacket};
+    use oxidized_protocol::packets::status::{ClientboundPongResponsePacket, ClientboundStatusResponsePacket};
+    use oxidized_protocol::status::{Component, StatusPlayers, StatusVersion};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+
+    fn test_server_status() -> ServerStatus {
+        ServerStatus {
+            version: StatusVersion {
+                name: constants::VERSION_NAME.to_string(),
+                protocol: constants::PROTOCOL_VERSION,
+            },
+            players: StatusPlayers {
+                max: 20,
+                online: 0,
+                sample: Vec::new(),
+            },
+            description: Component::text("Test Server"),
+            favicon: None,
+            enforces_secure_chat: false,
+        }
+    }
+
+    fn test_login_context() -> Arc<LoginContext> {
+        Arc::new(LoginContext {
+            server_status: Arc::new(test_server_status()),
+            keypair: Arc::new(ServerKeyPair::generate().unwrap()),
+            online_mode: false,
+            compression_threshold: -1,
+            prevent_proxy_connections: false,
+            http_client: reqwest::Client::new(),
+            server_ctx: Arc::new(ServerContext {
+                player_list: RwLock::new(PlayerList::new(20)),
+                level_data: PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
+                max_view_distance: 10,
+                max_simulation_distance: 10,
+                chat_tx: broadcast::channel(256).0,
+                color_char: Some('&'),
+                commands: oxidized_game::commands::Commands::new(),
+                max_players: 20,
+            }),
+        })
+    }
+
+    /// Sends a framed packet (VarInt length + VarInt packet_id + body) over a raw stream.
+    async fn send_packet(stream: &mut TcpStream, packet_id: i32, body: &[u8]) {
+        let mut inner = BytesMut::new();
+        varint::write_varint_buf(packet_id, &mut inner);
+        inner.extend_from_slice(body);
+        frame::write_frame(stream, &inner).await.unwrap();
+        stream.flush().await.unwrap();
+    }
+
+    /// Reads one framed packet and returns (packet_id, body).
+    async fn read_packet(stream: &mut TcpStream) -> (i32, bytes::Bytes) {
+        let frame_data =
+            frame::read_frame(stream, oxidized_protocol::codec::frame::MAX_PACKET_SIZE)
+                .await
+                .unwrap();
+        let mut buf = frame_data;
+        let id = varint::read_varint_buf(&mut buf).unwrap();
+        (id, buf)
+    }
+
+    #[tokio::test]
+    async fn test_full_status_exchange() {
+        let ctx = test_login_context();
+        let (shutdown_tx, _) = broadcast::channel::<()>(1);
+
+        // Bind to a random port
+        let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let tcp_listener = TcpListener::bind(addr).await.unwrap();
+        let bound_addr = tcp_listener.local_addr().unwrap();
+        drop(tcp_listener);
+
+        let shutdown_rx = shutdown_tx.subscribe();
+        let ctx_clone = Arc::clone(&ctx);
+        let server = tokio::spawn(async move {
+            listen(bound_addr, ctx_clone, shutdown_rx).await.unwrap();
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let mut client = TcpStream::connect(bound_addr).await.unwrap();
+
+        // 1. Send handshake (intent = Status)
+        let handshake = ClientIntentionPacket {
+            protocol_version: constants::PROTOCOL_VERSION,
+            server_address: "localhost".to_string(),
+            server_port: 25565,
+            next_state: ClientIntent::Status,
+        };
+        let handshake_body = handshake.encode();
+        send_packet(
+            &mut client,
+            ClientIntentionPacket::PACKET_ID,
+            &handshake_body,
+        )
+        .await;
+
+        // 2. Send status request (empty body)
+        send_packet(&mut client, ServerboundStatusRequestPacket::PACKET_ID, &[]).await;
+
+        // 3. Read status response
+        let (resp_id, resp_body) = read_packet(&mut client).await;
+        assert_eq!(resp_id, ClientboundStatusResponsePacket::PACKET_ID);
+
+        // Parse the response JSON string
+        use oxidized_protocol::codec::types;
+        let mut resp_data = resp_body;
+        let json_str = types::read_string(&mut resp_data, 32767).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(json["version"]["protocol"], constants::PROTOCOL_VERSION);
+        assert_eq!(json["description"]["text"], "Test Server");
+        assert_eq!(json["players"]["max"], 20);
+
+        // 4. Send ping request
+        let ping_time: i64 = 1_719_000_000_000;
+        let mut ping_body = BytesMut::new();
+        oxidized_protocol::codec::types::write_i64(&mut ping_body, ping_time);
+        send_packet(
+            &mut client,
+            ServerboundPingRequestPacket::PACKET_ID,
+            &ping_body,
+        )
+        .await;
+
+        // 5. Read pong response
+        let (pong_id, pong_body) = read_packet(&mut client).await;
+        assert_eq!(pong_id, ClientboundPongResponsePacket::PACKET_ID);
+        let mut pong_data = pong_body;
+        let echoed_time = types::read_i64(&mut pong_data).unwrap();
+        assert_eq!(echoed_time, ping_time);
+
+        // 6. Server should have closed our connection after pong
+        // Reading should return EOF
+        let mut eof_buf = [0u8; 1];
+        let read_result = client.read(&mut eof_buf).await.unwrap();
+        assert_eq!(read_result, 0, "expected EOF after pong");
+
+        // Clean up
+        let _ = shutdown_tx.send(());
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn test_protocol_mismatch_still_responds() {
+        let ctx = test_login_context();
+        let (shutdown_tx, _) = broadcast::channel::<()>(1);
+
+        let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let tcp_listener = TcpListener::bind(addr).await.unwrap();
+        let bound_addr = tcp_listener.local_addr().unwrap();
+        drop(tcp_listener);
+
+        let shutdown_rx = shutdown_tx.subscribe();
+        let ctx_clone = Arc::clone(&ctx);
+        let server = tokio::spawn(async move {
+            listen(bound_addr, ctx_clone, shutdown_rx).await.unwrap();
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let mut client = TcpStream::connect(bound_addr).await.unwrap();
+
+        // Send handshake with WRONG protocol version
+        let handshake = ClientIntentionPacket {
+            protocol_version: 999,
+            server_address: "localhost".to_string(),
+            server_port: 25565,
+            next_state: ClientIntent::Status,
+        };
+        let handshake_body = handshake.encode();
+        send_packet(
+            &mut client,
+            ClientIntentionPacket::PACKET_ID,
+            &handshake_body,
+        )
+        .await;
+
+        // Send status request
+        send_packet(&mut client, ServerboundStatusRequestPacket::PACKET_ID, &[]).await;
+
+        // Should still get a valid response (vanilla behavior)
+        let (resp_id, resp_body) = read_packet(&mut client).await;
+        assert_eq!(resp_id, ClientboundStatusResponsePacket::PACKET_ID);
+
+        use oxidized_protocol::codec::types;
+        let mut resp_data = resp_body;
+        let json_str = types::read_string(&mut resp_data, 32767).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(json["version"]["protocol"], constants::PROTOCOL_VERSION);
+
+        let _ = shutdown_tx.send(());
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn test_listener_graceful_shutdown() {
+        let ctx = test_login_context();
+        let (shutdown_tx, _) = broadcast::channel::<()>(1);
+        let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+        let tcp_listener = TcpListener::bind(addr).await.unwrap();
+        let bound_addr = tcp_listener.local_addr().unwrap();
+        drop(tcp_listener);
+
+        let shutdown_rx = shutdown_tx.subscribe();
+        let server = tokio::spawn(async move {
+            listen(bound_addr, ctx, shutdown_rx).await.unwrap();
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        let _ = shutdown_tx.send(());
+
+        let result = tokio::time::timeout(tokio::time::Duration::from_secs(2), server).await;
+        assert!(result.is_ok(), "server should shut down within 2 seconds");
+    }
+}
