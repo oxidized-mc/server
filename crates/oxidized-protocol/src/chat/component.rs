@@ -914,6 +914,8 @@ impl Component {
                 ClickEvent::SuggestCommand(v) => ("suggest_command", v.as_str()),
                 ClickEvent::CopyToClipboard(v) => ("copy_to_clipboard", v.as_str()),
                 ClickEvent::ChangePage(v) => ("change_page", v.as_str()),
+                ClickEvent::ShowDialog(v) => ("show_dialog", v.as_str()),
+                ClickEvent::Custom(v) => ("custom", v.as_str()),
             };
             ce_nbt.put_string("action", action);
             ce_nbt.put_string("value", value);
@@ -1087,6 +1089,8 @@ impl Component {
                     "suggest_command" => Some(ClickEvent::SuggestCommand(value.to_string())),
                     "copy_to_clipboard" => Some(ClickEvent::CopyToClipboard(value.to_string())),
                     "change_page" => Some(ClickEvent::ChangePage(value.to_string())),
+                    "show_dialog" => Some(ClickEvent::ShowDialog(value.to_string())),
+                    "custom" => Some(ClickEvent::Custom(value.to_string())),
                     _ => None,
                 };
             }

@@ -19,6 +19,7 @@ pub mod clientbound_login;
 pub mod clientbound_move_entity;
 pub mod clientbound_player_abilities;
 pub mod clientbound_player_chat;
+pub mod clientbound_player_info_remove;
 pub mod clientbound_player_info_update;
 pub mod clientbound_player_position;
 pub mod clientbound_remove_entities;
@@ -34,6 +35,7 @@ pub mod serverbound_accept_teleportation;
 pub mod serverbound_chat;
 pub mod serverbound_chat_ack;
 pub mod serverbound_chat_command;
+pub mod serverbound_chat_command_signed;
 pub mod serverbound_chunk_batch_received;
 pub mod serverbound_command_suggestion;
 pub mod serverbound_keep_alive;
@@ -64,6 +66,7 @@ pub use clientbound_move_entity::{
 };
 pub use clientbound_player_abilities::ClientboundPlayerAbilitiesPacket;
 pub use clientbound_player_chat::{ClientboundPlayerChatPacket, FilterMask};
+pub use clientbound_player_info_remove::ClientboundPlayerInfoRemovePacket;
 pub use clientbound_player_info_update::{
     ClientboundPlayerInfoUpdatePacket, PlayerInfoActions, PlayerInfoEntry,
 };
@@ -83,6 +86,7 @@ pub use serverbound_accept_teleportation::ServerboundAcceptTeleportationPacket;
 pub use serverbound_chat::{LastSeenMessagesUpdate, ServerboundChatPacket};
 pub use serverbound_chat_ack::ServerboundChatAckPacket;
 pub use serverbound_chat_command::ServerboundChatCommandPacket;
+pub use serverbound_chat_command_signed::ServerboundChatCommandSignedPacket;
 pub use serverbound_chunk_batch_received::ServerboundChunkBatchReceivedPacket;
 pub use serverbound_command_suggestion::ServerboundCommandSuggestionPacket;
 pub use serverbound_keep_alive::ServerboundKeepAlivePacket;
