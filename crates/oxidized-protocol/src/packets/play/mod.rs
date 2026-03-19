@@ -6,6 +6,8 @@
 pub mod clientbound_add_entity;
 pub mod clientbound_chunk_batch_finished;
 pub mod clientbound_chunk_batch_start;
+pub mod clientbound_command_suggestions;
+pub mod clientbound_commands;
 pub mod clientbound_delete_chat;
 pub mod clientbound_disguised_chat;
 pub mod clientbound_entity_position_sync;
@@ -33,6 +35,7 @@ pub mod serverbound_chat;
 pub mod serverbound_chat_ack;
 pub mod serverbound_chat_command;
 pub mod serverbound_chunk_batch_received;
+pub mod serverbound_command_suggestion;
 pub mod serverbound_keep_alive;
 pub mod serverbound_move_player;
 pub mod serverbound_player_command;
@@ -41,6 +44,10 @@ pub mod serverbound_player_input;
 pub use clientbound_add_entity::ClientboundAddEntityPacket;
 pub use clientbound_chunk_batch_finished::ClientboundChunkBatchFinishedPacket;
 pub use clientbound_chunk_batch_start::ClientboundChunkBatchStartPacket;
+pub use clientbound_command_suggestions::{ClientboundCommandSuggestionsPacket, SuggestionEntry};
+pub use clientbound_commands::{
+    ClientboundCommandsPacket, CommandNodeData as PacketCommandNodeData,
+};
 pub use clientbound_delete_chat::ClientboundDeleteChatPacket;
 pub use clientbound_disguised_chat::ClientboundDisguisedChatPacket;
 pub use clientbound_entity_position_sync::ClientboundEntityPositionSyncPacket;
@@ -77,6 +84,7 @@ pub use serverbound_chat::{LastSeenMessagesUpdate, ServerboundChatPacket};
 pub use serverbound_chat_ack::ServerboundChatAckPacket;
 pub use serverbound_chat_command::ServerboundChatCommandPacket;
 pub use serverbound_chunk_batch_received::ServerboundChunkBatchReceivedPacket;
+pub use serverbound_command_suggestion::ServerboundCommandSuggestionPacket;
 pub use serverbound_keep_alive::ServerboundKeepAlivePacket;
 pub use serverbound_move_player::ServerboundMovePlayerPacket;
 pub use serverbound_player_command::{PlayerCommandAction, ServerboundPlayerCommandPacket};

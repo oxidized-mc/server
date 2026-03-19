@@ -1154,3 +1154,67 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - **Keepalive packet IDs determined by counting**: CB 0x16 and SB 0x1C were found by
   counting `addPacket()` calls in GameProtocols.java. If client doesn't respond,
   verify these IDs against wiki.vg or actual packet captures.
+
+---
+
+### Phase 18 — Commands (Brigadier)
+
+**Date:** 2025-07-17  
+**Scope:** `oxidized-game/src/commands/`, `oxidized-protocol/src/packets/play/`, `oxidized-server/src/network.rs`
+
+#### Patterns & Best Practices
+
+- **`#[derive(Clone)]` on generic structs adds `S: Clone` bound** — Even if `S` only
+  appears inside `Arc<dyn Fn(&S)>` or `PhantomData<S>`, Rust's derive macro adds
+  `S: Clone` to the impl. Fix: write manual `Clone` impls without the bound.
+- **ServerHandle trait for cross-crate interaction** — `oxidized-game` cannot depend on
+  `oxidized-server` (crate dependency rules). Solution: define a `ServerHandle` trait in
+  `oxidized-game::commands::source`, implement it on `ServerContext` in `oxidized-server`.
+- **BFS serialization for command tree** — The Brigadier wire format uses a flat array of
+  nodes with child indices. BFS traversal produces correct index ordering. Permission
+  filtering must happen during serialization (skip nodes the player can't see).
+- **CommandNode as Clone-able enum** — Root/Literal/Argument variants. Children stored in
+  `BTreeMap` for deterministic wire format ordering.
+- **Feedback via broadcast channel** — Commands can't own the connection, so feedback
+  messages go through `chat_tx: broadcast::Sender`. Server-side message display.
+- **Builder DSL** — `literal("name").then(argument("arg", type).executes(fn))` mirrors
+  Java Brigadier. Functions are `Arc<dyn Fn(...)>` for Clone + Send + Sync.
+
+#### Gotchas
+
+- **Argument type IDs** — 57 entries (0-56), NOT 56. The count includes `uuid` at ID 56.
+  Order comes from `ArgumentTypeInfos.java` bootstrap() method. Getting these wrong causes
+  client-side tab-completion to silently fail or crash.
+- **Time argument overflow** — Vanilla allows `999999d` which when multiplied by 24000
+  overflows `i32`. Use `checked_mul()` for all time multipliers.
+- **QuotablePhrase escape sequences** — StringReader for quoted strings must handle `\"`
+  and `\\` escape sequences character-by-character. A simple `find('"')` misses escaped
+  quotes and produces wrong parse results.
+- **Tooltip encoding in CommandSuggestions** — Uses JSON string encoding (not NBT),
+  unlike most play-state Component encoding. The vanilla protocol uses
+  `ComponentSerialization.TRUSTED_STREAM_CODEC` which in this context serializes as JSON.
+- **Entity selector parsing stubbed** — Full `@a`, `@e`, `@p`, `@s`, `@r` parsing with
+  filters (`[distance=..10,type=zombie]`) is complex. Phase 18 reads it as a raw string.
+  Full parsing comes in later phases when entity queries are available.
+- **Permission levels hardcoded** — All connected players get permission level 4 (op).
+  Real permission reading from player data comes in a later phase.
+- **`reader.remaining()` borrows from reader** — Can't call `reader.remaining()` (returns
+  `&str`) and then mutate the reader. Fix: `.to_string()` to own the data before parsing.
+
+#### Architecture Notes
+
+- **56 vanilla argument types** mapped in `ArgumentType` enum with `registry_id()` and
+  `write_properties()`. Properties vary per type (e.g., Float has min/max flags + values,
+  Entity has flags byte, String has enum 0/1/2).
+- **Wire format node flags**: bits 0-1 = type (root/literal/argument), bit 2 = executable,
+  bit 3 = has redirect, bit 4 = has custom suggestions.
+- **16 core commands implemented**: stop, tp, gamemode, give, kill, time, weather, say, me,
+  help, list, kick, difficulty, seed, setblock, effect, gamerule.
+- **Commands packet sent during play entry** — after cache radius, before chunk loading.
+  Ensures client has the command tree for tab-completion before the player is fully in-game.
+
+#### Test Coverage
+
+- 32 unit tests: 20 dispatcher (parse, execute, permissions, completions, serialization),
+  6 arguments (registry IDs, property encoding), 6 context (escapes, time overflow).
+- All pass alongside existing 1409 workspace tests (1441 total).
