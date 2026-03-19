@@ -71,20 +71,16 @@ impl ClientboundSetEntityDataPacket {
         let entity_id = varint::read_varint_buf(&mut data)?;
         let mut entries = Vec::new();
 
-        loop {
-            if data.is_empty() {
-                return Err(PlayPacketError::InvalidData(
-                    "unexpected end of entity data".into(),
-                ));
-            }
+        if data.is_empty() {
+            return Err(PlayPacketError::InvalidData(
+                "unexpected end of entity data".into(),
+            ));
+        }
 
-            let slot = data[0];
-            data.advance(1);
+        let slot = data[0];
+        data.advance(1);
 
-            if slot == DATA_EOF_MARKER {
-                break;
-            }
-
+        if slot != DATA_EOF_MARKER {
             let serializer_type = varint::read_varint_buf(&mut data)?;
             // Without knowing the codec, we cannot determine where one
             // entry's value ends and the next begins. Collect all remaining
@@ -102,15 +98,9 @@ impl ClientboundSetEntityDataPacket {
                 serializer_type,
                 value_bytes,
             });
-            // Cannot continue — remaining data boundary is unknown without
-            // a serializer codec registry.
-            break;
         }
 
-        Ok(Self {
-            entity_id,
-            entries,
-        })
+        Ok(Self { entity_id, entries })
     }
 
     /// Encodes the packet body into `buf`.
@@ -127,11 +117,7 @@ impl ClientboundSetEntityDataPacket {
     /// Creates a packet with a single byte-type entry.
     ///
     /// Convenience for the common case of updating entity flags.
-    pub fn single_byte(
-        entity_id: i32,
-        slot: u8,
-        value: u8,
-    ) -> Self {
+    pub fn single_byte(entity_id: i32, slot: u8, value: u8) -> Self {
         Self {
             entity_id,
             entries: vec![EntityDataEntry {
@@ -143,11 +129,7 @@ impl ClientboundSetEntityDataPacket {
     }
 
     /// Creates a packet with a single VarInt-type entry.
-    pub fn single_varint(
-        entity_id: i32,
-        slot: u8,
-        value: i32,
-    ) -> Self {
+    pub fn single_varint(entity_id: i32, slot: u8, value: i32) -> Self {
         let mut value_bytes = BytesMut::new();
         varint::write_varint_buf(value, &mut value_bytes);
         Self {
@@ -161,11 +143,7 @@ impl ClientboundSetEntityDataPacket {
     }
 
     /// Creates a packet with a single boolean-type entry.
-    pub fn single_bool(
-        entity_id: i32,
-        slot: u8,
-        value: bool,
-    ) -> Self {
+    pub fn single_bool(entity_id: i32, slot: u8, value: bool) -> Self {
         Self {
             entity_id,
             entries: vec![EntityDataEntry {
@@ -190,8 +168,7 @@ mod tests {
 
     #[test]
     fn test_encode_single_byte_entry() {
-        let pkt =
-            ClientboundSetEntityDataPacket::single_byte(42, 0, 0x05);
+        let pkt = ClientboundSetEntityDataPacket::single_byte(42, 0, 0x05);
         let mut buf = BytesMut::new();
         pkt.encode(&mut buf);
 
@@ -231,9 +208,7 @@ mod tests {
 
     #[test]
     fn test_single_bool_convenience() {
-        let pkt = ClientboundSetEntityDataPacket::single_bool(
-            10, 4, true,
-        );
+        let pkt = ClientboundSetEntityDataPacket::single_bool(10, 4, true);
         assert_eq!(pkt.entity_id, 10);
         assert_eq!(pkt.entries.len(), 1);
         assert_eq!(pkt.entries[0].slot, 4);
@@ -243,9 +218,7 @@ mod tests {
 
     #[test]
     fn test_single_varint_convenience() {
-        let pkt = ClientboundSetEntityDataPacket::single_varint(
-            10, 1, 300,
-        );
+        let pkt = ClientboundSetEntityDataPacket::single_varint(10, 1, 300);
         assert_eq!(pkt.entity_id, 10);
         assert_eq!(pkt.entries.len(), 1);
         assert_eq!(pkt.entries[0].slot, 1);

@@ -83,9 +83,7 @@ impl Aabb {
 
     /// Returns the volume of this bounding box.
     pub fn volume(&self) -> f64 {
-        (self.max_x - self.min_x)
-            * (self.max_y - self.min_y)
-            * (self.max_z - self.min_z)
+        (self.max_x - self.min_x) * (self.max_y - self.min_y) * (self.max_z - self.min_z)
     }
 
     /// Returns the center point of this bounding box.

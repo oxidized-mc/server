@@ -610,13 +610,13 @@ fn test_teleport_accept_empty_queue_fails() {
 // Entity framework integration tests
 // ===========================================================================
 
+use oxidized_game::entity::Entity;
 use oxidized_game::entity::data_slots::*;
 use oxidized_game::entity::synched_data::{DataSerializerType, SynchedEntityData};
 use oxidized_game::entity::tracker::{
-    is_in_tracking_range, EntityTracker, TRACKING_RANGE_ANIMAL, TRACKING_RANGE_MISC,
-    TRACKING_RANGE_PLAYER,
+    EntityTracker, TRACKING_RANGE_ANIMAL, TRACKING_RANGE_MISC, TRACKING_RANGE_PLAYER,
+    is_in_tracking_range,
 };
-use oxidized_game::entity::Entity;
 
 /// Creating an entity populates all 8 base data slots and the bbox is
 /// consistent with the stated dimensions.
@@ -785,15 +785,39 @@ fn test_aabb_entity_collision() {
 #[test]
 fn test_tracking_range_boundary_conditions() {
     // Exactly at range
-    assert!(is_in_tracking_range(0.0, 0.0, 80.0, 0.0, TRACKING_RANGE_MISC));
+    assert!(is_in_tracking_range(
+        0.0,
+        0.0,
+        80.0,
+        0.0,
+        TRACKING_RANGE_MISC
+    ));
 
     // Just beyond range
-    assert!(!is_in_tracking_range(0.0, 0.0, 80.01, 0.0, TRACKING_RANGE_MISC));
+    assert!(!is_in_tracking_range(
+        0.0,
+        0.0,
+        80.01,
+        0.0,
+        TRACKING_RANGE_MISC
+    ));
 
     // Diagonal — exactly at sqrt(range²) distance
     let diag = (TRACKING_RANGE_MISC as f64) / 2.0_f64.sqrt();
-    assert!(is_in_tracking_range(0.0, 0.0, diag, diag, TRACKING_RANGE_MISC));
+    assert!(is_in_tracking_range(
+        0.0,
+        0.0,
+        diag,
+        diag,
+        TRACKING_RANGE_MISC
+    ));
 
     // Negative coordinates
-    assert!(is_in_tracking_range(-100.0, -100.0, -120.0, -100.0, TRACKING_RANGE_MISC));
+    assert!(is_in_tracking_range(
+        -100.0,
+        -100.0,
+        -120.0,
+        -100.0,
+        TRACKING_RANGE_MISC
+    ));
 }

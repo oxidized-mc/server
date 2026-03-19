@@ -34,9 +34,9 @@ impl ClientboundRemoveEntitiesPacket {
     pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
         let count = varint::read_varint_buf(&mut data)?;
         if count < 0 {
-            return Err(PlayPacketError::InvalidData(
-                format!("negative entity count: {count}"),
-            ));
+            return Err(PlayPacketError::InvalidData(format!(
+                "negative entity count: {count}"
+            )));
         }
         let mut entity_ids = Vec::with_capacity(count as usize);
         for _ in 0..count {
@@ -72,9 +72,7 @@ mod tests {
         };
         let mut buf = BytesMut::new();
         pkt.encode(&mut buf);
-        let decoded =
-            ClientboundRemoveEntitiesPacket::decode(buf.freeze())
-                .unwrap();
+        let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         assert_eq!(decoded.entity_ids, vec![42]);
     }
 
@@ -85,22 +83,16 @@ mod tests {
         };
         let mut buf = BytesMut::new();
         pkt.encode(&mut buf);
-        let decoded =
-            ClientboundRemoveEntitiesPacket::decode(buf.freeze())
-                .unwrap();
+        let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         assert_eq!(decoded.entity_ids, vec![1, 2, 3, 100, 999]);
     }
 
     #[test]
     fn test_encode_decode_empty() {
-        let pkt = ClientboundRemoveEntitiesPacket {
-            entity_ids: vec![],
-        };
+        let pkt = ClientboundRemoveEntitiesPacket { entity_ids: vec![] };
         let mut buf = BytesMut::new();
         pkt.encode(&mut buf);
-        let decoded =
-            ClientboundRemoveEntitiesPacket::decode(buf.freeze())
-                .unwrap();
+        let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         assert!(decoded.entity_ids.is_empty());
     }
 }

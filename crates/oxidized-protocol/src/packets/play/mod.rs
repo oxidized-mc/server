@@ -53,7 +53,7 @@ pub use clientbound_set_chunk_cache_center::ClientboundSetChunkCacheCenterPacket
 pub use clientbound_set_chunk_cache_radius::ClientboundSetChunkCacheRadiusPacket;
 pub use clientbound_set_default_spawn_position::ClientboundSetDefaultSpawnPositionPacket;
 pub use clientbound_set_entity_data::{
-    ClientboundSetEntityDataPacket, EntityDataEntry, DATA_EOF_MARKER,
+    ClientboundSetEntityDataPacket, DATA_EOF_MARKER, EntityDataEntry,
 };
 pub use clientbound_set_simulation_distance::ClientboundSetSimulationDistancePacket;
 pub use serverbound_accept_teleportation::ServerboundAcceptTeleportationPacket;
