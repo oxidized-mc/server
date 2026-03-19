@@ -18,6 +18,7 @@ use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 use crate::codec::frame::{self, FrameError, MAX_PACKET_SIZE};
+use crate::codec::packet::{Packet, PacketDecodeError};
 use crate::codec::varint::{self, VarIntError};
 use crate::compression::{CompressionError, CompressionState};
 use crate::crypto::CipherState;
@@ -92,6 +93,10 @@ pub enum ConnectionError {
     /// An I/O error on the underlying TCP stream.
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
+
+    /// A protocol-level error when decoding a typed packet.
+    #[error("protocol error: {0}")]
+    Protocol(#[from] PacketDecodeError),
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +317,41 @@ impl Connection {
     pub async fn flush(&mut self) -> Result<(), ConnectionError> {
         self.writer.flush().await?;
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Generic typed packet I/O
+    // -----------------------------------------------------------------------
+
+    /// Sends a typed packet (encodes, frames, and flushes).
+    ///
+    /// This is the high-level send API — it encodes the packet body via
+    /// [`Packet::encode`], prepends the packet ID via [`send_raw`](Self::send_raw),
+    /// and flushes the write buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConnectionError`] on I/O failure or compression errors.
+    pub async fn send_packet<P: Packet>(
+        &mut self,
+        pkt: &P,
+    ) -> Result<(), ConnectionError> {
+        let body = pkt.encode();
+        self.send_raw(P::PACKET_ID, &body).await?;
+        self.flush().await
+    }
+
+    /// Decodes a [`RawPacket`] into a typed packet.
+    ///
+    /// The caller is responsible for checking that `raw.id` matches
+    /// `P::PACKET_ID` — this method only decodes the body bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketDecodeError`] if the body bytes cannot be decoded
+    /// into the target packet type.
+    pub fn decode_packet<P: Packet>(raw: &RawPacket) -> Result<P, PacketDecodeError> {
+        P::decode(raw.data.clone())
     }
 
     /// Shuts down the write half of the connection.
@@ -541,5 +581,126 @@ mod tests {
         let pkt2 = server.read_raw_packet().await.unwrap();
         assert_eq!(pkt2.id, 0x0B);
         assert_eq!(&pkt2.data[..], b"small");
+    }
+
+    // -----------------------------------------------------------------------
+    // Generic typed packet I/O tests
+    // -----------------------------------------------------------------------
+
+    /// Minimal test packet implementing the `Packet` trait.
+    #[derive(Debug, Clone, PartialEq)]
+    struct TestPacket {
+        value: i32,
+    }
+
+    impl Packet for TestPacket {
+        const PACKET_ID: i32 = 0x42;
+
+        fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+            use crate::codec::types::read_i32;
+            let value = read_i32(&mut data)?;
+            Ok(Self { value })
+        }
+
+        fn encode(&self) -> BytesMut {
+            use crate::codec::types::write_i32;
+            let mut buf = BytesMut::with_capacity(4);
+            write_i32(&mut buf, self.value);
+            buf
+        }
+    }
+
+    #[tokio::test]
+    async fn test_send_packet_roundtrip() {
+        // Two Connection endpoints so both sides use encrypted/compressed pipeline
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let mut server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        // Server sends a typed packet
+        let pkt = TestPacket { value: 1_234_567 };
+        server.send_packet(&pkt).await.unwrap();
+
+        // Client reads it back as a raw packet, then decode via Connection helper
+        let raw = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(raw.id, TestPacket::PACKET_ID);
+
+        let decoded: TestPacket = Connection::decode_packet(&raw).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[tokio::test]
+    async fn test_send_packet_encrypted_roundtrip() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let mut server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        let secret = [0x77u8; 16];
+        server.enable_encryption(&secret);
+        client_conn.enable_encryption(&secret);
+
+        let pkt = TestPacket { value: -99 };
+        server.send_packet(&pkt).await.unwrap();
+
+        let raw = client_conn.read_raw_packet().await.unwrap();
+        let decoded: TestPacket = Connection::decode_packet(&raw).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[tokio::test]
+    async fn test_send_packet_compressed_roundtrip() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let mut server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        server.enable_compression(4);
+        client_conn.enable_compression(4);
+
+        let pkt = TestPacket { value: 42 };
+        server.send_packet(&pkt).await.unwrap();
+
+        let raw = client_conn.read_raw_packet().await.unwrap();
+        let decoded: TestPacket = Connection::decode_packet(&raw).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[tokio::test]
+    async fn test_decode_packet_error_propagation() {
+        // Decode with too-short data should produce a PacketDecodeError
+        let raw = RawPacket {
+            id: TestPacket::PACKET_ID,
+            data: Bytes::from_static(&[0x00, 0x01]), // only 2 bytes, need 4
+        };
+        let result: Result<TestPacket, _> = Connection::decode_packet(&raw);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_connection_error_protocol_variant() {
+        let pde = PacketDecodeError::InvalidData("test error".into());
+        let ce: ConnectionError = pde.into();
+        assert!(matches!(ce, ConnectionError::Protocol(_)));
+        assert!(ce.to_string().contains("test error"));
     }
 }
