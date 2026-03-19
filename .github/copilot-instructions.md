@@ -19,6 +19,7 @@ mistakes.
 | 2 | **[`.github/memories.md`](memories.md)** | Prior learnings, gotchas, patterns discovered in earlier sessions |
 | 3 | **Relevant ADRs** (`docs/adr/adr-NNN-*.md`) | Design decisions that constrain implementation |
 | 4 | **Relevant phase doc** (`docs/phases/phase-NN-*.md`) | Scope, acceptance criteria, and linked ADRs for the current phase |
+| 5 | **Lifecycle docs** (`docs/lifecycle/*.md`) | Development process, quality gates, and continuous-improvement guidance |
 
 ### How to determine "relevant"
 
