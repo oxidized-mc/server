@@ -915,3 +915,34 @@ Fixed in commit 478d145.
 #### LEVEL_CHUNKS_LOAD_START Fix
 Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client to exit
 "Loading Terrain" screen. We were missing this packet entirely. Fixed in commit 8315483.
+
+### Phase 14 — Player Movement (2025-07)
+
+#### What Went Well
+- Parallel agent dispatch (3 agents: serverbound, clientbound, game logic) worked perfectly
+  — all three compiled together on first try with no conflicts
+- Packet ID verification method (counting addPacket() calls in GameProtocols.java) confirmed
+  reliable — all 15 pre-existing IDs matched, all 8 new IDs verified correct
+
+#### Phase Doc Errors Discovered
+- **Sneak handling is WRONG in phase doc**: Phase doc describes `PressShiftKey`/`ReleaseShiftKey`
+  actions in `ServerboundPlayerCommandPacket`. In 26.1-pre-3, sneak is handled via
+  `ServerboundPlayerInputPacket` (Input.java) with bit flags, NOT PlayerCommand.
+- **PlayerCommandAction enum is WRONG**: Phase doc shows 9 actions starting from PressShiftKey=0.
+  Actual 26.1-pre-3 enum has 7 actions: StopSleeping=0, StartSprinting=1, StopSprinting=2,
+  StartRidingJump=3, StopRidingJump=4, OpenInventory=5, StartFallFlying=6.
+- **Input.java format**: Single byte with 7 bit flags: forward(0x01), backward(0x02),
+  left(0x04), right(0x08), jump(0x10), shift/sneak(0x20), sprint(0x40).
+
+#### Key Patterns
+- Movement validation: `validate_movement()` in `oxidized_game::player::movement` —
+  MAX_MOVEMENT_PER_TICK=100.0, coordinate clamp ±3.0e7, pitch clamp ±90°
+- Delta encoding: scale factor 4096.0 (1 block = 4096 units as i16), max delta ~7.999 blocks
+- `PlayerChunkTracker` wraps `chunks_to_load()`/`chunks_to_unload()` with persistent HashSet
+- Lock guards must be dropped before `.await` points in network.rs (use block scoping)
+
+#### What to Remember
+- Always verify phase doc claims against Java reference — phase docs were written before
+  detailed 26.1-pre-3 analysis and may contain pre-26.1 information
+- Sprint state is redundantly sent in BOTH PlayerCommand and PlayerInput packets —
+  server handles both to stay in sync
