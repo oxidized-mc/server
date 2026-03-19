@@ -306,9 +306,9 @@ proptest! {
 // Entity framework property tests
 // ---------------------------------------------------------------------------
 
-use oxidized_game::entity::aabb::Aabb;
 use oxidized_game::entity::synched_data::{DataSerializerType, SynchedEntityData};
 use oxidized_game::entity::tracker::is_in_tracking_range;
+use oxidized_protocol::types::aabb::Aabb;
 
 proptest! {
     /// AABB from_center volume is always width² × height.
@@ -337,8 +337,8 @@ proptest! {
         height in 0.01f64..10.0,
     ) {
         let bbox = Aabb::from_center(x, y, z, width, height);
-        let (cx, cy, cz) = bbox.center();
-        prop_assert!(bbox.contains(cx, cy, cz),
+        let c = bbox.get_center();
+        prop_assert!(bbox.contains(c.x, c.y, c.z),
             "AABB at ({x},{y},{z}) w={width} h={height} doesn't contain its center");
     }
 

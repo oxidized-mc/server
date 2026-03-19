@@ -5,13 +5,12 @@
 //! - [`id::next_entity_id()`] — global atomic entity ID counter
 //! - [`synched_data::SynchedEntityData`] — per-entity dirty-tracked data slots
 //! - [`data_slots`] — base entity data slot index constants
-//! - [`aabb::Aabb`] — axis-aligned bounding box
+//! - [`Aabb`](oxidized_protocol::types::aabb::Aabb) — axis-aligned bounding box (from `oxidized-protocol`)
 //! - [`Entity`] — base entity struct combining ID, position, and metadata
 //! - [`tracker::EntityTracker`] — tracks which players see each entity
 //!
 //! Corresponds to `net.minecraft.world.entity.Entity` and related classes.
 
-pub mod aabb;
 pub mod data_slots;
 pub mod id;
 pub mod synched_data;
@@ -19,10 +18,10 @@ pub mod tracker;
 
 use uuid::Uuid;
 
-use self::aabb::Aabb;
 use self::data_slots::*;
 use self::id::next_entity_id;
 use self::synched_data::{DataSerializerType, SynchedEntityData};
+use oxidized_protocol::types::aabb::Aabb;
 use oxidized_protocol::types::resource_location::ResourceLocation;
 
 /// Base entity containing all fields common to every entity type.
