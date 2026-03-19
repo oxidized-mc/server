@@ -21,6 +21,8 @@ pub enum FilterMask {
 /// 0x41 — Signed player chat message.
 #[derive(Debug, Clone)]
 pub struct ClientboundPlayerChatPacket {
+    /// Per-connection global message index (increments for each message sent).
+    pub global_index: i32,
     /// Sender UUID.
     pub sender: uuid::Uuid,
     /// Sender's message index (VarInt).
@@ -52,6 +54,9 @@ impl ClientboundPlayerChatPacket {
     /// Encodes the packet body (without packet ID).
     pub fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(512);
+
+        // Global message index
+        varint::write_varint_buf(self.global_index, &mut buf);
 
         // Sender UUID
         types::write_uuid(&mut buf, &self.sender);
@@ -114,6 +119,7 @@ impl ClientboundPlayerChatPacket {
     /// Returns an error if the buffer is malformed, contains invalid NBT, or
     /// has an unrecognised filter mask type.
     pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
+        let global_index = varint::read_varint_buf(&mut data)?;
         let sender = types::read_uuid(&mut data)?;
         let index = varint::read_varint_buf(&mut data)?;
         let has_sig = types::read_bool(&mut data)?;
@@ -197,6 +203,7 @@ impl ClientboundPlayerChatPacket {
         };
 
         Ok(Self {
+            global_index,
             sender,
             index,
             message_signature,
@@ -219,6 +226,7 @@ mod tests {
 
     fn make_packet() -> ClientboundPlayerChatPacket {
         ClientboundPlayerChatPacket {
+            global_index: 0,
             sender: uuid::Uuid::nil(),
             index: 0,
             message_signature: None,

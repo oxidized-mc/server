@@ -6,26 +6,32 @@ use crate::codec::{types, varint};
 use crate::packets::play::PlayPacketError;
 
 /// Acknowledgement state for recent chat messages.
+///
+/// Wire format: `VarInt offset` + `FixedBitSet(20) acknowledged` (3 bytes) + `byte checksum`.
 #[derive(Debug, Clone, Default)]
 pub struct LastSeenMessagesUpdate {
     /// Offset into the message chain.
     pub offset: i32,
     /// Fixed 20-bit bitset of acknowledged messages (3 bytes, packed).
     pub acknowledged: [u8; 3],
+    /// Integrity checksum (0 = ignore).
+    pub checksum: u8,
 }
 
 impl LastSeenMessagesUpdate {
     /// Decodes from a buffer.
     pub fn decode(data: &mut Bytes) -> Result<Self, PlayPacketError> {
         let offset = varint::read_varint_buf(data)?;
-        if data.remaining() < 3 {
+        if data.remaining() < 4 {
             return Err(PlayPacketError::UnexpectedEof);
         }
         let mut acknowledged = [0u8; 3];
         data.copy_to_slice(&mut acknowledged);
+        let checksum = data.get_u8();
         Ok(Self {
             offset,
             acknowledged,
+            checksum,
         })
     }
 
@@ -33,6 +39,7 @@ impl LastSeenMessagesUpdate {
     pub fn encode(&self, buf: &mut BytesMut) {
         varint::write_varint_buf(self.offset, buf);
         buf.put_slice(&self.acknowledged);
+        buf.put_u8(self.checksum);
     }
 }
 
