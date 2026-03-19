@@ -37,7 +37,8 @@ use oxidized_protocol::packets::login::{
 };
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
-    ClientboundForgetLevelChunkPacket, ClientboundGameEventPacket,
+    ClientboundDisguisedChatPacket, ClientboundForgetLevelChunkPacket,
+    ClientboundGameEventPacket,
     ClientboundLevelChunkWithLightPacket, ClientboundPlayerPositionPacket,
     ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
     ClientboundSystemChatPacket, GameEventType, PlayerCommandAction, RelativeFlags,
@@ -1215,15 +1216,16 @@ async fn handle_chat_command(
             if args.is_empty() {
                 return;
             }
-            // /say broadcasts as a system message: [<name>] <message>
-            let msg = Component::text(format!("[{player_name}] {args}"));
-            let pkt = ClientboundSystemChatPacket {
-                content: msg,
-                overlay: false,
+            // /say broadcasts via DisguisedChatPacket with SAY_COMMAND (registry id 1).
+            let pkt = ClientboundDisguisedChatPacket {
+                message: Component::text(args),
+                chat_type_id: 1, // minecraft:say_command
+                sender_name: Component::text(player_name),
+                target_name: None,
             };
             let encoded = pkt.encode();
             let broadcast = ChatBroadcastMessage {
-                packet_id: ClientboundSystemChatPacket::PACKET_ID,
+                packet_id: ClientboundDisguisedChatPacket::PACKET_ID,
                 data: encoded.freeze(),
             };
             let _ = server_ctx.chat_tx.send(broadcast);
@@ -1233,15 +1235,16 @@ async fn handle_chat_command(
             if args.is_empty() {
                 return;
             }
-            // /me broadcasts as: * <name> <action>
-            let msg = Component::text(format!("* {player_name} {args}"));
-            let pkt = ClientboundSystemChatPacket {
-                content: msg,
-                overlay: false,
+            // /me broadcasts via DisguisedChatPacket with EMOTE_COMMAND (registry id 6).
+            let pkt = ClientboundDisguisedChatPacket {
+                message: Component::text(args),
+                chat_type_id: 6, // minecraft:emote_command
+                sender_name: Component::text(player_name),
+                target_name: None,
             };
             let encoded = pkt.encode();
             let broadcast = ChatBroadcastMessage {
-                packet_id: ClientboundSystemChatPacket::PACKET_ID,
+                packet_id: ClientboundDisguisedChatPacket::PACKET_ID,
                 data: encoded.freeze(),
             };
             let _ = server_ctx.chat_tx.send(broadcast);
