@@ -27,10 +27,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         ctx.source.send_success(
                             &Component::translatable(
                                 "commands.gamerule.query",
-                                vec![
-                                    Component::text(rule),
-                                    Component::text("?"),
-                                ],
+                                vec![Component::text(rule), Component::text("?")],
                             ),
                             false,
                         );
@@ -46,10 +43,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                 ctx.source.send_success(
                                     &Component::translatable(
                                         "commands.gamerule.set",
-                                        vec![
-                                            Component::text(rule),
-                                            Component::text(value),
-                                        ],
+                                        vec![Component::text(rule), Component::text(value)],
                                     ),
                                     true,
                                 );

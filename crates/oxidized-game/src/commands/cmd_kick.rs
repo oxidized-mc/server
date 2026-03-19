@@ -64,10 +64,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                 ctx.source.send_success(
                                     &Component::translatable(
                                         "commands.kick.success",
-                                        vec![
-                                            Component::text(targets),
-                                            Component::text(reason),
-                                        ],
+                                        vec![Component::text(targets), Component::text(reason)],
                                     ),
                                     true,
                                 );

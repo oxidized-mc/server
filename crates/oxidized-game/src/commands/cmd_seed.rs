@@ -4,9 +4,9 @@ use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::literal;
 use crate::commands::source::CommandSourceStack;
+use oxidized_protocol::chat::ChatFormatting;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::chat::style::{ClickEvent, HoverEvent, TextColor};
-use oxidized_protocol::chat::ChatFormatting;
 
 /// Registers the `/seed` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
