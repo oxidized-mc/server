@@ -417,6 +417,7 @@ Full descriptions in the session plan file. Summary:
 | p12–p14 | Player join + spawns, chunks render, movement works |
 | p15–p18 | Entities, physics, chat, commands |
 | **R1** | **Architectural refactoring (ADR-035/036/037) — between p18 and p19** |
+| **R2** | **Packet trait & unified codec refactoring (ADR-007/038) — between R1 and p19** |
 | p19–p22 | World ticks, saves, inventory, block interaction |
 | p23–p27 | World generation (flat + noise), combat, mobs, animals |
 | p28–p32 | Redstone, crafting, block entities, advancements, scoreboards |

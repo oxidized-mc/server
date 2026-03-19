@@ -168,6 +168,7 @@ These principles inform every ADR:
 | [035](adr-035-module-structure.md) | Module Structure & File Size Policy | Accepted | R1, All future |
 | [036](adr-036-packet-handler-architecture.md) | Packet Handler Architecture | Accepted | R1, P19+ |
 | [037](adr-037-vector-type-macros.md) | Coordinate & Vector Type Macros | Accepted | R1, P07 (retrofit) |
+| [038](adr-038-packet-trait.md) | Packet Trait & Unified Codec Error | Accepted | R2, All future network phases |
 
 ---
 
@@ -214,3 +215,4 @@ These principles inform every ADR:
 | P37 JSON-RPC | 031 |
 | P38 Performance | 001, 004, 006, 014, 019, 029, 030, 032 |
 | R1 Refactoring | 003, 035, 036, 037 |
+| R2 Packet Trait | 007, 038 |
