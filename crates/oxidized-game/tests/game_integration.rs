@@ -292,3 +292,111 @@ fn test_chunks_to_load_no_movement() {
     assert!(to_load.is_empty(), "no movement → nothing to load");
     assert!(to_unload.is_empty(), "no movement → nothing to unload");
 }
+
+// ---------------------------------------------------------------------------
+// Full chunk packet lifecycle tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_full_chunk_packet_with_blocks_heightmaps_light() {
+    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
+    use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
+
+    let mut chunk = LevelChunk::new(ChunkPos::new(10, -20));
+
+    // Place some blocks
+    chunk.set_block_state(0, 64, 0, 1).unwrap(); // stone
+    chunk.set_block_state(7, 65, 7, 2).unwrap(); // granite
+
+    // Set client heightmaps
+    let hm = Heightmap::new(HeightmapType::MotionBlocking, OVERWORLD_HEIGHT).unwrap();
+    chunk.set_heightmap(hm);
+    let hm2 = Heightmap::new(HeightmapType::WorldSurface, OVERWORLD_HEIGHT).unwrap();
+    chunk.set_heightmap(hm2);
+
+    let pkt = build_chunk_packet(&chunk);
+
+    // Verify coordinates
+    assert_eq!(pkt.chunk_x, 10);
+    assert_eq!(pkt.chunk_z, -20);
+
+    // Verify heightmaps present
+    assert_eq!(pkt.chunk_data.heightmaps.len(), 2);
+
+    // Verify section buffer is non-empty and larger than empty chunk
+    let empty_len = build_chunk_packet(&LevelChunk::new(ChunkPos::new(0, 0)))
+        .chunk_data
+        .buffer
+        .len();
+    assert!(pkt.chunk_data.buffer.len() > empty_len);
+
+    // Verify the packet encodes without panicking
+    let encoded = pkt.encode();
+    assert!(encoded.len() > 8);
+    // Check coordinates in wire format
+    assert_eq!(i32::from_be_bytes(encoded[0..4].try_into().unwrap()), 10);
+    assert_eq!(i32::from_be_bytes(encoded[4..8].try_into().unwrap()), -20);
+}
+
+#[test]
+fn test_build_light_data_block_light_only() {
+    let sky: Vec<Option<DataLayer>> = vec![None; 26];
+    let mut block: Vec<Option<DataLayer>> = vec![None; 26];
+    block[10] = Some(DataLayer::filled(14));
+
+    let data = build_light_data(&sky, &block);
+
+    // Block light should have bit 10 set
+    assert_eq!(data.block_y_mask.len(), 1);
+    assert_ne!(data.block_y_mask[0] & (1 << 10), 0);
+    assert_eq!(data.block_updates.len(), 1);
+    assert_eq!(data.block_updates[0].len(), 2048);
+
+    // Sky should be all empty
+    assert!(data.sky_y_mask.is_empty());
+    assert!(data.sky_updates.is_empty());
+}
+
+#[test]
+fn test_build_light_data_mixed_sky_block() {
+    let mut sky: Vec<Option<DataLayer>> = vec![None; 26];
+    let mut block: Vec<Option<DataLayer>> = vec![None; 26];
+    sky[0] = Some(DataLayer::filled(15));
+    sky[3] = Some(DataLayer::filled(8));
+    block[1] = Some(DataLayer::filled(12));
+    block[3] = Some(DataLayer::filled(5));
+
+    let data = build_light_data(&sky, &block);
+
+    // Sky: bits 0 and 3
+    assert_eq!(data.sky_updates.len(), 2);
+    // Block: bits 1 and 3
+    assert_eq!(data.block_updates.len(), 2);
+
+    // Verify masks are disjoint with their empty counterparts
+    if !data.sky_y_mask.is_empty() && !data.empty_sky_y_mask.is_empty() {
+        assert_eq!(data.sky_y_mask[0] & data.empty_sky_y_mask[0], 0);
+    }
+    if !data.block_y_mask.is_empty() && !data.empty_block_y_mask.is_empty() {
+        assert_eq!(data.block_y_mask[0] & data.empty_block_y_mask[0], 0);
+    }
+}
+
+#[test]
+fn test_chunk_tracker_large_jump() {
+    use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
+
+    let mut tracker = PlayerChunkTracker::new(ChunkPos::new(0, 0), 2);
+    assert_eq!(tracker.loaded_count(), 25);
+
+    // Jump far away — no overlap
+    let (to_load, to_unload) = tracker.update_center(ChunkPos::new(1000, 1000));
+    assert_eq!(to_unload.len(), 25, "all old chunks should be unloaded");
+    assert_eq!(to_load.len(), 25, "all new chunks should be loaded");
+    assert_eq!(tracker.loaded_count(), 25, "total loaded should be constant");
+
+    // Verify none of the old chunks are still loaded
+    assert!(!tracker.is_loaded(&ChunkPos::new(0, 0)));
+    // Verify new center is loaded
+    assert!(tracker.is_loaded(&ChunkPos::new(1000, 1000)));
+}

@@ -70,4 +70,53 @@ mod tests {
         let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
         assert!((decoded.desired_chunks_per_tick).abs() < f32::EPSILON);
     }
+
+    #[test]
+    fn test_nan_rate_roundtrip() {
+        let pkt = ServerboundChunkBatchReceivedPacket {
+            desired_chunks_per_tick: f32::NAN,
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
+        assert!(decoded.desired_chunks_per_tick.is_nan());
+    }
+
+    #[test]
+    fn test_infinity_rate_roundtrip() {
+        let pkt = ServerboundChunkBatchReceivedPacket {
+            desired_chunks_per_tick: f32::INFINITY,
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
+        assert!(decoded.desired_chunks_per_tick.is_infinite());
+        assert!(decoded.desired_chunks_per_tick.is_sign_positive());
+    }
+
+    #[test]
+    fn test_negative_infinity_rate_roundtrip() {
+        let pkt = ServerboundChunkBatchReceivedPacket {
+            desired_chunks_per_tick: f32::NEG_INFINITY,
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
+        assert!(decoded.desired_chunks_per_tick.is_infinite());
+        assert!(decoded.desired_chunks_per_tick.is_sign_negative());
+    }
+
+    #[test]
+    fn test_negative_rate_roundtrip() {
+        let pkt = ServerboundChunkBatchReceivedPacket {
+            desired_chunks_per_tick: -5.0,
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundChunkBatchReceivedPacket::decode(encoded.freeze()).unwrap();
+        assert!((decoded.desired_chunks_per_tick - (-5.0)).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_decode_short_buffer() {
+        let data = bytes::Bytes::from_static(&[0x00, 0x00]); // only 2 bytes, need 4
+        let result = ServerboundChunkBatchReceivedPacket::decode(data);
+        assert!(result.is_err());
+    }
 }
