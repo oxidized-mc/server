@@ -27,20 +27,15 @@ pub async fn handle_movement(
     data: bytes::Bytes,
 ) -> Result<(), ConnectionError> {
     let decode_result = match packet_id {
-        ServerboundMovePlayerPacket::PACKET_ID_POS => {
-            ServerboundMovePlayerPacket::decode_pos(data)
-        },
+        ServerboundMovePlayerPacket::PACKET_ID_POS => ServerboundMovePlayerPacket::decode_pos(data),
         ServerboundMovePlayerPacket::PACKET_ID_POS_ROT => {
             ServerboundMovePlayerPacket::decode_pos_rot(data)
         },
-        ServerboundMovePlayerPacket::PACKET_ID_ROT => {
-            ServerboundMovePlayerPacket::decode_rot(data)
-        },
+        ServerboundMovePlayerPacket::PACKET_ID_ROT => ServerboundMovePlayerPacket::decode_rot(data),
         _ => ServerboundMovePlayerPacket::decode_status_only(data),
     };
 
-    let Ok(move_pkt) = decode_packet(decode_result, ctx.addr, ctx.player_name, "MovePlayer")
-    else {
+    let Ok(move_pkt) = decode_packet(decode_result, ctx.addr, ctx.player_name, "MovePlayer") else {
         return Ok(());
     };
 

@@ -558,9 +558,8 @@ pub fn get_entity(
         )));
     }
     let mut iter = targets.into_iter();
-    iter.next().ok_or_else(|| {
-        CommandError::Parse("Expected exactly one entity, got 0".to_string())
-    })
+    iter.next()
+        .ok_or_else(|| CommandError::Parse("Expected exactly one entity, got 0".to_string()))
 }
 
 /// Gets a player name from a string argument (for `GameProfile` args).

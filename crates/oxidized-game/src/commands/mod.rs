@@ -99,8 +99,8 @@ pub use context::{CommandContext, ParsedArgument, StringRange};
 pub use dispatcher::CommandDispatcher;
 pub use nodes::{ArgumentCommandNode, CommandNode, LiteralCommandNode, RootCommandNode};
 pub use pagination::PaginatedMessage;
-pub use serializer::{CommandNodeData, CommandTreeData};
 pub use selector::{SelectorKind, SelectorTarget};
+pub use serializer::{CommandNodeData, CommandTreeData};
 pub use source::{CommandSourceKind, CommandSourceStack};
 
 /// The command system hub: registers all commands, provides dispatch and

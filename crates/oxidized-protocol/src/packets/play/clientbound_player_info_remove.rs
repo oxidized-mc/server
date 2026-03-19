@@ -54,9 +54,7 @@ mod tests {
     #[test]
     fn test_roundtrip_single() {
         let uuid = Uuid::new_v4();
-        let pkt = ClientboundPlayerInfoRemovePacket {
-            uuids: vec![uuid],
-        };
+        let pkt = ClientboundPlayerInfoRemovePacket { uuids: vec![uuid] };
         let encoded = pkt.encode();
         let decoded = ClientboundPlayerInfoRemovePacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.uuids, vec![uuid]);

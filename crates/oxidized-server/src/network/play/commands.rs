@@ -24,13 +24,12 @@ pub async fn handle_command_suggestion(
     ctx: &mut PlayContext<'_>,
     data: bytes::Bytes,
 ) -> Result<(), ConnectionError> {
-    let suggestion_pkt: ServerboundCommandSuggestionPacket =
-        decode_packet(
-            ServerboundCommandSuggestionPacket::decode(data),
-            ctx.addr,
-            ctx.player_name,
-            "CommandSuggestion",
-        )?;
+    let suggestion_pkt: ServerboundCommandSuggestionPacket = decode_packet(
+        ServerboundCommandSuggestionPacket::decode(data),
+        ctx.addr,
+        ctx.player_name,
+        "CommandSuggestion",
+    )?;
 
     let (pos, rot) = {
         let p = ctx.player.read();
