@@ -784,11 +784,13 @@ fn test_aabb_entity_collision() {
 /// `is_in_tracking_range` works correctly at boundary conditions.
 #[test]
 fn test_tracking_range_boundary_conditions() {
+    let range = TRACKING_RANGE_MISC as f64;
+
     // Exactly at range
     assert!(is_in_tracking_range(
         0.0,
         0.0,
-        80.0,
+        range,
         0.0,
         TRACKING_RANGE_MISC
     ));
@@ -797,13 +799,13 @@ fn test_tracking_range_boundary_conditions() {
     assert!(!is_in_tracking_range(
         0.0,
         0.0,
-        80.01,
+        range + 0.01,
         0.0,
         TRACKING_RANGE_MISC
     ));
 
     // Diagonal — exactly at sqrt(range²) distance
-    let diag = (TRACKING_RANGE_MISC as f64) / 2.0_f64.sqrt();
+    let diag = range / 2.0_f64.sqrt();
     assert!(is_in_tracking_range(
         0.0,
         0.0,

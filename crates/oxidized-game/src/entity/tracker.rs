@@ -10,15 +10,17 @@ use std::collections::{HashMap, HashSet};
 ///
 /// These match the `clientTrackingRange()` × 16 values from
 /// `EntityType.java` registrations.
-pub const TRACKING_RANGE_PLAYER: i32 = 160; // 10 chunks
-/// Tracking range for animals (cows, pigs, etc.).
-pub const TRACKING_RANGE_ANIMAL: i32 = 128; // 8 chunks
+pub const TRACKING_RANGE_PLAYER: i32 = 512; // 32 chunks
+/// Tracking range for animals (cows, pigs, chickens, etc.).
+pub const TRACKING_RANGE_ANIMAL: i32 = 160; // 10 chunks
 /// Tracking range for hostile mobs (zombies, skeletons, etc.).
 pub const TRACKING_RANGE_MONSTER: i32 = 128; // 8 chunks
 /// Tracking range for miscellaneous entities (items, XP orbs).
-pub const TRACKING_RANGE_MISC: i32 = 80; // 5 chunks (default)
+pub const TRACKING_RANGE_MISC: i32 = 96; // 6 chunks (items, xp orbs)
 /// Tracking range for projectiles (arrows, fireballs).
 pub const TRACKING_RANGE_PROJECTILE: i32 = 64; // 4 chunks
+/// Default tracking range (used when entity type doesn't specify).
+pub const TRACKING_RANGE_DEFAULT: i32 = 80; // 5 chunks
 
 /// Tracks which players are watching each entity.
 ///
