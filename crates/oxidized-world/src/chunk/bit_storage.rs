@@ -128,14 +128,8 @@ impl BitStorage {
     ///
     /// Returns [`BitStorageError::OutOfBounds`] if `index >= size`.
     pub fn get(&self, index: usize) -> Result<u64, BitStorageError> {
-        if index >= self.size {
-            return Err(BitStorageError::OutOfBounds {
-                index,
-                size: self.size,
-            });
-        }
-        let long_index = index / self.values_per_long;
-        let bit_offset = (index % self.values_per_long) * self.bits as usize;
+        self.validate_index(index)?;
+        let (long_index, bit_offset) = self.long_bit_offset(index);
         Ok((self.data[long_index] >> bit_offset) & self.mask)
     }
 
@@ -145,21 +139,9 @@ impl BitStorage {
     ///
     /// Returns an error if `index` is out of bounds or `value` exceeds the bit width.
     pub fn set(&mut self, index: usize, value: u64) -> Result<(), BitStorageError> {
-        if index >= self.size {
-            return Err(BitStorageError::OutOfBounds {
-                index,
-                size: self.size,
-            });
-        }
-        if value > self.mask {
-            return Err(BitStorageError::ValueTooLarge {
-                value,
-                max: self.mask,
-                bits: self.bits,
-            });
-        }
-        let long_index = index / self.values_per_long;
-        let bit_offset = (index % self.values_per_long) * self.bits as usize;
+        self.validate_index(index)?;
+        self.validate_value(value)?;
+        let (long_index, bit_offset) = self.long_bit_offset(index);
         self.data[long_index] &= !(self.mask << bit_offset);
         self.data[long_index] |= value << bit_offset;
         Ok(())
@@ -171,12 +153,28 @@ impl BitStorage {
     ///
     /// Returns an error if `index` is out of bounds or `value` exceeds the bit width.
     pub fn get_and_set(&mut self, index: usize, value: u64) -> Result<u64, BitStorageError> {
+        self.validate_index(index)?;
+        self.validate_value(value)?;
+        let (long_index, bit_offset) = self.long_bit_offset(index);
+        let old = (self.data[long_index] >> bit_offset) & self.mask;
+        self.data[long_index] &= !(self.mask << bit_offset);
+        self.data[long_index] |= value << bit_offset;
+        Ok(old)
+    }
+
+    /// Validates that `index` is within bounds.
+    fn validate_index(&self, index: usize) -> Result<(), BitStorageError> {
         if index >= self.size {
             return Err(BitStorageError::OutOfBounds {
                 index,
                 size: self.size,
             });
         }
+        Ok(())
+    }
+
+    /// Validates that `value` fits within the bit width.
+    fn validate_value(&self, value: u64) -> Result<(), BitStorageError> {
         if value > self.mask {
             return Err(BitStorageError::ValueTooLarge {
                 value,
@@ -184,12 +182,14 @@ impl BitStorage {
                 bits: self.bits,
             });
         }
+        Ok(())
+    }
+
+    /// Returns the `(long_index, bit_offset)` for a given entry index.
+    fn long_bit_offset(&self, index: usize) -> (usize, usize) {
         let long_index = index / self.values_per_long;
         let bit_offset = (index % self.values_per_long) * self.bits as usize;
-        let old = (self.data[long_index] >> bit_offset) & self.mask;
-        self.data[long_index] &= !(self.mask << bit_offset);
-        self.data[long_index] |= value << bit_offset;
-        Ok(old)
+        (long_index, bit_offset)
     }
 
     /// Returns the bits per entry.
@@ -244,8 +244,7 @@ impl Iterator for BitStorageIter<'_> {
         if self.index >= self.storage.size {
             return None;
         }
-        let long_index = self.index / self.storage.values_per_long;
-        let bit_offset = (self.index % self.storage.values_per_long) * self.storage.bits as usize;
+        let (long_index, bit_offset) = self.storage.long_bit_offset(self.index);
         self.index += 1;
         Some((self.storage.data[long_index] >> bit_offset) & self.storage.mask)
     }

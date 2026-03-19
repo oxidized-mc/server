@@ -554,16 +554,7 @@ fn write_snbt(out: &mut String, tag: &NbtTag, depth: usize) {
         NbtTag::Double(v) => {
             write_float64(out, *v);
         },
-        NbtTag::ByteArray(arr) => {
-            out.push_str("[B;");
-            for (i, v) in arr.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                let _ = write!(out, "{v}b");
-            }
-            out.push(']');
-        },
+        NbtTag::ByteArray(arr) => format_typed_array(out, "[B;", arr, "b"),
         NbtTag::String(s) => write_quoted_string(out, s),
         NbtTag::List(list) => {
             out.push('[');
@@ -587,27 +578,26 @@ fn write_snbt(out: &mut String, tag: &NbtTag, depth: usize) {
             }
             out.push('}');
         },
-        NbtTag::IntArray(arr) => {
-            out.push_str("[I;");
-            for (i, v) in arr.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                let _ = write!(out, "{v}");
-            }
-            out.push(']');
-        },
-        NbtTag::LongArray(arr) => {
-            out.push_str("[L;");
-            for (i, v) in arr.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                let _ = write!(out, "{v}L");
-            }
-            out.push(']');
-        },
+        NbtTag::IntArray(arr) => format_typed_array(out, "[I;", arr, ""),
+        NbtTag::LongArray(arr) => format_typed_array(out, "[L;", arr, "L"),
     }
+}
+
+/// Formats a typed NBT array (`[B;1b,2b]`, `[I;1,2]`, `[L;1L,2L]`).
+fn format_typed_array<T: std::fmt::Display>(
+    out: &mut String,
+    prefix: &str,
+    arr: &[T],
+    suffix: &str,
+) {
+    out.push_str(prefix);
+    for (i, v) in arr.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let _ = write!(out, "{v}{suffix}");
+    }
+    out.push(']');
 }
 
 /// Writes a float with at least one decimal digit and the `f` suffix.
