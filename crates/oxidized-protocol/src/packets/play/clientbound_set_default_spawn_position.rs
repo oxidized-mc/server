@@ -42,7 +42,12 @@ impl ClientboundSetDefaultSpawnPositionPacket {
         }
         let yaw = data.get_f32();
         let pitch = data.get_f32();
-        Ok(Self { dimension, pos, yaw, pitch })
+        Ok(Self {
+            dimension,
+            pos,
+            yaw,
+            pitch,
+        })
     }
 
     /// Encodes the packet body (without packet ID).

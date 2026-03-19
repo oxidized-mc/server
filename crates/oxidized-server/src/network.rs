@@ -654,7 +654,11 @@ async fn handle_configuration(
             },
             _ => {
                 warn!(peer = %addr, id = finish_pkt.id, "Expected FinishConfiguration");
-                return Err(disconnect_err(conn, "Unexpected packet — expected finish configuration").await);
+                return Err(disconnect_err(
+                    conn,
+                    "Unexpected packet — expected finish configuration",
+                )
+                .await);
             },
         }
     }
@@ -726,7 +730,8 @@ async fn handle_play_entry(
     } else {
         // New player — spawn at world spawn.
         let (sx, sy, sz) = server_ctx.level_data.spawn_pos();
-        player.pos = oxidized_protocol::types::Vec3::new(f64::from(sx), f64::from(sy), f64::from(sz));
+        player.pos =
+            oxidized_protocol::types::Vec3::new(f64::from(sx), f64::from(sy), f64::from(sz));
         debug!(peer = %addr, uuid = %uuid, "New player — spawning at world spawn");
     }
 
@@ -800,9 +805,7 @@ async fn handle_play_entry(
                     );
                 }
             },
-            Err(ConnectionError::Io(ref e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
+            Err(ConnectionError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 info!(peer = %addr, name = %player_name, "Player disconnected");
                 break;
             },
@@ -954,9 +957,7 @@ mod tests {
             server_ctx: Arc::new(ServerContext {
                 player_list: RwLock::new(PlayerList::new(20)),
                 level_data: PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
-                dimensions: vec![
-                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
-                ],
+                dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
             }),
         })
     }

@@ -14,9 +14,7 @@ pub mod clientbound_set_simulation_distance;
 pub mod serverbound_accept_teleportation;
 
 pub use clientbound_game_event::{ClientboundGameEventPacket, GameEventType};
-pub use clientbound_login::{
-    ClientboundLoginPacket, CommonPlayerSpawnInfo, PlayPacketError,
-};
+pub use clientbound_login::{ClientboundLoginPacket, CommonPlayerSpawnInfo, PlayPacketError};
 pub use clientbound_player_abilities::ClientboundPlayerAbilitiesPacket;
 pub use clientbound_player_info_update::{
     ClientboundPlayerInfoUpdatePacket, PlayerInfoActions, PlayerInfoEntry,

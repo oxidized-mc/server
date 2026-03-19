@@ -112,7 +112,9 @@ impl ClientboundPlayerInfoUpdatePacket {
                     } else {
                         None
                     };
-                    entry.properties.push(ProfileProperty::new(name, value, signature));
+                    entry
+                        .properties
+                        .push(ProfileProperty::new(name, value, signature));
                 }
             }
 
@@ -187,10 +189,10 @@ impl ClientboundPlayerInfoUpdatePacket {
                         Some(sig) => {
                             types::write_bool(&mut buf, true);
                             types::write_string(&mut buf, sig);
-                        }
+                        },
                         None => {
                             types::write_bool(&mut buf, false);
-                        }
+                        },
                     }
                 }
             }
@@ -211,7 +213,10 @@ impl ClientboundPlayerInfoUpdatePacket {
                 varint::write_varint_buf(entry.latency, &mut buf);
             }
 
-            if self.actions.contains(PlayerInfoActions::UPDATE_DISPLAY_NAME) {
+            if self
+                .actions
+                .contains(PlayerInfoActions::UPDATE_DISPLAY_NAME)
+            {
                 types::write_bool(&mut buf, false); // No display name
             }
 
@@ -340,6 +345,9 @@ mod tests {
         assert_eq!(decoded.entries[0].properties.len(), 1);
         assert_eq!(decoded.entries[0].properties[0].name(), "textures");
         assert_eq!(decoded.entries[0].properties[0].value(), "dGV4dHVyZXM=");
-        assert_eq!(decoded.entries[0].properties[0].signature(), Some("c2lnbmF0dXJl"));
+        assert_eq!(
+            decoded.entries[0].properties[0].signature(),
+            Some("c2lnbmF0dXJl")
+        );
     }
 }

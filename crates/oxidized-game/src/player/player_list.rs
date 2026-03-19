@@ -5,8 +5,8 @@
 //!
 //! Mirrors `net.minecraft.server.players.PlayerList`.
 
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::AHashMap;
 use parking_lot::RwLock;

@@ -46,7 +46,10 @@ mod tests {
 
     #[test]
     fn test_roundtrip() {
-        let pkt = ClientboundSetChunkCacheCenterPacket { chunk_x: 5, chunk_z: -3 };
+        let pkt = ClientboundSetChunkCacheCenterPacket {
+            chunk_x: 5,
+            chunk_z: -3,
+        };
         let encoded = pkt.encode();
         let decoded = ClientboundSetChunkCacheCenterPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.chunk_x, 5);
@@ -55,7 +58,10 @@ mod tests {
 
     #[test]
     fn test_zero_center() {
-        let pkt = ClientboundSetChunkCacheCenterPacket { chunk_x: 0, chunk_z: 0 };
+        let pkt = ClientboundSetChunkCacheCenterPacket {
+            chunk_x: 0,
+            chunk_z: 0,
+        };
         let encoded = pkt.encode();
         let decoded = ClientboundSetChunkCacheCenterPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);

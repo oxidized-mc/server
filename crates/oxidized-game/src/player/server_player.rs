@@ -180,9 +180,11 @@ impl ServerPlayer {
         }
 
         // Spawn position (optional — bed or respawn anchor)
-        if let (Some(sx), Some(sy), Some(sz)) =
-            (nbt.get_int("SpawnX"), nbt.get_int("SpawnY"), nbt.get_int("SpawnZ"))
-        {
+        if let (Some(sx), Some(sy), Some(sz)) = (
+            nbt.get_int("SpawnX"),
+            nbt.get_int("SpawnY"),
+            nbt.get_int("SpawnZ"),
+        ) {
             self.spawn_pos = BlockPos::new(sx, sy, sz);
         }
 
@@ -228,7 +230,7 @@ impl ServerPlayer {
         nbt.put_int("SpawnZ", self.spawn_pos.z);
 
         // Dimension
-        nbt.put_string("Dimension", &self.dimension.to_string());
+        nbt.put_string("Dimension", self.dimension.to_string());
 
         nbt
     }

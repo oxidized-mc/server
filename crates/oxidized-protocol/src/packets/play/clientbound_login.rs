@@ -95,10 +95,10 @@ impl CommonPlayerSpawnInfo {
                 types::write_bool(buf, true);
                 dim.write(buf);
                 types::write_i64(buf, *pos);
-            }
+            },
             None => {
                 types::write_bool(buf, false);
-            }
+            },
         }
 
         varint::write_varint_buf(self.portal_cooldown, buf);

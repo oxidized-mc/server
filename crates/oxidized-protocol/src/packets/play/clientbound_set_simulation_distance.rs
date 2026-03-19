@@ -24,7 +24,9 @@ impl ClientboundSetSimulationDistancePacket {
     /// Decodes from the raw packet body.
     pub fn decode(mut data: Bytes) -> Result<Self, varint::VarIntError> {
         let simulation_distance = varint::read_varint_buf(&mut data)?;
-        Ok(Self { simulation_distance })
+        Ok(Self {
+            simulation_distance,
+        })
     }
 
     /// Encodes the packet body (without packet ID).
@@ -42,7 +44,9 @@ mod tests {
 
     #[test]
     fn test_roundtrip() {
-        let pkt = ClientboundSetSimulationDistancePacket { simulation_distance: 10 };
+        let pkt = ClientboundSetSimulationDistancePacket {
+            simulation_distance: 10,
+        };
         let encoded = pkt.encode();
         let decoded = ClientboundSetSimulationDistancePacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.simulation_distance, 10);

@@ -19,8 +19,8 @@ use oxidized_protocol::packets::play::{
     ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo, GameEventType,
     PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
 };
-use oxidized_protocol::types::block_pos::BlockPos;
 use oxidized_protocol::types::ResourceLocation;
+use oxidized_protocol::types::block_pos::BlockPos;
 use oxidized_world::storage::PrimaryLevelData;
 
 use super::game_mode::GameMode;
@@ -300,10 +300,7 @@ mod tests {
             ClientboundSetDefaultSpawnPositionPacket::PACKET_ID
         );
         assert_eq!(packets[3].id, ClientboundGameEventPacket::PACKET_ID);
-        assert_eq!(
-            packets[4].id,
-            ClientboundPlayerInfoUpdatePacket::PACKET_ID
-        );
+        assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
         assert_eq!(
             packets[5].id,
             ClientboundSetChunkCacheCenterPacket::PACKET_ID
@@ -323,8 +320,7 @@ mod tests {
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
         let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
-        let login =
-            ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
+        let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
         assert_eq!(login.player_id, 42);
         assert!(!login.hardcore);
@@ -343,7 +339,8 @@ mod tests {
         // Override to creative
         let mut player = player;
         player.game_mode = GameMode::Creative;
-        player.abilities = super::super::abilities::PlayerAbilities::for_game_mode(GameMode::Creative);
+        player.abilities =
+            super::super::abilities::PlayerAbilities::for_game_mode(GameMode::Creative);
 
         let level_data = make_level_data();
         let player_list = PlayerList::new(20);
@@ -386,8 +383,7 @@ mod tests {
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
         let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
-        let event =
-            ClientboundGameEventPacket::decode(packets[3].body.clone().freeze()).unwrap();
+        let event = ClientboundGameEventPacket::decode(packets[3].body.clone().freeze()).unwrap();
 
         assert_eq!(event.event, GameEventType::ChangeGameMode);
         assert!((event.param - 0.0).abs() < f32::EPSILON); // Survival = 0
@@ -402,8 +398,7 @@ mod tests {
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
         let joining = make_player(3, "Charlie");
-        let packets =
-            build_login_sequence(&joining, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(&joining, 1, &level_data, &player_list, &dimensions, 0);
         let info =
             ClientboundPlayerInfoUpdatePacket::decode(packets[4].body.clone().freeze()).unwrap();
 
@@ -427,7 +422,7 @@ mod tests {
         let center =
             ClientboundSetChunkCacheCenterPacket::decode(packets[5].body.clone().freeze()).unwrap();
 
-        assert_eq!(center.chunk_x, 6);  // 100 >> 4 = 6
+        assert_eq!(center.chunk_x, 6); // 100 >> 4 = 6
         assert_eq!(center.chunk_z, -13); // -200 >> 4 = -13
     }
 
@@ -442,8 +437,7 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets =
-            build_login_sequence(&player, 42, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(&player, 42, &level_data, &player_list, &dimensions, 0);
         let pos =
             ClientboundPlayerPositionPacket::decode(packets[7].body.clone().freeze()).unwrap();
 
@@ -504,8 +498,7 @@ mod tests {
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
         let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
-        let login =
-            ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
+        let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
         assert!(login.hardcore);
     }

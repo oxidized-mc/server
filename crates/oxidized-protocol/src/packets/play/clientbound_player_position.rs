@@ -99,9 +99,14 @@ impl ClientboundPlayerPositionPacket {
 
         Ok(Self {
             teleport_id,
-            x, y, z,
-            dx, dy, dz,
-            yaw, pitch,
+            x,
+            y,
+            z,
+            dx,
+            dy,
+            dz,
+            yaw,
+            pitch,
             relative_flags: RelativeFlags(flags),
         })
     }
@@ -132,9 +137,14 @@ mod tests {
     fn test_roundtrip_absolute() {
         let pkt = ClientboundPlayerPositionPacket {
             teleport_id: 1,
-            x: 100.5, y: 64.0, z: -200.25,
-            dx: 0.0, dy: 0.0, dz: 0.0,
-            yaw: 90.0, pitch: -15.0,
+            x: 100.5,
+            y: 64.0,
+            z: -200.25,
+            dx: 0.0,
+            dy: 0.0,
+            dz: 0.0,
+            yaw: 90.0,
+            pitch: -15.0,
             relative_flags: RelativeFlags::empty(),
         };
         let encoded = pkt.encode();
@@ -153,9 +163,14 @@ mod tests {
     fn test_roundtrip_with_relative_flags() {
         let pkt = ClientboundPlayerPositionPacket {
             teleport_id: 42,
-            x: 5.0, y: 3.0, z: -2.0,
-            dx: 0.1, dy: -0.5, dz: 0.0,
-            yaw: 0.0, pitch: 0.0,
+            x: 5.0,
+            y: 3.0,
+            z: -2.0,
+            dx: 0.1,
+            dy: -0.5,
+            dz: 0.0,
+            yaw: 0.0,
+            pitch: 0.0,
             relative_flags: RelativeFlags(RelativeFlags::X | RelativeFlags::Y | RelativeFlags::Z),
         };
         let encoded = pkt.encode();
@@ -172,9 +187,14 @@ mod tests {
     fn test_velocity_fields() {
         let pkt = ClientboundPlayerPositionPacket {
             teleport_id: 1,
-            x: 0.0, y: 0.0, z: 0.0,
-            dx: 1.5, dy: -0.08, dz: 0.3,
-            yaw: 0.0, pitch: 0.0,
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            dx: 1.5,
+            dy: -0.08,
+            dz: 0.3,
+            yaw: 0.0,
+            pitch: 0.0,
             relative_flags: RelativeFlags::empty(),
         };
         let encoded = pkt.encode();
