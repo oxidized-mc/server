@@ -9,6 +9,8 @@ use serde::de::{self, MapAccess, Visitor};
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use oxidized_nbt::{NbtCompound, NbtTag};
+
 use super::ChatFormatting;
 use crate::types::ResourceLocation;
 
@@ -73,10 +75,12 @@ pub enum ClickEvent {
     Custom(String),
 }
 
-impl Serialize for ClickEvent {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut map = s.serialize_map(Some(2))?;
-        let (action, value) = match self {
+impl ClickEvent {
+    /// Returns the `(action, value)` pair for serialization.
+    ///
+    /// Used by both JSON and NBT serializers.
+    pub fn action_value(&self) -> (&str, &str) {
+        match self {
             Self::OpenUrl(v) => ("open_url", v),
             Self::RunCommand(v) => ("run_command", v),
             Self::SuggestCommand(v) => ("suggest_command", v),
@@ -84,7 +88,30 @@ impl Serialize for ClickEvent {
             Self::ChangePage(v) => ("change_page", v),
             Self::ShowDialog(v) => ("show_dialog", v),
             Self::Custom(v) => ("custom", v),
-        };
+        }
+    }
+
+    /// Construct from an action/value pair.
+    ///
+    /// Returns `None` for unrecognized actions.
+    pub fn from_action_value(action: &str, value: &str) -> Option<Self> {
+        match action {
+            "open_url" => Some(Self::OpenUrl(value.to_string())),
+            "run_command" => Some(Self::RunCommand(value.to_string())),
+            "suggest_command" => Some(Self::SuggestCommand(value.to_string())),
+            "copy_to_clipboard" => Some(Self::CopyToClipboard(value.to_string())),
+            "change_page" => Some(Self::ChangePage(value.to_string())),
+            "show_dialog" => Some(Self::ShowDialog(value.to_string())),
+            "custom" => Some(Self::Custom(value.to_string())),
+            _ => None,
+        }
+    }
+}
+
+impl Serialize for ClickEvent {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut map = s.serialize_map(Some(2))?;
+        let (action, value) = self.action_value();
         map.serialize_entry("action", action)?;
         map.serialize_entry("value", value)?;
         map.end()
@@ -99,18 +126,9 @@ impl<'de> Deserialize<'de> for ClickEvent {
             value: String,
         }
         let raw = Raw::deserialize(d)?;
-        match raw.action.as_str() {
-            "open_url" => Ok(Self::OpenUrl(raw.value)),
-            "run_command" => Ok(Self::RunCommand(raw.value)),
-            "suggest_command" => Ok(Self::SuggestCommand(raw.value)),
-            "copy_to_clipboard" => Ok(Self::CopyToClipboard(raw.value)),
-            "change_page" => Ok(Self::ChangePage(raw.value)),
-            "show_dialog" => Ok(Self::ShowDialog(raw.value)),
-            "custom" => Ok(Self::Custom(raw.value)),
-            other => Err(de::Error::custom(format!(
-                "unknown click event action: {other}"
-            ))),
-        }
+        Self::from_action_value(&raw.action, &raw.value).ok_or_else(|| {
+            de::Error::custom(format!("unknown click event action: {}", raw.action))
+        })
     }
 }
 
@@ -153,6 +171,76 @@ pub enum HoverEvent {
     ShowItem(HoverItem),
     /// Show an entity tooltip.
     ShowEntity(HoverEntity),
+}
+
+impl HoverEvent {
+    /// Encode this hover event to an NBT compound.
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut compound = NbtCompound::new();
+        match self {
+            Self::ShowText(c) => {
+                compound.put_string("action", "show_text");
+                compound.put("contents", c.to_nbt());
+            },
+            Self::ShowItem(item) => {
+                compound.put_string("action", "show_item");
+                let mut item_nbt = NbtCompound::new();
+                item_nbt.put_string("id", &item.id);
+                item_nbt.put_int("count", item.count);
+                compound.put("contents", NbtTag::Compound(item_nbt));
+            },
+            Self::ShowEntity(entity) => {
+                compound.put_string("action", "show_entity");
+                let mut ent_nbt = NbtCompound::new();
+                ent_nbt.put_string("type", &entity.entity_type);
+                ent_nbt.put_string("id", &entity.id);
+                if let Some(ref name) = entity.name {
+                    ent_nbt.put("name", name.to_nbt());
+                }
+                compound.put("contents", NbtTag::Compound(ent_nbt));
+            },
+        }
+        compound
+    }
+
+    /// Decode a hover event from an NBT compound.
+    ///
+    /// Returns `Ok(None)` for unrecognized actions.
+    pub fn from_nbt(compound: &NbtCompound) -> Result<Option<Self>, String> {
+        let action = match compound.get_string("action") {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+        match action {
+            "show_text" => {
+                let component = compound
+                    .get("contents")
+                    .map(super::Component::from_nbt)
+                    .transpose()?;
+                Ok(component.map(|c| Self::ShowText(Box::new(c))))
+            },
+            "show_entity" => {
+                if let Some(NbtTag::Compound(ent)) = compound.get("contents") {
+                    let name = ent
+                        .get("name")
+                        .map(super::Component::from_nbt)
+                        .transpose()?
+                        .map(Box::new);
+                    Ok(Some(Self::ShowEntity(HoverEntity {
+                        entity_type: ent
+                            .get_string("type")
+                            .unwrap_or_default()
+                            .to_string(),
+                        id: ent.get_string("id").unwrap_or_default().to_string(),
+                        name,
+                    })))
+                } else {
+                    Ok(None)
+                }
+            },
+            _ => Ok(None),
+        }
+    }
 }
 
 impl Serialize for HoverEvent {
@@ -290,44 +378,48 @@ impl Style {
             font: self.font.clone().or_else(|| parent.font.clone()),
         }
     }
-}
 
-impl Serialize for Style {
-    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        // Count non-None fields for capacity hint
-        let mut count = 0;
+    /// Count non-`None` fields for JSON map sizing hints.
+    pub(crate) fn count_fields(&self) -> usize {
+        let mut n = 0;
         if self.color.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.bold.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.italic.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.underlined.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.strikethrough.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.obfuscated.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.insertion.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.click_event.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.hover_event.is_some() {
-            count += 1;
+            n += 1;
         }
         if self.font.is_some() {
-            count += 1;
+            n += 1;
         }
+        n
+    }
 
-        let mut map = s.serialize_map(Some(count))?;
+    /// Write style fields into an existing JSON serialize map.
+    pub(crate) fn write_json_fields<S: SerializeMap>(
+        &self,
+        map: &mut S,
+    ) -> Result<(), S::Error> {
         if let Some(ref c) = self.color {
             map.serialize_entry("color", c)?;
         }
@@ -358,6 +450,105 @@ impl Serialize for Style {
         if let Some(ref f) = self.font {
             map.serialize_entry("font", &f.to_string())?;
         }
+        Ok(())
+    }
+
+    /// Write style fields into an NBT compound.
+    pub(crate) fn write_nbt_fields(&self, compound: &mut NbtCompound) {
+        if let Some(ref color) = self.color {
+            match color {
+                TextColor::Named(cf) => {
+                    compound.put_string("color", cf.name());
+                },
+                TextColor::Hex(v) => {
+                    compound.put_string("color", format!("#{:06X}", v & 0xFFFFFF));
+                },
+            }
+        }
+        if let Some(b) = self.bold {
+            compound.put_byte("bold", if b { 1 } else { 0 });
+        }
+        if let Some(i) = self.italic {
+            compound.put_byte("italic", if i { 1 } else { 0 });
+        }
+        if let Some(u) = self.underlined {
+            compound.put_byte("underlined", if u { 1 } else { 0 });
+        }
+        if let Some(st) = self.strikethrough {
+            compound.put_byte("strikethrough", if st { 1 } else { 0 });
+        }
+        if let Some(o) = self.obfuscated {
+            compound.put_byte("obfuscated", if o { 1 } else { 0 });
+        }
+        if let Some(ref ins) = self.insertion {
+            compound.put_string("insertion", ins);
+        }
+        if let Some(ref ce) = self.click_event {
+            let mut ce_nbt = NbtCompound::new();
+            let (action, value) = ce.action_value();
+            ce_nbt.put_string("action", action);
+            ce_nbt.put_string("value", value);
+            compound.put("clickEvent", NbtTag::Compound(ce_nbt));
+        }
+        if let Some(ref he) = self.hover_event {
+            compound.put("hoverEvent", NbtTag::Compound(he.to_nbt()));
+        }
+        if let Some(ref f) = self.font {
+            compound.put_string("font", f.to_string());
+        }
+    }
+
+    /// Read style fields from an NBT compound.
+    pub(crate) fn read_nbt_fields(compound: &NbtCompound) -> Result<Self, String> {
+        let mut style = Style::default();
+        if let Some(color_str) = compound.get_string("color") {
+            if let Some(hex_str) = color_str.strip_prefix('#') {
+                if let Ok(v) = u32::from_str_radix(hex_str, 16) {
+                    style.color = Some(TextColor::Hex(v));
+                }
+            } else if let Some(cf) = ChatFormatting::from_name(color_str) {
+                style.color = Some(TextColor::Named(cf));
+            }
+        }
+        if let Some(b) = compound.get_byte("bold") {
+            style.bold = Some(b != 0);
+        }
+        if let Some(i) = compound.get_byte("italic") {
+            style.italic = Some(i != 0);
+        }
+        if let Some(u) = compound.get_byte("underlined") {
+            style.underlined = Some(u != 0);
+        }
+        if let Some(st) = compound.get_byte("strikethrough") {
+            style.strikethrough = Some(st != 0);
+        }
+        if let Some(o) = compound.get_byte("obfuscated") {
+            style.obfuscated = Some(o != 0);
+        }
+        if let Some(ins) = compound.get_string("insertion") {
+            style.insertion = Some(ins.to_string());
+        }
+        if let Some(NbtTag::Compound(ce)) = compound.get("clickEvent") {
+            if let (Some(action), Some(value)) =
+                (ce.get_string("action"), ce.get_string("value"))
+            {
+                style.click_event = ClickEvent::from_action_value(action, value);
+            }
+        }
+        if let Some(NbtTag::Compound(he)) = compound.get("hoverEvent") {
+            style.hover_event = HoverEvent::from_nbt(he)?;
+        }
+        if let Some(f) = compound.get_string("font") {
+            style.font = ResourceLocation::from_string(f).ok();
+        }
+        Ok(style)
+    }
+}
+
+impl Serialize for Style {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut map = s.serialize_map(Some(self.count_fields()))?;
+        self.write_json_fields(&mut map)?;
         map.end()
     }
 }
