@@ -1812,3 +1812,52 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - `crates/oxidized-server/src/network/mod.rs` — world_dir field on ServerContext
 - `crates/oxidized-server/src/tick.rs` — AUTOSAVE_INTERVAL_TICKS, async autosave, do_tick async
 
+
+---
+
+### Phase 21 — Inventory & Items
+
+#### Key Learnings
+
+- **packets.json IDs are final wire IDs** — no +1 bundle offset needed. The stored memory about bundle offsets was incorrect for this project. All existing codebase packet IDs match packets.json directly.
+- **Phase doc packet IDs were wrong** — always verify against `mc-server-ref/26.1-pre-3/generated/reports/packets.json` before implementing.
+- **DataComponentPatch** cannot be skipped without a component type registry. Each added entry has variable-length type-specific data. Must reject non-empty patches (return decode error) to prevent packet desync.
+- **ItemStack.to_nbt()** returns `Option<NbtCompound>` (None for empty stacks), not plain `NbtCompound`.
+- **Connection::send_packet(&pkt)** is the method to send packets, not `write_packet(id, &data)`.
+- **NbtList** does not support indexing (`inv[0]`). Use `.iter().collect::<Vec<_>>()` then index.
+- **Login sequence is now 10 packets** (was 8). Tests using hardcoded packet indices need updating when packets are added.
+- **Vanilla inventory format**: `Inventory` tag is TAG_List of compounds with `Slot` (byte), `id` (string), `count` (byte). See `ItemStackWithSlot.java`.
+
+#### Verified Packet IDs (from packets.json)
+
+| Packet | ID |
+|---|---|
+| ContainerSetContent (CB) | 0x12 |
+| ContainerSetSlot (CB) | 0x14 |
+| SetHeldSlot (CB) | 0x69 |
+| SetPlayerInventory (CB) | 0x6C |
+| SetCarriedItem (SB) | 0x35 |
+| SetCreativeModeSlot (SB) | 0x38 |
+
+#### Files Created
+
+- `crates/oxidized-protocol/src/codec/slot.rs` — Slot wire encoding/decoding (7 tests)
+- `crates/oxidized-game/src/inventory/mod.rs` — Inventory module with re-exports
+- `crates/oxidized-game/src/inventory/item_stack.rs` — ItemStack, ItemId, DataComponentPatch (18 tests)
+- `crates/oxidized-game/src/inventory/container.rs` — MenuType enum, ContainerStateId (3 tests)
+- `crates/oxidized-protocol/src/packets/play/clientbound_container_set_content.rs` — Packet 0x12
+- `crates/oxidized-protocol/src/packets/play/clientbound_container_set_slot.rs` — Packet 0x14
+- `crates/oxidized-protocol/src/packets/play/clientbound_set_held_slot.rs` — Packet 0x69
+- `crates/oxidized-protocol/src/packets/play/clientbound_set_player_inventory.rs` — Packet 0x6C
+- `crates/oxidized-protocol/src/packets/play/serverbound_set_carried_item.rs` — Packet 0x35
+- `crates/oxidized-protocol/src/packets/play/serverbound_set_creative_mode_slot.rs` — Packet 0x38
+- `crates/oxidized-server/src/network/play/inventory.rs` — Handlers + helpers (5 tests)
+
+#### Files Modified
+
+- `crates/oxidized-game/src/player/inventory.rs` — Full 41-slot PlayerInventory (20 tests)
+- `crates/oxidized-game/src/player/login.rs` — +2 packets in login sequence (ContainerSetContent, SetHeldSlot)
+- `crates/oxidized-game/src/player/server_player.rs` — NBT inventory persistence (5 new tests)
+- `crates/oxidized-game/tests/game_integration.rs` — Updated for 10-packet login sequence
+- `crates/oxidized-protocol/src/packets/play/mod.rs` — 6 new packet module registrations
+- `crates/oxidized-server/src/network/play/mod.rs` — 2 new dispatch arms + inventory module
