@@ -132,7 +132,9 @@ impl ClickEvent {
     pub fn from_nbt(compound: &NbtCompound) -> Option<Self> {
         let action = compound.get_string("action")?;
         match action {
-            "open_url" => compound.get_string("url").map(|v| Self::OpenUrl(v.to_string())),
+            "open_url" => compound
+                .get_string("url")
+                .map(|v| Self::OpenUrl(v.to_string())),
             "run_command" => compound
                 .get_string("command")
                 .map(|v| Self::RunCommand(v.to_string())),
@@ -210,7 +212,11 @@ impl<'de> Deserialize<'de> for ClickEvent {
             "change_page" => {
                 let page = map
                     .get("page")
-                    .and_then(|v| v.as_i64().map(|i| i.to_string()).or_else(|| v.as_str().map(|s| s.to_string())))
+                    .and_then(|v| {
+                        v.as_i64()
+                            .map(|i| i.to_string())
+                            .or_else(|| v.as_str().map(|s| s.to_string()))
+                    })
                     .ok_or_else(|| de::Error::missing_field("page"))?;
                 Ok(Self::ChangePage(page))
             },
@@ -323,7 +329,11 @@ impl HoverEvent {
             "show_item" => {
                 let id = compound.get_string("id").unwrap_or_default().to_string();
                 let count = compound.get_int("count").unwrap_or(1);
-                Ok(Some(Self::ShowItem(HoverItem { id, count, components: None })))
+                Ok(Some(Self::ShowItem(HoverItem {
+                    id,
+                    count,
+                    components: None,
+                })))
             },
             "show_entity" => {
                 let entity_type = compound.get_string("id").unwrap_or_default().to_string();
@@ -378,7 +388,9 @@ impl Serialize for HoverEvent {
 impl<'de> Deserialize<'de> for HoverEvent {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let raw: serde_json::Value = serde_json::Value::deserialize(d)?;
-        let obj = raw.as_object().ok_or_else(|| de::Error::custom("expected object"))?;
+        let obj = raw
+            .as_object()
+            .ok_or_else(|| de::Error::custom("expected object"))?;
         let action = obj
             .get("action")
             .and_then(|v| v.as_str())
@@ -397,11 +409,12 @@ impl<'de> Deserialize<'de> for HoverEvent {
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string();
-                let count = obj
-                    .get("count")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(1) as i32;
-                Ok(Self::ShowItem(HoverItem { id, count, components: None }))
+                let count = obj.get("count").and_then(|v| v.as_i64()).unwrap_or(1) as i32;
+                Ok(Self::ShowItem(HoverItem {
+                    id,
+                    count,
+                    components: None,
+                }))
             },
             "show_entity" => {
                 let entity_type = obj
