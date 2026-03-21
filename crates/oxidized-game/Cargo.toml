@@ -27,6 +27,7 @@ bitflags     = { workspace = true }
 glam         = { workspace = true }
 indexmap      = { workspace = true }
 lru           = { workspace = true }
+rand          = { workspace = true }
 
 [dev-dependencies]
 tokio    = { workspace = true }

@@ -38,7 +38,7 @@ pub use context::{CommandContext, ParsedArgument, StringRange};
 pub use dispatcher::CommandDispatcher;
 pub use nodes::{ArgumentCommandNode, CommandNode, LiteralCommandNode, RootCommandNode};
 pub use pagination::PaginatedMessage;
-pub use selector::{SelectorKind, SelectorTarget};
+pub use selector::{EntitySelector, SelectorFilters, SelectorKind, SelectorTarget};
 pub use serializer::{CommandNodeData, CommandTreeData};
 pub use source::{CommandSourceKind, CommandSourceStack};
 

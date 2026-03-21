@@ -1453,8 +1453,10 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
   variants) use `get_arg_result` directly — correct design choice.
 - Per-type parser functions (14 total) make `parse_argument()` a clean dispatch table where
   each match arm is a single function call.
-- Coordinate helpers (`parse_int3_coordinates`, `parse_double3_coordinates`,
-  `parse_double2_coordinates`) are reused by BlockPos, Vec3, Vec2.
+- Coordinate helpers (`parse_single_coordinate`, `parse_coordinates3`,
+  `parse_int_coordinates3`, `parse_coordinates2`) support absolute, `~` relative,
+  and `^` local coordinate forms. Returns `Coordinates` when any component is relative,
+  legacy `Vec3`/`BlockPos` types for fully absolute coords (backwards compat).
 - 16 new tests added without modifying any existing test — all 42 original tests pass.
 
 **Patterns to reuse:**
