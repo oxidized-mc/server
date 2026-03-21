@@ -1,6 +1,6 @@
 ---
-source: crates/oxidized-server/src/config.rs
-assertion_line: 820
+source: crates/oxidized-server/src/config/mod.rs
+assertion_line: 433
 expression: toml_str
 ---
 [network]
