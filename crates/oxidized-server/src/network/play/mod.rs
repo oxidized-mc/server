@@ -107,7 +107,7 @@ pub async fn handle_play_entry(
 
     // Create ServerPlayer with entity ID from the player list.
     let entity_id = server_ctx.player_list.read().next_entity_id();
-    let game_mode = GameMode::from_id(server_ctx.level_data.game_type);
+    let game_mode = GameMode::from_id(server_ctx.level_data.read().game_type);
     let dimension = ResourceLocation::from_string("minecraft:overworld").map_err(|e| {
         ConnectionError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -136,7 +136,7 @@ pub async fn handle_play_entry(
         }
     } else {
         // New player — spawn at world spawn.
-        let (sx, sy, sz) = server_ctx.level_data.spawn_pos();
+        let (sx, sy, sz) = server_ctx.level_data.read().spawn_pos();
         player.pos =
             oxidized_protocol::types::Vec3::new(f64::from(sx), f64::from(sy), f64::from(sz));
         debug!(peer = %addr, uuid = %uuid, "New player — spawning at world spawn");
@@ -154,11 +154,12 @@ pub async fn handle_play_entry(
     // Build the 8-packet login sequence.
     let dimension_type_id = 0; // overworld = 0 in registry order
     let packets = {
+        let level_data = server_ctx.level_data.read();
         let player_list = server_ctx.player_list.read();
         build_login_sequence(
             &player,
             teleport_id,
-            &server_ctx.level_data,
+            &level_data,
             &player_list,
             &server_ctx.dimensions,
             dimension_type_id,

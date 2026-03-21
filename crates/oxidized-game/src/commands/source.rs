@@ -54,6 +54,66 @@ pub trait ServerHandle: Send + Sync {
     /// The default implementation does nothing. Override in the server
     /// to send via the broadcast channel.
     fn broadcast_chat(&self, _message: &Component) {}
+
+    /// Sets the overworld day time to an absolute tick value.
+    fn set_day_time(&self, _time: i64) {}
+
+    /// Adds `ticks` to the current day time (may be negative).
+    fn add_day_time(&self, _ticks: i64) {}
+
+    /// Sets the weather state and optional duration in ticks.
+    ///
+    /// `weather` is one of `"clear"`, `"rain"`, or `"thunder"`.
+    fn set_weather(&self, _weather: &str, _duration: Option<i32>) {}
+
+    /// Returns the string value of a game rule by its camelCase vanilla name.
+    fn get_game_rule(&self, _name: &str) -> Option<String> {
+        None
+    }
+
+    /// Sets a game rule from a string. Returns `Err` on invalid name or value.
+    fn set_game_rule(&self, _name: &str, _value: &str) -> Result<(), String> {
+        Err("game rules not supported".to_string())
+    }
+
+    /// Returns all game rule names sorted alphabetically.
+    fn game_rule_names(&self) -> Vec<&'static str> {
+        vec![]
+    }
+
+    /// Returns the current tick rate in TPS.
+    fn tick_rate(&self) -> f32 {
+        20.0
+    }
+
+    /// Sets the server tick rate. Returns `true` if changed.
+    fn set_tick_rate(&self, _rate: f32) -> bool {
+        false
+    }
+
+    /// Returns `true` if the server tick loop is frozen.
+    fn is_tick_frozen(&self) -> bool {
+        false
+    }
+
+    /// Freezes or unfreezes the server tick loop.
+    fn set_tick_frozen(&self, _frozen: bool) {}
+
+    /// Requests N tick steps while frozen.
+    fn tick_step(&self, _steps: u32) {}
+
+    /// Returns remaining tick steps (0 if not stepping).
+    fn tick_steps_remaining(&self) -> u32 {
+        0
+    }
+
+    /// Starts a tick sprint for `ticks` duration.
+    fn tick_sprint(&self, _ticks: u64) {}
+
+    /// Returns `true` if the server is currently sprinting.
+    fn is_tick_sprinting(&self) -> bool {
+        false
+    }
 }
 
 /// The kind of entity that is executing a command.

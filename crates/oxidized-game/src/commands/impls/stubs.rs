@@ -73,7 +73,6 @@ const STUBS: &[(&str, &str, u32, &[&str])] = &[
     ("team", "Manage teams", 2, &[]),
     ("teammsg", "Send a message to team members", 0, &["tm"]),
     ("tellraw", "Send a JSON text message", 2, &[]),
-    ("tick", "Control the tick rate", 3, &[]),
     ("title", "Manage titles displayed to players", 2, &[]),
     ("transfer", "Transfer players to another server", 3, &[]),
     ("trigger", "Modify a trigger scoreboard objective", 0, &[]),

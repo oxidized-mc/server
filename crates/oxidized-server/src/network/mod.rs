@@ -17,6 +17,8 @@ use std::sync::Arc;
 use oxidized_game::commands::Commands;
 use oxidized_game::commands::source::ServerHandle;
 use oxidized_game::event::EventBus;
+use oxidized_game::level::game_rules::GameRules;
+use oxidized_game::level::tick_rate::ServerTickRateManager;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_protocol::crypto::ServerKeyPair;
@@ -55,8 +57,8 @@ pub struct LoginContext {
 pub struct ServerContext {
     /// Server-wide player roster (thread-safe via interior mutability).
     pub player_list: RwLock<PlayerList>,
-    /// World metadata loaded from `level.dat` (or defaults for new worlds).
-    pub level_data: PrimaryLevelData,
+    /// World metadata loaded from `level.dat` (mutable via tick loop).
+    pub level_data: RwLock<PrimaryLevelData>,
     /// All registered dimension identifiers (e.g., `minecraft:overworld`).
     pub dimensions: Vec<ResourceLocation>,
     /// Maximum view distance allowed by the server config (2–32 chunks).
@@ -75,6 +77,10 @@ pub struct ServerContext {
     pub max_players: usize,
     /// Broadcast sender used to trigger a graceful server shutdown.
     pub shutdown_tx: broadcast::Sender<()>,
+    /// Game rules — thread-safe for tick loop + command access.
+    pub game_rules: RwLock<GameRules>,
+    /// Tick rate manager — controls freeze/step/sprint.
+    pub tick_rate_manager: RwLock<ServerTickRateManager>,
 }
 
 impl ServerHandle for ServerContext {
@@ -108,23 +114,23 @@ impl ServerHandle for ServerContext {
     }
 
     fn difficulty(&self) -> i32 {
-        self.level_data.difficulty
+        self.level_data.read().difficulty
     }
 
     fn game_time(&self) -> i64 {
-        self.level_data.time
+        self.level_data.read().time
     }
 
     fn day_time(&self) -> i64 {
-        self.level_data.day_time
+        self.level_data.read().day_time
     }
 
     fn is_raining(&self) -> bool {
-        self.level_data.is_raining
+        self.level_data.read().is_raining
     }
 
     fn is_thundering(&self) -> bool {
-        self.level_data.is_thundering
+        self.level_data.read().is_thundering
     }
 
     fn kick_player(&self, name: &str, reason: &str) -> bool {
@@ -176,6 +182,87 @@ impl ServerHandle for ServerContext {
             data: encoded.freeze(),
         };
         let _ = self.chat_tx.send(broadcast);
+    }
+
+    fn set_day_time(&self, time: i64) {
+        self.level_data.write().day_time = time;
+    }
+
+    fn add_day_time(&self, ticks: i64) {
+        let mut ld = self.level_data.write();
+        ld.day_time = ld.day_time.wrapping_add(ticks);
+    }
+
+    fn set_weather(&self, weather: &str, duration: Option<i32>) {
+        let mut ld = self.level_data.write();
+        let dur = duration.unwrap_or(6000);
+        match weather {
+            "clear" => {
+                ld.is_raining = false;
+                ld.is_thundering = false;
+                ld.rain_time = dur;
+                ld.thunder_time = dur;
+            },
+            "rain" => {
+                ld.is_raining = true;
+                ld.is_thundering = false;
+                ld.rain_time = dur;
+                ld.thunder_time = dur;
+            },
+            "thunder" => {
+                ld.is_raining = true;
+                ld.is_thundering = true;
+                ld.rain_time = dur;
+                ld.thunder_time = dur;
+            },
+            _ => {},
+        }
+    }
+
+    fn get_game_rule(&self, name: &str) -> Option<String> {
+        let key = GameRules::from_name(name)?;
+        Some(self.game_rules.read().get_as_string(key))
+    }
+
+    fn set_game_rule(&self, name: &str, value: &str) -> Result<(), String> {
+        let key = GameRules::from_name(name).ok_or_else(|| format!("Unknown game rule: {name}"))?;
+        self.game_rules.write().set_from_string(key, value)
+    }
+
+    fn game_rule_names(&self) -> Vec<&'static str> {
+        GameRules::all_names()
+    }
+
+    fn tick_rate(&self) -> f32 {
+        self.tick_rate_manager.read().tick_rate
+    }
+
+    fn set_tick_rate(&self, rate: f32) -> bool {
+        self.tick_rate_manager.write().set_rate(rate)
+    }
+
+    fn is_tick_frozen(&self) -> bool {
+        self.tick_rate_manager.read().frozen
+    }
+
+    fn set_tick_frozen(&self, frozen: bool) {
+        self.tick_rate_manager.write().frozen = frozen;
+    }
+
+    fn tick_step(&self, steps: u32) {
+        self.tick_rate_manager.write().request_steps(steps);
+    }
+
+    fn tick_steps_remaining(&self) -> u32 {
+        self.tick_rate_manager.read().steps_remaining
+    }
+
+    fn tick_sprint(&self, ticks: u64) {
+        self.tick_rate_manager.write().start_sprint(ticks);
+    }
+
+    fn is_tick_sprinting(&self) -> bool {
+        self.tick_rate_manager.read().sprinting
     }
 }
 
@@ -349,7 +436,9 @@ mod tests {
             http_client: reqwest::Client::new(),
             server_ctx: Arc::new(ServerContext {
                 player_list: RwLock::new(PlayerList::new(20)),
-                level_data: PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                level_data: RwLock::new(
+                    PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                ),
                 dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
                 max_view_distance: 10,
                 max_simulation_distance: 10,
@@ -359,6 +448,10 @@ mod tests {
                 event_bus: oxidized_game::event::EventBus::new(),
                 max_players: 20,
                 shutdown_tx: broadcast::channel(1).0,
+                game_rules: RwLock::new(oxidized_game::level::GameRules::default()),
+                tick_rate_manager: RwLock::new(
+                    oxidized_game::level::ServerTickRateManager::default(),
+                ),
             }),
         })
     }

@@ -7,6 +7,7 @@
 mod app;
 mod config;
 mod network;
+mod tick;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -168,7 +169,7 @@ fn main() -> anyhow::Result<()> {
             player_list: parking_lot::RwLock::new(PlayerList::new(
                 config.gameplay.max_players as usize,
             )),
-            level_data,
+            level_data: parking_lot::RwLock::new(level_data),
             dimensions,
             max_view_distance: config.world.view_distance as i32,
             max_simulation_distance: config.world.simulation_distance as i32,
@@ -178,6 +179,10 @@ fn main() -> anyhow::Result<()> {
             event_bus: oxidized_game::event::EventBus::new(),
             max_players: config.gameplay.max_players as usize,
             shutdown_tx: shutdown_tx.clone(),
+            game_rules: parking_lot::RwLock::new(oxidized_game::level::GameRules::default()),
+            tick_rate_manager: parking_lot::RwLock::new(
+                oxidized_game::level::ServerTickRateManager::default(),
+            ),
         });
 
         // Build the shared login context.
@@ -203,6 +208,11 @@ fn main() -> anyhow::Result<()> {
 
         // Clone the server context for the console before moving login_ctx.
         let console_server_ctx = login_ctx.server_ctx.clone();
+
+        // Spawn the server tick loop (20 TPS).
+        let tick_shutdown = shutdown_tx.subscribe();
+        let tick_ctx = login_ctx.server_ctx.clone();
+        tokio::spawn(tick::run_tick_loop(tick_ctx, tick_shutdown));
 
         // Spawn the TCP listener.
         let listener_shutdown = shutdown_tx.subscribe();

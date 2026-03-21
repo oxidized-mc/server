@@ -1,9 +1,7 @@
 //! `/gamerule` command — query or set game rules.
 //!
-//! TODO: Requires a gamerule storage system (map of rule name → value),
-//! propagation to clients, and per-rule side effects (e.g. `doDaylightCycle`
-//! affects the tick loop). Vanilla registers each rule statically in
-//! `GameRules.java`.
+//! Uses `ServerHandle::get_game_rule` / `set_game_rule` to access the
+//! game rules storage.
 
 use crate::commands::argument_access::get_string;
 use crate::commands::arguments::{ArgumentType, StringKind};
@@ -24,15 +22,24 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                 argument("rule", ArgumentType::String(StringKind::SingleWord))
                     .executes(|ctx: &CommandContext<CommandSourceStack>| {
                         let rule = get_string(ctx, "rule")?;
-                        // TODO: Read actual gamerule value from storage
-                        ctx.source.send_success(
-                            &Component::translatable(
-                                "commands.gamerule.query",
-                                vec![Component::text(rule), Component::text("?")],
-                            ),
-                            false,
-                        );
-                        Ok(1)
+                        match ctx.source.server.get_game_rule(rule) {
+                            Some(value) => {
+                                ctx.source.send_success(
+                                    &Component::translatable(
+                                        "commands.gamerule.query",
+                                        vec![Component::text(rule), Component::text(value)],
+                                    ),
+                                    false,
+                                );
+                                Ok(1)
+                            },
+                            None => {
+                                ctx.source.send_failure(&Component::text(format!(
+                                    "Unknown game rule: {rule}"
+                                )));
+                                Ok(0)
+                            },
+                        }
                     })
                     // /gamerule <rule> <value>
                     .then(
@@ -40,15 +47,22 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                             |ctx: &CommandContext<CommandSourceStack>| {
                                 let rule = get_string(ctx, "rule")?;
                                 let value = get_string(ctx, "value")?;
-                                // TODO: Set gamerule value in storage + propagate
-                                ctx.source.send_success(
-                                    &Component::translatable(
-                                        "commands.gamerule.set",
-                                        vec![Component::text(rule), Component::text(value)],
-                                    ),
-                                    true,
-                                );
-                                Ok(1)
+                                match ctx.source.server.set_game_rule(rule, value) {
+                                    Ok(()) => {
+                                        ctx.source.send_success(
+                                            &Component::translatable(
+                                                "commands.gamerule.set",
+                                                vec![Component::text(rule), Component::text(value)],
+                                            ),
+                                            true,
+                                        );
+                                        Ok(1)
+                                    },
+                                    Err(msg) => {
+                                        ctx.source.send_failure(&Component::text(msg));
+                                        Ok(0)
+                                    },
+                                }
                             },
                         ),
                     ),
