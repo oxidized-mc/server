@@ -231,13 +231,13 @@ fn main() -> anyhow::Result<()> {
         match tokio::time::timeout(SHUTDOWN_TIMEOUT, listener_handle).await {
             Ok(result) => {
                 let _ = result;
-            }
+            },
             Err(_) => {
                 warn!(
                     "Graceful shutdown timed out after {}s, forcing exit",
                     SHUTDOWN_TIMEOUT.as_secs()
                 );
-            }
+            },
         }
 
         info!("Server stopped");

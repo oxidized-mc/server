@@ -87,10 +87,7 @@ impl HoverEvent {
         };
         match action {
             "show_text" => {
-                let component = compound
-                    .get("value")
-                    .map(Component::from_nbt)
-                    .transpose()?;
+                let component = compound.get("value").map(Component::from_nbt).transpose()?;
                 Ok(component.map(|c| Self::ShowText(Box::new(c))))
             },
             "show_item" => {

@@ -13,8 +13,8 @@
 //! TODO: Actual teleportation requires sending `ClientboundPlayerPositionPacket`.
 
 use crate::commands::CommandError;
-use crate::commands::arguments::ArgumentType;
 use crate::commands::argument_access::{get_entity, get_vec3};
+use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};

@@ -204,8 +204,8 @@ impl<'de> Deserialize<'de> for Component {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use crate::chat::formatting::ChatFormatting;
     use crate::chat::click_event::ClickEvent;
+    use crate::chat::formatting::ChatFormatting;
     use crate::chat::hover_event::HoverEvent;
     use crate::chat::text_color::TextColor;
 

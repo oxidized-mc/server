@@ -17,10 +17,10 @@ use crate::chunk::heightmap::{Heightmap, HeightmapType};
 use crate::chunk::level_chunk::{
     LevelChunk, OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT,
 };
-use oxidized_types::ChunkPos;
 use crate::chunk::paletted_container::{PalettedContainer, Strategy};
 use crate::chunk::section::LevelChunkSection;
 use crate::registry::BlockRegistry;
+use oxidized_types::ChunkPos;
 
 /// Minimum section Y index for the overworld.
 const MIN_SECTION_Y: i32 = OVERWORLD_MIN_Y >> 4;

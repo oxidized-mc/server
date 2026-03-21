@@ -4,8 +4,8 @@
 //! and `ChatType.EMOTE_COMMAND` (`chat.type.emote`) for `/me`. We broadcast
 //! via the server's chat channel.
 
-use crate::commands::arguments::{ArgumentType, StringKind};
 use crate::commands::argument_access::get_string;
+use crate::commands::arguments::{ArgumentType, StringKind};
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};

@@ -11,10 +11,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use oxidized_nbt::{NbtCompound, NbtTag};
 
+use super::ChatFormatting;
 use super::click_event::ClickEvent;
 use super::hover_event::HoverEvent;
 use super::text_color::TextColor;
-use super::ChatFormatting;
 use crate::types::ResourceLocation;
 
 /// Rendering style for a text component.

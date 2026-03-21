@@ -3,8 +3,8 @@
 //! TODO: Actually setting blocks requires `ServerLevel` access from commands
 //! and broadcasting block change packets to nearby clients.
 
-use crate::commands::arguments::ArgumentType;
 use crate::commands::argument_access::{get_block_pos, get_string};
+use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};

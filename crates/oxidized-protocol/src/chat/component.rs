@@ -15,8 +15,8 @@ use oxidized_nbt::{NbtCompound, NbtList, NbtTag};
 use serde::Serialize;
 use serde::ser::SerializeMap;
 
-use super::formatting::ChatFormatting;
 use super::click_event::ClickEvent;
+use super::formatting::ChatFormatting;
 use super::hover_event::HoverEvent;
 use super::style::Style;
 use super::text_color::TextColor;

@@ -11,13 +11,13 @@ pub mod arguments;
 pub mod context;
 pub mod coordinates;
 pub mod dispatcher;
+mod impls;
 pub mod nodes;
 pub mod pagination;
 pub mod selector;
 pub mod serializer;
 pub mod source;
 pub mod string_reader;
-mod impls;
 
 pub use argument_access::{
     get_block_pos, get_bool, get_double, get_entities, get_entity, get_float, get_game_profile,
