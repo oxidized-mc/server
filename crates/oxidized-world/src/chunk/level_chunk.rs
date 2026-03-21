@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use oxidized_types::ChunkPos;
+
 use super::data_layer::DataLayer;
 use super::heightmap::{Heightmap, HeightmapType};
 use super::paletted_container::PalettedContainerError;
@@ -71,63 +73,6 @@ pub struct LevelChunk {
     min_y: i32,
     /// Number of sections in this chunk.
     section_count: usize,
-}
-
-/// Chunk position in chunk coordinates.
-///
-/// # Note
-///
-/// TODO: This type is duplicated in `oxidized-protocol`. Both crates need
-/// `ChunkPos` but `oxidized-world` cannot depend on `oxidized-protocol` per
-/// crate layering rules. A shared `oxidized-types` crate should be created
-/// to consolidate coordinate types (BlockPos, ChunkPos, SectionPos).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChunkPos {
-    /// Chunk X coordinate.
-    pub x: i32,
-    /// Chunk Z coordinate.
-    pub z: i32,
-}
-
-impl ChunkPos {
-    /// Creates a new chunk position.
-    #[must_use]
-    pub const fn new(x: i32, z: i32) -> Self {
-        Self { x, z }
-    }
-
-    /// Returns the chunk position containing the given block coordinates.
-    #[must_use]
-    pub const fn from_block(block_x: i32, block_z: i32) -> Self {
-        Self {
-            x: block_x >> 4,
-            z: block_z >> 4,
-        }
-    }
-
-    /// Returns the minimum block X for this chunk.
-    #[must_use]
-    pub const fn min_block_x(self) -> i32 {
-        self.x << 4
-    }
-
-    /// Returns the minimum block Z for this chunk.
-    #[must_use]
-    pub const fn min_block_z(self) -> i32 {
-        self.z << 4
-    }
-
-    /// Packs into a single `i64` for use as a map key.
-    #[must_use]
-    pub const fn to_long(self) -> i64 {
-        ((self.x as i64) & 0xFFFF_FFFF) | (((self.z as i64) & 0xFFFF_FFFF) << 32)
-    }
-}
-
-impl std::fmt::Display for ChunkPos {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}, {}]", self.x, self.z)
-    }
 }
 
 impl LevelChunk {
@@ -340,7 +285,7 @@ mod tests {
 
     #[test]
     fn test_chunk_pos_from_block() {
-        let pos = ChunkPos::from_block(32, -48);
+        let pos = ChunkPos::from_block_coords(32, -48);
         assert_eq!(pos.x, 2);
         assert_eq!(pos.z, -3);
     }

@@ -1,0 +1,16 @@
+[package]
+name        = "oxidized-types"
+description = "Shared coordinate types used across the Oxidized workspace"
+version.workspace     = true
+edition.workspace     = true
+authors.workspace     = true
+license.workspace     = true
+repository.workspace  = true
+rust-version.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+
+[lints]
+workspace = true

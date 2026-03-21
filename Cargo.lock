@@ -1758,6 +1758,7 @@ dependencies = [
  "md-5",
  "oxidized-macros",
  "oxidized-nbt",
+ "oxidized-types",
  "proptest",
  "rand 0.10.0",
  "reqwest",
@@ -1802,6 +1803,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxidized-types"
+version = "0.1.0"
+
+[[package]]
 name = "oxidized-world"
 version = "0.1.0"
 dependencies = [
@@ -1814,6 +1819,7 @@ dependencies = [
  "insta",
  "lz4_flex",
  "oxidized-nbt",
+ "oxidized-types",
  "parking_lot",
  "proptest",
  "rayon",

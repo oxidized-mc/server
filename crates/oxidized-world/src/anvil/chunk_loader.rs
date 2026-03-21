@@ -15,8 +15,9 @@ use super::region::RegionFile;
 use crate::chunk::data_layer::{DATA_LAYER_SIZE, DataLayer};
 use crate::chunk::heightmap::{Heightmap, HeightmapType};
 use crate::chunk::level_chunk::{
-    ChunkPos, LevelChunk, OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT,
+    LevelChunk, OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT,
 };
+use oxidized_types::ChunkPos;
 use crate::chunk::paletted_container::{PalettedContainer, Strategy};
 use crate::chunk::section::LevelChunkSection;
 use crate::registry::BlockRegistry;

@@ -15,6 +15,7 @@ pub mod section;
 pub use bit_storage::BitStorage;
 pub use data_layer::DataLayer;
 pub use heightmap::{Heightmap, HeightmapType};
-pub use level_chunk::{ChunkPos, LevelChunk};
+pub use level_chunk::LevelChunk;
+pub use oxidized_types::ChunkPos;
 pub use paletted_container::PalettedContainer;
 pub use section::LevelChunkSection;

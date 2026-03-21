@@ -177,7 +177,7 @@ pub async fn handle_play_entry(
     }
 
     // Send initial chunk batch — empty air chunks in a spiral pattern.
-    let chunk_center = ChunkPos::from_block(player_chunk_x, player_chunk_z);
+    let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
     let chunk_count =
         helpers::send_initial_chunks(conn, chunk_center, player_view_distance).await?;
 
@@ -231,7 +231,7 @@ pub async fn handle_play_entry(
     }
 
     // Track which chunks the player has loaded.
-    let initial_chunk = ChunkPos::from_block(player_chunk_x, player_chunk_z);
+    let initial_chunk = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
     let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, player_view_distance);
 
     // Subscribe to chat broadcast channel.
