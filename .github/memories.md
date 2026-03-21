@@ -1755,3 +1755,60 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - `crates/oxidized-server/src/network/mod.rs` — level_data RwLock, game_rules, tick_rate_manager
 - `crates/oxidized-server/src/network/play/mod.rs` — .read() for level_data access
 
+---
+
+### Phase 20 — World Saving (2025-07-17)
+
+**Context:** Adding world persistence — save level.dat, chunks to region files, autosave.
+
+#### Patterns & Best Practices
+
+- **Anvil sector_count is u8** — The region file offset entry packs into 4 bytes: 3 bytes
+  sector offset (24-bit) + 1 byte sector count (max 255 = ~1 MB per chunk). Always validate
+  `sectors_needed <= 255` before writing; never silently truncate via `as u8`.
+- **Sector number is 24-bit** — Guard `new_sector <= 0xFF_FFFF` on writes to prevent header
+  corruption in pathologically large region files (>64 GiB).
+- **PalettedContainer::to_nbt_data()** — Global variant must re-palettize: collect unique values,
+  build compact palette, repack into new BitStorage. Single variant returns `(vec![value], vec![])`.
+- **ChunkSerializer needs BlockRegistry** — Block state IDs must be resolved back to
+  `"namespace:name"` + properties for the NBT palette. Biomes use placeholder mapping
+  (no biome registry yet).
+- **level.dat backup pattern** — Write to `<path>_new`, rename existing to `<path>_old`,
+  rename `_new` to final. This is the vanilla double-write pattern (ADR-030).
+- **`do_tick` is now async** — After adding `spawn_blocking` for autosave I/O, `do_tick`
+  became async and all tick tests use `#[tokio::test]`.
+- **AnvilChunkLoader::deserialize_chunk is pub(crate)** — Integration tests must use
+  `load_chunk()` (which opens region files internally), not `deserialize_chunk` directly.
+
+#### Gotchas
+
+- **RegionFile refactored from BufReader<File> to raw File** — `open()` remains read-only
+  (`File::open`), `open_rw()` uses `OpenOptions::new().read(true).write(true)`, `create()`
+  writes 8 KiB zero header. No BufReader/BufWriter — callers control buffering.
+- **ServerContext grows — update ALL constructors** — Adding a field to `ServerContext` requires
+  updating: main.rs construction, network/mod.rs test helper, tick.rs test helper. Grep for
+  `ServerContext {` to find all.
+- **File I/O in async context** — ADR-015 mandates `spawn_blocking` for all file I/O. Both
+  autosave (tick.rs) and shutdown save (main.rs) wrap `PrimaryLevelData::save()` in
+  `tokio::task::spawn_blocking`.
+
+#### Files Created
+
+- `crates/oxidized-world/src/storage/dirty_tracker.rs` — DirtyChunkTracker (HashSet<ChunkPos>)
+- `crates/oxidized-world/src/anvil/chunk_serializer.rs` — LevelChunk → Anvil NBT format
+- `crates/oxidized-world/tests/world_save.rs` — 5 integration tests (roundtrip, multi-chunk, level.dat)
+
+#### Files Modified
+
+- `crates/oxidized-world/src/anvil/compression.rs` — compress_zlib(), compress_zlib_level()
+- `crates/oxidized-world/src/anvil/error.rs` — Compression, ChunkTooLarge variants
+- `crates/oxidized-world/src/anvil/mod.rs` — chunk_serializer module + exports
+- `crates/oxidized-world/src/anvil/region.rs` — read-write refactor, write_chunk_data, create
+- `crates/oxidized-world/src/anvil/chunk_loader.rs` — deserialize_chunk pub(crate) visibility
+- `crates/oxidized-world/src/chunk/paletted_container.rs` — to_nbt_data() (inverse of from_nbt_data)
+- `crates/oxidized-world/src/storage/mod.rs` — dirty_tracker module + export
+- `crates/oxidized-world/src/storage/primary_level_data.rs` — to_nbt(), save() with backup
+- `crates/oxidized-server/src/main.rs` — world_dir field, shutdown save with spawn_blocking
+- `crates/oxidized-server/src/network/mod.rs` — world_dir field on ServerContext
+- `crates/oxidized-server/src/tick.rs` — AUTOSAVE_INTERVAL_TICKS, async autosave, do_tick async
+

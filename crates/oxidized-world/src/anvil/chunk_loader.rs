@@ -93,7 +93,7 @@ impl AnvilChunkLoader {
     }
 
     /// Deserializes a chunk from its root NBT compound.
-    fn deserialize_chunk(
+    pub(crate) fn deserialize_chunk(
         &self,
         root: &NbtCompound,
         expected_x: i32,

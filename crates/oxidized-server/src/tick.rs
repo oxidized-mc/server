@@ -48,6 +48,9 @@ const THUNDER_DURATION_MAX: i32 = 15_600;
 /// Per-tick delta for rain/thunder visual level interpolation.
 const WEATHER_LEVEL_DELTA: f32 = 0.01;
 
+/// Autosave interval in ticks (6000 ticks = 5 minutes at 20 TPS).
+const AUTOSAVE_INTERVAL_TICKS: u64 = 6000;
+
 /// Tracks interpolated rain/thunder visual intensity levels across ticks.
 struct WeatherLevels {
     rain_level: f32,
@@ -102,7 +105,7 @@ pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::
                 };
 
                 if should_tick {
-                    do_tick(&ctx, tick_count, &mut rng, &mut weather);
+                    do_tick(&ctx, tick_count, &mut rng, &mut weather).await;
                     tick_count += 1;
                 }
 
@@ -137,7 +140,12 @@ pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::
 }
 
 /// Performs one game tick.
-fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &mut WeatherLevels) {
+async fn do_tick(
+    ctx: &ServerContext,
+    tick_count: u64,
+    rng: &mut impl Rng,
+    weather: &mut WeatherLevels,
+) {
     // Snapshot game rules once per tick to minimize lock acquisitions.
     let (do_daylight, do_weather) = {
         let rules = ctx.game_rules.read();
@@ -167,6 +175,11 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
     // Broadcast time to all clients every 20 ticks (once per second).
     if tick_count % 20 == 0 {
         broadcast_time(ctx, do_daylight);
+    }
+
+    // Autosave level.dat every 5 minutes (6000 ticks).
+    if tick_count > 0 && tick_count % AUTOSAVE_INTERVAL_TICKS == 0 {
+        autosave_level_dat(ctx).await;
     }
 }
 
@@ -320,6 +333,26 @@ fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
     let _ = ctx.chat_tx.send(msg);
 }
 
+/// Saves level.dat to disk as part of periodic autosave.
+///
+/// Takes a snapshot of `level_data` under a read lock, then writes to disk
+/// via [`tokio::task::spawn_blocking`] to avoid blocking the async runtime (ADR-015).
+/// Errors are logged but do not crash the server.
+async fn autosave_level_dat(ctx: &ServerContext) {
+    let level_data = ctx.level_data.read().clone();
+    let level_dat_path = format!("{}/level.dat", ctx.world_dir);
+    debug!("Autosaving level.dat...");
+    let result = tokio::task::spawn_blocking(move || {
+        level_data.save(std::path::Path::new(&level_dat_path))
+    })
+    .await;
+    match result {
+        Ok(Ok(())) => debug!("Autosave complete"),
+        Ok(Err(e)) => warn!(error = %e, "Autosave failed for level.dat"),
+        Err(e) => warn!(error = %e, "Autosave task panicked"),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -350,6 +383,7 @@ mod tests {
             shutdown_tx: broadcast::channel(1).0,
             game_rules: RwLock::new(GameRules::default()),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
+            world_dir: String::new(),
         })
     }
 
@@ -366,27 +400,27 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_do_tick_advances_time() {
+    #[tokio::test]
+    async fn test_do_tick_advances_time() {
         let ctx = test_ctx();
         let initial_time = ctx.level_data.read().time;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
         assert_eq!(ctx.level_data.read().time, initial_time + 1);
     }
 
-    #[test]
-    fn test_do_tick_advances_day_time() {
+    #[tokio::test]
+    async fn test_do_tick_advances_day_time() {
         let ctx = test_ctx();
         let initial_day = ctx.level_data.read().day_time;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
         assert_eq!(ctx.level_data.read().day_time, initial_day + 1);
     }
 
-    #[test]
-    fn test_day_time_grows_unbounded() {
+    #[tokio::test]
+    async fn test_day_time_grows_unbounded() {
         let ctx = test_ctx();
         ctx.level_data.write().day_time = TICKS_PER_DAY - 1;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
         assert_eq!(
             ctx.level_data.read().day_time,
             TICKS_PER_DAY,
@@ -394,14 +428,14 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_daylight_cycle_respects_gamerule() {
+    #[tokio::test]
+    async fn test_daylight_cycle_respects_gamerule() {
         let ctx = test_ctx();
         ctx.game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceTime, false);
         let initial_day = ctx.level_data.read().day_time;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
         assert_eq!(
             ctx.level_data.read().day_time,
             initial_day,
@@ -411,14 +445,14 @@ mod tests {
         assert_eq!(ctx.level_data.read().time, 1);
     }
 
-    #[test]
-    fn test_weather_cycle_respects_gamerule() {
+    #[tokio::test]
+    async fn test_weather_cycle_respects_gamerule() {
         let ctx = test_ctx();
         ctx.game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceWeather, false);
         ctx.level_data.write().rain_time = 1; // would flip without gamerule
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
         // Weather should not have changed because gamerule is false.
         assert_eq!(
             ctx.level_data.read().rain_time,
