@@ -205,7 +205,9 @@ impl<'de> Deserialize<'de> for Component {
 mod tests {
     use super::*;
     use crate::chat::formatting::ChatFormatting;
-    use crate::chat::style::{ClickEvent, HoverEvent, TextColor};
+    use crate::chat::click_event::ClickEvent;
+    use crate::chat::hover_event::HoverEvent;
+    use crate::chat::text_color::TextColor;
 
     // ── JSON serialization ───────────────────────────────────────────
 
