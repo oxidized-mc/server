@@ -12,6 +12,7 @@ mod network;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use clap::Parser;
 use mimalloc::MiMalloc;
@@ -226,8 +227,20 @@ fn main() -> anyhow::Result<()> {
         info!("Shutdown signal received");
         let _ = shutdown_tx.send(());
 
-        // Wait for the listener task to finish.
-        let _ = listener_handle.await;
+        // Wait for the listener task to finish, with a timeout to avoid
+        // hanging indefinitely if connections don't close cleanly.
+        const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
+        match tokio::time::timeout(SHUTDOWN_TIMEOUT, listener_handle).await {
+            Ok(result) => {
+                let _ = result;
+            }
+            Err(_) => {
+                warn!(
+                    "Graceful shutdown timed out after {}s, forcing exit",
+                    SHUTDOWN_TIMEOUT.as_secs()
+                );
+            }
+        }
 
         info!("Server stopped");
         Ok(())
