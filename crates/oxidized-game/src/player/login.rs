@@ -29,10 +29,10 @@ use oxidized_world::storage::PrimaryLevelData;
 use super::game_mode::GameMode;
 use super::player_list::PlayerList;
 use super::server_player::ServerPlayer;
-use crate::inventory::item_ids::item_name_to_id;
 use crate::inventory::ItemStack;
-use crate::player::inventory::PROTOCOL_SLOT_COUNT;
+use crate::inventory::item_ids::item_name_to_id;
 use crate::player::PlayerInventory;
+use crate::player::inventory::PROTOCOL_SLOT_COUNT;
 
 /// An encoded packet ready to be sent over the wire.
 ///

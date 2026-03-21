@@ -4,8 +4,8 @@
 
 use tracing::{debug, warn};
 
-use oxidized_game::inventory::item_ids::{item_id_to_name, item_name_to_id};
 use oxidized_game::inventory::ItemStack;
+use oxidized_game::inventory::item_ids::{item_id_to_name, item_name_to_id};
 use oxidized_game::player::inventory::PROTOCOL_SLOT_COUNT;
 use oxidized_game::player::{GameMode, PlayerInventory};
 use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
@@ -104,7 +104,7 @@ pub async fn handle_set_creative_mode_slot(
                 "SetCreativeModeSlot: slot has no backing storage (crafting?)"
             );
             return Ok(());
-        }
+        },
     };
 
     // Convert wire SlotData to game ItemStack
@@ -126,7 +126,7 @@ pub async fn handle_set_creative_mode_slot(
                 }
             }
             s
-        }
+        },
         None => ItemStack::empty(),
     };
 
@@ -177,9 +177,7 @@ pub async fn send_held_slot(
     play_ctx: &mut PlayContext<'_>,
     slot: u8,
 ) -> Result<(), ConnectionError> {
-    let pkt = ClientboundSetHeldSlotPacket {
-        slot: slot as i32,
-    };
+    let pkt = ClientboundSetHeldSlotPacket { slot: slot as i32 };
     play_ctx.conn.send_packet(&pkt).await?;
     Ok(())
 }

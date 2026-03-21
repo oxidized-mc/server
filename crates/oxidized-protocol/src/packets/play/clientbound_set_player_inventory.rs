@@ -51,8 +51,7 @@ mod tests {
             contents: None,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundSetPlayerInventoryPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundSetPlayerInventoryPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.slot, 36);
         assert!(decoded.contents.is_none());
     }
@@ -68,8 +67,7 @@ mod tests {
             }),
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundSetPlayerInventoryPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundSetPlayerInventoryPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.slot, 0);
         assert_eq!(decoded.contents.as_ref().unwrap().count, 32);
     }
