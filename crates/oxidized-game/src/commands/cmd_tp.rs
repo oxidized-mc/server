@@ -49,18 +49,18 @@ fn build_tp_tree(name: &'static str) -> crate::commands::nodes::LiteralBuilder<C
             .then(
                 argument("location", ArgumentType::Vec3)
                     // /tp <targets> <location>
-                    .executes(exec_tp_targets_location)
+                    .executes(exec_tp_targets_to_location)
                     // /tp <targets> <location> <rotation>
                     .then(
                         argument("rotation", ArgumentType::Rotation)
-                            .executes(exec_tp_targets_location_rotation),
+                            .executes(exec_tp_targets_to_location),
                     )
-                    // /tp <targets> <location> facing <facingLocation>
+                    // /tp <targets> <location> facing …
                     .then(
                         literal("facing")
                             .then(
                                 argument("facingLocation", ArgumentType::Vec3)
-                                    .executes(exec_tp_targets_location_facing_pos),
+                                    .executes(exec_tp_targets_to_location),
                             )
                             .then(
                                 literal("entity")
@@ -72,14 +72,10 @@ fn build_tp_tree(name: &'static str) -> crate::commands::nodes::LiteralBuilder<C
                                                 player_only: false,
                                             },
                                         )
-                                        // /tp <targets> <location> facing entity <entity>
-                                        .executes(exec_tp_targets_location_facing_entity)
-                                        // /tp <targets> <location> facing entity <entity> <anchor>
+                                        .executes(exec_tp_targets_to_location)
                                         .then(
                                             argument("anchor", ArgumentType::EntityAnchor)
-                                                .executes(
-                                                    exec_tp_targets_location_facing_entity_anchor,
-                                                ),
+                                                .executes(exec_tp_targets_to_location),
                                         ),
                                     ),
                             ),
@@ -121,68 +117,15 @@ fn exec_tp_destination(ctx: &CommandContext<CommandSourceStack>) -> Result<i32, 
     Ok(1)
 }
 
-/// `/tp <targets> <location>` — teleport targets to coordinates.
-fn exec_tp_targets_location(
+/// Shared handler for all `/tp <targets> <location> [facing|rotation]` branches.
+///
+/// The facing/rotation arguments are currently parsed but not applied (TODO).
+fn exec_tp_targets_to_location(
     ctx: &CommandContext<CommandSourceStack>,
 ) -> Result<i32, CommandError> {
     let target = get_entity(ctx, "destination")?;
     let (x, y, z) = get_vec3(ctx, "location")?;
-    ctx.source.send_success(
-        &tp_location_msg(&target.name, x, y, z),
-        true,
-    );
-    Ok(1)
-}
-
-/// `/tp <targets> <location> <rotation>` — teleport with explicit rotation.
-fn exec_tp_targets_location_rotation(
-    ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, CommandError> {
-    let target = get_entity(ctx, "destination")?;
-    let (x, y, z) = get_vec3(ctx, "location")?;
-    // TODO: apply rotation from "rotation" argument
-    ctx.source.send_success(
-        &tp_location_msg(&target.name, x, y, z),
-        true,
-    );
-    Ok(1)
-}
-
-/// `/tp <targets> <location> facing <facingLocation>`
-fn exec_tp_targets_location_facing_pos(
-    ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, CommandError> {
-    let target = get_entity(ctx, "destination")?;
-    let (x, y, z) = get_vec3(ctx, "location")?;
-    // TODO: compute rotation from facing position
-    ctx.source.send_success(
-        &tp_location_msg(&target.name, x, y, z),
-        true,
-    );
-    Ok(1)
-}
-
-/// `/tp <targets> <location> facing entity <entity>`
-fn exec_tp_targets_location_facing_entity(
-    ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, CommandError> {
-    let target = get_entity(ctx, "destination")?;
-    let (x, y, z) = get_vec3(ctx, "location")?;
-    // TODO: compute rotation from facing entity position
-    ctx.source.send_success(
-        &tp_location_msg(&target.name, x, y, z),
-        true,
-    );
-    Ok(1)
-}
-
-/// `/tp <targets> <location> facing entity <entity> <anchor>`
-fn exec_tp_targets_location_facing_entity_anchor(
-    ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, CommandError> {
-    let target = get_entity(ctx, "destination")?;
-    let (x, y, z) = get_vec3(ctx, "location")?;
-    // TODO: compute rotation from facing entity position + anchor
+    // TODO: apply rotation/facing from optional args once teleport is real
     ctx.source.send_success(
         &tp_location_msg(&target.name, x, y, z),
         true,

@@ -2,12 +2,16 @@
 
 use crate::commands::CommandError;
 use crate::commands::arguments::{ArgumentType, StringKind};
+use crate::commands::coordinates::{
+    Coordinates, EntityAnchorKind, parse_coordinates2, parse_coordinates3, parse_int_coordinates3,
+};
 use crate::commands::nodes::CommandFn;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_protocol::chat::{ChatFormatting, Component};
 use oxidized_protocol::types::game_type::GameType;
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::str::FromStr;
 
 /// A parsed command ready for execution.
 pub struct CommandContext<S> {
@@ -59,8 +63,8 @@ pub enum ArgumentResult {
     Uuid(uuid::Uuid),
     /// A time value in ticks.
     Time(i32),
-    /// A named color.
-    Color(NamedColor),
+    /// A named color (from `ChatFormatting` color variants).
+    Color(ChatFormatting),
     /// An angle value (possibly relative).
     Angle {
         /// The angle in degrees.
@@ -86,192 +90,6 @@ pub enum ArgumentResult {
         /// Inclusive maximum (if any).
         max: Option<f64>,
     },
-}
-
-/// A single coordinate component that may be absolute, relative (`~`), or
-/// local (`^`).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct WorldCoordinate {
-    /// The numeric value (offset if relative/local, absolute otherwise).
-    pub value: f64,
-    /// Whether this coordinate is relative to the source position.
-    pub relative: bool,
-}
-
-/// The kind of coordinate system used.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CoordinateKind {
-    /// World coordinates — each axis is absolute or `~` relative.
-    World,
-    /// Local coordinates — all axes use `^` (relative to facing direction).
-    Local,
-}
-
-/// Three-component coordinates parsed from command input.
-///
-/// Vanilla supports two forms:
-/// - **World coordinates**: `100 64 -200`, `~10 ~ ~-5` (absolute/relative per axis)
-/// - **Local coordinates**: `^1 ^0 ^2` (left/up/forwards relative to facing)
-///
-/// The two forms cannot be mixed (all `^` or none `^`).
-#[derive(Debug, Clone, PartialEq)]
-pub struct Coordinates {
-    /// X component (or "left" in local mode).
-    pub x: WorldCoordinate,
-    /// Y component (or "up" in local mode).
-    pub y: WorldCoordinate,
-    /// Z component (or "forwards" in local mode).
-    pub z: WorldCoordinate,
-    /// Whether these are world or local coordinates.
-    pub kind: CoordinateKind,
-}
-
-impl Coordinates {
-    /// Resolves these coordinates to absolute (x, y, z) using the given
-    /// source position and rotation.
-    ///
-    /// For world coordinates, relative axes (`~`) add to the source position.
-    /// For local coordinates (`^`), the offsets are rotated by the source's
-    /// yaw and pitch.
-    pub fn resolve(&self, position: (f64, f64, f64), rotation: (f32, f32)) -> (f64, f64, f64) {
-        match self.kind {
-            CoordinateKind::World => {
-                let x = if self.x.relative {
-                    position.0 + self.x.value
-                } else {
-                    self.x.value
-                };
-                let y = if self.y.relative {
-                    position.1 + self.y.value
-                } else {
-                    self.y.value
-                };
-                let z = if self.z.relative {
-                    position.2 + self.z.value
-                } else {
-                    self.z.value
-                };
-                (x, y, z)
-            },
-            CoordinateKind::Local => {
-                let (yaw, pitch) = rotation;
-                let yaw_rad = (yaw as f64).to_radians();
-                let pitch_rad = (pitch as f64).to_radians();
-
-                let (sin_yaw, cos_yaw) = yaw_rad.sin_cos();
-                let (sin_pitch, cos_pitch) = pitch_rad.sin_cos();
-
-                // Vanilla's local coordinate system:
-                //   left  = x component (perpendicular to facing, horizontal)
-                //   up    = y component (perpendicular to facing, vertical plane)
-                //   fwd   = z component (in facing direction)
-                let left = self.x.value;
-                let up = self.y.value;
-                let fwd = self.z.value;
-
-                // Forward vector (from yaw/pitch)
-                let fwd_x = -sin_yaw * cos_pitch;
-                let fwd_y = -sin_pitch;
-                let fwd_z = cos_yaw * cos_pitch;
-
-                // Up vector (perpendicular to forward in vertical plane)
-                let up_x = -sin_yaw * (-sin_pitch);
-                let up_y = cos_pitch;
-                let up_z = cos_yaw * (-sin_pitch);
-
-                // Left vector (cross product of up and forward, simplified)
-                let left_x = cos_yaw;
-                let left_y = 0.0;
-                let left_z = sin_yaw;
-
-                let x = position.0 + left * left_x + up * up_x + fwd * fwd_x;
-                let y = position.1 + left * left_y + up * up_y + fwd * fwd_y;
-                let z = position.2 + left * left_z + up * up_z + fwd * fwd_z;
-                (x, y, z)
-            },
-        }
-    }
-
-    /// Resolves to integer block position (floors after resolving).
-    pub fn resolve_block_pos(
-        &self,
-        position: (f64, f64, f64),
-        rotation: (f32, f32),
-    ) -> (i32, i32, i32) {
-        let (x, y, z) = self.resolve(position, rotation);
-        (x.floor() as i32, y.floor() as i32, z.floor() as i32)
-    }
-}
-
-/// Named chat colors (vanilla's 16 formatting colors).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NamedColor {
-    /// `black` (§0)
-    Black,
-    /// `dark_blue` (§1)
-    DarkBlue,
-    /// `dark_green` (§2)
-    DarkGreen,
-    /// `dark_aqua` (§3)
-    DarkAqua,
-    /// `dark_red` (§4)
-    DarkRed,
-    /// `dark_purple` (§5)
-    DarkPurple,
-    /// `gold` (§6)
-    Gold,
-    /// `gray` (§7)
-    Gray,
-    /// `dark_gray` (§8)
-    DarkGray,
-    /// `blue` (§9)
-    Blue,
-    /// `green` (§a)
-    Green,
-    /// `aqua` (§b)
-    Aqua,
-    /// `red` (§c)
-    Red,
-    /// `light_purple` (§d)
-    LightPurple,
-    /// `yellow` (§e)
-    Yellow,
-    /// `white` (§f)
-    White,
-}
-
-impl NamedColor {
-    /// Parses a color name (case-insensitive).
-    pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "black" => Self::Black,
-            "dark_blue" => Self::DarkBlue,
-            "dark_green" => Self::DarkGreen,
-            "dark_aqua" => Self::DarkAqua,
-            "dark_red" => Self::DarkRed,
-            "dark_purple" => Self::DarkPurple,
-            "gold" => Self::Gold,
-            "gray" => Self::Gray,
-            "dark_gray" => Self::DarkGray,
-            "blue" => Self::Blue,
-            "green" => Self::Green,
-            "aqua" => Self::Aqua,
-            "red" => Self::Red,
-            "light_purple" => Self::LightPurple,
-            "yellow" => Self::Yellow,
-            "white" => Self::White,
-            _ => return None,
-        })
-    }
-}
-
-/// Entity anchor points for `/tp facing`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EntityAnchorKind {
-    /// At the entity's feet.
-    Feet,
-    /// At the entity's eyes.
-    Eyes,
 }
 
 /// A range within the input string.
@@ -334,6 +152,11 @@ impl<'a> StringReader<'a> {
     /// Returns the current cursor position.
     pub fn cursor(&self) -> usize {
         self.cursor
+    }
+
+    /// Advances the cursor by `n` bytes.
+    pub fn advance(&mut self, n: usize) {
+        self.cursor += n;
     }
 
     /// Returns the remaining unparsed input.
@@ -473,139 +296,36 @@ fn validate_range<T: PartialOrd + Display>(
     Ok(value)
 }
 
-// ── Coordinate parsing helpers ──────────────────────────────────────
+// ── Generic range parsing ───────────────────────────────────────────
 
-/// Parses a single coordinate component that may be absolute, relative (`~`),
-/// or local (`^`). Returns `(WorldCoordinate, is_local)`.
-fn parse_single_coordinate(
-    reader: &mut StringReader<'_>,
-) -> Result<(WorldCoordinate, bool), CommandError> {
-    let remaining = reader.remaining();
-    if remaining.starts_with('^') {
-        reader.cursor += 1;
-        // ^<number> or just ^ (meaning ^0)
-        let value = if reader.can_read() && reader.peek() != Some(' ') {
-            reader.read_double()?
+/// Parses a `min..max` range from a string. Handles open ranges (`5..`,
+/// `..10`) and exact values (`42`).
+pub fn parse_range<T: FromStr + Copy>(
+    input: &str,
+    type_name: &str,
+) -> Result<(Option<T>, Option<T>), CommandError> {
+    if let Some((min_s, max_s)) = input.split_once("..") {
+        let min = if min_s.is_empty() {
+            None
         } else {
-            0.0
+            Some(min_s.parse::<T>().map_err(|_| {
+                CommandError::Parse(format!("Invalid {type_name} range minimum: '{min_s}'"))
+            })?)
         };
-        Ok((WorldCoordinate { value, relative: true }, true))
-    } else if remaining.starts_with('~') {
-        reader.cursor += 1;
-        // ~<number> or just ~ (meaning ~0)
-        let value = if reader.can_read() && reader.peek() != Some(' ') {
-            reader.read_double()?
+        let max = if max_s.is_empty() {
+            None
         } else {
-            0.0
+            Some(max_s.parse::<T>().map_err(|_| {
+                CommandError::Parse(format!("Invalid {type_name} range maximum: '{max_s}'"))
+            })?)
         };
-        Ok((WorldCoordinate { value, relative: true }, false))
+        Ok((min, max))
     } else {
-        let value = reader.read_double()?;
-        Ok((WorldCoordinate { value, relative: false }, false))
+        let v = input
+            .parse::<T>()
+            .map_err(|_| CommandError::Parse(format!("Invalid {type_name} range: '{input}'")))?;
+        Ok((Some(v), Some(v)))
     }
-}
-
-/// Parses a single integer coordinate that may be relative (`~`).
-fn parse_single_int_coordinate(
-    reader: &mut StringReader<'_>,
-) -> Result<(WorldCoordinate, bool), CommandError> {
-    let remaining = reader.remaining();
-    if remaining.starts_with('^') {
-        reader.cursor += 1;
-        let value = if reader.can_read() && reader.peek() != Some(' ') {
-            reader.read_integer()? as f64
-        } else {
-            0.0
-        };
-        Ok((WorldCoordinate { value, relative: true }, true))
-    } else if remaining.starts_with('~') {
-        reader.cursor += 1;
-        let value = if reader.can_read() && reader.peek() != Some(' ') {
-            reader.read_integer()? as f64
-        } else {
-            0.0
-        };
-        Ok((WorldCoordinate { value, relative: true }, false))
-    } else {
-        let value = reader.read_integer()? as f64;
-        Ok((WorldCoordinate { value, relative: false }, false))
-    }
-}
-
-/// Parses three whitespace-separated coordinates supporting `~`/`^` syntax.
-fn parse_coordinates3(reader: &mut StringReader<'_>) -> Result<Coordinates, CommandError> {
-    let (x, x_local) = parse_single_coordinate(reader)?;
-    reader.skip_whitespace();
-    let (y, y_local) = parse_single_coordinate(reader)?;
-    reader.skip_whitespace();
-    let (z, z_local) = parse_single_coordinate(reader)?;
-
-    // Cannot mix local (^) with non-local coordinates.
-    if x_local != y_local || y_local != z_local {
-        return Err(CommandError::Parse(
-            "Cannot mix world and local coordinates (^ and ~)".to_string(),
-        ));
-    }
-
-    let kind = if x_local {
-        CoordinateKind::Local
-    } else {
-        CoordinateKind::World
-    };
-
-    Ok(Coordinates { x, y, z, kind })
-}
-
-/// Parses three whitespace-separated integer coordinates supporting `~`/`^`.
-fn parse_int_coordinates3(reader: &mut StringReader<'_>) -> Result<Coordinates, CommandError> {
-    let (x, x_local) = parse_single_int_coordinate(reader)?;
-    reader.skip_whitespace();
-    let (y, y_local) = parse_single_int_coordinate(reader)?;
-    reader.skip_whitespace();
-    let (z, z_local) = parse_single_int_coordinate(reader)?;
-
-    if x_local != y_local || y_local != z_local {
-        return Err(CommandError::Parse(
-            "Cannot mix world and local coordinates (^ and ~)".to_string(),
-        ));
-    }
-
-    let kind = if x_local {
-        CoordinateKind::Local
-    } else {
-        CoordinateKind::World
-    };
-
-    Ok(Coordinates { x, y, z, kind })
-}
-
-/// Parses two whitespace-separated coordinates (x z) for Vec2.
-fn parse_coordinates2(reader: &mut StringReader<'_>) -> Result<Coordinates, CommandError> {
-    let (x, x_local) = parse_single_coordinate(reader)?;
-    reader.skip_whitespace();
-    let (z, z_local) = parse_single_coordinate(reader)?;
-
-    if x_local != z_local {
-        return Err(CommandError::Parse(
-            "Cannot mix world and local coordinates (^ and ~)".to_string(),
-        ));
-    }
-
-    let kind = if x_local {
-        CoordinateKind::Local
-    } else {
-        CoordinateKind::World
-    };
-
-    Ok(Coordinates {
-        x,
-        y: WorldCoordinate {
-            value: 0.0,
-            relative: false,
-        },
-        z,
-        kind,
-    })
 }
 
 // ── Per-type argument parsers ───────────────────────────────────────
@@ -656,12 +376,7 @@ fn parse_double_num_arg(
 
 fn parse_block_pos_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, CommandError> {
     let coords = parse_int_coordinates3(reader)?;
-    // If all absolute, return legacy BlockPos for backwards compat.
-    if coords.kind == CoordinateKind::World
-        && !coords.x.relative
-        && !coords.y.relative
-        && !coords.z.relative
-    {
+    if !coords.has_relative() {
         return Ok(ArgumentResult::BlockPos(
             coords.x.value as i32,
             coords.y.value as i32,
@@ -673,12 +388,7 @@ fn parse_block_pos_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, 
 
 fn parse_vec3_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, CommandError> {
     let coords = parse_coordinates3(reader)?;
-    // If all absolute, return legacy Vec3 for backwards compat.
-    if coords.kind == CoordinateKind::World
-        && !coords.x.relative
-        && !coords.y.relative
-        && !coords.z.relative
-    {
+    if !coords.has_relative() {
         return Ok(ArgumentResult::Vec3(
             coords.x.value,
             coords.y.value,
@@ -690,7 +400,7 @@ fn parse_vec3_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, Comma
 
 fn parse_vec2_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, CommandError> {
     let coords = parse_coordinates2(reader)?;
-    if coords.kind == CoordinateKind::World && !coords.x.relative && !coords.z.relative {
+    if !coords.has_relative() {
         return Ok(ArgumentResult::Vec3(coords.x.value, 0.0, coords.z.value));
     }
     Ok(ArgumentResult::Coordinates(coords))
@@ -743,7 +453,8 @@ fn parse_word_as_string(reader: &mut StringReader<'_>) -> Result<ArgumentResult,
 
 fn parse_color_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, CommandError> {
     let word = reader.read_word();
-    NamedColor::from_name(word)
+    ChatFormatting::from_name(word)
+        .filter(|f| f.is_color())
         .map(ArgumentResult::Color)
         .ok_or_else(|| CommandError::Parse(format!("Unknown color: '{word}'")))
 }
@@ -751,7 +462,7 @@ fn parse_color_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, Comm
 fn parse_angle_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, CommandError> {
     let remaining = reader.remaining();
     if remaining.starts_with('~') {
-        reader.cursor += 1;
+        reader.advance(1);
         let value = if reader.can_read() && reader.peek() != Some(' ') {
             reader.read_float()?
         } else {
@@ -806,60 +517,14 @@ fn parse_swizzle_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, Co
 
 fn parse_int_range_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, CommandError> {
     let word = reader.read_word();
-    if let Some((min_s, max_s)) = word.split_once("..") {
-        let min = if min_s.is_empty() {
-            None
-        } else {
-            Some(min_s.parse::<i32>().map_err(|_| {
-                CommandError::Parse(format!("Invalid range minimum: '{min_s}'"))
-            })?)
-        };
-        let max = if max_s.is_empty() {
-            None
-        } else {
-            Some(max_s.parse::<i32>().map_err(|_| {
-                CommandError::Parse(format!("Invalid range maximum: '{max_s}'"))
-            })?)
-        };
-        Ok(ArgumentResult::IntRange { min, max })
-    } else {
-        let v = word.parse::<i32>().map_err(|_| {
-            CommandError::Parse(format!("Invalid integer range: '{word}'"))
-        })?;
-        Ok(ArgumentResult::IntRange {
-            min: Some(v),
-            max: Some(v),
-        })
-    }
+    let (min, max) = parse_range::<i32>(word, "integer")?;
+    Ok(ArgumentResult::IntRange { min, max })
 }
 
 fn parse_float_range_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, CommandError> {
     let word = reader.read_word();
-    if let Some((min_s, max_s)) = word.split_once("..") {
-        let min = if min_s.is_empty() {
-            None
-        } else {
-            Some(min_s.parse::<f64>().map_err(|_| {
-                CommandError::Parse(format!("Invalid range minimum: '{min_s}'"))
-            })?)
-        };
-        let max = if max_s.is_empty() {
-            None
-        } else {
-            Some(max_s.parse::<f64>().map_err(|_| {
-                CommandError::Parse(format!("Invalid range maximum: '{max_s}'"))
-            })?)
-        };
-        Ok(ArgumentResult::FloatRange { min, max })
-    } else {
-        let v = word.parse::<f64>().map_err(|_| {
-            CommandError::Parse(format!("Invalid float range: '{word}'"))
-        })?;
-        Ok(ArgumentResult::FloatRange {
-            min: Some(v),
-            max: Some(v),
-        })
-    }
+    let (min, max) = parse_range::<f64>(word, "float")?;
+    Ok(ArgumentResult::FloatRange { min, max })
 }
 
 /// Parses rotation (pitch yaw) with support for `~` relative syntax.
@@ -1081,9 +746,10 @@ pub fn get_vec3(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
+    use crate::commands::coordinates::CoordinateKind;
 
     // ── StringReader tests ──────────────────────────────────────────
 
@@ -1366,79 +1032,32 @@ mod tests {
         assert_eq!(result, ArgumentResult::BlockPos(10, 64, -30));
     }
 
-    #[test]
-    fn coordinates_resolve_absolute() {
-        let coords = Coordinates {
-            x: WorldCoordinate { value: 100.0, relative: false },
-            y: WorldCoordinate { value: 64.0, relative: false },
-            z: WorldCoordinate { value: -200.0, relative: false },
-            kind: CoordinateKind::World,
-        };
-        let (x, y, z) = coords.resolve((0.0, 0.0, 0.0), (0.0, 0.0));
-        assert!((x - 100.0).abs() < f64::EPSILON);
-        assert!((y - 64.0).abs() < f64::EPSILON);
-        assert!((z - -200.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn coordinates_resolve_relative() {
-        let coords = Coordinates {
-            x: WorldCoordinate { value: 10.0, relative: true },
-            y: WorldCoordinate { value: 0.0, relative: true },
-            z: WorldCoordinate { value: -5.0, relative: true },
-            kind: CoordinateKind::World,
-        };
-        let (x, y, z) = coords.resolve((50.0, 100.0, 200.0), (0.0, 0.0));
-        assert!((x - 60.0).abs() < f64::EPSILON);
-        assert!((y - 100.0).abs() < f64::EPSILON);
-        assert!((z - 195.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn coordinates_resolve_mixed() {
-        let coords = Coordinates {
-            x: WorldCoordinate { value: 100.0, relative: false },
-            y: WorldCoordinate { value: 5.0, relative: true },
-            z: WorldCoordinate { value: -200.0, relative: false },
-            kind: CoordinateKind::World,
-        };
-        let (x, y, z) = coords.resolve((50.0, 60.0, 200.0), (0.0, 0.0));
-        assert!((x - 100.0).abs() < f64::EPSILON);
-        assert!((y - 65.0).abs() < f64::EPSILON);
-        assert!((z - -200.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn coordinates_resolve_block_pos_floors() {
-        let coords = Coordinates {
-            x: WorldCoordinate { value: 10.7, relative: false },
-            y: WorldCoordinate { value: -0.3, relative: false },
-            z: WorldCoordinate { value: 5.9, relative: false },
-            kind: CoordinateKind::World,
-        };
-        let (x, y, z) = coords.resolve_block_pos((0.0, 0.0, 0.0), (0.0, 0.0));
-        assert_eq!((x, y, z), (10, -1, 5));
-    }
-
-    // ── New argument type parsing tests ─────────────────────────────
+    // ── Argument type parsing tests ─────────────────────────────────
 
     #[test]
     fn parse_color_valid() {
         let mut reader = StringReader::new("red", 0);
         let result = parse_argument(&mut reader, &ArgumentType::Color).unwrap();
-        assert_eq!(result, ArgumentResult::Color(NamedColor::Red));
+        assert_eq!(result, ArgumentResult::Color(ChatFormatting::Red));
     }
 
     #[test]
     fn parse_color_dark_aqua() {
         let mut reader = StringReader::new("dark_aqua", 0);
         let result = parse_argument(&mut reader, &ArgumentType::Color).unwrap();
-        assert_eq!(result, ArgumentResult::Color(NamedColor::DarkAqua));
+        assert_eq!(result, ArgumentResult::Color(ChatFormatting::DarkAqua));
     }
 
     #[test]
     fn parse_color_invalid() {
         let mut reader = StringReader::new("pink", 0);
+        let result = parse_argument(&mut reader, &ArgumentType::Color);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_color_rejects_formatting_modifiers() {
+        let mut reader = StringReader::new("bold", 0);
         let result = parse_argument(&mut reader, &ArgumentType::Color);
         assert!(result.is_err());
     }
@@ -1486,20 +1105,14 @@ mod tests {
     fn parse_entity_anchor_feet() {
         let mut reader = StringReader::new("feet", 0);
         let result = parse_argument(&mut reader, &ArgumentType::EntityAnchor).unwrap();
-        assert_eq!(
-            result,
-            ArgumentResult::EntityAnchor(EntityAnchorKind::Feet)
-        );
+        assert_eq!(result, ArgumentResult::EntityAnchor(EntityAnchorKind::Feet));
     }
 
     #[test]
     fn parse_entity_anchor_eyes() {
         let mut reader = StringReader::new("eyes", 0);
         let result = parse_argument(&mut reader, &ArgumentType::EntityAnchor).unwrap();
-        assert_eq!(
-            result,
-            ArgumentResult::EntityAnchor(EntityAnchorKind::Eyes)
-        );
+        assert_eq!(result, ArgumentResult::EntityAnchor(EntityAnchorKind::Eyes));
     }
 
     #[test]

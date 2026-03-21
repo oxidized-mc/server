@@ -6,8 +6,10 @@
 //! `advancements`) are parsed and stored but not yet applied during resolution.
 
 use crate::commands::CommandError;
+use crate::commands::context::parse_range;
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
 use rand::RngExt;
+use std::str::FromStr;
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -39,6 +41,22 @@ pub enum SelectorSort {
     Furthest,
     /// Random order (default for `@r`).
     Random,
+}
+
+impl FromStr for SelectorSort {
+    type Err = CommandError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "nearest" => Ok(Self::Nearest),
+            "furthest" => Ok(Self::Furthest),
+            "random" => Ok(Self::Random),
+            "arbitrary" => Ok(Self::Arbitrary),
+            _ => Err(CommandError::Parse(format!(
+                "Invalid sort mode: '{s}' (expected nearest, furthest, random, or arbitrary)"
+            ))),
+        }
+    }
 }
 
 /// A single name filter entry.
@@ -210,17 +228,7 @@ fn parse_filters(inner: &str) -> Result<SelectorFilters, CommandError> {
                 filters.limit = Some(n);
             },
             "sort" => {
-                filters.sort = Some(match value {
-                    "nearest" => SelectorSort::Nearest,
-                    "furthest" => SelectorSort::Furthest,
-                    "random" => SelectorSort::Random,
-                    "arbitrary" => SelectorSort::Arbitrary,
-                    _ => {
-                        return Err(CommandError::Parse(format!(
-                            "Invalid sort mode: '{value}'"
-                        )));
-                    },
-                });
+                filters.sort = Some(value.parse()?);
             },
             "distance" => filters.distance = Some(parse_double_range(value)?),
             "level" => filters.level = Some(parse_double_range(value)?),
@@ -299,32 +307,8 @@ fn parse_negatable(value: &str) -> (&str, bool) {
 /// Parses a `min..max` range, supporting open-ended forms like `..10`, `5..`,
 /// and single values like `10` (which means `10..10`).
 fn parse_double_range(value: &str) -> Result<DoubleRange, CommandError> {
-    if let Some((min_s, max_s)) = value.split_once("..") {
-        let min = if min_s.is_empty() {
-            None
-        } else {
-            Some(min_s.parse::<f64>().map_err(|_| {
-                CommandError::Parse(format!("Invalid range minimum: '{min_s}'"))
-            })?)
-        };
-        let max = if max_s.is_empty() {
-            None
-        } else {
-            Some(max_s.parse::<f64>().map_err(|_| {
-                CommandError::Parse(format!("Invalid range maximum: '{max_s}'"))
-            })?)
-        };
-        Ok(DoubleRange { min, max })
-    } else {
-        // Single value means exact match.
-        let v = value.parse::<f64>().map_err(|_| {
-            CommandError::Parse(format!("Invalid range value: '{value}'"))
-        })?;
-        Ok(DoubleRange {
-            min: Some(v),
-            max: Some(v),
-        })
-    }
+    let (min, max) = parse_range::<f64>(value, "double")?;
+    Ok(DoubleRange { min, max })
 }
 
 /// Parses a single f64 value for coordinate options.
