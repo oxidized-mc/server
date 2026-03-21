@@ -183,6 +183,7 @@ fn main() -> anyhow::Result<()> {
             tick_rate_manager: parking_lot::RwLock::new(
                 oxidized_game::level::ServerTickRateManager::default(),
             ),
+            world_dir: config.world.name.clone(),
         });
 
         // Build the shared login context.
@@ -206,8 +207,9 @@ fn main() -> anyhow::Result<()> {
         // This ordering guarantees all plugin hooks are in place before
         // the first client connection arrives.
 
-        // Clone the server context for the console before moving login_ctx.
+        // Clone the server context for the console and shutdown save before moving login_ctx.
         let console_server_ctx = login_ctx.server_ctx.clone();
+        let shutdown_server_ctx = login_ctx.server_ctx.clone();
 
         // Spawn the server tick loop (20 TPS).
         let tick_shutdown = shutdown_tx.subscribe();
@@ -245,6 +247,23 @@ fn main() -> anyhow::Result<()> {
         }
         info!("Shutdown signal received");
         let _ = shutdown_tx.send(());
+
+        // Save level.dat on shutdown (ADR-030: graceful shutdown saves).
+        // Uses spawn_blocking to avoid blocking the async runtime (ADR-015).
+        {
+            let level_dat_path = format!("{}/level.dat", shutdown_server_ctx.world_dir);
+            let level_data = shutdown_server_ctx.level_data.read().clone();
+            info!("Saving level.dat...");
+            let result = tokio::task::spawn_blocking(move || {
+                level_data.save(std::path::Path::new(&level_dat_path))
+            })
+            .await;
+            match result {
+                Ok(Ok(())) => info!("level.dat saved successfully"),
+                Ok(Err(e)) => error!(error = %e, "Failed to save level.dat on shutdown"),
+                Err(e) => error!(error = %e, "Shutdown save task panicked"),
+            }
+        }
 
         // Wait for the listener task to finish, with a timeout to avoid
         // hanging indefinitely if connections don't close cleanly.

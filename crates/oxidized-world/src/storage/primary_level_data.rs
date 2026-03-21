@@ -1,11 +1,12 @@
-//! Primary level data parsed from `level.dat`.
+//! Primary level data parsed from and written to `level.dat`.
 //!
 //! Contains world metadata: spawn position, game type, difficulty, time,
-//! weather, and other server-level settings.
+//! weather, and other server-level settings. Supports both deserialization
+//! (from NBT) and serialization (to NBT) for save/load cycles.
 
 use std::path::Path;
 
-use oxidized_nbt::NbtCompound;
+use oxidized_nbt::{NbtCompound, NbtTag};
 
 use crate::anvil::AnvilError;
 
@@ -108,6 +109,72 @@ impl PrimaryLevelData {
             .get_compound("Data")
             .ok_or(AnvilError::MissingField { field: "Data" })?;
         Self::from_nbt(data)
+    }
+
+    /// Serializes this level data to an NBT `Data` compound.
+    ///
+    /// Returns a root compound containing a `Data` child with all fields,
+    /// matching the vanilla `level.dat` format.
+    #[must_use]
+    pub fn to_nbt(&self) -> NbtCompound {
+        let mut data = NbtCompound::new();
+        data.put_string("LevelName", &self.level_name);
+        data.put_int("DataVersion", self.data_version);
+        data.put_int("GameType", self.game_type);
+        data.put_int("SpawnX", self.spawn_x);
+        data.put_int("SpawnY", self.spawn_y);
+        data.put_int("SpawnZ", self.spawn_z);
+        data.put_float("SpawnAngle", self.spawn_angle);
+        data.put_long("Time", self.time);
+        data.put_long("DayTime", self.day_time);
+        data.put_byte("raining", i8::from(self.is_raining));
+        data.put_byte("thundering", i8::from(self.is_thundering));
+        data.put_int("rainTime", self.rain_time);
+        data.put_int("thunderTime", self.thunder_time);
+        data.put_int("clearWeatherTime", self.clear_weather_time);
+        data.put_byte("hardcore", i8::from(self.hardcore));
+        #[allow(clippy::cast_possible_truncation)]
+        data.put_byte("Difficulty", self.difficulty as i8);
+        data.put_byte("allowCommands", i8::from(self.allow_commands));
+        data.put_byte("initialized", i8::from(self.initialized));
+        data.put_int("SeaLevel", self.sea_level);
+
+        let mut root = NbtCompound::new();
+        root.put("Data", NbtTag::Compound(data));
+        root
+    }
+
+    /// Saves level data to a file using the safe backup pattern.
+    ///
+    /// 1. Write to `<path>_new` (temporary)
+    /// 2. If `<path>` exists, rename it to `<path>_old` (backup)
+    /// 3. Rename `<path>_new` to `<path>` (atomic commit)
+    ///
+    /// This ensures at least one valid file always exists on disk, even if
+    /// the process crashes mid-write.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnvilError::Io`] on file I/O failure.
+    pub fn save(&self, path: &Path) -> Result<(), AnvilError> {
+        let nbt = self.to_nbt();
+
+        let tmp_path = path.with_extension("dat_new");
+        let old_path = path.with_extension("dat_old");
+
+        // Write to temporary file first.
+        oxidized_nbt::write_file(&tmp_path, &nbt)
+            .map_err(|e| AnvilError::io(&tmp_path, std::io::Error::other(e.to_string())))?;
+
+        // Back up the existing file.
+        if path.exists() {
+            std::fs::rename(path, &old_path).map_err(|e| AnvilError::io(&old_path, e))?;
+        }
+
+        // Commit: rename temporary to final path.
+        std::fs::rename(&tmp_path, path).map_err(|e| AnvilError::io(path, e))?;
+
+        Ok(())
     }
 }
 
@@ -215,5 +282,128 @@ mod tests {
         assert!(result.is_err());
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_to_nbt_roundtrip() {
+        let data = sample_data_compound();
+        let level = PrimaryLevelData::from_nbt(&data).unwrap();
+
+        // Serialize back to NBT
+        let root_nbt = level.to_nbt();
+        let data_nbt = root_nbt.get_compound("Data").unwrap();
+
+        // Deserialize again
+        let level2 = PrimaryLevelData::from_nbt(data_nbt).unwrap();
+
+        assert_eq!(level2.level_name, level.level_name);
+        assert_eq!(level2.data_version, level.data_version);
+        assert_eq!(level2.game_type, level.game_type);
+        assert_eq!(level2.spawn_x, level.spawn_x);
+        assert_eq!(level2.spawn_y, level.spawn_y);
+        assert_eq!(level2.spawn_z, level.spawn_z);
+        assert!((level2.spawn_angle - level.spawn_angle).abs() < f32::EPSILON);
+        assert_eq!(level2.time, level.time);
+        assert_eq!(level2.day_time, level.day_time);
+        assert_eq!(level2.is_raining, level.is_raining);
+        assert_eq!(level2.is_thundering, level.is_thundering);
+        assert_eq!(level2.rain_time, level.rain_time);
+        assert_eq!(level2.thunder_time, level.thunder_time);
+        assert_eq!(level2.clear_weather_time, level.clear_weather_time);
+        assert_eq!(level2.hardcore, level.hardcore);
+        assert_eq!(level2.difficulty, level.difficulty);
+        assert_eq!(level2.allow_commands, level.allow_commands);
+        assert_eq!(level2.initialized, level.initialized);
+        assert_eq!(level2.sea_level, level.sea_level);
+    }
+
+    #[test]
+    fn test_to_nbt_defaults_roundtrip() {
+        let level = PrimaryLevelData::from_nbt(&NbtCompound::new()).unwrap();
+        let root_nbt = level.to_nbt();
+        let data_nbt = root_nbt.get_compound("Data").unwrap();
+        let level2 = PrimaryLevelData::from_nbt(data_nbt).unwrap();
+
+        assert_eq!(level2.level_name, "Unnamed");
+        assert_eq!(level2.spawn_y, 64);
+        assert_eq!(level2.difficulty, 2);
+        assert!(level2.initialized);
+    }
+
+    #[test]
+    fn test_save_creates_file() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_save_create.dat");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("dat_old"));
+        let _ = std::fs::remove_file(path.with_extension("dat_new"));
+
+        let level = PrimaryLevelData::from_nbt(&sample_data_compound()).unwrap();
+        level.save(&path).unwrap();
+
+        assert!(path.exists(), "level.dat should exist after save");
+        // No backup when there was no previous file
+        assert!(!path.with_extension("dat_old").exists());
+
+        // Verify we can load it back
+        let loaded = PrimaryLevelData::load(&path).unwrap();
+        assert_eq!(loaded.level_name, "TestWorld");
+        assert_eq!(loaded.time, 24000);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_save_creates_backup() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_save_backup.dat");
+        let old_path = path.with_extension("dat_old");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&old_path);
+
+        // Initial save
+        let mut level = PrimaryLevelData::from_nbt(&sample_data_compound()).unwrap();
+        level.save(&path).unwrap();
+
+        // Modify and save again — should create backup
+        level.time = 48000;
+        level.save(&path).unwrap();
+
+        assert!(path.exists(), "level.dat should exist");
+        assert!(old_path.exists(), "level.dat_old backup should exist");
+
+        // Backup should contain original data
+        let backup = PrimaryLevelData::load(&old_path).unwrap();
+        assert_eq!(backup.time, 24000, "backup should have original time");
+
+        // New file should contain updated data
+        let current = PrimaryLevelData::load(&path).unwrap();
+        assert_eq!(current.time, 48000, "current should have updated time");
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(&old_path);
+    }
+
+    #[test]
+    fn test_save_load_full_roundtrip() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_full_roundtrip.dat");
+        let _ = std::fs::remove_file(&path);
+
+        let data = sample_data_compound();
+        let level = PrimaryLevelData::from_nbt(&data).unwrap();
+        level.save(&path).unwrap();
+        let loaded = PrimaryLevelData::load(&path).unwrap();
+
+        assert_eq!(loaded.level_name, level.level_name);
+        assert_eq!(loaded.time, level.time);
+        assert_eq!(loaded.day_time, level.day_time);
+        assert_eq!(loaded.is_raining, level.is_raining);
+        assert_eq!(loaded.spawn_x, level.spawn_x);
+        assert_eq!(loaded.spawn_y, level.spawn_y);
+        assert_eq!(loaded.spawn_z, level.spawn_z);
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_file(path.with_extension("dat_old"));
     }
 }

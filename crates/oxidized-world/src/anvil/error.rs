@@ -25,6 +25,10 @@ pub enum AnvilError {
     #[error("decompression failed: {0}")]
     Decompression(String),
 
+    /// Compression failed.
+    #[error("compression failed: {0}")]
+    Compression(String),
+
     /// NBT parsing error.
     #[error("NBT error: {0}")]
     Nbt(#[from] oxidized_nbt::NbtError),
@@ -59,6 +63,17 @@ pub enum AnvilError {
     /// Region file header is invalid.
     #[error("invalid region file header: {0}")]
     InvalidHeader(String),
+
+    /// Chunk data too large to fit in a region file.
+    ///
+    /// The Anvil format encodes sector count as a single byte (max 255 sectors = ~1 MB).
+    #[error("chunk data too large: {size} bytes ({sectors} sectors, max 255)")]
+    ChunkTooLarge {
+        /// The compressed chunk size in bytes.
+        size: usize,
+        /// The number of 4 KiB sectors required.
+        sectors: usize,
+    },
 
     /// Block name not found in the registry.
     #[error("unknown block: {0}")]

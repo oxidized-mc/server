@@ -82,6 +82,8 @@ pub struct ServerContext {
     pub game_rules: RwLock<GameRules>,
     /// Tick rate manager — controls freeze/step/sprint.
     pub tick_rate_manager: RwLock<ServerTickRateManager>,
+    /// World directory name (e.g., `"world"`).
+    pub world_dir: String,
 }
 
 impl ServerHandle for ServerContext {
@@ -495,6 +497,7 @@ mod tests {
                 tick_rate_manager: RwLock::new(
                     oxidized_game::level::ServerTickRateManager::default(),
                 ),
+                world_dir: String::new(),
             }),
         })
     }

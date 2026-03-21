@@ -24,6 +24,9 @@ pub enum CompressionType {
 pub const EXTERNAL_FLAG: u8 = 0x80;
 
 impl CompressionType {
+    /// Zlib compression byte value for writing chunk data.
+    pub const ZLIB_BYTE: u8 = 2;
+
     /// Parses a compression type from the raw byte, ignoring the external flag.
     ///
     /// # Errors
@@ -45,6 +48,36 @@ impl CompressionType {
     pub fn is_external(b: u8) -> bool {
         b & EXTERNAL_FLAG != 0
     }
+}
+
+/// Compresses data using Zlib at the given compression level.
+///
+/// Uses level 4 by default for a good speed/ratio tradeoff (see ADR-015).
+///
+/// # Errors
+///
+/// Returns [`AnvilError::Compression`] if compression fails.
+pub fn compress_zlib(data: &[u8]) -> Result<Vec<u8>, AnvilError> {
+    compress_zlib_level(data, flate2::Compression::new(4))
+}
+
+/// Compresses data using Zlib at a specific compression level.
+///
+/// # Errors
+///
+/// Returns [`AnvilError::Compression`] if compression fails.
+pub fn compress_zlib_level(
+    data: &[u8],
+    level: flate2::Compression,
+) -> Result<Vec<u8>, AnvilError> {
+    use std::io::Write;
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), level);
+    encoder
+        .write_all(data)
+        .map_err(|e| AnvilError::Compression(e.to_string()))?;
+    encoder
+        .finish()
+        .map_err(|e| AnvilError::Compression(e.to_string()))
 }
 
 /// Decompresses chunk data according to the given codec.
@@ -154,5 +187,31 @@ mod tests {
         let compressed = lz4_flex::compress_prepend_size(original);
         let decompressed = decompress(&compressed, CompressionType::Lz4).unwrap();
         assert_eq!(decompressed, original.as_slice());
+    }
+
+    #[test]
+    fn test_compress_zlib_roundtrip() {
+        let original = b"chunk NBT data for compression roundtrip test";
+        let compressed = compress_zlib(original).unwrap();
+        let decompressed = decompress(&compressed, CompressionType::Zlib).unwrap();
+        assert_eq!(decompressed, original);
+    }
+
+    #[test]
+    fn test_compress_zlib_level_roundtrip() {
+        let original = b"testing different compression levels";
+        for level in [1, 4, 6, 9] {
+            let compressed =
+                compress_zlib_level(original, flate2::Compression::new(level)).unwrap();
+            let decompressed = decompress(&compressed, CompressionType::Zlib).unwrap();
+            assert_eq!(decompressed, original, "roundtrip failed at level {level}");
+        }
+    }
+
+    #[test]
+    fn test_compress_zlib_empty_data() {
+        let compressed = compress_zlib(b"").unwrap();
+        let decompressed = decompress(&compressed, CompressionType::Zlib).unwrap();
+        assert!(decompressed.is_empty());
     }
 }

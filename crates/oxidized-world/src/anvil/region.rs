@@ -1,11 +1,11 @@
-//! Anvil region file format (`.mca`) reader.
+//! Anvil region file format (`.mca`) reader and writer.
 //!
 //! A region file stores up to 1024 chunks (32×32) in a sector-based layout.
 //! The first 8 KiB is a header containing offset and timestamp tables;
 //! chunk data follows in 4 KiB sectors.
 
-use std::fs::File;
-use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use super::compression::{CompressionType, decompress};
@@ -66,10 +66,10 @@ impl OffsetEntry {
 
 /// An open Anvil region file (`.mca`).
 ///
-/// Reads the 8 KiB header on open and provides methods to read individual
-/// chunk data. Chunk data is decompressed before being returned.
+/// Reads the 8 KiB header on open and provides methods to read and write
+/// individual chunk data. Chunk data is decompressed/compressed as needed.
 pub struct RegionFile {
-    reader: BufReader<File>,
+    file: File,
     offsets: [OffsetEntry; SECTOR_INTS],
     timestamps: [u32; SECTOR_INTS],
     path: PathBuf,
@@ -77,7 +77,7 @@ pub struct RegionFile {
 }
 
 impl RegionFile {
-    /// Opens and parses a region file at the given path.
+    /// Opens and parses a region file at the given path (read-only).
     ///
     /// Reads and validates the 8 KiB header.
     ///
@@ -97,7 +97,7 @@ impl RegionFile {
         }
 
         let mut region = Self {
-            reader: BufReader::new(file),
+            file,
             offsets: [OffsetEntry {
                 sector_number: 0,
                 sector_count: 0,
@@ -108,6 +108,75 @@ impl RegionFile {
         };
         region.read_header()?;
         Ok(region)
+    }
+
+    /// Opens a region file for reading and writing.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnvilError::Io`] on file open/read failure, or
+    /// [`AnvilError::InvalidHeader`] if the file is too small.
+    pub fn open_rw(path: &Path) -> Result<Self, AnvilError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|e| AnvilError::io(path, e))?;
+        let file_len = file.metadata().map_err(|e| AnvilError::io(path, e))?.len();
+
+        if file_len < HEADER_BYTES as u64 {
+            return Err(AnvilError::InvalidHeader(format!(
+                "file too small: {} bytes (need at least {})",
+                file_len, HEADER_BYTES
+            )));
+        }
+
+        let mut region = Self {
+            file,
+            offsets: [OffsetEntry {
+                sector_number: 0,
+                sector_count: 0,
+            }; SECTOR_INTS],
+            timestamps: [0u32; SECTOR_INTS],
+            path: path.to_path_buf(),
+            file_len,
+        };
+        region.read_header()?;
+        Ok(region)
+    }
+
+    /// Creates a new empty region file at the given path.
+    ///
+    /// Writes the 8 KiB empty header (all zeros).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnvilError::Io`] on file creation failure.
+    pub fn create(path: &Path) -> Result<Self, AnvilError> {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(path)
+            .map_err(|e| AnvilError::io(path, e))?;
+
+        // Write empty header (8 KiB of zeros)
+        let header = vec![0u8; HEADER_BYTES];
+        file.write_all(&header)
+            .map_err(|e| AnvilError::io(path, e))?;
+        file.flush().map_err(|e| AnvilError::io(path, e))?;
+
+        Ok(Self {
+            file,
+            offsets: [OffsetEntry {
+                sector_number: 0,
+                sector_count: 0,
+            }; SECTOR_INTS],
+            timestamps: [0u32; SECTOR_INTS],
+            path: path.to_path_buf(),
+            file_len: HEADER_BYTES as u64,
+        })
     }
 
     /// Returns the local chunk index (0–1023) for the given chunk coordinates.
@@ -153,13 +222,13 @@ impl RegionFile {
             return Ok(None);
         }
 
-        self.reader
+        self.file
             .seek(SeekFrom::Start(byte_offset))
             .map_err(|e| AnvilError::io(&self.path, e))?;
 
         // Read 4-byte payload length (big-endian)
         let mut len_buf = [0u8; 4];
-        self.reader
+        self.file
             .read_exact(&mut len_buf)
             .map_err(|e| AnvilError::io(&self.path, e))?;
         let payload_len = u32::from_be_bytes(len_buf) as usize;
@@ -192,7 +261,7 @@ impl RegionFile {
 
         // Read 1-byte compression type
         let mut codec_byte = [0u8; 1];
-        self.reader
+        self.file
             .read_exact(&mut codec_byte)
             .map_err(|e| AnvilError::io(&self.path, e))?;
 
@@ -211,7 +280,7 @@ impl RegionFile {
         // Read compressed data (payload_len - 1 because the codec byte is included)
         let compressed_len = payload_len - 1;
         let mut compressed = vec![0u8; compressed_len];
-        self.reader
+        self.file
             .read_exact(&mut compressed)
             .map_err(|e| AnvilError::io(&self.path, e))?;
 
@@ -240,7 +309,7 @@ impl RegionFile {
 
     /// Reads and parses the 8 KiB header, sanitizing invalid entries.
     fn read_header(&mut self) -> Result<(), AnvilError> {
-        self.reader
+        self.file
             .seek(SeekFrom::Start(0))
             .map_err(|e| AnvilError::io(&self.path, e))?;
 
@@ -249,7 +318,7 @@ impl RegionFile {
         // Read offset table (4096 bytes = 1024 × 4-byte entries)
         let mut buf = [0u8; 4];
         for (i, offset) in self.offsets.iter_mut().enumerate() {
-            self.reader
+            self.file
                 .read_exact(&mut buf)
                 .map_err(|e| AnvilError::io(&self.path, e))?;
             let entry = OffsetEntry::from_u32(u32::from_be_bytes(buf));
@@ -281,10 +350,129 @@ impl RegionFile {
 
         // Read timestamp table (4096 bytes = 1024 × 4-byte entries)
         for ts in &mut self.timestamps {
-            self.reader
+            self.file
                 .read_exact(&mut buf)
                 .map_err(|e| AnvilError::io(&self.path, e))?;
             *ts = u32::from_be_bytes(buf);
+        }
+
+        Ok(())
+    }
+
+    /// Writes compressed chunk data to this region file.
+    ///
+    /// The `compressed_data` must be zlib-compressed chunk NBT. The method
+    /// handles sector allocation, data writing, and header updates.
+    ///
+    /// The compression type byte (0x02 = zlib) is prepended automatically.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnvilError::Io`] on file I/O failure.
+    pub fn write_chunk_data(
+        &mut self,
+        chunk_x: i32,
+        chunk_z: i32,
+        compressed_data: &[u8],
+        timestamp: u32,
+    ) -> Result<(), AnvilError> {
+        let idx = Self::chunk_index(chunk_x, chunk_z);
+
+        // Payload = 4-byte length + 1-byte compression type + compressed data
+        let payload_len = (compressed_data.len() + 1) as u32; // +1 for codec byte
+        let total_on_disk = 4 + payload_len as usize; // +4 for length prefix
+        let sectors_needed = total_on_disk.div_ceil(SECTOR_BYTES);
+
+        // The Anvil format stores sector_count as a single byte (max 255).
+        if sectors_needed > 255 {
+            return Err(AnvilError::ChunkTooLarge {
+                size: compressed_data.len(),
+                sectors: sectors_needed,
+            });
+        }
+        let sectors_needed_u8 = sectors_needed as u8;
+
+        // Allocate sectors: always append at end of file for simplicity.
+        // A production implementation would reclaim freed sectors.
+        let new_sector = (self.file_len as usize).div_ceil(SECTOR_BYTES) as u32;
+        // Ensure we don't overlap the header
+        let new_sector = new_sector.max(2);
+
+        // The Anvil format stores sector_number in 24 bits (max 0xFF_FFFF).
+        if new_sector > 0xFF_FFFF {
+            return Err(AnvilError::InvalidHeader(
+                "region file too large: sector offset exceeds 24-bit limit".into(),
+            ));
+        }
+
+        let byte_offset = new_sector as u64 * SECTOR_BYTES as u64;
+
+        // Seek to the sector and write the chunk payload
+        self.file
+            .seek(SeekFrom::Start(byte_offset))
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        // Write: 4-byte payload length (big-endian)
+        self.file
+            .write_all(&payload_len.to_be_bytes())
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        // Write: 1-byte compression type (zlib = 2)
+        self.file
+            .write_all(&[CompressionType::ZLIB_BYTE])
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        // Write: compressed data
+        self.file
+            .write_all(compressed_data)
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        // Pad to sector boundary
+        let written = total_on_disk;
+        let padded = sectors_needed * SECTOR_BYTES;
+        if padded > written {
+            let padding = vec![0u8; padded - written];
+            self.file
+                .write_all(&padding)
+                .map_err(|e| AnvilError::io(&self.path, e))?;
+        }
+
+        // Update in-memory state
+        self.offsets[idx] = OffsetEntry {
+            sector_number: new_sector,
+            sector_count: sectors_needed_u8,
+        };
+        self.timestamps[idx] = timestamp;
+        self.file_len = self.file_len.max(byte_offset + padded as u64);
+
+        // Flush header
+        self.write_header()?;
+
+        self.file
+            .flush()
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        Ok(())
+    }
+
+    /// Writes the offset and timestamp tables back to the file header.
+    fn write_header(&mut self) -> Result<(), AnvilError> {
+        self.file
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        // Write offset table
+        for offset in &self.offsets {
+            self.file
+                .write_all(&offset.to_u32().to_be_bytes())
+                .map_err(|e| AnvilError::io(&self.path, e))?;
+        }
+
+        // Write timestamp table
+        for ts in &self.timestamps {
+            self.file
+                .write_all(&ts.to_be_bytes())
+                .map_err(|e| AnvilError::io(&self.path, e))?;
         }
 
         Ok(())
@@ -543,6 +731,132 @@ mod tests {
         // Should return None due to payload exceeding sector allocation
         let result = region.read_chunk_data(0, 0).unwrap();
         assert!(result.is_none());
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // ── Write tests ────────────────────────────────────────────────
+
+    #[test]
+    fn test_create_empty_region() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_create_region.mca");
+        let _ = std::fs::remove_file(&path);
+
+        let region = RegionFile::create(&path).unwrap();
+        assert!(!region.has_chunk(0, 0));
+        assert_eq!(region.file_len, HEADER_BYTES as u64);
+        assert!(path.exists());
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_write_then_read_chunk() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_write_read.mca");
+        let _ = std::fs::remove_file(&path);
+
+        let test_data = b"hello chunk world";
+        let mut encoder =
+            flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(test_data).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        // Create + write
+        {
+            let mut region = RegionFile::create(&path).unwrap();
+            region.write_chunk_data(3, 7, &compressed, 12345).unwrap();
+            assert!(region.has_chunk(3, 7));
+            assert_eq!(region.chunk_timestamp(3, 7), 12345);
+        }
+
+        // Re-open read-only and verify
+        {
+            let mut region = RegionFile::open(&path).unwrap();
+            assert!(region.has_chunk(3, 7));
+            assert!(!region.has_chunk(0, 0));
+            assert_eq!(region.chunk_timestamp(3, 7), 12345);
+
+            let data = region.read_chunk_data(3, 7).unwrap().unwrap();
+            assert_eq!(data, test_data);
+        }
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_write_multiple_chunks() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_write_multi.mca");
+        let _ = std::fs::remove_file(&path);
+
+        let mut region = RegionFile::create(&path).unwrap();
+
+        for i in 0..5 {
+            let payload = format!("chunk data {i}");
+            let mut encoder =
+                flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+            encoder.write_all(payload.as_bytes()).unwrap();
+            let compressed = encoder.finish().unwrap();
+            region
+                .write_chunk_data(i, 0, &compressed, 1000 + i as u32)
+                .unwrap();
+        }
+
+        // Verify all chunks
+        for i in 0..5 {
+            assert!(region.has_chunk(i, 0));
+            let data = region.read_chunk_data(i, 0).unwrap().unwrap();
+            assert_eq!(
+                String::from_utf8(data).unwrap(),
+                format!("chunk data {i}")
+            );
+        }
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_write_then_reopen_read() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_write_reopen.mca");
+        let _ = std::fs::remove_file(&path);
+
+        let data1 = b"first chunk";
+        let data2 = b"second chunk";
+
+        // Compress
+        let compress = |data: &[u8]| -> Vec<u8> {
+            let mut enc =
+                flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+            enc.write_all(data).unwrap();
+            enc.finish().unwrap()
+        };
+
+        // Write two chunks
+        {
+            let mut region = RegionFile::create(&path).unwrap();
+            region.write_chunk_data(0, 0, &compress(data1), 100).unwrap();
+            region.write_chunk_data(1, 1, &compress(data2), 200).unwrap();
+        }
+
+        // Re-open and verify header persisted
+        {
+            let mut region = RegionFile::open(&path).unwrap();
+            assert!(region.has_chunk(0, 0));
+            assert!(region.has_chunk(1, 1));
+            assert!(!region.has_chunk(2, 2));
+
+            assert_eq!(region.read_chunk_data(0, 0).unwrap().unwrap(), data1);
+            assert_eq!(region.read_chunk_data(1, 1).unwrap().unwrap(), data2);
+        }
 
         let _ = std::fs::remove_file(&path);
     }

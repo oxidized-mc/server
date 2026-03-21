@@ -541,6 +541,66 @@ impl PalettedContainer {
         }
         count
     }
+
+    /// Serializes this container to NBT disk format.
+    ///
+    /// Returns `(palette_ids, data_longs)` matching the Anvil on-disk format.
+    /// The palette IDs are the registry values stored in the palette, and the
+    /// data longs are the packed palette indices.
+    ///
+    /// - For single-value palettes: `(vec![value], vec![])`.
+    /// - For Linear/HashMap: palette entries + storage longs.
+    /// - For Global: all values collected into a fresh palette + repacked storage.
+    #[must_use]
+    pub fn to_nbt_data(&self) -> (Vec<u32>, Vec<i64>) {
+        match &self.data {
+            PaletteData::Single(palette) => {
+                (vec![palette.value().unwrap_or(0)], Vec::new())
+            },
+            PaletteData::Linear(palette, storage) => {
+                let entries = palette.entries().to_vec();
+                let longs: Vec<i64> = storage.raw().iter().map(|&v| v as i64).collect();
+                (entries, longs)
+            },
+            PaletteData::HashMap(palette, storage) => {
+                let entries = palette.entries().to_vec();
+                let longs: Vec<i64> = storage.raw().iter().map(|&v| v as i64).collect();
+                (entries, longs)
+            },
+            PaletteData::Global(storage) => {
+                // Re-palette global data: collect all values, build a compact palette
+                let size = self.strategy.size();
+                let mut seen = Vec::new();
+                let mut indices = Vec::with_capacity(size);
+                for i in 0..size {
+                    #[allow(clippy::cast_possible_truncation)]
+                    let val = storage.get(i).unwrap_or(0) as u32;
+                    let idx = match seen.iter().position(|&v| v == val) {
+                        Some(pos) => pos,
+                        None => {
+                            seen.push(val);
+                            seen.len() - 1
+                        },
+                    };
+                    indices.push(idx);
+                }
+
+                let bits = bits_for_count(seen.len());
+                let sb = self.strategy.storage_bits(bits);
+                // Build packed longs
+                if let Ok(mut new_storage) = BitStorage::new(sb, size) {
+                    for (i, &idx) in indices.iter().enumerate() {
+                        let _ = new_storage.set(i, idx as u64);
+                    }
+                    let longs: Vec<i64> = new_storage.raw().iter().map(|&v| v as i64).collect();
+                    (seen, longs)
+                } else {
+                    // Fallback: shouldn't happen, but return safe empty
+                    (vec![0], Vec::new())
+                }
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -793,5 +853,65 @@ mod tests {
 
         let c = PalettedContainer::empty(Strategy::Biomes);
         assert_eq!(c.bits_per_entry(), 0); // SingleValue
+    }
+
+    // ── to_nbt_data / from_nbt_data roundtrip ──────────────────────
+
+    #[test]
+    fn test_to_nbt_data_single_value() {
+        let c = PalettedContainer::new(Strategy::BlockStates, 42);
+        let (palette, data) = c.to_nbt_data();
+        assert_eq!(palette, vec![42]);
+        assert!(data.is_empty());
+    }
+
+    #[test]
+    fn test_to_nbt_data_roundtrip_linear() {
+        let mut c = PalettedContainer::empty(Strategy::BlockStates);
+        c.set(0, 0, 0, 1).unwrap();
+        c.set(1, 0, 0, 2).unwrap();
+        c.set(2, 0, 0, 3).unwrap();
+
+        let (palette, data) = c.to_nbt_data();
+        let c2 = PalettedContainer::from_nbt_data(Strategy::BlockStates, palette, &data).unwrap();
+
+        assert_eq!(c2.get(0, 0, 0).unwrap(), 1);
+        assert_eq!(c2.get(1, 0, 0).unwrap(), 2);
+        assert_eq!(c2.get(2, 0, 0).unwrap(), 3);
+        assert_eq!(c2.get(3, 0, 0).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_to_nbt_data_roundtrip_biome() {
+        let mut c = PalettedContainer::empty(Strategy::Biomes);
+        c.set(0, 0, 0, 10).unwrap();
+        c.set(3, 3, 3, 20).unwrap();
+
+        let (palette, data) = c.to_nbt_data();
+        let c2 = PalettedContainer::from_nbt_data(Strategy::Biomes, palette, &data).unwrap();
+        assert_eq!(c2.get(0, 0, 0).unwrap(), 10);
+        assert_eq!(c2.get(3, 3, 3).unwrap(), 20);
+    }
+
+    #[test]
+    fn test_to_nbt_data_roundtrip_global() {
+        let mut c = PalettedContainer::empty(Strategy::BlockStates);
+        // Insert 257 distinct values to trigger Global palette
+        for i in 0..257u32 {
+            let x = (i % 16) as usize;
+            let y = ((i / 16) % 16) as usize;
+            let z = (i / 256) as usize;
+            c.set(x, y, z, i + 1).unwrap();
+        }
+        assert_eq!(c.bits_per_entry(), 15); // Global
+
+        let (palette, data) = c.to_nbt_data();
+        let c2 = PalettedContainer::from_nbt_data(Strategy::BlockStates, palette, &data).unwrap();
+        for i in 0..257u32 {
+            let x = (i % 16) as usize;
+            let y = ((i / 16) % 16) as usize;
+            let z = (i / 256) as usize;
+            assert_eq!(c2.get(x, y, z).unwrap(), i + 1);
+        }
     }
 }
