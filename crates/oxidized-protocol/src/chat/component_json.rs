@@ -129,8 +129,8 @@ impl<'de> Deserialize<'de> for Component {
                         "strikethrough" => style.strikethrough = Some(map.next_value()?),
                         "obfuscated" => style.obfuscated = Some(map.next_value()?),
                         "insertion" => style.insertion = Some(map.next_value()?),
-                        "clickEvent" => style.click_event = Some(map.next_value()?),
-                        "hoverEvent" => style.hover_event = Some(map.next_value()?),
+                        "click_event" => style.click_event = Some(map.next_value()?),
+                        "hover_event" => style.hover_event = Some(map.next_value()?),
                         "font" => {
                             let s: String = map.next_value()?;
                             style.font =
@@ -249,8 +249,8 @@ mod tests {
     fn test_click_event_in_component() {
         let c = Component::text("click me").click(ClickEvent::RunCommand("/home".into()));
         let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
-        assert_eq!(json["clickEvent"]["action"], "run_command");
-        assert_eq!(json["clickEvent"]["value"], "/home");
+        assert_eq!(json["click_event"]["action"], "run_command");
+        assert_eq!(json["click_event"]["value"], "/home");
     }
 
     #[test]
@@ -258,8 +258,8 @@ mod tests {
         let c = Component::text("hover me")
             .hover(HoverEvent::ShowText(Box::new(Component::text("tooltip"))));
         let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
-        assert_eq!(json["hoverEvent"]["action"], "show_text");
-        assert_eq!(json["hoverEvent"]["contents"]["text"], "tooltip");
+        assert_eq!(json["hover_event"]["action"], "show_text");
+        assert_eq!(json["hover_event"]["value"]["text"], "tooltip");
     }
 
     #[test]
