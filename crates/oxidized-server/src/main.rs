@@ -4,10 +4,8 @@
 //! parses CLI arguments, initialises tracing, loads configuration, and
 //! launches the Tokio async runtime with the TCP listener.
 
-mod cli;
+mod app;
 mod config;
-mod console;
-mod logging;
 mod network;
 
 use std::net::SocketAddr;
@@ -28,7 +26,7 @@ use oxidized_world::storage::PrimaryLevelData;
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
-use crate::cli::Args;
+use crate::app::cli::Args;
 use crate::config::ServerConfig;
 use crate::network::{LoginContext, ServerContext};
 
@@ -42,7 +40,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     // Initialise structured logging before anything else.
-    logging::init(&args.log_level);
+    app::logging::init(&args.log_level);
 
     info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -208,7 +206,7 @@ fn main() -> anyhow::Result<()> {
         let _console_thread = std::thread::Builder::new()
             .name("console".into())
             .spawn(move || {
-                console::run_console_loop(console_server_ctx);
+                app::console::run_console_loop(console_server_ctx);
             })
             .map_err(|e| anyhow::anyhow!("failed to spawn console thread: {e}"))?;
 
