@@ -20,8 +20,8 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use crate::codec::frame::{self, FrameError, MAX_PACKET_SIZE};
 use crate::codec::packet::{Packet, PacketDecodeError};
 use crate::codec::varint::{self, VarIntError};
-use crate::compression::{CompressionError, CompressionState};
-use crate::crypto::CipherState;
+use super::compression::{CompressionError, CompressionState};
+use super::crypto::CipherState;
 
 // ---------------------------------------------------------------------------
 // ConnectionState

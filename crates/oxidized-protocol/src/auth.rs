@@ -137,7 +137,7 @@ impl ProfileProperty {
 ///
 /// * `client` - An HTTP client (reuse across requests for connection pooling)
 /// * `username` - The player's username
-/// * `server_hash` - The auth hash from [`crate::crypto::minecraft_digest`]
+/// * `server_hash` - The auth hash from [`crate::transport::crypto::minecraft_digest`]
 /// * `client_ip` - Optional client IP (for `prevent-proxy-connections`)
 ///
 /// # Errors
