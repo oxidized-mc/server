@@ -2,7 +2,7 @@
 
 use oxidized_protocol::chat::ChatFormatting;
 use oxidized_protocol::chat::Component;
-use oxidized_protocol::chat::style::{ClickEvent, HoverEvent, TextColor};
+use oxidized_protocol::chat::{ClickEvent, HoverEvent, TextColor};
 
 /// Configuration for a paginated message.
 pub struct PaginatedMessage {
