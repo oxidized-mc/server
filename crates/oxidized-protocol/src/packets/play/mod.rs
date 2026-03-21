@@ -90,6 +90,9 @@ pub use serverbound_chat_command_signed::ServerboundChatCommandSignedPacket;
 pub use serverbound_chunk_batch_received::ServerboundChunkBatchReceivedPacket;
 pub use serverbound_command_suggestion::ServerboundCommandSuggestionPacket;
 pub use serverbound_keep_alive::ServerboundKeepAlivePacket;
-pub use serverbound_move_player::ServerboundMovePlayerPacket;
+pub use serverbound_move_player::{
+    ServerboundMovePlayerPacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
+    ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
+};
 pub use serverbound_player_command::{PlayerCommandAction, ServerboundPlayerCommandPacket};
 pub use serverbound_player_input::{PlayerInput, ServerboundPlayerInputPacket};

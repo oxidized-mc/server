@@ -27,8 +27,9 @@ use oxidized_protocol::packets::play::{
     PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, ServerboundAcceptTeleportationPacket,
     ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket, ServerboundChatPacket,
     ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
-    ServerboundKeepAlivePacket, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
-    ServerboundPlayerInputPacket,
+    ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
+    ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
+    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -62,10 +63,10 @@ pub struct PlayContext<'a> {
 
 /// Returns `true` if the packet ID is a movement packet.
 fn is_movement_packet(id: i32) -> bool {
-    id == ServerboundMovePlayerPacket::PACKET_ID_POS
-        || id == ServerboundMovePlayerPacket::PACKET_ID_POS_ROT
-        || id == ServerboundMovePlayerPacket::PACKET_ID_ROT
-        || id == ServerboundMovePlayerPacket::PACKET_ID_STATUS_ONLY
+    id == ServerboundMovePlayerPosPacket::PACKET_ID
+        || id == ServerboundMovePlayerPosRotPacket::PACKET_ID
+        || id == ServerboundMovePlayerRotPacket::PACKET_ID
+        || id == ServerboundMovePlayerStatusOnlyPacket::PACKET_ID
 }
 
 /// Handles the PLAY-state login sequence for a newly joined player.
