@@ -8,6 +8,8 @@ pub mod clientbound_chunk_batch_finished;
 pub mod clientbound_chunk_batch_start;
 pub mod clientbound_command_suggestions;
 pub mod clientbound_commands;
+pub mod clientbound_container_set_content;
+pub mod clientbound_container_set_slot;
 pub mod clientbound_delete_chat;
 pub mod clientbound_disguised_chat;
 pub mod clientbound_entity_position_sync;
@@ -29,6 +31,8 @@ pub mod clientbound_set_chunk_cache_radius;
 pub mod clientbound_set_default_spawn_position;
 pub mod clientbound_set_entity_data;
 pub mod clientbound_set_entity_motion;
+pub mod clientbound_set_held_slot;
+pub mod clientbound_set_player_inventory;
 pub mod clientbound_set_simulation_distance;
 pub mod clientbound_set_time;
 pub mod clientbound_system_chat;
@@ -45,6 +49,8 @@ pub mod serverbound_keep_alive;
 pub mod serverbound_move_player;
 pub mod serverbound_player_command;
 pub mod serverbound_player_input;
+pub mod serverbound_set_carried_item;
+pub mod serverbound_set_creative_mode_slot;
 
 pub use clientbound_add_entity::ClientboundAddEntityPacket;
 pub use clientbound_chunk_batch_finished::ClientboundChunkBatchFinishedPacket;
@@ -53,6 +59,8 @@ pub use clientbound_command_suggestions::{ClientboundCommandSuggestionsPacket, S
 pub use clientbound_commands::{
     ClientboundCommandsPacket, CommandNodeData as PacketCommandNodeData,
 };
+pub use clientbound_container_set_content::ClientboundContainerSetContentPacket;
+pub use clientbound_container_set_slot::ClientboundContainerSetSlotPacket;
 pub use clientbound_delete_chat::ClientboundDeleteChatPacket;
 pub use clientbound_disguised_chat::ClientboundDisguisedChatPacket;
 pub use clientbound_entity_position_sync::ClientboundEntityPositionSyncPacket;
@@ -83,6 +91,8 @@ pub use clientbound_set_entity_data::{
     ClientboundSetEntityDataPacket, DATA_EOF_MARKER, EntityDataEntry,
 };
 pub use clientbound_set_entity_motion::ClientboundSetEntityMotionPacket;
+pub use clientbound_set_held_slot::ClientboundSetHeldSlotPacket;
+pub use clientbound_set_player_inventory::ClientboundSetPlayerInventoryPacket;
 pub use clientbound_set_simulation_distance::ClientboundSetSimulationDistancePacket;
 pub use clientbound_set_time::{ClientboundSetTimePacket, ClockNetworkState, ClockUpdate};
 pub use clientbound_system_chat::ClientboundSystemChatPacket;
@@ -102,3 +112,5 @@ pub use serverbound_move_player::{
 };
 pub use serverbound_player_command::{PlayerCommandAction, ServerboundPlayerCommandPacket};
 pub use serverbound_player_input::{PlayerInput, ServerboundPlayerInputPacket};
+pub use serverbound_set_carried_item::ServerboundSetCarriedItemPacket;
+pub use serverbound_set_creative_mode_slot::ServerboundSetCreativeModeSlotPacket;

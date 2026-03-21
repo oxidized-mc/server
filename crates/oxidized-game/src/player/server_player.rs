@@ -8,7 +8,7 @@
 
 use std::collections::VecDeque;
 
-use oxidized_nbt::{NbtCompound, NbtList, NbtTag, TAG_DOUBLE, TAG_FLOAT};
+use oxidized_nbt::{NbtCompound, NbtList, NbtTag, TAG_COMPOUND, TAG_DOUBLE, TAG_FLOAT};
 use oxidized_protocol::auth::GameProfile;
 use oxidized_protocol::types::{BlockPos, ResourceLocation, Vec3};
 use uuid::Uuid;
@@ -16,6 +16,7 @@ use uuid::Uuid;
 use super::abilities::PlayerAbilities;
 use super::game_mode::GameMode;
 use super::inventory::PlayerInventory;
+use crate::inventory::ItemStack;
 
 /// Runtime state for a single connected player.
 ///
@@ -227,6 +228,32 @@ impl ServerPlayer {
 
         self.on_ground = nbt.get_byte("OnGround").unwrap_or(0) != 0;
         self.sneaking = nbt.get_byte("Sneaking").unwrap_or(0) != 0;
+
+        // Selected hotbar slot
+        if let Some(v) = nbt.get_int("SelectedItemSlot") {
+            if (0..9).contains(&v) {
+                self.inventory.selected_slot = v as u8;
+            }
+        }
+
+        // Inventory items
+        if let Some(inv_list) = nbt.get_list("Inventory") {
+            for tag in inv_list.iter() {
+                if let NbtTag::Compound(item_nbt) = tag {
+                    let slot = item_nbt.get_byte("Slot").unwrap_or(-1);
+                    if slot < 0 {
+                        continue;
+                    }
+                    let slot = slot as usize;
+                    if slot >= PlayerInventory::TOTAL_SLOTS {
+                        continue;
+                    }
+                    if let Ok(stack) = ItemStack::from_nbt(item_nbt) {
+                        self.inventory.set(slot, stack);
+                    }
+                }
+            }
+        }
     }
 
     /// Saves player state to an NBT compound for disk persistence.
@@ -263,6 +290,22 @@ impl ServerPlayer {
 
         // Dimension
         nbt.put_string("Dimension", self.dimension.to_string());
+
+        // Selected hotbar slot
+        nbt.put_int("SelectedItemSlot", self.inventory.selected_slot as i32);
+
+        // Inventory items
+        let mut inv_list = NbtList::new(TAG_COMPOUND);
+        for slot in 0..PlayerInventory::TOTAL_SLOTS {
+            let stack = self.inventory.get(slot);
+            if !stack.is_empty() {
+                if let Some(mut item_nbt) = stack.to_nbt() {
+                    item_nbt.put_byte("Slot", slot as i8);
+                    let _ = inv_list.push(NbtTag::Compound(item_nbt));
+                }
+            }
+        }
+        nbt.put("Inventory", NbtTag::List(inv_list));
 
         nbt
     }
@@ -427,5 +470,136 @@ mod tests {
         assert!(player.abilities.invulnerable);
         assert!(player.abilities.can_fly);
         assert!(player.abilities.instabuild);
+    }
+
+    #[test]
+    fn test_save_inventory_to_nbt() {
+        let mut player = make_test_player(1, "Test");
+        player
+            .inventory
+            .set(0, ItemStack::new("minecraft:diamond_sword", 1));
+        player
+            .inventory
+            .set(9, ItemStack::new("minecraft:stone", 64));
+
+        let nbt = player.save_to_nbt();
+        let inv = nbt.get_list("Inventory").expect("Inventory tag missing");
+        assert_eq!(inv.len(), 2);
+
+        let items: Vec<_> = inv.iter().collect();
+
+        // Check slot 0
+        if let NbtTag::Compound(item) = &items[0] {
+            assert_eq!(item.get_byte("Slot"), Some(0));
+            assert_eq!(item.get_string("id"), Some("minecraft:diamond_sword"));
+            assert_eq!(item.get_byte("count"), Some(1));
+        } else {
+            panic!("Expected compound tag");
+        }
+
+        // Check slot 9
+        if let NbtTag::Compound(item) = &items[1] {
+            assert_eq!(item.get_byte("Slot"), Some(9));
+            assert_eq!(item.get_string("id"), Some("minecraft:stone"));
+            assert_eq!(item.get_byte("count"), Some(64));
+        } else {
+            panic!("Expected compound tag");
+        }
+    }
+
+    #[test]
+    fn test_load_inventory_from_nbt() {
+        let mut nbt = NbtCompound::new();
+        let mut inv_list = NbtList::new(TAG_COMPOUND);
+
+        let mut item0 = NbtCompound::new();
+        item0.put_byte("Slot", 0);
+        item0.put_string("id", "minecraft:iron_pickaxe");
+        item0.put_byte("count", 1);
+        let _ = inv_list.push(NbtTag::Compound(item0));
+
+        let mut item9 = NbtCompound::new();
+        item9.put_byte("Slot", 9);
+        item9.put_string("id", "minecraft:dirt");
+        item9.put_byte("count", 32);
+        let _ = inv_list.push(NbtTag::Compound(item9));
+
+        nbt.put("Inventory", NbtTag::List(inv_list));
+        nbt.put_int("SelectedItemSlot", 3);
+
+        let mut player = make_test_player(1, "Test");
+        player.load_from_nbt(&nbt);
+
+        assert_eq!(player.inventory.selected_slot, 3);
+        let slot0 = player.inventory.get(0);
+        assert_eq!(slot0.item.0, "minecraft:iron_pickaxe");
+        assert_eq!(slot0.count, 1);
+        let slot9 = player.inventory.get(9);
+        assert_eq!(slot9.item.0, "minecraft:dirt");
+        assert_eq!(slot9.count, 32);
+        assert!(player.inventory.get(1).is_empty());
+    }
+
+    #[test]
+    fn test_inventory_nbt_roundtrip() {
+        let mut player = make_test_player(1, "Test");
+        player
+            .inventory
+            .set(0, ItemStack::new("minecraft:diamond_sword", 1));
+        player
+            .inventory
+            .set(9, ItemStack::new("minecraft:stone", 64));
+        player
+            .inventory
+            .set(40, ItemStack::new("minecraft:shield", 1));
+        player.inventory.selected_slot = 5;
+
+        let nbt = player.save_to_nbt();
+
+        let mut player2 = make_test_player(2, "Test2");
+        player2.load_from_nbt(&nbt);
+
+        assert_eq!(player2.inventory.selected_slot, 5);
+        assert_eq!(player2.inventory.get(0).item.0, "minecraft:diamond_sword");
+        assert_eq!(player2.inventory.get(0).count, 1);
+        assert_eq!(player2.inventory.get(9).item.0, "minecraft:stone");
+        assert_eq!(player2.inventory.get(9).count, 64);
+        assert_eq!(player2.inventory.get(40).item.0, "minecraft:shield");
+        assert_eq!(player2.inventory.get(40).count, 1);
+        assert!(player2.inventory.get(1).is_empty());
+    }
+
+    #[test]
+    fn test_empty_inventory_nbt() {
+        let player = make_test_player(1, "Test");
+        let nbt = player.save_to_nbt();
+
+        let inv = nbt.get_list("Inventory").expect("Inventory tag missing");
+        assert_eq!(inv.len(), 0);
+
+        assert_eq!(nbt.get_int("SelectedItemSlot"), Some(0));
+    }
+
+    #[test]
+    fn test_load_invalid_slot_ignored() {
+        let mut nbt = NbtCompound::new();
+        let mut inv_list = NbtList::new(TAG_COMPOUND);
+
+        // Slot 255 — out of bounds, should be ignored
+        let mut bad = NbtCompound::new();
+        bad.put_byte("Slot", 127); // max positive i8 = 127 > 40
+        bad.put_string("id", "minecraft:stone");
+        bad.put_byte("count", 1);
+        let _ = inv_list.push(NbtTag::Compound(bad));
+
+        nbt.put("Inventory", NbtTag::List(inv_list));
+
+        let mut player = make_test_player(1, "Test");
+        player.load_from_nbt(&nbt);
+
+        // All slots should still be empty
+        for i in 0..PlayerInventory::TOTAL_SLOTS {
+            assert!(player.inventory.get(i).is_empty());
+        }
     }
 }

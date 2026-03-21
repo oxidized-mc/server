@@ -13,10 +13,12 @@
 use bytes::BytesMut;
 
 use oxidized_protocol::codec::Packet;
+use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
 use oxidized_protocol::packets::play::{
-    ClientboundGameEventPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
-    ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
-    ClientboundSetChunkCacheCenterPacket, ClientboundSetDefaultSpawnPositionPacket,
+    ClientboundContainerSetContentPacket, ClientboundGameEventPacket, ClientboundLoginPacket,
+    ClientboundPlayerAbilitiesPacket, ClientboundPlayerInfoUpdatePacket,
+    ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket,
+    ClientboundSetDefaultSpawnPositionPacket, ClientboundSetHeldSlotPacket,
     ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo, GameEventType,
     PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
 };
@@ -27,6 +29,8 @@ use oxidized_world::storage::PrimaryLevelData;
 use super::game_mode::GameMode;
 use super::player_list::PlayerList;
 use super::server_player::ServerPlayer;
+use crate::inventory::ItemStack;
+use crate::player::PlayerInventory;
 
 /// An encoded packet ready to be sent over the wire.
 ///
@@ -50,9 +54,11 @@ pub struct EncodedPacket {
 /// 3. `ClientboundSetDefaultSpawnPositionPacket` — compass target
 /// 4. `ClientboundGameEventPacket` — game mode change event
 /// 5. `ClientboundPlayerInfoUpdatePacket` — all online players for tab list
-/// 6. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
-/// 7. `ClientboundSetSimulationDistancePacket` — simulation distance
-/// 8. `ClientboundPlayerPositionPacket` — initial position + teleport ID
+/// 6. `ClientboundContainerSetContentPacket` — full inventory sync
+/// 7. `ClientboundSetHeldSlotPacket` — selected hotbar slot
+/// 8. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
+/// 9. `ClientboundSetSimulationDistancePacket` — simulation distance
+/// 10. `ClientboundPlayerPositionPacket` — initial position + teleport ID
 ///
 /// Chunk data (step 8 in vanilla) is handled separately by the chunk
 /// streaming subsystem (Phase 13).
@@ -87,6 +93,8 @@ pub fn build_login_sequence(
         build_spawn_position_packet(player, level_data),
         build_game_mode_event_packet(player),
         build_player_info_packet(all_players),
+        build_container_set_content_packet(player),
+        build_held_slot_packet(player),
         build_chunk_center_packet(player),
         build_simulation_distance_packet(player),
         build_position_packet(player, teleport_id),
@@ -206,6 +214,65 @@ fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
     }
 }
 
+fn build_container_set_content_packet(player: &ServerPlayer) -> EncodedPacket {
+    let items: Vec<Option<SlotData>> = (0..46i16)
+        .map(|proto_slot| {
+            PlayerInventory::from_protocol_slot(proto_slot).and_then(|internal| {
+                let stack = player.inventory.get(internal);
+                if stack.is_empty() {
+                    None
+                } else {
+                    Some(item_stack_to_slot_data(stack))
+                }
+            })
+        })
+        .collect();
+
+    let pkt = ClientboundContainerSetContentPacket {
+        container_id: 0,
+        state_id: 0,
+        items,
+        carried_item: None,
+    };
+    EncodedPacket {
+        id: ClientboundContainerSetContentPacket::PACKET_ID,
+        body: pkt.encode(),
+    }
+}
+
+fn build_held_slot_packet(player: &ServerPlayer) -> EncodedPacket {
+    let pkt = ClientboundSetHeldSlotPacket {
+        slot: player.inventory.selected_slot as i32,
+    };
+    EncodedPacket {
+        id: ClientboundSetHeldSlotPacket::PACKET_ID,
+        body: pkt.encode(),
+    }
+}
+
+/// Converts a game [`ItemStack`] to a wire [`SlotData`] for the login
+/// sequence. Uses a placeholder item ID mapping until a proper item
+/// registry is built (Phase 22+).
+fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
+    let item_id = match stack.item.0.as_str() {
+        "minecraft:air" | "" => 0,
+        "minecraft:stone" => 1,
+        "minecraft:dirt" => 10,
+        "minecraft:grass_block" => 8,
+        "minecraft:cobblestone" => 14,
+        "minecraft:oak_planks" => 15,
+        "minecraft:diamond" => 802,
+        "minecraft:diamond_sword" => 824,
+        "minecraft:iron_pickaxe" => 813,
+        _ => 1, // fallback to stone for unknown items
+    };
+    SlotData {
+        count: stack.count,
+        item_id,
+        component_data: ComponentPatchData::default(),
+    }
+}
+
 fn build_chunk_center_packet(player: &ServerPlayer) -> EncodedPacket {
     let chunk_center = ClientboundSetChunkCacheCenterPacket {
         chunk_x: player.chunk_x(),
@@ -301,7 +368,7 @@ mod tests {
     }
 
     #[test]
-    fn login_sequence_produces_eight_packets() {
+    fn login_sequence_produces_ten_packets() {
         let player = make_player(42, "Steve");
         let level_data = make_level_data();
         let mut player_list = PlayerList::new(20);
@@ -313,7 +380,7 @@ mod tests {
         ];
 
         let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
-        assert_eq!(packets.len(), 8);
+        assert_eq!(packets.len(), 10);
     }
 
     #[test]
@@ -335,13 +402,18 @@ mod tests {
         assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
         assert_eq!(
             packets[5].id,
+            ClientboundContainerSetContentPacket::PACKET_ID
+        );
+        assert_eq!(packets[6].id, ClientboundSetHeldSlotPacket::PACKET_ID);
+        assert_eq!(
+            packets[7].id,
             ClientboundSetChunkCacheCenterPacket::PACKET_ID
         );
         assert_eq!(
-            packets[6].id,
+            packets[8].id,
             ClientboundSetSimulationDistancePacket::PACKET_ID
         );
-        assert_eq!(packets[7].id, ClientboundPlayerPositionPacket::PACKET_ID);
+        assert_eq!(packets[9].id, ClientboundPlayerPositionPacket::PACKET_ID);
     }
 
     #[test]
@@ -452,7 +524,7 @@ mod tests {
 
         let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
         let center =
-            ClientboundSetChunkCacheCenterPacket::decode(packets[5].body.clone().freeze()).unwrap();
+            ClientboundSetChunkCacheCenterPacket::decode(packets[7].body.clone().freeze()).unwrap();
 
         assert_eq!(center.chunk_x, 6); // 100 >> 4 = 6
         assert_eq!(center.chunk_z, -13); // -200 >> 4 = -13
@@ -471,7 +543,7 @@ mod tests {
 
         let packets = build_login_sequence(&player, 42, &level_data, &player_list, &dimensions, 0);
         let pos =
-            ClientboundPlayerPositionPacket::decode(packets[7].body.clone().freeze()).unwrap();
+            ClientboundPlayerPositionPacket::decode(packets[9].body.clone().freeze()).unwrap();
 
         assert_eq!(pos.teleport_id, 42);
         assert!((pos.x - 50.5).abs() < 0.001);
