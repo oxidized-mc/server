@@ -113,3 +113,80 @@ macro_rules! impl_axis_accessor {
         }
     };
 }
+
+/// Generate common boilerplate for protocol enums encoded as VarInt on the wire.
+///
+/// Generates: `id()`, `name()`, `by_id()`, `by_name()`, `read()`, `write()`, and `Display`.
+/// Enum must use `#[repr(i32)]`. Unique methods (e.g., `GameType::is_creative()`) should
+/// be added in a separate `impl` block.
+///
+/// # Usage
+///
+/// ```ignore
+/// impl_protocol_enum! {
+///     Difficulty {
+///         Peaceful = 0 => "peaceful",
+///         Easy     = 1 => "easy",
+///         Normal   = 2 => "normal",
+///         Hard     = 3 => "hard",
+///     }
+/// }
+/// ```
+macro_rules! impl_protocol_enum {
+    ($enum_ty:ident { $($variant:ident = $id:literal => $name:literal),+ $(,)? }) => {
+        impl $enum_ty {
+            /// Returns the numeric ID of this variant.
+            pub const fn id(self) -> i32 {
+                self as i32
+            }
+
+            /// Returns the lowercase name of this variant.
+            pub const fn name(self) -> &'static str {
+                match self {
+                    $( $enum_ty::$variant => $name, )+
+                }
+            }
+
+            /// Looks up a variant by numeric ID.
+            pub const fn by_id(id: i32) -> Option<$enum_ty> {
+                match id {
+                    $( $id => Some($enum_ty::$variant), )+
+                    _ => None,
+                }
+            }
+
+            /// Looks up a variant by lowercase name.
+            pub fn by_name(name: &str) -> Option<$enum_ty> {
+                match name {
+                    $( $name => Some($enum_ty::$variant), )+
+                    _ => None,
+                }
+            }
+
+            /// Reads this type from a wire buffer as a VarInt.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`TypeError`] if the buffer is truncated or the value
+            /// is out of range.
+            pub fn read(buf: &mut ::bytes::Bytes) -> Result<Self, $crate::codec::types::TypeError> {
+                let id = $crate::codec::varint::read_varint_buf(buf)?;
+                $enum_ty::by_id(id).ok_or($crate::codec::types::TypeError::UnexpectedEof {
+                    need: 1,
+                    have: 0,
+                })
+            }
+
+            /// Writes this type to a wire buffer as a VarInt.
+            pub fn write(&self, buf: &mut ::bytes::BytesMut) {
+                $crate::codec::varint::write_varint_buf(self.id(), buf);
+            }
+        }
+
+        impl ::std::fmt::Display for $enum_ty {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.write_str(self.name())
+            }
+        }
+    };
+}

@@ -6,33 +6,17 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundChunkBatchStartPacket`.
 
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-
-/// Signals the start of a chunk batch. Has no payload.
-///
-/// Wire format: (empty — zero bytes).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ClientboundChunkBatchStartPacket;
-
-impl Packet for ClientboundChunkBatchStartPacket {
-    const PACKET_ID: i32 = 0x0C;
-
-    fn decode(_data: Bytes) -> Result<Self, PacketDecodeError> {
-        Ok(Self)
-    }
-
-    fn encode(&self) -> BytesMut {
-        BytesMut::new()
-    }
-}
+impl_empty_packet!(
+    ClientboundChunkBatchStartPacket,
+    0x0C,
+    "Signals the start of a chunk batch. Has no payload."
+);
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::codec::Packet;
 
     #[test]
     fn test_encode_empty() {

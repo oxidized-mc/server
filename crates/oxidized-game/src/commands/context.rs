@@ -152,32 +152,31 @@ impl<'a> StringReader<'a> {
         &self.input[start..self.cursor]
     }
 
+    /// Reads and parses a numeric value from the next word.
+    fn read_numeric<T: std::str::FromStr>(&mut self, type_name: &str) -> Result<T, CommandError> {
+        let word = self.read_word();
+        word.parse::<T>()
+            .map_err(|_| CommandError::Parse(format!("Expected {type_name}, got '{word}'")))
+    }
+
     /// Reads an integer.
     pub fn read_integer(&mut self) -> Result<i32, CommandError> {
-        let word = self.read_word();
-        word.parse::<i32>()
-            .map_err(|_| CommandError::Parse(format!("Expected integer, got '{word}'")))
+        self.read_numeric("integer")
     }
 
     /// Reads a long.
     pub fn read_long(&mut self) -> Result<i64, CommandError> {
-        let word = self.read_word();
-        word.parse::<i64>()
-            .map_err(|_| CommandError::Parse(format!("Expected long, got '{word}'")))
+        self.read_numeric("long")
     }
 
     /// Reads a float.
     pub fn read_float(&mut self) -> Result<f32, CommandError> {
-        let word = self.read_word();
-        word.parse::<f32>()
-            .map_err(|_| CommandError::Parse(format!("Expected float, got '{word}'")))
+        self.read_numeric("float")
     }
 
     /// Reads a double.
     pub fn read_double(&mut self) -> Result<f64, CommandError> {
-        let word = self.read_word();
-        word.parse::<f64>()
-            .map_err(|_| CommandError::Parse(format!("Expected double, got '{word}'")))
+        self.read_numeric("double")
     }
 
     /// Reads a boolean.

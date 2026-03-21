@@ -3,33 +3,19 @@
 //! This is an empty packet (no fields). It corresponds to
 //! `net.minecraft.network.protocol.status.ServerboundStatusRequestPacket`.
 
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-
-/// Serverbound packet `0x00` in the STATUS state — requests the server status JSON.
-///
-/// This packet has no fields.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServerboundStatusRequestPacket;
-
-impl Packet for ServerboundStatusRequestPacket {
-    const PACKET_ID: i32 = 0x00;
-
-    fn decode(_data: Bytes) -> Result<Self, PacketDecodeError> {
-        Ok(Self)
-    }
-
-    fn encode(&self) -> BytesMut {
-        BytesMut::new()
-    }
-}
+impl_empty_packet!(
+    ServerboundStatusRequestPacket,
+    0x00,
+    "Serverbound packet `0x00` in the STATUS state — requests the server status JSON."
+);
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use bytes::Bytes;
+
     use super::*;
+    use crate::codec::Packet;
 
     #[test]
     fn test_decode_empty_body() {

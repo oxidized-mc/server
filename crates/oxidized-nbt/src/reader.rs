@@ -26,6 +26,17 @@ fn map_eof(e: std::io::Error) -> NbtError {
     }
 }
 
+/// Generates a typed big-endian read helper for a fixed-size primitive.
+macro_rules! read_primitive {
+    ($fn_name:ident, $ty:ty, $size:literal) => {
+        fn $fn_name<R: Read>(reader: &mut R) -> Result<$ty, NbtError> {
+            let mut buf = [0u8; $size];
+            reader.read_exact(&mut buf).map_err(map_eof)?;
+            Ok(<$ty>::from_be_bytes(buf))
+        }
+    };
+}
+
 fn read_u8<R: Read>(reader: &mut R) -> Result<u8, NbtError> {
     let mut buf = [0u8; 1];
     reader.read_exact(&mut buf).map_err(map_eof)?;
@@ -36,41 +47,12 @@ fn read_i8<R: Read>(reader: &mut R) -> Result<i8, NbtError> {
     Ok(read_u8(reader)? as i8)
 }
 
-fn read_i16<R: Read>(reader: &mut R) -> Result<i16, NbtError> {
-    let mut buf = [0u8; 2];
-    reader.read_exact(&mut buf).map_err(map_eof)?;
-    Ok(i16::from_be_bytes(buf))
-}
-
-fn read_u16<R: Read>(reader: &mut R) -> Result<u16, NbtError> {
-    let mut buf = [0u8; 2];
-    reader.read_exact(&mut buf).map_err(map_eof)?;
-    Ok(u16::from_be_bytes(buf))
-}
-
-fn read_i32<R: Read>(reader: &mut R) -> Result<i32, NbtError> {
-    let mut buf = [0u8; 4];
-    reader.read_exact(&mut buf).map_err(map_eof)?;
-    Ok(i32::from_be_bytes(buf))
-}
-
-fn read_i64<R: Read>(reader: &mut R) -> Result<i64, NbtError> {
-    let mut buf = [0u8; 8];
-    reader.read_exact(&mut buf).map_err(map_eof)?;
-    Ok(i64::from_be_bytes(buf))
-}
-
-fn read_f32<R: Read>(reader: &mut R) -> Result<f32, NbtError> {
-    let mut buf = [0u8; 4];
-    reader.read_exact(&mut buf).map_err(map_eof)?;
-    Ok(f32::from_be_bytes(buf))
-}
-
-fn read_f64<R: Read>(reader: &mut R) -> Result<f64, NbtError> {
-    let mut buf = [0u8; 8];
-    reader.read_exact(&mut buf).map_err(map_eof)?;
-    Ok(f64::from_be_bytes(buf))
-}
+read_primitive!(read_i16, i16, 2);
+read_primitive!(read_u16, u16, 2);
+read_primitive!(read_i32, i32, 4);
+read_primitive!(read_i64, i64, 8);
+read_primitive!(read_f32, f32, 4);
+read_primitive!(read_f64, f64, 8);
 
 /// Reads a Modified UTF-8 string (u16 length prefix + data).
 fn read_string<R: Read>(reader: &mut R) -> Result<String, NbtError> {
@@ -220,6 +202,39 @@ pub fn read_network_nbt<R: Read>(
     Ok(compound)
 }
 
+/// Reads a length-prefixed typed array (IntArray / LongArray).
+///
+/// Validates the length, accounts for memory, and reads `len` elements
+/// using the provided reader function.
+fn read_typed_array<R: Read, T>(
+    reader: &mut R,
+    accounter: &mut NbtAccounter,
+    elem_size: usize,
+    type_name: &str,
+    read_elem: fn(&mut R) -> Result<T, NbtError>,
+) -> Result<Vec<T>, NbtError> {
+    let len = read_i32(reader)?;
+    if len < 0 {
+        return Err(NbtError::InvalidFormat(format!(
+            "negative {type_name} array length: {len}"
+        )));
+    }
+    let len = len as usize;
+    accounter.account_bytes(
+        elem_size
+            .checked_mul(len)
+            .and_then(|v| v.checked_add(24))
+            .ok_or_else(|| {
+                NbtError::InvalidFormat(format!("{type_name} array size overflow"))
+            })?,
+    )?;
+    let mut arr = Vec::with_capacity(len);
+    for _ in 0..len {
+        arr.push(read_elem(reader)?);
+    }
+    Ok(arr)
+}
+
 /// Reads the payload for a specific tag type.
 ///
 /// The `type_id` must be in the range `TAG_BYTE..=TAG_LONG_ARRAY`.
@@ -344,44 +359,12 @@ pub fn read_payload<R: Read>(
         },
 
         TAG_INT_ARRAY => {
-            let len = read_i32(reader)?;
-            if len < 0 {
-                return Err(NbtError::InvalidFormat(format!(
-                    "negative int array length: {len}"
-                )));
-            }
-            let len = len as usize;
-            accounter.account_bytes(
-                (4_usize)
-                    .checked_mul(len)
-                    .and_then(|v| v.checked_add(24))
-                    .ok_or_else(|| NbtError::InvalidFormat("int array size overflow".into()))?,
-            )?;
-            let mut arr = Vec::with_capacity(len);
-            for _ in 0..len {
-                arr.push(read_i32(reader)?);
-            }
+            let arr = read_typed_array(reader, accounter, 4, "int", read_i32)?;
             Ok(NbtTag::IntArray(arr))
         },
 
         TAG_LONG_ARRAY => {
-            let len = read_i32(reader)?;
-            if len < 0 {
-                return Err(NbtError::InvalidFormat(format!(
-                    "negative long array length: {len}"
-                )));
-            }
-            let len = len as usize;
-            accounter.account_bytes(
-                (8_usize)
-                    .checked_mul(len)
-                    .and_then(|v| v.checked_add(24))
-                    .ok_or_else(|| NbtError::InvalidFormat("long array size overflow".into()))?,
-            )?;
-            let mut arr = Vec::with_capacity(len);
-            for _ in 0..len {
-                arr.push(read_i64(reader)?);
-            }
+            let arr = read_typed_array(reader, accounter, 8, "long", read_i64)?;
             Ok(NbtTag::LongArray(arr))
         },
 

@@ -59,6 +59,11 @@ impl DataLayer {
         })
     }
 
+    /// Computes the flat index for a 16³ section coordinate.
+    const fn section_index(x: usize, y: usize, z: usize) -> usize {
+        (y << 8) | (z << 4) | x
+    }
+
     /// Returns the light value at `(x, y, z)` within the section (0–15 each).
     ///
     /// # Panics
@@ -67,7 +72,7 @@ impl DataLayer {
     #[must_use]
     pub fn get(&self, x: usize, y: usize, z: usize) -> u8 {
         debug_assert!(x < 16 && y < 16 && z < 16);
-        let index = (y << 8) | (z << 4) | x;
+        let index = Self::section_index(x, y, z);
         let byte_pos = index >> 1;
         if index & 1 == 0 {
             self.data[byte_pos] & 0x0F
@@ -84,7 +89,7 @@ impl DataLayer {
     pub fn set(&mut self, x: usize, y: usize, z: usize, value: u8) {
         debug_assert!(x < 16 && y < 16 && z < 16);
         debug_assert!(value <= 15);
-        let index = (y << 8) | (z << 4) | x;
+        let index = Self::section_index(x, y, z);
         let byte_pos = index >> 1;
         if index & 1 == 0 {
             self.data[byte_pos] = (self.data[byte_pos] & 0xF0) | (value & 0x0F);

@@ -3,35 +3,17 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.configuration.ServerboundFinishConfigurationPacket`.
 
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-
-/// Serverbound packet `0x01` in the CONFIGURATION state — finish configuration.
-///
-/// This is an empty packet with no fields. The client sends it after receiving
-/// [`ClientboundFinishConfigurationPacket`](super::ClientboundFinishConfigurationPacket)
-/// to confirm it is ready to transition to the PLAY state.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServerboundFinishConfigurationPacket;
-
-impl Packet for ServerboundFinishConfigurationPacket {
-    const PACKET_ID: i32 = 0x03;
-
-    fn decode(_data: Bytes) -> Result<Self, PacketDecodeError> {
-        Ok(Self)
-    }
-
-    fn encode(&self) -> BytesMut {
-        BytesMut::new()
-    }
-}
+impl_empty_packet!(
+    ServerboundFinishConfigurationPacket,
+    0x03,
+    "Serverbound packet `0x03` in the CONFIGURATION state — finish configuration."
+);
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::codec::Packet;
 
     #[test]
     fn test_roundtrip() {

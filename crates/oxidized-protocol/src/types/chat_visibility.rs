@@ -3,13 +3,6 @@
 //! Maps to the vanilla `ChatVisiblity` enum (note: vanilla misspells it).
 //! Used in [`ServerboundClientInformationPacket`] during configuration.
 
-use std::fmt;
-
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::types::TypeError;
-use crate::codec::varint;
-
 /// Controls which chat messages the client wants to receive.
 ///
 /// # Wire format
@@ -26,59 +19,19 @@ pub enum ChatVisibility {
     Hidden = 2,
 }
 
-impl ChatVisibility {
-    /// Returns the numeric ID of this chat visibility.
-    pub const fn id(self) -> i32 {
-        self as i32
-    }
-
-    /// Returns the lowercase name of this chat visibility.
-    pub const fn name(self) -> &'static str {
-        match self {
-            ChatVisibility::Full => "full",
-            ChatVisibility::System => "system",
-            ChatVisibility::Hidden => "hidden",
-        }
-    }
-
-    /// Looks up a chat visibility by numeric ID.
-    ///
-    /// Returns `None` if `id` is not in 0–2.
-    pub const fn by_id(id: i32) -> Option<ChatVisibility> {
-        match id {
-            0 => Some(ChatVisibility::Full),
-            1 => Some(ChatVisibility::System),
-            2 => Some(ChatVisibility::Hidden),
-            _ => None,
-        }
-    }
-
-    /// Reads a [`ChatVisibility`] from a wire buffer as a VarInt.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`TypeError`] if the buffer is truncated or the value is
-    /// out of range.
-    pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
-        let id = varint::read_varint_buf(buf)?;
-        ChatVisibility::by_id(id).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
-    }
-
-    /// Writes this [`ChatVisibility`] to a wire buffer as a VarInt.
-    pub fn write(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.id(), buf);
-    }
-}
-
-impl fmt::Display for ChatVisibility {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
+impl_protocol_enum! {
+    ChatVisibility {
+        Full   = 0 => "full",
+        System = 1 => "system",
+        Hidden = 2 => "hidden",
     }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use bytes::{Bytes, BytesMut};
+
     use super::*;
 
     // ── by_id ───────────────────────────────────────────────────────

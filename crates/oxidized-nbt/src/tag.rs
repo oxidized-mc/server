@@ -55,6 +55,36 @@ pub enum NbtTag {
     LongArray(Vec<i64>),
 }
 
+/// Generates `as_*` copy-value accessors on `NbtTag`.
+macro_rules! impl_nbt_primitive_accessor {
+    ($($(#[$meta:meta])* $fn_name:ident -> $ty:ty, $variant:ident);+ $(;)?) => {
+        $(
+            $(#[$meta])*
+            pub fn $fn_name(&self) -> Option<$ty> {
+                match self {
+                    NbtTag::$variant(v) => Some(*v),
+                    _ => None,
+                }
+            }
+        )+
+    };
+}
+
+/// Generates `as_*` reference accessors on `NbtTag`.
+macro_rules! impl_nbt_ref_accessor {
+    ($($(#[$meta:meta])* $fn_name:ident -> $ty:ty, $variant:ident);+ $(;)?) => {
+        $(
+            $(#[$meta])*
+            pub fn $fn_name(&self) -> Option<$ty> {
+                match self {
+                    NbtTag::$variant(v) => Some(v),
+                    _ => None,
+                }
+            }
+        )+
+    };
+}
+
 impl NbtTag {
     /// Returns the NBT tag type ID for this value.
     pub fn type_id(&self) -> u8 {
@@ -92,92 +122,34 @@ impl NbtTag {
         }
     }
 
-    /// Returns the byte value, or `None` if not a `Byte` tag.
-    pub fn as_byte(&self) -> Option<i8> {
-        match self {
-            NbtTag::Byte(v) => Some(*v),
-            _ => None,
-        }
+    impl_nbt_primitive_accessor! {
+        /// Returns the byte value, or `None` if not a `Byte` tag.
+        as_byte -> i8, Byte;
+        /// Returns the short value, or `None` if not a `Short` tag.
+        as_short -> i16, Short;
+        /// Returns the int value, or `None` if not an `Int` tag.
+        as_int -> i32, Int;
+        /// Returns the long value, or `None` if not a `Long` tag.
+        as_long -> i64, Long;
+        /// Returns the float value, or `None` if not a `Float` tag.
+        as_float -> f32, Float;
+        /// Returns the double value, or `None` if not a `Double` tag.
+        as_double -> f64, Double
     }
 
-    /// Returns the short value, or `None` if not a `Short` tag.
-    pub fn as_short(&self) -> Option<i16> {
-        match self {
-            NbtTag::Short(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// Returns the int value, or `None` if not an `Int` tag.
-    pub fn as_int(&self) -> Option<i32> {
-        match self {
-            NbtTag::Int(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// Returns the long value, or `None` if not a `Long` tag.
-    pub fn as_long(&self) -> Option<i64> {
-        match self {
-            NbtTag::Long(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// Returns the float value, or `None` if not a `Float` tag.
-    pub fn as_float(&self) -> Option<f32> {
-        match self {
-            NbtTag::Float(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// Returns the double value, or `None` if not a `Double` tag.
-    pub fn as_double(&self) -> Option<f64> {
-        match self {
-            NbtTag::Double(v) => Some(*v),
-            _ => None,
-        }
-    }
-
-    /// Returns the string value as a `&str`, or `None` if not a `String` tag.
-    pub fn as_str(&self) -> Option<&str> {
-        match self {
-            NbtTag::String(s) => Some(s.as_str()),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the byte array, or `None` if not a `ByteArray` tag.
-    pub fn as_byte_array(&self) -> Option<&[i8]> {
-        match self {
-            NbtTag::ByteArray(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the int array, or `None` if not an `IntArray` tag.
-    pub fn as_int_array(&self) -> Option<&[i32]> {
-        match self {
-            NbtTag::IntArray(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the long array, or `None` if not a `LongArray` tag.
-    pub fn as_long_array(&self) -> Option<&[i64]> {
-        match self {
-            NbtTag::LongArray(v) => Some(v),
-            _ => None,
-        }
-    }
-
-    /// Returns a reference to the compound, or `None` if not a `Compound` tag.
-    pub fn as_compound(&self) -> Option<&NbtCompound> {
-        match self {
-            NbtTag::Compound(c) => Some(c),
-            _ => None,
-        }
+    impl_nbt_ref_accessor! {
+        /// Returns the string value as a `&str`, or `None` if not a `String` tag.
+        as_str -> &str, String;
+        /// Returns a reference to the byte array, or `None` if not a `ByteArray` tag.
+        as_byte_array -> &[i8], ByteArray;
+        /// Returns a reference to the int array, or `None` if not an `IntArray` tag.
+        as_int_array -> &[i32], IntArray;
+        /// Returns a reference to the long array, or `None` if not a `LongArray` tag.
+        as_long_array -> &[i64], LongArray;
+        /// Returns a reference to the compound, or `None` if not a `Compound` tag.
+        as_compound -> &NbtCompound, Compound;
+        /// Returns a reference to the list, or `None` if not a `List` tag.
+        as_list -> &NbtList, List
     }
 
     /// Returns a mutable reference to the compound, or `None`.
@@ -187,58 +159,31 @@ impl NbtTag {
             _ => None,
         }
     }
-
-    /// Returns a reference to the list, or `None` if not a `List` tag.
-    pub fn as_list(&self) -> Option<&NbtList> {
-        match self {
-            NbtTag::List(l) => Some(l),
-            _ => None,
-        }
-    }
 }
 
 // ── From impls ──────────────────────────────────────────────────────────
 
-impl From<i8> for NbtTag {
-    fn from(v: i8) -> Self {
-        NbtTag::Byte(v)
-    }
+/// Generates `From<$ty> for NbtTag` wrapping in the given variant.
+macro_rules! impl_nbt_from {
+    ($($ty:ty => $variant:ident),+ $(,)?) => {
+        $(
+            impl From<$ty> for NbtTag {
+                fn from(v: $ty) -> Self {
+                    NbtTag::$variant(v)
+                }
+            }
+        )+
+    };
 }
 
-impl From<i16> for NbtTag {
-    fn from(v: i16) -> Self {
-        NbtTag::Short(v)
-    }
-}
-
-impl From<i32> for NbtTag {
-    fn from(v: i32) -> Self {
-        NbtTag::Int(v)
-    }
-}
-
-impl From<i64> for NbtTag {
-    fn from(v: i64) -> Self {
-        NbtTag::Long(v)
-    }
-}
-
-impl From<f32> for NbtTag {
-    fn from(v: f32) -> Self {
-        NbtTag::Float(v)
-    }
-}
-
-impl From<f64> for NbtTag {
-    fn from(v: f64) -> Self {
-        NbtTag::Double(v)
-    }
-}
-
-impl From<String> for NbtTag {
-    fn from(v: String) -> Self {
-        NbtTag::String(v)
-    }
+impl_nbt_from! {
+    i8     => Byte,
+    i16    => Short,
+    i32    => Int,
+    i64    => Long,
+    f32    => Float,
+    f64    => Double,
+    String => String,
 }
 
 impl From<&str> for NbtTag {
