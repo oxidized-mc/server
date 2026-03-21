@@ -2,6 +2,16 @@
 //!
 //! Contains the main `select!` loop that drives keepalive, chat broadcast
 //! relay, and serverbound packet dispatch for PLAY-state connections.
+//!
+//! # Future: Plugin-extensible packet dispatch
+//!
+//! The packet dispatch in the play loop currently uses a `match pkt.id`
+//! block, which is efficient for the fixed set of vanilla packets. When
+//! plugin support is added, this should migrate to a registry-based
+//! approach (e.g., `HashMap<i32, Box<dyn PacketHandler>>`) so plugins
+//! can register custom packet handlers without modifying this file.
+//! The `EventBus` in `ServerContext` already provides the event-level
+//! extensibility; the packet registry would add raw-packet-level hooks.
 
 pub mod chat;
 pub mod commands;

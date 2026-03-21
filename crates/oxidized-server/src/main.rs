@@ -175,6 +175,7 @@ fn main() -> anyhow::Result<()> {
             chat_tx: broadcast::channel(256).0,
             color_char,
             commands: Commands::new(),
+            event_bus: oxidized_game::event::EventBus::new(),
             max_players: config.gameplay.max_players as usize,
             shutdown_tx: shutdown_tx.clone(),
         });
@@ -189,6 +190,16 @@ fn main() -> anyhow::Result<()> {
             http_client: reqwest::Client::new(),
             server_ctx,
         });
+
+        // --- Plugin initialization hook ---
+        // Future plugin system will load and initialize plugins here,
+        // after ServerContext is built but before the TCP listener starts.
+        // Plugins will receive `Arc<ServerContext>` to:
+        //   - Register event handlers via `server_ctx.event_bus`
+        //   - Register custom commands via `server_ctx.commands.register()`
+        //   - Read server configuration
+        // This ordering guarantees all plugin hooks are in place before
+        // the first client connection arrives.
 
         // Clone the server context for the console before moving login_ctx.
         let console_server_ctx = login_ctx.server_ctx.clone();
@@ -239,6 +250,11 @@ fn main() -> anyhow::Result<()> {
                 );
             },
         }
+
+        // --- Plugin shutdown hook ---
+        // Future plugin system will notify plugins of shutdown here,
+        // after the listener has stopped but before the process exits.
+        // Plugins can flush state, save data, and clean up resources.
 
         info!("Server stopped");
         Ok(())

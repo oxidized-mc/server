@@ -16,6 +16,7 @@ use std::sync::Arc;
 
 use oxidized_game::commands::Commands;
 use oxidized_game::commands::source::ServerHandle;
+use oxidized_game::event::EventBus;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_protocol::crypto::ServerKeyPair;
@@ -68,6 +69,8 @@ pub struct ServerContext {
     pub color_char: Option<char>,
     /// Brigadier command framework — shared across all connections.
     pub commands: Commands,
+    /// Game event bus for plugin extensibility.
+    pub event_bus: EventBus,
     /// Maximum number of players allowed on the server.
     pub max_players: usize,
     /// Broadcast sender used to trigger a graceful server shutdown.
@@ -153,6 +156,26 @@ impl ServerHandle for ServerContext {
             .collect();
         cmds.sort_by(|a, b| a.0.cmp(&b.0));
         cmds
+    }
+
+    fn event_bus(&self) -> Option<&EventBus> {
+        Some(&self.event_bus)
+    }
+
+    fn broadcast_chat(&self, message: &Component) {
+        use oxidized_protocol::codec::Packet;
+        use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
+
+        let pkt = ClientboundSystemChatPacket {
+            content: message.clone(),
+            overlay: false,
+        };
+        let encoded = pkt.encode();
+        let broadcast = ChatBroadcastMessage {
+            packet_id: ClientboundSystemChatPacket::PACKET_ID,
+            data: encoded.freeze(),
+        };
+        let _ = self.chat_tx.send(broadcast);
     }
 }
 
@@ -333,6 +356,7 @@ mod tests {
                 chat_tx: broadcast::channel(256).0,
                 color_char: Some('&'),
                 commands: oxidized_game::commands::Commands::new(),
+                event_bus: oxidized_game::event::EventBus::new(),
                 max_players: 20,
                 shutdown_tx: broadcast::channel(1).0,
             }),

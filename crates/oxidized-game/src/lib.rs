@@ -7,6 +7,7 @@ pub mod chat;
 pub mod chunk;
 pub mod commands;
 pub mod entity;
+pub mod event;
 pub mod level;
 pub mod net;
 pub mod physics;
