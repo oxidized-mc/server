@@ -39,19 +39,6 @@ pub fn decode_packet<P: Packet>(
     })
 }
 
-/// Sends a disconnect packet to the client and returns a corresponding
-/// [`ConnectionError`].
-pub async fn disconnect(conn: &mut Connection, reason: &str) -> Result<(), ConnectionError> {
-    let pkt = ClientboundDisconnectPacket {
-        reason: reason.to_string(),
-    };
-    let _ = conn.send_packet(&pkt).await;
-    Err(ConnectionError::Io(std::io::Error::new(
-        std::io::ErrorKind::ConnectionAborted,
-        reason.to_string(),
-    )))
-}
-
 /// Sends a disconnect packet and returns the [`ConnectionError`] directly
 /// (for use in expressions where the caller builds its own `Err`).
 pub async fn disconnect_err(conn: &mut Connection, reason: &str) -> ConnectionError {
@@ -63,4 +50,10 @@ pub async fn disconnect_err(conn: &mut Connection, reason: &str) -> ConnectionEr
         std::io::ErrorKind::ConnectionAborted,
         reason.to_string(),
     ))
+}
+
+/// Sends a disconnect packet to the client and returns a corresponding
+/// [`ConnectionError`].
+pub async fn disconnect(conn: &mut Connection, reason: &str) -> Result<(), ConnectionError> {
+    Err(disconnect_err(conn, reason).await)
 }

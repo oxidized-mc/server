@@ -3,13 +3,6 @@
 //! Maps to the vanilla `HumanoidArm` enum.
 //! Used in [`ServerboundClientInformationPacket`] during configuration.
 
-use std::fmt;
-
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::types::TypeError;
-use crate::codec::varint;
-
 /// Which hand the player uses as their main hand.
 ///
 /// # Wire format
@@ -24,33 +17,16 @@ pub enum HumanoidArm {
     Right = 1,
 }
 
+impl_protocol_enum! {
+    HumanoidArm {
+        Left  = 0 => "left",
+        Right = 1 => "right",
+    }
+}
+
 impl HumanoidArm {
     /// The default main hand (right).
     pub const DEFAULT: HumanoidArm = HumanoidArm::Right;
-
-    /// Returns the numeric ID of this arm.
-    pub const fn id(self) -> i32 {
-        self as i32
-    }
-
-    /// Returns the lowercase name of this arm.
-    pub const fn name(self) -> &'static str {
-        match self {
-            HumanoidArm::Left => "left",
-            HumanoidArm::Right => "right",
-        }
-    }
-
-    /// Looks up an arm by numeric ID.
-    ///
-    /// Returns `None` if `id` is not in 0–1.
-    pub const fn by_id(id: i32) -> Option<HumanoidArm> {
-        match id {
-            0 => Some(HumanoidArm::Left),
-            1 => Some(HumanoidArm::Right),
-            _ => None,
-        }
-    }
 
     /// Returns the opposite arm.
     pub const fn opposite(self) -> HumanoidArm {
@@ -59,33 +35,13 @@ impl HumanoidArm {
             HumanoidArm::Right => HumanoidArm::Left,
         }
     }
-
-    /// Reads a [`HumanoidArm`] from a wire buffer as a VarInt.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`TypeError`] if the buffer is truncated or the value is
-    /// out of range.
-    pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
-        let id = varint::read_varint_buf(buf)?;
-        HumanoidArm::by_id(id).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
-    }
-
-    /// Writes this [`HumanoidArm`] to a wire buffer as a VarInt.
-    pub fn write(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.id(), buf);
-    }
-}
-
-impl fmt::Display for HumanoidArm {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
-    }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use bytes::{Bytes, BytesMut};
+
     use super::*;
 
     // ── by_id ───────────────────────────────────────────────────────

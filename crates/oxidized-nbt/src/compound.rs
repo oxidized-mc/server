@@ -29,6 +29,30 @@ pub struct NbtCompound {
     entries: IndexMap<String, NbtTag>,
 }
 
+/// Generates typed getter methods that delegate to `NbtTag::as_*`.
+macro_rules! impl_compound_getter {
+    ($($(#[$meta:meta])* $fn_name:ident -> $ty:ty, $accessor:ident);+ $(;)?) => {
+        $(
+            $(#[$meta])*
+            pub fn $fn_name(&self, key: &str) -> Option<$ty> {
+                self.entries.get(key).and_then(NbtTag::$accessor)
+            }
+        )+
+    };
+}
+
+/// Generates typed insertion methods that wrap a value in an `NbtTag` variant.
+macro_rules! impl_compound_putter {
+    ($($(#[$meta:meta])* $fn_name:ident, $ty:ty, $variant:ident);+ $(;)?) => {
+        $(
+            $(#[$meta])*
+            pub fn $fn_name(&mut self, key: impl Into<String>, value: $ty) -> Option<NbtTag> {
+                self.put(key, NbtTag::$variant(value))
+            }
+        )+
+    };
+}
+
 impl NbtCompound {
     /// Creates an empty compound.
     pub fn new() -> Self {
@@ -47,69 +71,36 @@ impl NbtCompound {
 
     // ── Typed getters ───────────────────────────────────────────────────
 
-    /// Returns the byte value for `key`, or `None`.
-    pub fn get_byte(&self, key: &str) -> Option<i8> {
-        self.entries.get(key).and_then(NbtTag::as_byte)
-    }
-
-    /// Returns the short value for `key`, or `None`.
-    pub fn get_short(&self, key: &str) -> Option<i16> {
-        self.entries.get(key).and_then(NbtTag::as_short)
-    }
-
-    /// Returns the int value for `key`, or `None`.
-    pub fn get_int(&self, key: &str) -> Option<i32> {
-        self.entries.get(key).and_then(NbtTag::as_int)
-    }
-
-    /// Returns the long value for `key`, or `None`.
-    pub fn get_long(&self, key: &str) -> Option<i64> {
-        self.entries.get(key).and_then(NbtTag::as_long)
-    }
-
-    /// Returns the float value for `key`, or `None`.
-    pub fn get_float(&self, key: &str) -> Option<f32> {
-        self.entries.get(key).and_then(NbtTag::as_float)
-    }
-
-    /// Returns the double value for `key`, or `None`.
-    pub fn get_double(&self, key: &str) -> Option<f64> {
-        self.entries.get(key).and_then(NbtTag::as_double)
-    }
-
-    /// Returns the string value for `key`, or `None`.
-    pub fn get_string(&self, key: &str) -> Option<&str> {
-        self.entries.get(key).and_then(NbtTag::as_str)
-    }
-
-    /// Returns a reference to the compound value for `key`, or `None`.
-    pub fn get_compound(&self, key: &str) -> Option<&NbtCompound> {
-        self.entries.get(key).and_then(NbtTag::as_compound)
+    impl_compound_getter! {
+        /// Returns the byte value for `key`, or `None`.
+        get_byte -> i8, as_byte;
+        /// Returns the short value for `key`, or `None`.
+        get_short -> i16, as_short;
+        /// Returns the int value for `key`, or `None`.
+        get_int -> i32, as_int;
+        /// Returns the long value for `key`, or `None`.
+        get_long -> i64, as_long;
+        /// Returns the float value for `key`, or `None`.
+        get_float -> f32, as_float;
+        /// Returns the double value for `key`, or `None`.
+        get_double -> f64, as_double;
+        /// Returns the string value for `key`, or `None`.
+        get_string -> &str, as_str;
+        /// Returns a reference to the compound value for `key`, or `None`.
+        get_compound -> &NbtCompound, as_compound;
+        /// Returns a reference to the list value for `key`, or `None`.
+        get_list -> &NbtList, as_list;
+        /// Returns a reference to the byte array for `key`, or `None`.
+        get_byte_array -> &[i8], as_byte_array;
+        /// Returns a reference to the int array for `key`, or `None`.
+        get_int_array -> &[i32], as_int_array;
+        /// Returns a reference to the long array for `key`, or `None`.
+        get_long_array -> &[i64], as_long_array
     }
 
     /// Returns a mutable reference to the compound value for `key`, or `None`.
     pub fn get_compound_mut(&mut self, key: &str) -> Option<&mut NbtCompound> {
         self.entries.get_mut(key).and_then(NbtTag::as_compound_mut)
-    }
-
-    /// Returns a reference to the list value for `key`, or `None`.
-    pub fn get_list(&self, key: &str) -> Option<&NbtList> {
-        self.entries.get(key).and_then(NbtTag::as_list)
-    }
-
-    /// Returns a reference to the byte array for `key`, or `None`.
-    pub fn get_byte_array(&self, key: &str) -> Option<&[i8]> {
-        self.entries.get(key).and_then(NbtTag::as_byte_array)
-    }
-
-    /// Returns a reference to the int array for `key`, or `None`.
-    pub fn get_int_array(&self, key: &str) -> Option<&[i32]> {
-        self.entries.get(key).and_then(NbtTag::as_int_array)
-    }
-
-    /// Returns a reference to the long array for `key`, or `None`.
-    pub fn get_long_array(&self, key: &str) -> Option<&[i64]> {
-        self.entries.get(key).and_then(NbtTag::as_long_array)
     }
 
     // ── Insertion ───────────────────────────────────────────────────────
@@ -119,34 +110,19 @@ impl NbtCompound {
         self.entries.insert(key.into(), value.into())
     }
 
-    /// Inserts a byte value.
-    pub fn put_byte(&mut self, key: impl Into<String>, value: i8) -> Option<NbtTag> {
-        self.put(key, NbtTag::Byte(value))
-    }
-
-    /// Inserts a short value.
-    pub fn put_short(&mut self, key: impl Into<String>, value: i16) -> Option<NbtTag> {
-        self.put(key, NbtTag::Short(value))
-    }
-
-    /// Inserts an int value.
-    pub fn put_int(&mut self, key: impl Into<String>, value: i32) -> Option<NbtTag> {
-        self.put(key, NbtTag::Int(value))
-    }
-
-    /// Inserts a long value.
-    pub fn put_long(&mut self, key: impl Into<String>, value: i64) -> Option<NbtTag> {
-        self.put(key, NbtTag::Long(value))
-    }
-
-    /// Inserts a float value.
-    pub fn put_float(&mut self, key: impl Into<String>, value: f32) -> Option<NbtTag> {
-        self.put(key, NbtTag::Float(value))
-    }
-
-    /// Inserts a double value.
-    pub fn put_double(&mut self, key: impl Into<String>, value: f64) -> Option<NbtTag> {
-        self.put(key, NbtTag::Double(value))
+    impl_compound_putter! {
+        /// Inserts a byte value.
+        put_byte, i8, Byte;
+        /// Inserts a short value.
+        put_short, i16, Short;
+        /// Inserts an int value.
+        put_int, i32, Int;
+        /// Inserts a long value.
+        put_long, i64, Long;
+        /// Inserts a float value.
+        put_float, f32, Float;
+        /// Inserts a double value.
+        put_double, f64, Double
     }
 
     /// Inserts a string value.

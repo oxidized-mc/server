@@ -5,6 +5,7 @@
 
 pub mod auth;
 pub mod chat;
+#[macro_use]
 pub mod codec;
 pub mod compression;
 pub mod connection;

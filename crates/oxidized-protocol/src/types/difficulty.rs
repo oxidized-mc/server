@@ -3,13 +3,6 @@
 //! Maps to the vanilla `Difficulty` enum used in server-properties,
 //! login/join-game packets, and difficulty-change packets.
 
-use std::fmt;
-
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::types::TypeError;
-use crate::codec::varint;
-
 /// The difficulty level of the game.
 ///
 /// # Wire format
@@ -28,74 +21,20 @@ pub enum Difficulty {
     Hard = 3,
 }
 
-impl Difficulty {
-    /// Returns the numeric ID of this difficulty.
-    pub const fn id(self) -> i32 {
-        self as i32
-    }
-
-    /// Returns the lowercase name of this difficulty.
-    pub const fn name(self) -> &'static str {
-        match self {
-            Difficulty::Peaceful => "peaceful",
-            Difficulty::Easy => "easy",
-            Difficulty::Normal => "normal",
-            Difficulty::Hard => "hard",
-        }
-    }
-
-    /// Looks up a difficulty by numeric ID.
-    ///
-    /// Returns `None` if `id` is not in 0–3.
-    pub const fn by_id(id: i32) -> Option<Difficulty> {
-        match id {
-            0 => Some(Difficulty::Peaceful),
-            1 => Some(Difficulty::Easy),
-            2 => Some(Difficulty::Normal),
-            3 => Some(Difficulty::Hard),
-            _ => None,
-        }
-    }
-
-    /// Looks up a difficulty by lowercase name.
-    ///
-    /// Returns `None` if the name is not recognized.
-    pub fn by_name(name: &str) -> Option<Difficulty> {
-        match name {
-            "peaceful" => Some(Difficulty::Peaceful),
-            "easy" => Some(Difficulty::Easy),
-            "normal" => Some(Difficulty::Normal),
-            "hard" => Some(Difficulty::Hard),
-            _ => None,
-        }
-    }
-
-    /// Reads a [`Difficulty`] from a wire buffer as a VarInt.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`TypeError`] if the buffer is truncated or the value is
-    /// out of range.
-    pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
-        let id = varint::read_varint_buf(buf)?;
-        Difficulty::by_id(id).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
-    }
-
-    /// Writes this [`Difficulty`] to a wire buffer as a VarInt.
-    pub fn write(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.id(), buf);
-    }
-}
-
-impl fmt::Display for Difficulty {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
+impl_protocol_enum! {
+    Difficulty {
+        Peaceful = 0 => "peaceful",
+        Easy     = 1 => "easy",
+        Normal   = 2 => "normal",
+        Hard     = 3 => "hard",
     }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use bytes::BytesMut;
+
     use super::*;
 
     // ── by_id ───────────────────────────────────────────────────────

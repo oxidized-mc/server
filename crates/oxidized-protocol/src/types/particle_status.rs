@@ -3,13 +3,6 @@
 //! Maps to the vanilla `ParticleStatus` enum.
 //! Used in [`ServerboundClientInformationPacket`] during configuration.
 
-use std::fmt;
-
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::types::TypeError;
-use crate::codec::varint;
-
 /// Controls the particle rendering level on the client.
 ///
 /// # Wire format
@@ -26,59 +19,19 @@ pub enum ParticleStatus {
     Minimal = 2,
 }
 
-impl ParticleStatus {
-    /// Returns the numeric ID of this particle status.
-    pub const fn id(self) -> i32 {
-        self as i32
-    }
-
-    /// Returns the lowercase name of this particle status.
-    pub const fn name(self) -> &'static str {
-        match self {
-            ParticleStatus::All => "all",
-            ParticleStatus::Decreased => "decreased",
-            ParticleStatus::Minimal => "minimal",
-        }
-    }
-
-    /// Looks up a particle status by numeric ID.
-    ///
-    /// Returns `None` if `id` is not in 0–2.
-    pub const fn by_id(id: i32) -> Option<ParticleStatus> {
-        match id {
-            0 => Some(ParticleStatus::All),
-            1 => Some(ParticleStatus::Decreased),
-            2 => Some(ParticleStatus::Minimal),
-            _ => None,
-        }
-    }
-
-    /// Reads a [`ParticleStatus`] from a wire buffer as a VarInt.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`TypeError`] if the buffer is truncated or the value is
-    /// out of range.
-    pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
-        let id = varint::read_varint_buf(buf)?;
-        ParticleStatus::by_id(id).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
-    }
-
-    /// Writes this [`ParticleStatus`] to a wire buffer as a VarInt.
-    pub fn write(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.id(), buf);
-    }
-}
-
-impl fmt::Display for ParticleStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
+impl_protocol_enum! {
+    ParticleStatus {
+        All       = 0 => "all",
+        Decreased = 1 => "decreased",
+        Minimal   = 2 => "minimal",
     }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use bytes::{Bytes, BytesMut};
+
     use super::*;
 
     // ── by_id ───────────────────────────────────────────────────────

@@ -3,13 +3,6 @@
 //! Maps to the vanilla `GameType` enum used in login packets,
 //! player info updates, and game event packets.
 
-use std::fmt;
-
-use bytes::{Bytes, BytesMut};
-
-use crate::codec::types::TypeError;
-use crate::codec::varint;
-
 /// The game mode for a player.
 ///
 /// # Wire format
@@ -29,22 +22,16 @@ pub enum GameType {
     Spectator = 3,
 }
 
+impl_protocol_enum! {
+    GameType {
+        Survival  = 0 => "survival",
+        Creative  = 1 => "creative",
+        Adventure = 2 => "adventure",
+        Spectator = 3 => "spectator",
+    }
+}
+
 impl GameType {
-    /// Returns the numeric ID of this game type.
-    pub const fn id(self) -> i32 {
-        self as i32
-    }
-
-    /// Returns the lowercase name of this game type.
-    pub const fn name(self) -> &'static str {
-        match self {
-            GameType::Survival => "survival",
-            GameType::Creative => "creative",
-            GameType::Adventure => "adventure",
-            GameType::Spectator => "spectator",
-        }
-    }
-
     /// Returns the vanilla translation key for this game type (e.g.,
     /// `"gameMode.survival"`).
     pub const fn translation_key(self) -> &'static str {
@@ -53,32 +40,6 @@ impl GameType {
             GameType::Creative => "gameMode.creative",
             GameType::Adventure => "gameMode.adventure",
             GameType::Spectator => "gameMode.spectator",
-        }
-    }
-
-    /// Looks up a game type by numeric ID.
-    ///
-    /// Returns `None` if `id` is not in 0–3.
-    pub const fn by_id(id: i32) -> Option<GameType> {
-        match id {
-            0 => Some(GameType::Survival),
-            1 => Some(GameType::Creative),
-            2 => Some(GameType::Adventure),
-            3 => Some(GameType::Spectator),
-            _ => None,
-        }
-    }
-
-    /// Looks up a game type by lowercase name.
-    ///
-    /// Returns `None` if the name is not recognized.
-    pub fn by_name(name: &str) -> Option<GameType> {
-        match name {
-            "survival" => Some(GameType::Survival),
-            "creative" => Some(GameType::Creative),
-            "adventure" => Some(GameType::Adventure),
-            "spectator" => Some(GameType::Spectator),
-            _ => None,
         }
     }
 
@@ -99,33 +60,13 @@ impl GameType {
     pub const fn is_block_placing_restricted(self) -> bool {
         matches!(self, GameType::Adventure | GameType::Spectator)
     }
-
-    /// Reads a [`GameType`] from a wire buffer as a VarInt.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`TypeError`] if the buffer is truncated or the value is
-    /// out of range.
-    pub fn read(buf: &mut Bytes) -> Result<Self, TypeError> {
-        let id = varint::read_varint_buf(buf)?;
-        GameType::by_id(id).ok_or(TypeError::UnexpectedEof { need: 1, have: 0 })
-    }
-
-    /// Writes this [`GameType`] to a wire buffer as a VarInt.
-    pub fn write(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.id(), buf);
-    }
-}
-
-impl fmt::Display for GameType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.name())
-    }
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use bytes::BytesMut;
+
     use super::*;
 
     // ── by_id ───────────────────────────────────────────────────────
