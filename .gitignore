@@ -7,14 +7,11 @@
 # Cargo.lock  ← intentionally kept
 
 # Minecraft reference files (large, not needed in git)
-/mc-server-ref/server.jar
+/mc-server-ref/*/
 /mc-server-ref/*.jar
-/mc-server-ref/extracted/
-/mc-server-ref/mc-extracted/
-/mc-server-ref/decompiled/
-/mc-server-ref/generated/
-/mc-server-ref/libraries/
-/mc-server-ref/versions/
+/mc-server-ref/decompiled
+/mc-server-ref/generated
+/mc-server-ref/mc-extracted
 
 # World data / test worlds (large binary files)
 *.mca
