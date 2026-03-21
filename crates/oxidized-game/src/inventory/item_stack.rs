@@ -201,7 +201,7 @@ impl ItemStack {
         }
         let mut tag = NbtCompound::new();
         tag.put_string("id", &self.item.0);
-        tag.put_byte("count", self.count as i8);
+        tag.put_int("count", self.count);
         if !self.components.is_empty() {
             let patch_tag = self.components.to_nbt();
             tag.put("components", NbtTag::Compound(patch_tag));
@@ -219,7 +219,12 @@ impl ItemStack {
             .get_string("id")
             .ok_or(ItemError::MissingField("id"))?
             .to_string();
-        let count = tag.get_byte("count").map(|b| b as i32).unwrap_or(1);
+        // Vanilla 26.1 stores count as IntTag. Accept ByteTag too for
+        // backward compatibility with older saves.
+        let count = tag
+            .get_int("count")
+            .or_else(|| tag.get_byte("count").map(|b| b as i32))
+            .unwrap_or(1);
         let components = if let Some(NbtTag::Compound(c)) = tag.get("components") {
             DataComponentPatch::from_nbt(c)
         } else {
@@ -247,18 +252,18 @@ impl Default for ItemStack {
 pub fn max_stack_size(item: &ItemId) -> i32 {
     // TODO(Phase 29+): Look up from the actual item registry.
     let name = &item.0;
-    if name.contains("sword")
-        || name.contains("pickaxe")
-        || name.contains("axe")
-        || name.contains("shovel")
-        || name.contains("hoe")
-        || name.contains("helmet")
-        || name.contains("chestplate")
-        || name.contains("leggings")
-        || name.contains("boots")
+    if name.contains("_sword")
+        || name.contains("_pickaxe")
+        || name.contains("_axe")
+        || name.contains("_shovel")
+        || name.contains("_hoe")
+        || name.contains("_helmet")
+        || name.contains("_chestplate")
+        || name.contains("_leggings")
+        || name.contains("_boots")
         || name.contains("shield")
         || name.contains("trident")
-        || name.contains("bow")
+        || name.ends_with("bow")
         || name.contains("crossbow")
         || name.contains("elytra")
     {
@@ -419,6 +424,19 @@ mod tests {
     fn test_max_stack_size_special() {
         assert_eq!(max_stack_size(&ItemId("minecraft:ender_pearl".into())), 16);
         assert_eq!(max_stack_size(&ItemId("minecraft:snowball".into())), 16);
+    }
+
+    #[test]
+    fn test_max_stack_size_no_false_positives() {
+        // "waxed" contains "axe" as substring — must NOT be treated as a tool
+        assert_eq!(
+            max_stack_size(&ItemId("minecraft:waxed_copper_block".into())),
+            64
+        );
+        assert_eq!(
+            max_stack_size(&ItemId("minecraft:waxed_oxidized_copper".into())),
+            64
+        );
     }
 
     #[test]

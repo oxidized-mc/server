@@ -2,13 +2,12 @@
 //!
 //! Handles hotbar selection and creative mode slot placement.
 
-#![allow(dead_code, unused_imports)] // Functions ready for future phases.
-
 use tracing::{debug, warn};
 
+use oxidized_game::inventory::item_ids::{item_id_to_name, item_name_to_id};
 use oxidized_game::inventory::ItemStack;
+use oxidized_game::player::inventory::PROTOCOL_SLOT_COUNT;
 use oxidized_game::player::{GameMode, PlayerInventory};
-use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
 use oxidized_protocol::packets::play::{
     ClientboundContainerSetContentPacket, ClientboundSetHeldSlotPacket,
@@ -54,6 +53,12 @@ pub async fn handle_set_carried_item(
 }
 
 /// Handles `ServerboundSetCreativeModeSlotPacket` (0x38) — creative item placement.
+///
+/// Vanilla behavior:
+/// - Only valid for players with infinite materials (creative mode).
+/// - Slot < 0 means "drop item" (not yet implemented — needs physics).
+/// - Valid slot range: 1–45 (covers inventory + armor + offhand).
+/// - Item count must not exceed max stack size.
 pub async fn handle_set_creative_mode_slot(
     play_ctx: &mut PlayContext<'_>,
     data: bytes::Bytes,
@@ -76,6 +81,19 @@ pub async fn handle_set_creative_mode_slot(
         return Ok(());
     }
 
+    // Vanilla: slot < 0 means drop the item (throttled).
+    // TODO(Phase 22+): Implement item dropping with physics.
+    if pkt.slot < 0 {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            slot = pkt.slot,
+            "SetCreativeModeSlot: drop action not yet implemented"
+        );
+        return Ok(());
+    }
+
+    // Vanilla: valid slot range is 1–45; slot 0 is crafting output (read-only).
     let internal = match PlayerInventory::from_protocol_slot(pkt.slot) {
         Some(idx) => idx,
         None => {
@@ -91,7 +109,24 @@ pub async fn handle_set_creative_mode_slot(
 
     // Convert wire SlotData to game ItemStack
     let stack = match &pkt.item {
-        Some(slot_data) => slot_data_to_item_stack(slot_data),
+        Some(slot_data) => {
+            let s = slot_data_to_item_stack(slot_data);
+            // Vanilla: reject items with count > max stack size.
+            if !s.is_empty() {
+                let max = oxidized_game::inventory::item_stack::max_stack_size(&s.item);
+                if s.count > max {
+                    warn!(
+                        peer = %play_ctx.addr,
+                        name = %play_ctx.player_name,
+                        count = s.count,
+                        max,
+                        "SetCreativeModeSlot: count exceeds max stack size"
+                    );
+                    return Ok(());
+                }
+            }
+            s
+        }
         None => ItemStack::empty(),
     };
 
@@ -115,6 +150,7 @@ pub async fn handle_set_creative_mode_slot(
 ///
 /// Builds a `ClientboundContainerSetContentPacket` with all 46 protocol
 /// slots mapped from the player's 41 physical slots.
+#[allow(dead_code)] // Will be used when container transactions are implemented.
 pub async fn send_full_inventory(
     play_ctx: &mut PlayContext<'_>,
     state_id: i32,
@@ -136,6 +172,7 @@ pub async fn send_full_inventory(
 }
 
 /// Sends the currently selected hotbar slot to the client.
+#[allow(dead_code)] // Will be used when pick-item is implemented.
 pub async fn send_held_slot(
     play_ctx: &mut PlayContext<'_>,
     slot: u8,
@@ -152,7 +189,7 @@ pub async fn send_held_slot(
 /// Maps each protocol slot (0–45) to the corresponding physical slot.
 /// Crafting slots (0–4) have no backing storage and are always empty.
 fn build_inventory_slot_list(inventory: &PlayerInventory) -> Vec<Option<SlotData>> {
-    (0..46i16)
+    (0..PROTOCOL_SLOT_COUNT as i16)
         .map(|proto_slot| {
             PlayerInventory::from_protocol_slot(proto_slot).and_then(|internal| {
                 let stack = inventory.get(internal);
@@ -168,66 +205,21 @@ fn build_inventory_slot_list(inventory: &PlayerInventory) -> Vec<Option<SlotData
 
 /// Converts a game `ItemStack` to a wire `SlotData`.
 ///
-/// Uses item ID 1 as a placeholder — a proper item registry mapping will
-/// be implemented in a later phase.
+/// Uses the shared placeholder item ID mapping from
+/// [`oxidized_game::inventory::item_ids`] until a proper item registry
+/// is built (Phase 22+).
 fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
-    // TODO(Phase 22+): Look up actual item registry ID from stack.item.0
-    let item_id = item_name_to_id(&stack.item.0);
     SlotData {
         count: stack.count,
-        item_id,
+        item_id: item_name_to_id(&stack.item.0),
         component_data: ComponentPatchData::default(),
     }
 }
 
 /// Converts a wire `SlotData` to a game `ItemStack`.
 fn slot_data_to_item_stack(data: &SlotData) -> ItemStack {
-    // TODO(Phase 22+): Look up resource name from item registry ID
     let item_name = item_id_to_name(data.item_id);
     ItemStack::new(item_name, data.count)
-}
-
-/// Placeholder item name → ID mapping.
-///
-/// A proper registry will be built in a later phase. For now, use a small
-/// hardcoded mapping for common items plus a hash-based fallback.
-fn item_name_to_id(name: &str) -> i32 {
-    match name {
-        "minecraft:air" | "" => 0,
-        "minecraft:stone" => 1,
-        "minecraft:dirt" => 10,
-        "minecraft:grass_block" => 8,
-        "minecraft:cobblestone" => 14,
-        "minecraft:oak_planks" => 15,
-        "minecraft:diamond" => 802,
-        "minecraft:diamond_sword" => 824,
-        "minecraft:iron_pickaxe" => 813,
-        _ => {
-            // Fallback: use a simple hash to generate a deterministic ID.
-            // This won't match vanilla, but is stable across calls.
-            let mut hash: i32 = 0;
-            for b in name.bytes() {
-                hash = hash.wrapping_mul(31).wrapping_add(b as i32);
-            }
-            hash.abs() % 2000 + 100
-        }
-    }
-}
-
-/// Placeholder item ID → name mapping.
-fn item_id_to_name(id: i32) -> String {
-    match id {
-        0 => "minecraft:air".to_string(),
-        1 => "minecraft:stone".to_string(),
-        10 => "minecraft:dirt".to_string(),
-        8 => "minecraft:grass_block".to_string(),
-        14 => "minecraft:cobblestone".to_string(),
-        15 => "minecraft:oak_planks".to_string(),
-        802 => "minecraft:diamond".to_string(),
-        824 => "minecraft:diamond_sword".to_string(),
-        813 => "minecraft:iron_pickaxe".to_string(),
-        _ => format!("minecraft:unknown_{id}"),
-    }
 }
 
 #[cfg(test)]
@@ -261,7 +253,7 @@ mod tests {
     fn test_build_inventory_slot_list_empty() {
         let inv = PlayerInventory::new();
         let slots = build_inventory_slot_list(&inv);
-        assert_eq!(slots.len(), 46);
+        assert_eq!(slots.len(), PROTOCOL_SLOT_COUNT);
         assert!(slots.iter().all(|s| s.is_none()));
     }
 
@@ -271,7 +263,7 @@ mod tests {
         inv.set(0, ItemStack::new("minecraft:stone", 64)); // hotbar 0 → proto 36
 
         let slots = build_inventory_slot_list(&inv);
-        assert_eq!(slots.len(), 46);
+        assert_eq!(slots.len(), PROTOCOL_SLOT_COUNT);
         // Protocol slot 36 should have the stone
         assert!(slots[36].is_some());
         assert_eq!(slots[36].as_ref().unwrap().count, 64);

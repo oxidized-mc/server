@@ -32,20 +32,17 @@ pub struct SlotData {
     pub component_data: ComponentPatchData,
 }
 
-/// Raw data component patch — stored as counts for now.
+/// Raw data component patch — counts only for now.
 ///
 /// In the future this will hold parsed component entries. For Phase 21,
 /// we only support the "no modifications" case (0 added, 0 removed).
+/// Byte storage fields will be added when Phase 29 implements component parsing.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ComponentPatchData {
     /// Number of added/modified components.
     pub added_count: i32,
     /// Number of removed components.
     pub removed_count: i32,
-    /// Raw bytes of the added component entries (type IDs + values).
-    pub added_bytes: Vec<u8>,
-    /// Raw bytes of the removed component type IDs.
-    pub removed_bytes: Vec<u8>,
 }
 
 /// Writes an optional item slot to the buffer.
@@ -118,12 +115,7 @@ pub fn read_slot(buf: &mut Bytes) -> Result<Option<SlotData>, PacketDecodeError>
 fn write_component_patch(buf: &mut BytesMut, patch: &ComponentPatchData) {
     varint::write_varint_buf(patch.added_count, buf);
     varint::write_varint_buf(patch.removed_count, buf);
-    if !patch.added_bytes.is_empty() {
-        buf.extend_from_slice(&patch.added_bytes);
-    }
-    if !patch.removed_bytes.is_empty() {
-        buf.extend_from_slice(&patch.removed_bytes);
-    }
+    // TODO(Phase 29+): Write actual component entries when component registry exists.
 }
 
 /// Reads a `DataComponentPatch` from the buffer.
@@ -152,8 +144,6 @@ fn read_component_patch(buf: &mut Bytes) -> Result<ComponentPatchData, PacketDec
     Ok(ComponentPatchData {
         added_count: 0,
         removed_count: 0,
-        added_bytes: Vec::new(),
-        removed_bytes: Vec::new(),
     })
 }
 
