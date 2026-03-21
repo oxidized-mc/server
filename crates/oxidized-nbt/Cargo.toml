@@ -15,7 +15,6 @@ thiserror    = { workspace = true }
 flate2       = { workspace = true }
 bytes        = { workspace = true }
 indexmap      = { workspace = true }
-bumpalo      = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

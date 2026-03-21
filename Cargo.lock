@@ -1736,7 +1736,6 @@ dependencies = [
 name = "oxidized-nbt"
 version = "0.1.0"
 dependencies = [
- "bumpalo",
  "bytes",
  "flate2",
  "indexmap",
@@ -1808,7 +1807,6 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "bitflags",
- "bumpalo",
  "bytes",
  "dashmap",
  "flate2",
