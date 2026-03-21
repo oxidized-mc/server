@@ -9,7 +9,7 @@ use crate::codec::varint;
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
 
 /// 0x21 — Disguised chat (chat type + sender name, no UUID/signature).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClientboundDisguisedChatPacket {
     /// The message content.
     pub message: Component,

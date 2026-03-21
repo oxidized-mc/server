@@ -9,7 +9,7 @@ use crate::codec::{types, varint};
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
 
 /// Filter mask type for chat messages.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum FilterMask {
     /// No filtering — message passes through completely.
     PassThrough,
@@ -20,7 +20,7 @@ pub enum FilterMask {
 }
 
 /// 0x41 — Signed player chat message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClientboundPlayerChatPacket {
     /// Per-connection global message index (increments for each message sent).
     pub global_index: i32,

@@ -7,7 +7,7 @@ use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
 
 /// 0x07 — Client dispatches an unsigned command (leading `/` already stripped).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundChatCommandPacket {
     /// The command text without the leading `/`.
     pub command: String,

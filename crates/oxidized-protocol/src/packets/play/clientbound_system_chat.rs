@@ -7,7 +7,7 @@ use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 
 /// 0x79 — System chat message (no signature, no player sender).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClientboundSystemChatPacket {
     /// The message content.
     pub content: Component,

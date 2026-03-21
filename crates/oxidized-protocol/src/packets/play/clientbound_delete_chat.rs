@@ -10,7 +10,7 @@ use crate::codec::varint;
 ///
 /// If `packed_message_id` is 0, the message is identified by its full 256-byte
 /// signature. Otherwise the value is a cache index (wire value − 1).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientboundDeleteChatPacket {
     /// The packed message ID (VarInt).
     /// If the value is 0, the next 256 bytes are the full signature.

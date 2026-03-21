@@ -9,7 +9,7 @@ use crate::codec::types::{read_string, write_string};
 use crate::codec::varint::{read_varint_buf, write_varint_buf};
 
 /// 0x0F — Server returns tab-completion suggestions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ClientboundCommandSuggestionsPacket {
     /// Transaction ID — echoed from the request.
     pub id: i32,
@@ -22,7 +22,7 @@ pub struct ClientboundCommandSuggestionsPacket {
 }
 
 /// A single tab-completion suggestion.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SuggestionEntry {
     /// The suggested text.
     pub text: String,

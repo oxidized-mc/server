@@ -7,7 +7,7 @@ use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
 
 /// 0x06 — Client acknowledges message chain offset.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundChatAckPacket {
     /// Offset into the message chain being acknowledged.
     pub offset: i32,

@@ -93,7 +93,7 @@ impl PlayerInput {
 }
 
 /// Serverbound packet carrying per-tick player input.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundPlayerInputPacket {
     /// The current input state.
     pub input: PlayerInput,

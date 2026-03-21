@@ -6,7 +6,7 @@ use crate::codec::packet::PacketDecodeError;
 use crate::codec::{Packet, types, varint};
 
 /// 0x0F — Client requests tab-completion suggestions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundCommandSuggestionPacket {
     /// Transaction ID — echoed back in the response.
     pub id: i32,
