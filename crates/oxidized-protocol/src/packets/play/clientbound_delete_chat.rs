@@ -5,7 +5,6 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::packets::play::PlayPacketError;
 
 /// 0x1F — Server requests client to delete a chat message.
 ///
@@ -19,48 +18,6 @@ pub struct ClientboundDeleteChatPacket {
     pub packed_message_id: i32,
     /// Full 256-byte signature, present only when `packed_message_id == 0`.
     pub full_signature: Option<[u8; 256]>,
-}
-
-impl ClientboundDeleteChatPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x1F;
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(261);
-        if let Some(ref sig) = self.full_signature {
-            varint::write_varint_buf(0, &mut buf);
-            buf.put_slice(sig);
-        } else {
-            varint::write_varint_buf(self.packed_message_id + 1, &mut buf);
-        }
-        buf
-    }
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let id = varint::read_varint_buf(&mut data)?;
-        if id == 0 {
-            if data.remaining() < 256 {
-                return Err(PlayPacketError::UnexpectedEof);
-            }
-            let mut sig = [0u8; 256];
-            data.copy_to_slice(&mut sig);
-            Ok(Self {
-                packed_message_id: 0,
-                full_signature: Some(sig),
-            })
-        } else {
-            Ok(Self {
-                packed_message_id: id - 1,
-                full_signature: None,
-            })
-        }
-    }
 }
 
 impl Packet for ClientboundDeleteChatPacket {
@@ -89,7 +46,14 @@ impl Packet for ClientboundDeleteChatPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(261);
+        if let Some(ref sig) = self.full_signature {
+            varint::write_varint_buf(0, &mut buf);
+            buf.put_slice(sig);
+        } else {
+            varint::write_varint_buf(self.packed_message_id + 1, &mut buf);
+        }
+        buf
     }
 }
 
@@ -100,7 +64,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundDeleteChatPacket::PACKET_ID, 0x1F);
+        assert_eq!(<ClientboundDeleteChatPacket as Packet>::PACKET_ID, 0x1F);
     }
 
     #[test]
@@ -128,22 +92,5 @@ mod tests {
         let decoded = ClientboundDeleteChatPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.full_signature.unwrap()[0], 0xDE);
         assert_eq!(decoded.full_signature.unwrap()[255], 0xAD);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundDeleteChatPacket {
-            packed_message_id: 5,
-            full_signature: None,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundDeleteChatPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded.packed_message_id, 5);
-        assert!(decoded.full_signature.is_none());
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundDeleteChatPacket as Packet>::PACKET_ID, 0x1F);
     }
 }

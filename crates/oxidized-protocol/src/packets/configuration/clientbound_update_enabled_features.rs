@@ -4,29 +4,11 @@
 //! Corresponds to `net.minecraft.network.protocol.configuration.ClientboundUpdateEnabledFeaturesPacket`.
 
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint::{self, VarIntError};
-use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
-
-/// Errors from decoding a [`ClientboundUpdateEnabledFeaturesPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum UpdateEnabledFeaturesError {
-    /// VarInt decode failure.
-    #[error("varint error: {0}")]
-    VarInt(#[from] VarIntError),
-
-    /// Invalid resource location.
-    #[error("resource location error: {0}")]
-    ResourceLocation(#[from] ResourceLocationError),
-
-    /// Negative feature count.
-    #[error("negative feature count: {0}")]
-    NegativeCount(i32),
-}
+use crate::codec::varint;
+use crate::types::resource_location::ResourceLocation;
 
 /// Clientbound packet `0x05` in the CONFIGURATION state — update enabled features.
 ///
@@ -36,40 +18,6 @@ pub enum UpdateEnabledFeaturesError {
 pub struct ClientboundUpdateEnabledFeaturesPacket {
     /// The list of enabled feature identifiers (e.g. `minecraft:vanilla`).
     pub features: Vec<ResourceLocation>,
-}
-
-impl ClientboundUpdateEnabledFeaturesPacket {
-    /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x0c;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`UpdateEnabledFeaturesError`] if the buffer is truncated or
-    /// malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, UpdateEnabledFeaturesError> {
-        let count = varint::read_varint_buf(&mut data)?;
-        if count < 0 {
-            return Err(UpdateEnabledFeaturesError::NegativeCount(count));
-        }
-        let mut features = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            features.push(ResourceLocation::read(&mut data)?);
-        }
-        Ok(Self { features })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        varint::write_varint_buf(self.features.len() as i32, &mut buf);
-        for feature in &self.features {
-            feature.write(&mut buf);
-        }
-        buf
-    }
 }
 
 impl Packet for ClientboundUpdateEnabledFeaturesPacket {
@@ -90,7 +38,13 @@ impl Packet for ClientboundUpdateEnabledFeaturesPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        varint::write_varint_buf(self.features.len() as i32, &mut buf);
+        for feature in &self.features {
+            feature.write(&mut buf);
+        }
+        buf
     }
 }
 
@@ -102,8 +56,9 @@ mod tests {
     #[test]
     fn test_roundtrip_empty() {
         let pkt = ClientboundUpdateEnabledFeaturesPacket { features: vec![] };
-        let encoded = pkt.encode();
-        let decoded = ClientboundUpdateEnabledFeaturesPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundUpdateEnabledFeaturesPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
@@ -112,8 +67,9 @@ mod tests {
         let pkt = ClientboundUpdateEnabledFeaturesPacket {
             features: vec![ResourceLocation::new("minecraft", "vanilla").unwrap()],
         };
-        let encoded = pkt.encode();
-        let decoded = ClientboundUpdateEnabledFeaturesPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ClientboundUpdateEnabledFeaturesPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
@@ -125,16 +81,6 @@ mod tests {
                 ResourceLocation::new("minecraft", "trade_rebalance").unwrap(),
             ],
         };
-        let encoded = pkt.encode();
-        let decoded = ClientboundUpdateEnabledFeaturesPacket::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundUpdateEnabledFeaturesPacket {
-            features: vec![ResourceLocation::new("minecraft", "vanilla").unwrap()],
-        };
         let encoded = Packet::encode(&pkt);
         let decoded =
             <ClientboundUpdateEnabledFeaturesPacket as Packet>::decode(encoded.freeze()).unwrap();
@@ -142,7 +88,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(
             <ClientboundUpdateEnabledFeaturesPacket as Packet>::PACKET_ID,
             0x0c

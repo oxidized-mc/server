@@ -4,38 +4,12 @@
 //! Corresponds to `net.minecraft.network.protocol.configuration.ClientboundRegistryDataPacket`.
 
 use bytes::{Buf, Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{self, TypeError};
-use crate::codec::varint::{self, VarIntError};
-use crate::types::resource_location::{ResourceLocation, ResourceLocationError};
-
-/// Errors from decoding a [`ClientboundRegistryDataPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum RegistryDataError {
-    /// VarInt decode failure.
-    #[error("varint error: {0}")]
-    VarInt(#[from] VarIntError),
-
-    /// Type decode failure.
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-
-    /// Invalid resource location.
-    #[error("resource location error: {0}")]
-    ResourceLocation(#[from] ResourceLocationError),
-
-    /// NBT decode failure.
-    #[error("nbt error: {0}")]
-    Nbt(#[from] oxidized_nbt::NbtError),
-
-    /// Negative entry count.
-    #[error("negative entry count: {0}")]
-    NegativeCount(i32),
-}
+use crate::codec::types;
+use crate::codec::varint;
+use crate::types::resource_location::ResourceLocation;
 
 /// A single entry in a registry data packet.
 #[derive(Debug, Clone, PartialEq)]
@@ -58,68 +32,6 @@ pub struct ClientboundRegistryDataPacket {
     pub registry: ResourceLocation,
     /// The entries in this registry.
     pub entries: Vec<RegistryEntry>,
-}
-
-impl ClientboundRegistryDataPacket {
-    /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x07;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`RegistryDataError`] if the buffer is truncated or any field
-    /// is malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, RegistryDataError> {
-        let registry = ResourceLocation::read(&mut data)?;
-
-        let count = varint::read_varint_buf(&mut data)?;
-        if count < 0 {
-            return Err(RegistryDataError::NegativeCount(count));
-        }
-
-        let mut entries = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            let id = ResourceLocation::read(&mut data)?;
-            let has_data = types::read_bool(&mut data)?;
-            let nbt_data = if has_data {
-                let mut reader = data.reader();
-                let mut acc = oxidized_nbt::NbtAccounter::unlimited();
-                let compound = oxidized_nbt::read_network_nbt(&mut reader, &mut acc)?;
-                data = reader.into_inner();
-                Some(compound)
-            } else {
-                None
-            };
-            entries.push(RegistryEntry { id, data: nbt_data });
-        }
-
-        Ok(Self { registry, entries })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        self.registry.write(&mut buf);
-
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        varint::write_varint_buf(self.entries.len() as i32, &mut buf);
-
-        for entry in &self.entries {
-            entry.id.write(&mut buf);
-            types::write_bool(&mut buf, entry.data.is_some());
-            if let Some(compound) = &entry.data {
-                let mut nbt_buf = Vec::new();
-                // NBT write cannot fail for valid compounds written to a Vec.
-                #[allow(clippy::expect_used)]
-                oxidized_nbt::write_network_nbt(&mut nbt_buf, compound)
-                    .expect("NBT write to Vec should not fail");
-                buf.extend_from_slice(&nbt_buf);
-            }
-        }
-
-        buf
-    }
 }
 
 impl Packet for ClientboundRegistryDataPacket {
@@ -155,7 +67,26 @@ impl Packet for ClientboundRegistryDataPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        self.registry.write(&mut buf);
+
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        varint::write_varint_buf(self.entries.len() as i32, &mut buf);
+
+        for entry in &self.entries {
+            entry.id.write(&mut buf);
+            types::write_bool(&mut buf, entry.data.is_some());
+            if let Some(compound) = &entry.data {
+                let mut nbt_buf = Vec::new();
+                // NBT write cannot fail for valid compounds written to a Vec.
+                #[allow(clippy::expect_used)]
+                oxidized_nbt::write_network_nbt(&mut nbt_buf, compound)
+                    .expect("NBT write to Vec should not fail");
+                buf.extend_from_slice(&nbt_buf);
+            }
+        }
+
+        buf
     }
 }
 
@@ -170,8 +101,8 @@ mod tests {
             registry: ResourceLocation::new("minecraft", "dimension_type").unwrap(),
             entries: vec![],
         };
-        let encoded = pkt.encode();
-        let decoded = ClientboundRegistryDataPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
@@ -184,8 +115,8 @@ mod tests {
                 data: None,
             }],
         };
-        let encoded = pkt.encode();
-        let decoded = ClientboundRegistryDataPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
@@ -202,8 +133,8 @@ mod tests {
                 data: Some(compound),
             }],
         };
-        let encoded = pkt.encode();
-        let decoded = ClientboundRegistryDataPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded = <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
@@ -229,27 +160,13 @@ mod tests {
                 },
             ],
         };
-        let encoded = pkt.encode();
-        let decoded = ClientboundRegistryDataPacket::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundRegistryDataPacket {
-            registry: ResourceLocation::new("minecraft", "dimension_type").unwrap(),
-            entries: vec![RegistryEntry {
-                id: ResourceLocation::new("minecraft", "overworld").unwrap(),
-                data: None,
-            }],
-        };
         let encoded = Packet::encode(&pkt);
         let decoded = <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
     #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(<ClientboundRegistryDataPacket as Packet>::PACKET_ID, 0x07);
     }
 }

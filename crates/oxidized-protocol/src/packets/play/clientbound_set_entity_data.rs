@@ -12,8 +12,6 @@ use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
 
-use super::clientbound_login::PlayPacketError;
-
 /// End-of-data marker byte.
 pub const DATA_EOF_MARKER: u8 = 0xFF;
 
@@ -53,69 +51,6 @@ pub struct ClientboundSetEntityDataPacket {
 }
 
 impl ClientboundSetEntityDataPacket {
-    /// Packet ID in the PLAY state clientbound registry.
-    pub const PACKET_ID: i32 = 0x63;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// **Note:** Full decoding of individual entry values requires
-    /// knowing the codec for each serializer type (which depends on
-    /// registry state). This decoder consumes entries correctly by
-    /// reading the slot + serializer type, but stores all remaining
-    /// bytes as the value of the *last* entry since we cannot determine
-    /// per-entry value boundaries without the codec registry.
-    ///
-    /// For packets with a single entry (the common case for flags,
-    /// pose, etc.), this produces an exact result. For multi-entry
-    /// packets, prefer [`encode`](Self::encode) on the sending side
-    /// and use a registry-aware decoder on the receiving side.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let mut entries = Vec::new();
-
-        if data.is_empty() {
-            return Err(PlayPacketError::InvalidData(
-                "unexpected end of entity data".into(),
-            ));
-        }
-
-        let slot = data[0];
-        data.advance(1);
-
-        if slot != DATA_EOF_MARKER {
-            let serializer_type = varint::read_varint_buf(&mut data)?;
-            // Without knowing the codec, we cannot determine where one
-            // entry's value ends and the next begins. Collect all remaining
-            // bytes, strip the trailing 0xFF terminator, and store as
-            // this entry's value. Correct for single-entry packets.
-            let mut value_bytes = data.to_vec();
-            data.clear();
-            // Remove trailing EOF marker if present
-            if value_bytes.last() == Some(&DATA_EOF_MARKER) {
-                value_bytes.pop();
-            }
-
-            entries.push(EntityDataEntry {
-                slot,
-                serializer_type,
-                value_bytes,
-            });
-        }
-
-        Ok(Self { entity_id, entries })
-    }
-
-    /// Encodes the packet body into `buf`.
-    pub fn encode(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.entity_id, buf);
-        for entry in &self.entries {
-            buf.put_u8(entry.slot);
-            varint::write_varint_buf(entry.serializer_type, buf);
-            buf.extend_from_slice(&entry.value_bytes);
-        }
-        buf.put_u8(DATA_EOF_MARKER);
-    }
-
     /// Creates a packet with a single byte-type entry.
     ///
     /// Convenience for the common case of updating entity flags.
@@ -193,7 +128,13 @@ impl Packet for ClientboundSetEntityDataPacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        self.encode(&mut buf);
+        varint::write_varint_buf(self.entity_id, &mut buf);
+        for entry in &self.entries {
+            buf.put_u8(entry.slot);
+            varint::write_varint_buf(entry.serializer_type, &mut buf);
+            buf.extend_from_slice(&entry.value_bytes);
+        }
+        buf.put_u8(DATA_EOF_MARKER);
         buf
     }
 }
@@ -206,14 +147,13 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundSetEntityDataPacket::PACKET_ID, 0x63);
+        assert_eq!(<ClientboundSetEntityDataPacket as Packet>::PACKET_ID, 0x63);
     }
 
     #[test]
     fn test_encode_single_byte_entry() {
         let pkt = ClientboundSetEntityDataPacket::single_byte(42, 0, 0x05);
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
 
         // entity_id=42 (VarInt=1 byte) + slot=0 + serializer=0 (VarInt=1) + value=0x05 + 0xFF
         let data = buf.to_vec();
@@ -241,8 +181,7 @@ mod tests {
                 },
             ],
         };
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
 
         let data = buf.to_vec();
         let last = data[data.len() - 1];
@@ -271,18 +210,5 @@ mod tests {
     #[test]
     fn test_eof_marker_constant() {
         assert_eq!(DATA_EOF_MARKER, 255);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundSetEntityDataPacket::single_byte(42, 0, 0x05);
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundSetEntityDataPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundSetEntityDataPacket as Packet>::PACKET_ID, 0x63);
     }
 }

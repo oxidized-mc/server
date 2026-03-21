@@ -16,25 +16,6 @@ use crate::codec::packet::PacketDecodeError;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundFinishConfigurationPacket;
 
-impl ServerboundFinishConfigurationPacket {
-    /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x03;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// This packet carries no fields, so `data` is ignored.
-    pub fn decode(_data: Bytes) -> Self {
-        Self
-    }
-
-    /// Encodes the packet body (without packet ID).
-    ///
-    /// Returns an empty buffer since this packet has no fields.
-    pub fn encode(&self) -> BytesMut {
-        BytesMut::new()
-    }
-}
-
 impl Packet for ServerboundFinishConfigurationPacket {
     const PACKET_ID: i32 = 0x03;
 
@@ -55,23 +36,15 @@ mod tests {
     #[test]
     fn test_roundtrip() {
         let pkt = ServerboundFinishConfigurationPacket;
-        let encoded = pkt.encode();
+        let encoded = Packet::encode(&pkt);
         assert!(encoded.is_empty());
-        let decoded = ServerboundFinishConfigurationPacket::decode(encoded.freeze());
+        let decoded =
+            <ServerboundFinishConfigurationPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
     #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ServerboundFinishConfigurationPacket;
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundFinishConfigurationPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(
             <ServerboundFinishConfigurationPacket as Packet>::PACKET_ID,
             0x03

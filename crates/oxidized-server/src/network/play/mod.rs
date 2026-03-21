@@ -18,6 +18,7 @@ use oxidized_game::player::{
     GameMode, ServerPlayer, build_login_sequence, handle_accept_teleportation,
 };
 use oxidized_protocol::auth;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{

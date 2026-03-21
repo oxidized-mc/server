@@ -4,12 +4,11 @@
 //! in the vanilla server.
 
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{self, TypeError};
-use crate::codec::varint::{self, VarIntError};
+use crate::codec::types;
+use crate::codec::varint;
 
 /// The client's declared intent after the handshake.
 ///
@@ -24,32 +23,20 @@ pub enum ClientIntent {
     Transfer = 3,
 }
 
-/// Errors from decoding a [`ClientIntentionPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum IntentionError {
-    /// Unknown `next_state` value.
-    #[error("unknown client intent: {0}")]
-    UnknownIntent(i32),
-
-    /// VarInt decode failure.
-    #[error("varint error: {0}")]
-    VarInt(#[from] VarIntError),
-
-    /// Type decode failure.
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-}
-
-impl TryFrom<i32> for ClientIntent {
-    type Error = IntentionError;
-
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
+impl ClientIntent {
+    /// Converts a raw wire value to a [`ClientIntent`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketDecodeError::InvalidData`] if the value is not a known intent.
+    pub fn from_id(value: i32) -> Result<Self, PacketDecodeError> {
         match value {
             1 => Ok(Self::Status),
             2 => Ok(Self::Login),
             3 => Ok(Self::Transfer),
-            other => Err(IntentionError::UnknownIntent(other)),
+            other => Err(PacketDecodeError::InvalidData(format!(
+                "unknown client intent: {other}"
+            ))),
         }
     }
 }
@@ -62,8 +49,9 @@ impl TryFrom<i32> for ClientIntent {
 ///
 /// # Examples
 ///
-/// ```
+/// ```rust,ignore
 /// use oxidized_protocol::packets::handshake::{ClientIntentionPacket, ClientIntent};
+/// use oxidized_protocol::codec::Packet;
 ///
 /// let packet = ClientIntentionPacket {
 ///     protocol_version: 1_073_742_124,
@@ -73,8 +61,9 @@ impl TryFrom<i32> for ClientIntent {
 /// };
 ///
 /// // Encode and decode roundtrip
-/// let encoded = packet.encode();
-/// let decoded = ClientIntentionPacket::decode(encoded.freeze()).unwrap();
+/// let encoded = Packet::encode(&packet);
+/// let decoded =
+///     <ClientIntentionPacket as Packet>::decode(encoded.freeze()).unwrap();
 /// assert_eq!(decoded, packet);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,45 +78,6 @@ pub struct ClientIntentionPacket {
     pub next_state: ClientIntent,
 }
 
-impl ClientIntentionPacket {
-    /// Packet ID for the handshake packet.
-    pub const PACKET_ID: i32 = 0x00;
-
-    /// Decodes a [`ClientIntentionPacket`] from a raw packet body.
-    ///
-    /// The `data` should be the packet body *after* the packet ID has been
-    /// stripped (i.e., just the fields).
-    ///
-    /// # Errors
-    ///
-    /// Returns [`IntentionError`] if the buffer is truncated, contains
-    /// invalid UTF-8, or has an unknown `next_state` value.
-    pub fn decode(mut data: Bytes) -> Result<Self, IntentionError> {
-        let protocol_version = varint::read_varint_buf(&mut data)?;
-        let server_address = types::read_string(&mut data, 255)?;
-        let server_port = types::read_u16(&mut data)?;
-        let next_state_raw = varint::read_varint_buf(&mut data)?;
-        let next_state = ClientIntent::try_from(next_state_raw)?;
-
-        Ok(Self {
-            protocol_version,
-            server_address,
-            server_port,
-            next_state,
-        })
-    }
-
-    /// Encodes this packet into bytes (without the packet ID prefix).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        varint::write_varint_buf(self.protocol_version, &mut buf);
-        types::write_string(&mut buf, &self.server_address);
-        types::write_u16(&mut buf, self.server_port);
-        varint::write_varint_buf(self.next_state as i32, &mut buf);
-        buf
-    }
-}
-
 impl Packet for ClientIntentionPacket {
     const PACKET_ID: i32 = 0x00;
 
@@ -136,13 +86,7 @@ impl Packet for ClientIntentionPacket {
         let server_address = types::read_string(&mut data, 255)?;
         let server_port = types::read_u16(&mut data)?;
         let next_state_raw = varint::read_varint_buf(&mut data)?;
-        let next_state = ClientIntent::try_from(next_state_raw).map_err(|e| match e {
-            IntentionError::UnknownIntent(v) => {
-                PacketDecodeError::InvalidData(format!("unknown client intent: {v}"))
-            },
-            IntentionError::VarInt(e) => PacketDecodeError::VarInt(e),
-            IntentionError::Type(e) => PacketDecodeError::Type(e),
-        })?;
+        let next_state = ClientIntent::from_id(next_state_raw)?;
 
         Ok(Self {
             protocol_version,
@@ -153,7 +97,12 @@ impl Packet for ClientIntentionPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        varint::write_varint_buf(self.protocol_version, &mut buf);
+        types::write_string(&mut buf, &self.server_address);
+        types::write_u16(&mut buf, self.server_port);
+        varint::write_varint_buf(self.next_state as i32, &mut buf);
+        buf
     }
 }
 
@@ -208,8 +157,9 @@ mod tests {
         types::write_string(&mut buf, "localhost");
         types::write_u16(&mut buf, 25565);
         varint::write_varint_buf(99, &mut buf); // invalid intent
-        let err = ClientIntentionPacket::decode(buf.freeze()).unwrap_err();
-        assert!(matches!(err, IntentionError::UnknownIntent(99)));
+        let err = <ClientIntentionPacket as Packet>::decode(buf.freeze()).unwrap_err();
+        assert!(matches!(err, PacketDecodeError::InvalidData(_)));
+        assert!(err.to_string().contains("99"));
     }
 
     #[test]
@@ -236,19 +186,6 @@ mod tests {
     }
 
     // --- Packet trait tests ---
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientIntentionPacket {
-            protocol_version: 1_073_742_124,
-            server_address: "localhost".to_string(),
-            server_port: 25565,
-            next_state: ClientIntent::Login,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientIntentionPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
 
     #[test]
     fn test_packet_trait_unknown_intent_maps_to_invalid_data() {

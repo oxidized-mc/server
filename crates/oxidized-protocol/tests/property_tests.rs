@@ -5,6 +5,7 @@
 use bytes::{Bytes, BytesMut};
 use proptest::prelude::*;
 
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::types;
 use oxidized_protocol::types::block_pos::BlockPos;
 use oxidized_protocol::types::chunk_pos::ChunkPos;
@@ -528,8 +529,7 @@ proptest! {
             x_rot, y_rot, y_head_rot,
             data: data_val,
         };
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
         prop_assert_eq!(decoded.entity_id, entity_id);
         prop_assert_eq!(decoded.uuid, uuid);
@@ -549,8 +549,7 @@ proptest! {
         ids in prop::collection::vec(any::<i32>(), 0..20),
     ) {
         let pkt = ClientboundRemoveEntitiesPacket { entity_ids: ids.clone() };
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         prop_assert_eq!(decoded.entity_ids, ids);
     }
@@ -563,8 +562,7 @@ proptest! {
         value: u8,
     ) {
         let pkt = ClientboundSetEntityDataPacket::single_byte(entity_id, slot, value);
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundSetEntityDataPacket::decode(buf.freeze()).unwrap();
         prop_assert_eq!(decoded.entity_id, entity_id);
         prop_assert_eq!(decoded.entries.len(), 1);

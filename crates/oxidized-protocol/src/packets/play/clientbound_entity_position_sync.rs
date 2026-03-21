@@ -10,8 +10,6 @@ use bytes::{Bytes, BytesMut};
 use crate::codec::types;
 use crate::codec::varint;
 
-use super::clientbound_login::PlayPacketError;
-
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 
@@ -55,53 +53,6 @@ pub struct ClientboundEntityPositionSyncPacket {
     pub on_ground: bool,
 }
 
-impl ClientboundEntityPositionSyncPacket {
-    /// Packet ID in the PLAY state clientbound registry.
-    pub const PACKET_ID: i32 = 0x23;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let x = types::read_f64(&mut data)?;
-        let y = types::read_f64(&mut data)?;
-        let z = types::read_f64(&mut data)?;
-        let vx = types::read_f64(&mut data)?;
-        let vy = types::read_f64(&mut data)?;
-        let vz = types::read_f64(&mut data)?;
-        let yaw = types::read_f32(&mut data)?;
-        let pitch = types::read_f32(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
-        Ok(Self {
-            entity_id,
-            x,
-            y,
-            z,
-            vx,
-            vy,
-            vz,
-            yaw,
-            pitch,
-            on_ground,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(58);
-        varint::write_varint_buf(self.entity_id, &mut buf);
-        types::write_f64(&mut buf, self.x);
-        types::write_f64(&mut buf, self.y);
-        types::write_f64(&mut buf, self.z);
-        types::write_f64(&mut buf, self.vx);
-        types::write_f64(&mut buf, self.vy);
-        types::write_f64(&mut buf, self.vz);
-        types::write_f32(&mut buf, self.yaw);
-        types::write_f32(&mut buf, self.pitch);
-        types::write_bool(&mut buf, self.on_ground);
-        buf
-    }
-}
-
 impl Packet for ClientboundEntityPositionSyncPacket {
     const PACKET_ID: i32 = 0x23;
 
@@ -131,7 +82,18 @@ impl Packet for ClientboundEntityPositionSyncPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(58);
+        varint::write_varint_buf(self.entity_id, &mut buf);
+        types::write_f64(&mut buf, self.x);
+        types::write_f64(&mut buf, self.y);
+        types::write_f64(&mut buf, self.z);
+        types::write_f64(&mut buf, self.vx);
+        types::write_f64(&mut buf, self.vy);
+        types::write_f64(&mut buf, self.vz);
+        types::write_f32(&mut buf, self.yaw);
+        types::write_f32(&mut buf, self.pitch);
+        types::write_bool(&mut buf, self.on_ground);
+        buf
     }
 }
 
@@ -163,7 +125,10 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundEntityPositionSyncPacket::PACKET_ID, 0x23);
+        assert_eq!(
+            <ClientboundEntityPositionSyncPacket as Packet>::PACKET_ID,
+            0x23
+        );
     }
 
     #[test]
@@ -185,33 +150,5 @@ mod tests {
         assert!((decoded.vx - 1.5).abs() < f64::EPSILON);
         assert!((decoded.vy + 9.8).abs() < f64::EPSILON);
         assert!((decoded.vz - 0.3).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundEntityPositionSyncPacket {
-            entity_id: 1,
-            x: 100.5,
-            y: 64.0,
-            z: -200.25,
-            vx: 0.0,
-            vy: -0.08,
-            vz: 0.0,
-            yaw: 90.0,
-            pitch: -15.0,
-            on_ground: false,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundEntityPositionSyncPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundEntityPositionSyncPacket as Packet>::PACKET_ID,
-            0x23
-        );
     }
 }

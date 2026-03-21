@@ -282,6 +282,7 @@ async fn handle_connection(
 mod tests {
     use super::*;
     use bytes::BytesMut;
+    use oxidized_protocol::codec::Packet;
     use oxidized_protocol::codec::{frame, varint};
     use oxidized_protocol::constants;
     use oxidized_protocol::crypto::ServerKeyPair;

@@ -6,7 +6,7 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::types::{self, TypeError};
+use crate::codec::types;
 use crate::codec::varint;
 use crate::types::resource_location::ResourceLocation;
 
@@ -42,16 +42,20 @@ pub struct CommonPlayerSpawnInfo {
 
 impl CommonPlayerSpawnInfo {
     /// Decodes from a buffer.
-    pub fn decode(data: &mut Bytes) -> Result<Self, PlayPacketError> {
+    pub fn decode(data: &mut Bytes) -> Result<Self, PacketDecodeError> {
         let dimension_type_id = varint::read_varint_buf(data)?;
         let dimension = ResourceLocation::read(data)?;
         let seed = types::read_i64(data)?;
         if data.remaining() < 1 {
-            return Err(PlayPacketError::UnexpectedEof);
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of packet data".into(),
+            ));
         }
         let game_mode = data.get_u8();
         if data.remaining() < 1 {
-            return Err(PlayPacketError::UnexpectedEof);
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of packet data".into(),
+            ));
         }
         let previous_game_mode = data.get_i8();
         let is_debug = types::read_bool(data)?;
@@ -136,12 +140,10 @@ pub struct ClientboundLoginPacket {
     pub enforces_secure_chat: bool,
 }
 
-impl ClientboundLoginPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x31; // 49
+impl Packet for ClientboundLoginPacket {
+    const PACKET_ID: i32 = 0x31;
 
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let player_id = types::read_i32(&mut data)?;
         let hardcore = types::read_bool(&mut data)?;
 
@@ -175,8 +177,7 @@ impl ClientboundLoginPacket {
         })
     }
 
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
+    fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(128);
         types::write_i32(&mut buf, self.player_id);
         types::write_bool(&mut buf, self.hardcore);
@@ -196,83 +197,6 @@ impl ClientboundLoginPacket {
         types::write_bool(&mut buf, self.enforces_secure_chat);
         buf
     }
-}
-
-/// Converts a [`PlayPacketError`] to a [`PacketDecodeError`].
-fn play_error_to_packet_decode_error(e: PlayPacketError) -> PacketDecodeError {
-    match e {
-        PlayPacketError::UnexpectedEof => {
-            PacketDecodeError::InvalidData("unexpected end of packet data".into())
-        },
-        PlayPacketError::VarInt(v) => PacketDecodeError::VarInt(v),
-        PlayPacketError::Type(t) => PacketDecodeError::Type(t),
-        PlayPacketError::ResourceLocation(r) => PacketDecodeError::ResourceLocation(r),
-        PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
-    }
-}
-
-impl Packet for ClientboundLoginPacket {
-    const PACKET_ID: i32 = 0x31;
-
-    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let player_id = types::read_i32(&mut data)?;
-        let hardcore = types::read_bool(&mut data)?;
-
-        let dim_count = varint::read_varint_buf(&mut data)? as usize;
-        let mut dimensions = Vec::with_capacity(dim_count);
-        for _ in 0..dim_count {
-            dimensions.push(ResourceLocation::read(&mut data)?);
-        }
-
-        let max_players = varint::read_varint_buf(&mut data)?;
-        let chunk_radius = varint::read_varint_buf(&mut data)?;
-        let simulation_distance = varint::read_varint_buf(&mut data)?;
-        let reduced_debug_info = types::read_bool(&mut data)?;
-        let show_death_screen = types::read_bool(&mut data)?;
-        let do_limited_crafting = types::read_bool(&mut data)?;
-        let common_spawn_info =
-            CommonPlayerSpawnInfo::decode(&mut data).map_err(play_error_to_packet_decode_error)?;
-        let enforces_secure_chat = types::read_bool(&mut data)?;
-
-        Ok(Self {
-            player_id,
-            hardcore,
-            dimensions,
-            max_players,
-            chunk_radius,
-            simulation_distance,
-            reduced_debug_info,
-            show_death_screen,
-            do_limited_crafting,
-            common_spawn_info,
-            enforces_secure_chat,
-        })
-    }
-
-    fn encode(&self) -> BytesMut {
-        self.encode()
-    }
-}
-
-/// Errors when decoding play-state packets.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum PlayPacketError {
-    /// Not enough data in the buffer.
-    #[error("unexpected end of packet data")]
-    UnexpectedEof,
-    /// Invalid VarInt encoding.
-    #[error("varint error: {0}")]
-    VarInt(#[from] varint::VarIntError),
-    /// Invalid type encoding.
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-    /// Invalid resource location.
-    #[error("resource location error: {0}")]
-    ResourceLocation(#[from] crate::types::resource_location::ResourceLocationError),
-    /// Invalid data format.
-    #[error("invalid data: {0}")]
-    InvalidData(String),
 }
 
 #[cfg(test)]
@@ -359,18 +283,5 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundLoginPacket::decode(encoded.freeze()).unwrap();
         assert!(decoded.hardcore);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = sample_login_packet();
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundLoginPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundLoginPacket as Packet>::PACKET_ID, 0x31);
     }
 }

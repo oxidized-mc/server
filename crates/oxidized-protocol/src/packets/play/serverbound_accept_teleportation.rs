@@ -19,24 +19,6 @@ pub struct ServerboundAcceptTeleportationPacket {
     pub teleport_id: i32,
 }
 
-impl ServerboundAcceptTeleportationPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x00;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, varint::VarIntError> {
-        let teleport_id = varint::read_varint_buf(&mut data)?;
-        Ok(Self { teleport_id })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(5);
-        varint::write_varint_buf(self.teleport_id, &mut buf);
-        buf
-    }
-}
-
 impl Packet for ServerboundAcceptTeleportationPacket {
     const PACKET_ID: i32 = 0x00;
 
@@ -46,7 +28,9 @@ impl Packet for ServerboundAcceptTeleportationPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(5);
+        varint::write_varint_buf(self.teleport_id, &mut buf);
+        buf
     }
 }
 
@@ -69,22 +53,5 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ServerboundAcceptTeleportationPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.teleport_id, 0);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ServerboundAcceptTeleportationPacket { teleport_id: 42 };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundAcceptTeleportationPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundAcceptTeleportationPacket as Packet>::PACKET_ID,
-            0x00
-        );
     }
 }

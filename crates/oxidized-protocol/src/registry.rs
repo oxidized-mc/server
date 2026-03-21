@@ -259,6 +259,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
+    use crate::codec::Packet;
 
     #[test]
     fn test_all_registries_loadable() {

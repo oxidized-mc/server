@@ -20,24 +20,6 @@ pub struct ClientboundChunkBatchFinishedPacket {
     pub batch_size: i32,
 }
 
-impl ClientboundChunkBatchFinishedPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x0B; // 11
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, varint::VarIntError> {
-        let batch_size = varint::read_varint_buf(&mut data)?;
-        Ok(Self { batch_size })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(5);
-        varint::write_varint_buf(self.batch_size, &mut buf);
-        buf
-    }
-}
-
 impl Packet for ClientboundChunkBatchFinishedPacket {
     const PACKET_ID: i32 = 0x0B;
 
@@ -47,7 +29,9 @@ impl Packet for ClientboundChunkBatchFinishedPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(5);
+        varint::write_varint_buf(self.batch_size, &mut buf);
+        buf
     }
 }
 
@@ -70,22 +54,5 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundChunkBatchFinishedPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.batch_size, 0);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundChunkBatchFinishedPacket { batch_size: 49 };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundChunkBatchFinishedPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundChunkBatchFinishedPacket as Packet>::PACKET_ID,
-            0x0B
-        );
     }
 }

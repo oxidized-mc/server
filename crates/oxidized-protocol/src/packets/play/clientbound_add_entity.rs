@@ -12,8 +12,6 @@ use crate::codec::lp_vec3;
 use crate::codec::types;
 use crate::codec::varint;
 
-use super::clientbound_login::PlayPacketError;
-
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 
@@ -64,57 +62,6 @@ pub struct ClientboundAddEntityPacket {
     pub data: i32,
 }
 
-impl ClientboundAddEntityPacket {
-    /// Packet ID in the PLAY state clientbound registry.
-    pub const PACKET_ID: i32 = 0x01;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let uuid = types::read_uuid(&mut data)?;
-        let entity_type = varint::read_varint_buf(&mut data)?;
-        let x = types::read_f64(&mut data)?;
-        let y = types::read_f64(&mut data)?;
-        let z = types::read_f64(&mut data)?;
-        let (vx, vy, vz) = lp_vec3::read(&mut data)?;
-        let x_rot = types::read_u8(&mut data)?;
-        let y_rot = types::read_u8(&mut data)?;
-        let y_head_rot = types::read_u8(&mut data)?;
-        let extra_data = varint::read_varint_buf(&mut data)?;
-
-        Ok(Self {
-            entity_id,
-            uuid,
-            entity_type,
-            x,
-            y,
-            z,
-            vx,
-            vy,
-            vz,
-            x_rot,
-            y_rot,
-            y_head_rot,
-            data: extra_data,
-        })
-    }
-
-    /// Encodes the packet body into `buf`.
-    pub fn encode(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.entity_id, buf);
-        types::write_uuid(buf, &self.uuid);
-        varint::write_varint_buf(self.entity_type, buf);
-        buf.put_f64(self.x);
-        buf.put_f64(self.y);
-        buf.put_f64(self.z);
-        lp_vec3::write(buf, self.vx, self.vy, self.vz);
-        buf.put_u8(self.x_rot);
-        buf.put_u8(self.y_rot);
-        buf.put_u8(self.y_head_rot);
-        varint::write_varint_buf(self.data, buf);
-    }
-}
-
 impl Packet for ClientboundAddEntityPacket {
     const PACKET_ID: i32 = 0x01;
 
@@ -150,7 +97,17 @@ impl Packet for ClientboundAddEntityPacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        self.encode(&mut buf);
+        varint::write_varint_buf(self.entity_id, &mut buf);
+        types::write_uuid(&mut buf, &self.uuid);
+        varint::write_varint_buf(self.entity_type, &mut buf);
+        buf.put_f64(self.x);
+        buf.put_f64(self.y);
+        buf.put_f64(self.z);
+        lp_vec3::write(&mut buf, self.vx, self.vy, self.vz);
+        buf.put_u8(self.x_rot);
+        buf.put_u8(self.y_rot);
+        buf.put_u8(self.y_head_rot);
+        varint::write_varint_buf(self.data, &mut buf);
         buf
     }
 }
@@ -163,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundAddEntityPacket::PACKET_ID, 0x01);
+        assert_eq!(<ClientboundAddEntityPacket as Packet>::PACKET_ID, 0x01);
     }
 
     #[test]
@@ -185,8 +142,7 @@ mod tests {
             data: 0,
         };
 
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
 
         assert_eq!(decoded.entity_id, 42);
@@ -220,40 +176,12 @@ mod tests {
             data: 0,
         };
 
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundAddEntityPacket::decode(buf.freeze()).unwrap();
 
         // LpVec3 is lossy — check within tolerance
         assert!((decoded.vx - 1.5).abs() < 0.1);
         assert!((decoded.vy - (-0.5)).abs() < 0.1);
         assert!((decoded.vz - 0.3).abs() < 0.1);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundAddEntityPacket {
-            entity_id: 42,
-            uuid: Uuid::nil(),
-            entity_type: 7,
-            x: 100.5,
-            y: 64.0,
-            z: -200.25,
-            vx: 0.0,
-            vy: 0.0,
-            vz: 0.0,
-            x_rot: 128,
-            y_rot: 64,
-            y_head_rot: 32,
-            data: 0,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundAddEntityPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundAddEntityPacket as Packet>::PACKET_ID, 0x01);
     }
 }

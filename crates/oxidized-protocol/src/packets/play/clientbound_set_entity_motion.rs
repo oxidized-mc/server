@@ -11,8 +11,6 @@ use bytes::{Bytes, BytesMut};
 use crate::codec::lp_vec3;
 use crate::codec::varint;
 
-use super::clientbound_login::PlayPacketError;
-
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 
@@ -37,9 +35,6 @@ pub struct ClientboundSetEntityMotionPacket {
 }
 
 impl ClientboundSetEntityMotionPacket {
-    /// Packet ID for `ClientboundSetEntityMotionPacket` in the PLAY state.
-    pub const PACKET_ID: i32 = 0x65;
-
     /// Creates a new set-entity-motion packet.
     pub fn new(entity_id: i32, vx: f64, vy: f64, vz: f64) -> Self {
         Self {
@@ -48,35 +43,6 @@ impl ClientboundSetEntityMotionPacket {
             vy,
             vz,
         }
-    }
-
-    /// Encodes this packet to its wire format.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PlayPacketError`] if encoding fails.
-    pub fn encode(&self) -> Result<Bytes, PlayPacketError> {
-        let mut buf = BytesMut::with_capacity(16);
-        varint::write_varint_buf(self.entity_id, &mut buf);
-        lp_vec3::write(&mut buf, self.vx, self.vy, self.vz);
-        Ok(buf.freeze())
-    }
-
-    /// Decodes a set-entity-motion packet from wire bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PlayPacketError`] if the data is malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let (vx, vy, vz) = lp_vec3::read(&mut data)
-            .map_err(|e| PlayPacketError::InvalidData(format!("movement: {e}")))?;
-        Ok(Self {
-            entity_id,
-            vx,
-            vy,
-            vz,
-        })
     }
 }
 
@@ -110,13 +76,16 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundSetEntityMotionPacket::PACKET_ID, 0x65);
+        assert_eq!(
+            <ClientboundSetEntityMotionPacket as Packet>::PACKET_ID,
+            0x65
+        );
     }
 
     #[test]
     fn test_encode_decode_roundtrip() {
         let packet = ClientboundSetEntityMotionPacket::new(42, 1.5, -0.08, 0.0);
-        let encoded = packet.encode().unwrap();
+        let encoded = packet.encode().freeze();
         let decoded = ClientboundSetEntityMotionPacket::decode(encoded).unwrap();
         assert_eq!(decoded.entity_id, 42);
         // LpVec3 has limited precision, so compare with tolerance.
@@ -128,31 +97,11 @@ mod tests {
     #[test]
     fn test_encode_decode_zero_velocity() {
         let packet = ClientboundSetEntityMotionPacket::new(1, 0.0, 0.0, 0.0);
-        let encoded = packet.encode().unwrap();
+        let encoded = packet.encode().freeze();
         let decoded = ClientboundSetEntityMotionPacket::decode(encoded).unwrap();
         assert_eq!(decoded.entity_id, 1);
         assert!(decoded.vx.abs() < 1e-5);
         assert!(decoded.vy.abs() < 1e-5);
         assert!(decoded.vz.abs() < 1e-5);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let packet = ClientboundSetEntityMotionPacket::new(42, 0.0, 0.0, 0.0);
-        let encoded = Packet::encode(&packet);
-        let decoded =
-            <ClientboundSetEntityMotionPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded.entity_id, 42);
-        assert!(decoded.vx.abs() < 1e-5);
-        assert!(decoded.vy.abs() < 1e-5);
-        assert!(decoded.vz.abs() < 1e-5);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundSetEntityMotionPacket as Packet>::PACKET_ID,
-            0x65
-        );
     }
 }

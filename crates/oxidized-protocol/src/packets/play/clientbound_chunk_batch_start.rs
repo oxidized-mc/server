@@ -17,21 +17,6 @@ use crate::codec::packet::PacketDecodeError;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClientboundChunkBatchStartPacket;
 
-impl ClientboundChunkBatchStartPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x0C; // 12
-
-    /// Decodes from the raw packet body.
-    pub fn decode(_data: Bytes) -> Self {
-        Self
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        BytesMut::new()
-    }
-}
-
 impl Packet for ClientboundChunkBatchStartPacket {
     const PACKET_ID: i32 = 0x0C;
 
@@ -40,7 +25,7 @@ impl Packet for ClientboundChunkBatchStartPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        BytesMut::new()
     }
 }
 
@@ -60,24 +45,7 @@ mod tests {
     fn test_roundtrip() {
         let pkt = ClientboundChunkBatchStartPacket;
         let encoded = pkt.encode();
-        let decoded = ClientboundChunkBatchStartPacket::decode(encoded.freeze());
+        let decoded = ClientboundChunkBatchStartPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundChunkBatchStartPacket;
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundChunkBatchStartPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundChunkBatchStartPacket as Packet>::PACKET_ID,
-            0x0C
-        );
     }
 }

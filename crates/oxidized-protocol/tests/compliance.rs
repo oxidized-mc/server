@@ -4,6 +4,7 @@
 
 use bytes::Bytes;
 
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::varint::{
     VARINT_MAX_BYTES, VARLONG_MAX_BYTES, decode_varint, decode_varlong, encode_varint,
     encode_varlong,

@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use oxidized_protocol::chat::Component;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
 use tracing::{debug, info, warn};

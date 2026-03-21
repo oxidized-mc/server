@@ -7,7 +7,6 @@ use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types::{read_string, write_string};
 use crate::codec::varint::{read_varint_buf, write_varint_buf};
-use crate::packets::play::PlayPacketError;
 
 /// 0x0F — Server returns tab-completion suggestions.
 #[derive(Debug, Clone)]
@@ -31,12 +30,42 @@ pub struct SuggestionEntry {
     pub tooltip: Option<Component>,
 }
 
-impl ClientboundCommandSuggestionsPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x0F;
+impl Packet for ClientboundCommandSuggestionsPacket {
+    const PACKET_ID: i32 = 0x0F;
 
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let id = read_varint_buf(&mut data)?;
+        let start = read_varint_buf(&mut data)?;
+        let length = read_varint_buf(&mut data)?;
+        let count = read_varint_buf(&mut data)?;
+        let mut suggestions = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            let text = read_string(&mut data, 32767)?;
+            let has_tooltip = if data.has_remaining() {
+                data.get_u8() != 0
+            } else {
+                false
+            };
+            let tooltip = if has_tooltip {
+                let json_str = read_string(&mut data, 262144)?;
+                let comp = serde_json::from_str(&json_str).map_err(|e| {
+                    PacketDecodeError::InvalidData(format!("invalid tooltip JSON: {e}"))
+                })?;
+                Some(comp)
+            } else {
+                None
+            };
+            suggestions.push(SuggestionEntry { text, tooltip });
+        }
+        Ok(Self {
+            id,
+            start,
+            length,
+            suggestions,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(256);
 
         write_varint_buf(self.id, &mut buf);
@@ -58,61 +87,6 @@ impl ClientboundCommandSuggestionsPacket {
         }
 
         buf
-    }
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PlayPacketError`] if the buffer is malformed or contains
-    /// invalid tooltip JSON.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let id = read_varint_buf(&mut data)?;
-        let start = read_varint_buf(&mut data)?;
-        let length = read_varint_buf(&mut data)?;
-        let count = read_varint_buf(&mut data)?;
-        let mut suggestions = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            let text = read_string(&mut data, 32767)?;
-            let has_tooltip = if data.has_remaining() {
-                data.get_u8() != 0
-            } else {
-                false
-            };
-            let tooltip = if has_tooltip {
-                let json_str = read_string(&mut data, 262144)?;
-                let comp = serde_json::from_str(&json_str).map_err(|e| {
-                    PlayPacketError::InvalidData(format!("invalid tooltip JSON: {e}"))
-                })?;
-                Some(comp)
-            } else {
-                None
-            };
-            suggestions.push(SuggestionEntry { text, tooltip });
-        }
-        Ok(Self {
-            id,
-            start,
-            length,
-            suggestions,
-        })
-    }
-}
-
-impl Packet for ClientboundCommandSuggestionsPacket {
-    const PACKET_ID: i32 = 0x0F;
-
-    fn decode(data: Bytes) -> Result<Self, PacketDecodeError> {
-        Self::decode(data).map_err(|e| match e {
-            PlayPacketError::VarInt(v) => PacketDecodeError::VarInt(v),
-            PlayPacketError::Type(t) => PacketDecodeError::Type(t),
-            PlayPacketError::ResourceLocation(r) => PacketDecodeError::ResourceLocation(r),
-            other => PacketDecodeError::InvalidData(other.to_string()),
-        })
-    }
-
-    fn encode(&self) -> BytesMut {
-        self.encode()
     }
 }
 

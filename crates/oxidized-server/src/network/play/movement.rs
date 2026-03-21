@@ -4,6 +4,7 @@
 //! and sends/forgets chunks when the player crosses chunk boundaries.
 
 use oxidized_game::player::movement::validate_movement;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::ConnectionError;
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,

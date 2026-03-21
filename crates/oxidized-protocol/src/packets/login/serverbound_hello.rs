@@ -3,20 +3,10 @@
 //! Corresponds to `net.minecraft.network.protocol.login.ServerboundHelloPacket`.
 
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{self, TypeError};
-
-/// Errors from decoding a [`ServerboundHelloPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum HelloError {
-    /// Type decode failure.
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-}
+use crate::codec::types;
 
 /// Serverbound packet `0x00` in the LOGIN state — login start.
 ///
@@ -30,31 +20,6 @@ pub struct ServerboundHelloPacket {
     pub profile_id: uuid::Uuid,
 }
 
-impl ServerboundHelloPacket {
-    /// Packet ID in the LOGIN state.
-    pub const PACKET_ID: i32 = 0x00;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`HelloError`] if the buffer is truncated or the string is
-    /// invalid.
-    pub fn decode(mut data: Bytes) -> Result<Self, HelloError> {
-        let name = types::read_string(&mut data, 16)?;
-        let profile_id = types::read_uuid(&mut data)?;
-        Ok(Self { name, profile_id })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        types::write_string(&mut buf, &self.name);
-        types::write_uuid(&mut buf, &self.profile_id);
-        buf
-    }
-}
-
 impl Packet for ServerboundHelloPacket {
     const PACKET_ID: i32 = 0x00;
 
@@ -65,7 +30,10 @@ impl Packet for ServerboundHelloPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        types::write_string(&mut buf, &self.name);
+        types::write_uuid(&mut buf, &self.profile_id);
+        buf
     }
 }
 
@@ -97,18 +65,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ServerboundHelloPacket {
-            name: "Steve".to_string(),
-            profile_id: uuid::Uuid::from_u128(0xCAFE),
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ServerboundHelloPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(<ServerboundHelloPacket as Packet>::PACKET_ID, 0x00);
     }
 }

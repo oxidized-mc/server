@@ -21,26 +21,6 @@ pub struct ClientboundSetChunkCacheCenterPacket {
     pub chunk_z: i32,
 }
 
-impl ClientboundSetChunkCacheCenterPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x5E; // 94
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, varint::VarIntError> {
-        let chunk_x = varint::read_varint_buf(&mut data)?;
-        let chunk_z = varint::read_varint_buf(&mut data)?;
-        Ok(Self { chunk_x, chunk_z })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(10);
-        varint::write_varint_buf(self.chunk_x, &mut buf);
-        varint::write_varint_buf(self.chunk_z, &mut buf);
-        buf
-    }
-}
-
 impl Packet for ClientboundSetChunkCacheCenterPacket {
     const PACKET_ID: i32 = 0x5E;
 
@@ -51,7 +31,10 @@ impl Packet for ClientboundSetChunkCacheCenterPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(10);
+        varint::write_varint_buf(self.chunk_x, &mut buf);
+        varint::write_varint_buf(self.chunk_z, &mut buf);
+        buf
     }
 }
 
@@ -81,25 +64,5 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSetChunkCacheCenterPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundSetChunkCacheCenterPacket {
-            chunk_x: 5,
-            chunk_z: -3,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSetChunkCacheCenterPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundSetChunkCacheCenterPacket as Packet>::PACKET_ID,
-            0x5E
-        );
     }
 }

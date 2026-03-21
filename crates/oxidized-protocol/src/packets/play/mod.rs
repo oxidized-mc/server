@@ -59,7 +59,7 @@ pub use clientbound_keep_alive::ClientboundKeepAlivePacket;
 pub use clientbound_level_chunk_with_light::{
     ChunkPacketData, ClientboundLevelChunkWithLightPacket, HeightmapEntry, LightUpdateData,
 };
-pub use clientbound_login::{ClientboundLoginPacket, CommonPlayerSpawnInfo, PlayPacketError};
+pub use clientbound_login::{ClientboundLoginPacket, CommonPlayerSpawnInfo};
 pub use clientbound_move_entity::{
     ClientboundMoveEntityPosPacket, ClientboundMoveEntityPosRotPacket,
     ClientboundMoveEntityRotPacket,

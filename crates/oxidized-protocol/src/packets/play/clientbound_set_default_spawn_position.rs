@@ -12,8 +12,6 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use crate::codec::types;
 use crate::types::resource_location::ResourceLocation;
 
-use super::clientbound_login::PlayPacketError;
-
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 
@@ -30,38 +28,6 @@ pub struct ClientboundSetDefaultSpawnPositionPacket {
     pub yaw: f32,
     /// Spawn pitch angle.
     pub pitch: f32,
-}
-
-impl ClientboundSetDefaultSpawnPositionPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x61; // 97
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let dimension = ResourceLocation::read(&mut data)?;
-        let pos = types::read_i64(&mut data)?;
-        if data.remaining() < 8 {
-            return Err(PlayPacketError::UnexpectedEof);
-        }
-        let yaw = data.get_f32();
-        let pitch = data.get_f32();
-        Ok(Self {
-            dimension,
-            pos,
-            yaw,
-            pitch,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(32);
-        self.dimension.write(&mut buf);
-        types::write_i64(&mut buf, self.pos);
-        buf.put_f32(self.yaw);
-        buf.put_f32(self.pitch);
-        buf
-    }
 }
 
 impl Packet for ClientboundSetDefaultSpawnPositionPacket {
@@ -86,7 +52,12 @@ impl Packet for ClientboundSetDefaultSpawnPositionPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(32);
+        self.dimension.write(&mut buf);
+        types::write_i64(&mut buf, self.pos);
+        buf.put_f32(self.yaw);
+        buf.put_f32(self.pitch);
+        buf
     }
 }
 
@@ -114,27 +85,5 @@ mod tests {
         assert_eq!(pos.z, -200);
         assert!((decoded.yaw - 90.0).abs() < f32::EPSILON);
         assert!((decoded.pitch).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundSetDefaultSpawnPositionPacket {
-            dimension: ResourceLocation::minecraft("overworld"),
-            pos: BlockPos::new(0, 64, 0).as_long(),
-            yaw: 0.0,
-            pitch: 0.0,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSetDefaultSpawnPositionPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundSetDefaultSpawnPositionPacket as Packet>::PACKET_ID,
-            0x61
-        );
     }
 }

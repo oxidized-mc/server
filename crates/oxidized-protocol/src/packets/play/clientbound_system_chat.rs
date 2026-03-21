@@ -5,7 +5,6 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use crate::chat::Component;
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::packets::play::PlayPacketError;
 
 /// 0x79 — System chat message (no signature, no player sender).
 #[derive(Debug, Clone)]
@@ -16,47 +15,11 @@ pub struct ClientboundSystemChatPacket {
     pub overlay: bool,
 }
 
-impl ClientboundSystemChatPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x79;
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(256);
-        write_component_nbt(&mut buf, &self.content);
-        buf.put_u8(u8::from(self.overlay));
-        buf
-    }
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is malformed or contains invalid NBT.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let content = read_component_nbt(&mut data)?;
-        let overlay = if data.has_remaining() {
-            data.get_u8() != 0
-        } else {
-            false
-        };
-        Ok(Self { content, overlay })
-    }
-}
-
 impl Packet for ClientboundSystemChatPacket {
     const PACKET_ID: i32 = 0x79;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let content = read_component_nbt(&mut data).map_err(|e| match e {
-            PlayPacketError::UnexpectedEof => {
-                PacketDecodeError::InvalidData("unexpected end of packet data".into())
-            },
-            PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
-            PlayPacketError::VarInt(e) => e.into(),
-            PlayPacketError::Type(e) => e.into(),
-            PlayPacketError::ResourceLocation(e) => e.into(),
-        })?;
+        let content = read_component_nbt(&mut data)?;
         let overlay = if data.has_remaining() {
             data.get_u8() != 0
         } else {
@@ -66,7 +29,10 @@ impl Packet for ClientboundSystemChatPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(256);
+        write_component_nbt(&mut buf, &self.content);
+        buf.put_u8(u8::from(self.overlay));
+        buf
     }
 }
 
@@ -96,15 +62,15 @@ pub fn write_component_nbt(buf: &mut BytesMut, component: &Component) {
 }
 
 /// Reads a [`Component`] from network NBT in the buffer.
-pub fn read_component_nbt(data: &mut Bytes) -> Result<Component, PlayPacketError> {
+pub fn read_component_nbt(data: &mut Bytes) -> Result<Component, PacketDecodeError> {
     let mut cursor = std::io::Cursor::new(data.as_ref());
     let mut acc = oxidized_nbt::NbtAccounter::unlimited();
     let compound = oxidized_nbt::read_network_nbt(&mut cursor, &mut acc)
-        .map_err(|e| PlayPacketError::InvalidData(format!("NBT decode error: {e}")))?;
+        .map_err(|e| PacketDecodeError::InvalidData(format!("NBT decode error: {e}")))?;
     let consumed = cursor.position() as usize;
     data.advance(consumed);
     Component::from_nbt(&oxidized_nbt::NbtTag::Compound(compound))
-        .map_err(|e| PlayPacketError::InvalidData(format!("component decode error: {e}")))
+        .map_err(|e| PacketDecodeError::InvalidData(format!("component decode error: {e}")))
 }
 
 #[cfg(test)]
@@ -114,7 +80,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundSystemChatPacket::PACKET_ID, 0x79);
+        assert_eq!(<ClientboundSystemChatPacket as Packet>::PACKET_ID, 0x79);
     }
 
     #[test]
@@ -154,22 +120,5 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSystemChatPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.content, pkt.content);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundSystemChatPacket {
-            content: Component::text("hello"),
-            overlay: false,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundSystemChatPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded.content, Component::text("hello"));
-        assert!(!decoded.overlay);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundSystemChatPacket as Packet>::PACKET_ID, 0x79);
     }
 }

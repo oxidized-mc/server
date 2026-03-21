@@ -5,35 +5,12 @@ use bytes::{Bytes, BytesMut};
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
-use crate::packets::play::PlayPacketError;
 
 /// 0x06 — Client acknowledges message chain offset.
 #[derive(Debug, Clone)]
 pub struct ServerboundChatAckPacket {
     /// Offset into the message chain being acknowledged.
     pub offset: i32,
-}
-
-impl ServerboundChatAckPacket {
-    /// Packet ID in the PLAY state serverbound registry.
-    pub const PACKET_ID: i32 = 0x06;
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let offset = varint::read_varint_buf(&mut data)?;
-        Ok(Self { offset })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(5);
-        varint::write_varint_buf(self.offset, &mut buf);
-        buf
-    }
 }
 
 impl Packet for ServerboundChatAckPacket {
@@ -45,7 +22,9 @@ impl Packet for ServerboundChatAckPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(5);
+        varint::write_varint_buf(self.offset, &mut buf);
+        buf
     }
 }
 
@@ -56,7 +35,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ServerboundChatAckPacket::PACKET_ID, 0x06);
+        assert_eq!(<ServerboundChatAckPacket as Packet>::PACKET_ID, 0x06);
     }
 
     #[test]

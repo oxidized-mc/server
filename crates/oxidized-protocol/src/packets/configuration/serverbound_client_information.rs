@@ -5,50 +5,15 @@
 //! wrapping `net.minecraft.server.level.ClientInformation`.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{self, TypeError};
+use crate::codec::types;
 use crate::codec::varint;
 use crate::types::{ChatVisibility, HumanoidArm, ParticleStatus};
 
 /// Maximum length of the language string (in characters).
 const MAX_LANGUAGE_LENGTH: usize = 16;
-
-/// Errors from decoding a [`ServerboundClientInformationPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum ClientInformationError {
-    /// A wire type could not be decoded.
-    #[error("{0}")]
-    Type(#[from] TypeError),
-
-    /// VarInt decoding failed.
-    #[error("varint error: {0}")]
-    VarInt(#[from] varint::VarIntError),
-
-    /// Invalid chat visibility value.
-    #[error("invalid chat visibility: {0}")]
-    InvalidChatVisibility(i32),
-
-    /// Invalid main hand value.
-    #[error("invalid main hand: {0}")]
-    InvalidMainHand(i32),
-
-    /// Invalid particle status value.
-    #[error("invalid particle status: {0}")]
-    InvalidParticleStatus(i32),
-
-    /// Not enough bytes remaining in the buffer.
-    #[error("unexpected end of buffer (need {need}, have {have})")]
-    UnexpectedEof {
-        /// Bytes needed.
-        need: usize,
-        /// Bytes remaining.
-        have: usize,
-    },
-}
 
 /// The client's display settings and preferences, sent during configuration.
 ///
@@ -98,37 +63,44 @@ impl ClientInformation {
     ///
     /// # Errors
     ///
-    /// Returns [`ClientInformationError`] if the buffer is truncated or
+    /// Returns [`PacketDecodeError`] if the buffer is truncated or
     /// contains invalid enum values.
-    pub fn read(buf: &mut Bytes) -> Result<Self, ClientInformationError> {
+    pub fn read(buf: &mut Bytes) -> Result<Self, PacketDecodeError> {
         let language = types::read_string(buf, MAX_LANGUAGE_LENGTH)?;
 
         if buf.remaining() < 1 {
-            return Err(ClientInformationError::UnexpectedEof { need: 1, have: 0 });
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected eof: need 1, have 0".to_string(),
+            ));
         }
         let view_distance = buf.get_i8();
 
         let chat_vis_id = varint::read_varint_buf(buf)?;
-        let chat_visibility = ChatVisibility::by_id(chat_vis_id)
-            .ok_or(ClientInformationError::InvalidChatVisibility(chat_vis_id))?;
+        let chat_visibility = ChatVisibility::by_id(chat_vis_id).ok_or_else(|| {
+            PacketDecodeError::InvalidData(format!("invalid chat visibility: {chat_vis_id}"))
+        })?;
 
         let chat_colors = types::read_bool(buf)?;
 
         if buf.remaining() < 1 {
-            return Err(ClientInformationError::UnexpectedEof { need: 1, have: 0 });
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected eof: need 1, have 0".to_string(),
+            ));
         }
         let model_customisation = buf.get_u8();
 
         let main_hand_id = varint::read_varint_buf(buf)?;
-        let main_hand = HumanoidArm::by_id(main_hand_id)
-            .ok_or(ClientInformationError::InvalidMainHand(main_hand_id))?;
+        let main_hand = HumanoidArm::by_id(main_hand_id).ok_or_else(|| {
+            PacketDecodeError::InvalidData(format!("invalid main hand: {main_hand_id}"))
+        })?;
 
         let text_filtering = types::read_bool(buf)?;
         let allows_listing = types::read_bool(buf)?;
 
         let particle_id = varint::read_varint_buf(buf)?;
-        let particle_status = ParticleStatus::by_id(particle_id)
-            .ok_or(ClientInformationError::InvalidParticleStatus(particle_id))?;
+        let particle_status = ParticleStatus::by_id(particle_id).ok_or_else(|| {
+            PacketDecodeError::InvalidData(format!("invalid particle status: {particle_id}"))
+        })?;
 
         Ok(Self {
             language,
@@ -168,43 +140,18 @@ pub struct ServerboundClientInformationPacket {
     pub information: ClientInformation,
 }
 
-impl ServerboundClientInformationPacket {
-    /// Packet ID in the CONFIGURATION state.
-    pub const PACKET_ID: i32 = 0x00;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ClientInformationError`] if the buffer is truncated or
-    /// contains invalid values.
-    pub fn decode(mut data: Bytes) -> Result<Self, ClientInformationError> {
-        let information = ClientInformation::read(&mut data)?;
-        Ok(Self { information })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        self.information.write(&mut buf);
-        buf
-    }
-}
-
 impl Packet for ServerboundClientInformationPacket {
     const PACKET_ID: i32 = 0x00;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let information = ClientInformation::read(&mut data).map_err(|e| match e {
-            ClientInformationError::Type(t) => PacketDecodeError::Type(t),
-            ClientInformationError::VarInt(v) => PacketDecodeError::VarInt(v),
-            other => PacketDecodeError::InvalidData(other.to_string()),
-        })?;
+        let information = ClientInformation::read(&mut data)?;
         Ok(Self { information })
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        self.information.write(&mut buf);
+        buf
     }
 }
 
@@ -270,8 +217,9 @@ mod tests {
         let pkt = ServerboundClientInformationPacket {
             information: default_info(),
         };
-        let encoded = pkt.encode();
-        let decoded = ServerboundClientInformationPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundClientInformationPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
@@ -280,8 +228,9 @@ mod tests {
         let pkt = ServerboundClientInformationPacket {
             information: custom_info(),
         };
-        let encoded = pkt.encode();
-        let decoded = ServerboundClientInformationPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundClientInformationPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 
@@ -292,8 +241,9 @@ mod tests {
         let pkt = ServerboundClientInformationPacket {
             information: custom_info(),
         };
-        let encoded = pkt.encode();
-        let decoded = ServerboundClientInformationPacket::decode(encoded.freeze()).unwrap();
+        let encoded = Packet::encode(&pkt);
+        let decoded =
+            <ServerboundClientInformationPacket as Packet>::decode(encoded.freeze()).unwrap();
         let info = &decoded.information;
         assert_eq!(info.language, "de_de");
         assert_eq!(info.view_distance, 16);
@@ -326,7 +276,10 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ServerboundClientInformationPacket::PACKET_ID, 0x00);
+        assert_eq!(
+            <ServerboundClientInformationPacket as Packet>::PACKET_ID,
+            0x00
+        );
     }
 
     // ── Error cases ─────────────────────────────────────────────────
@@ -334,7 +287,7 @@ mod tests {
     #[test]
     fn test_decode_empty_buffer() {
         let data = Bytes::new();
-        assert!(ServerboundClientInformationPacket::decode(data).is_err());
+        assert!(<ServerboundClientInformationPacket as Packet>::decode(data).is_err());
     }
 
     #[test]
@@ -344,7 +297,7 @@ mod tests {
         types::write_string(&mut buf, &info.language);
         // Missing everything after language
         let data = buf.freeze();
-        assert!(ServerboundClientInformationPacket::decode(data).is_err());
+        assert!(<ServerboundClientInformationPacket as Packet>::decode(data).is_err());
     }
 
     #[test]
@@ -359,11 +312,10 @@ mod tests {
         types::write_bool(&mut buf, false); // text_filtering
         types::write_bool(&mut buf, false); // allows_listing
         varint::write_varint_buf(0, &mut buf); // particle_status
-        let err = ServerboundClientInformationPacket::decode(buf.freeze()).unwrap_err();
-        assert!(matches!(
-            err,
-            ClientInformationError::InvalidChatVisibility(99)
-        ));
+        let err = <ServerboundClientInformationPacket as Packet>::decode(buf.freeze()).unwrap_err();
+        assert!(
+            matches!(err, PacketDecodeError::InvalidData(ref msg) if msg.contains("invalid chat visibility: 99"))
+        );
     }
 
     #[test]
@@ -378,8 +330,10 @@ mod tests {
         types::write_bool(&mut buf, false);
         types::write_bool(&mut buf, false);
         varint::write_varint_buf(0, &mut buf);
-        let err = ServerboundClientInformationPacket::decode(buf.freeze()).unwrap_err();
-        assert!(matches!(err, ClientInformationError::InvalidMainHand(42)));
+        let err = <ServerboundClientInformationPacket as Packet>::decode(buf.freeze()).unwrap_err();
+        assert!(
+            matches!(err, PacketDecodeError::InvalidData(ref msg) if msg.contains("invalid main hand: 42"))
+        );
     }
 
     #[test]
@@ -394,11 +348,10 @@ mod tests {
         types::write_bool(&mut buf, false);
         types::write_bool(&mut buf, false);
         varint::write_varint_buf(77, &mut buf); // invalid particle status
-        let err = ServerboundClientInformationPacket::decode(buf.freeze()).unwrap_err();
-        assert!(matches!(
-            err,
-            ClientInformationError::InvalidParticleStatus(77)
-        ));
+        let err = <ServerboundClientInformationPacket as Packet>::decode(buf.freeze()).unwrap_err();
+        assert!(
+            matches!(err, PacketDecodeError::InvalidData(ref msg) if msg.contains("invalid particle status: 77"))
+        );
     }
 
     // ── Negative view distance ──────────────────────────────────────
@@ -444,24 +397,5 @@ mod tests {
         let mut data = buf.freeze();
         let decoded = ClientInformation::read(&mut data).unwrap();
         assert_eq!(decoded.model_customisation, 0xFF);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ServerboundClientInformationPacket {
-            information: default_info(),
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundClientInformationPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundClientInformationPacket as Packet>::PACKET_ID,
-            0x00
-        );
     }
 }
