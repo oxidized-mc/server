@@ -15,7 +15,7 @@ use crate::anvil::AnvilError;
 /// Stores raw numeric IDs for game type and difficulty to avoid depending
 /// on protocol-layer enums. Convert to `GameType`/`Difficulty` at a higher
 /// layer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PrimaryLevelData {
     /// World display name.
     pub level_name: String,
@@ -165,6 +165,13 @@ impl PrimaryLevelData {
         // Write to temporary file first.
         oxidized_nbt::write_file(&tmp_path, &nbt)
             .map_err(|e| AnvilError::io(&tmp_path, std::io::Error::other(e.to_string())))?;
+
+        // Flush data to disk before renaming — ensures the temp file is fully
+        // persisted so a crash between rename and disk flush can't lose data.
+        let tmp_file = std::fs::File::open(&tmp_path).map_err(|e| AnvilError::io(&tmp_path, e))?;
+        tmp_file
+            .sync_all()
+            .map_err(|e| AnvilError::io(&tmp_path, e))?;
 
         // Back up the existing file.
         if path.exists() {

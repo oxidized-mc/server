@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use oxidized_types::ChunkPos;
-use oxidized_world::anvil::{compress_zlib, AnvilChunkLoader, ChunkSerializer, RegionFile};
+use oxidized_world::anvil::{AnvilChunkLoader, ChunkSerializer, RegionFile, compress_zlib};
 use oxidized_world::chunk::LevelChunk;
 use oxidized_world::registry::BlockRegistry;
 use oxidized_world::storage::{DirtyChunkTracker, PrimaryLevelData};

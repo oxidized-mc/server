@@ -23,7 +23,7 @@ use oxidized_protocol::constants;
 use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::{ServerStatus, StatusPlayers, StatusVersion};
 use oxidized_protocol::types::resource_location::ResourceLocation;
-use oxidized_world::storage::PrimaryLevelData;
+use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
@@ -136,9 +136,10 @@ fn main() -> anyhow::Result<()> {
         info!("RSA keypair generated");
 
         // Load world metadata from level.dat (or use defaults for new worlds).
-        let level_dat_path = format!("{}/level.dat", config.world.name);
-        let level_data = if std::path::Path::new(&level_dat_path).exists() {
-            match PrimaryLevelData::load(std::path::Path::new(&level_dat_path)) {
+        let storage = LevelStorageSource::new(&config.world.name);
+        let level_dat_path = storage.level_dat_path();
+        let level_data = if level_dat_path.exists() {
+            match PrimaryLevelData::load(&level_dat_path) {
                 Ok(data) => {
                     info!(world = %data.level_name, "Loaded level.dat");
                     data
@@ -183,7 +184,7 @@ fn main() -> anyhow::Result<()> {
             tick_rate_manager: parking_lot::RwLock::new(
                 oxidized_game::level::ServerTickRateManager::default(),
             ),
-            world_dir: config.world.name.clone(),
+            storage,
         });
 
         // Build the shared login context.
@@ -249,19 +250,12 @@ fn main() -> anyhow::Result<()> {
         let _ = shutdown_tx.send(());
 
         // Save level.dat on shutdown (ADR-030: graceful shutdown saves).
-        // Uses spawn_blocking to avoid blocking the async runtime (ADR-015).
+        // Uses the shared save helper which runs on a blocking thread (ADR-015).
         {
-            let level_dat_path = format!("{}/level.dat", shutdown_server_ctx.world_dir);
-            let level_data = shutdown_server_ctx.level_data.read().clone();
             info!("Saving level.dat...");
-            let result = tokio::task::spawn_blocking(move || {
-                level_data.save(std::path::Path::new(&level_dat_path))
-            })
-            .await;
-            match result {
-                Ok(Ok(())) => info!("level.dat saved successfully"),
-                Ok(Err(e)) => error!(error = %e, "Failed to save level.dat on shutdown"),
-                Err(e) => error!(error = %e, "Shutdown save task panicked"),
+            match tick::save_level_dat(&shutdown_server_ctx).await {
+                Ok(()) => info!("level.dat saved successfully"),
+                Err(e) => error!(error = %e, "Failed to save level.dat on shutdown"),
             }
         }
 

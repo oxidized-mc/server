@@ -25,7 +25,7 @@ use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState
 use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::ServerStatus;
 use oxidized_protocol::types::resource_location::ResourceLocation;
-use oxidized_world::storage::PrimaryLevelData;
+use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
@@ -82,8 +82,8 @@ pub struct ServerContext {
     pub game_rules: RwLock<GameRules>,
     /// Tick rate manager — controls freeze/step/sprint.
     pub tick_rate_manager: RwLock<ServerTickRateManager>,
-    /// World directory name (e.g., `"world"`).
-    pub world_dir: String,
+    /// World storage source — resolves paths to level.dat, region dirs, etc.
+    pub storage: LevelStorageSource,
 }
 
 impl ServerHandle for ServerContext {
@@ -497,7 +497,7 @@ mod tests {
                 tick_rate_manager: RwLock::new(
                     oxidized_game::level::ServerTickRateManager::default(),
                 ),
-                world_dir: String::new(),
+                storage: LevelStorageSource::new(""),
             }),
         })
     }

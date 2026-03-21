@@ -553,35 +553,35 @@ impl PalettedContainer {
     /// - For Global: all values collected into a fresh palette + repacked storage.
     #[must_use]
     pub fn to_nbt_data(&self) -> (Vec<u32>, Vec<i64>) {
+        /// Helper: extract entries + raw longs from any palette+storage pair.
+        fn palette_and_storage(entries: &[u32], storage: &BitStorage) -> (Vec<u32>, Vec<i64>) {
+            let longs: Vec<i64> = storage.raw().iter().map(|&v| v as i64).collect();
+            (entries.to_vec(), longs)
+        }
+
         match &self.data {
-            PaletteData::Single(palette) => {
-                (vec![palette.value().unwrap_or(0)], Vec::new())
-            },
+            PaletteData::Single(palette) => (vec![palette.value().unwrap_or(0)], Vec::new()),
             PaletteData::Linear(palette, storage) => {
-                let entries = palette.entries().to_vec();
-                let longs: Vec<i64> = storage.raw().iter().map(|&v| v as i64).collect();
-                (entries, longs)
+                palette_and_storage(palette.entries(), storage)
             },
             PaletteData::HashMap(palette, storage) => {
-                let entries = palette.entries().to_vec();
-                let longs: Vec<i64> = storage.raw().iter().map(|&v| v as i64).collect();
-                (entries, longs)
+                palette_and_storage(palette.entries(), storage)
             },
             PaletteData::Global(storage) => {
-                // Re-palette global data: collect all values, build a compact palette
+                // Re-palette global data: collect all values, build a compact palette.
+                // Uses a HashMap for O(1) dedup instead of O(n) linear scan.
                 let size = self.strategy.size();
                 let mut seen = Vec::new();
+                let mut seen_map = std::collections::HashMap::<u32, usize>::new();
                 let mut indices = Vec::with_capacity(size);
                 for i in 0..size {
                     #[allow(clippy::cast_possible_truncation)]
                     let val = storage.get(i).unwrap_or(0) as u32;
-                    let idx = match seen.iter().position(|&v| v == val) {
-                        Some(pos) => pos,
-                        None => {
-                            seen.push(val);
-                            seen.len() - 1
-                        },
-                    };
+                    let idx = *seen_map.entry(val).or_insert_with(|| {
+                        let pos = seen.len();
+                        seen.push(val);
+                        pos
+                    });
                     indices.push(idx);
                 }
 
