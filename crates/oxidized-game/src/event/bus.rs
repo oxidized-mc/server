@@ -149,10 +149,7 @@ mod tests {
     #[test]
     fn test_subscribe_and_fire_allow() {
         let bus = EventBus::new();
-        bus.subscribe(
-            EventKind::PlayerChat,
-            Box::new(|_| EventResult::Allow),
-        );
+        bus.subscribe(EventKind::PlayerChat, Box::new(|_| EventResult::Allow));
         assert_eq!(bus.fire(&chat_event("hello")), EventResult::Allow);
     }
 
@@ -180,10 +177,7 @@ mod tests {
         let counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
 
         // First handler denies everything.
-        bus.subscribe(
-            EventKind::PlayerChat,
-            Box::new(|_| EventResult::Deny),
-        );
+        bus.subscribe(EventKind::PlayerChat, Box::new(|_| EventResult::Deny));
 
         // Second handler should never run.
         let c = Arc::clone(&counter);
@@ -202,10 +196,7 @@ mod tests {
     #[test]
     fn test_unsubscribe_removes_handler() {
         let bus = EventBus::new();
-        let id = bus.subscribe(
-            EventKind::PlayerChat,
-            Box::new(|_| EventResult::Deny),
-        );
+        let id = bus.subscribe(EventKind::PlayerChat, Box::new(|_| EventResult::Deny));
         assert_eq!(bus.handler_count(EventKind::PlayerChat), 1);
 
         assert!(bus.unsubscribe(EventKind::PlayerChat, id));
@@ -216,10 +207,7 @@ mod tests {
     #[test]
     fn test_unsubscribe_wrong_kind_returns_false() {
         let bus = EventBus::new();
-        let id = bus.subscribe(
-            EventKind::PlayerChat,
-            Box::new(|_| EventResult::Allow),
-        );
+        let id = bus.subscribe(EventKind::PlayerChat, Box::new(|_| EventResult::Allow));
         assert!(!bus.unsubscribe(EventKind::PlayerJoin, id));
         assert_eq!(bus.handler_count(EventKind::PlayerChat), 1);
     }
@@ -233,10 +221,7 @@ mod tests {
     #[test]
     fn test_different_kinds_are_independent() {
         let bus = EventBus::new();
-        bus.subscribe(
-            EventKind::PlayerJoin,
-            Box::new(|_| EventResult::Deny),
-        );
+        bus.subscribe(EventKind::PlayerJoin, Box::new(|_| EventResult::Deny));
         // PlayerJoin handler should not affect PlayerChat events.
         assert_eq!(bus.fire(&chat_event("hello")), EventResult::Allow);
     }
