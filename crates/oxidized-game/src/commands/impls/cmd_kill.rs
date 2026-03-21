@@ -3,8 +3,8 @@
 //! TODO: Actually killing entities requires health/damage system and death
 //! event handling. Needs `ServerHandle::kill_entity()` or similar.
 
-use crate::commands::arguments::ArgumentType;
 use crate::commands::argument_access::get_entities;
+use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};

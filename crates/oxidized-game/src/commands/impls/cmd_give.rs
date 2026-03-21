@@ -4,8 +4,8 @@
 //! item stack creation from registry ID, and `ClientboundContainerSetSlotPacket`
 //! to sync the slot to the client.
 
-use crate::commands::arguments::ArgumentType;
 use crate::commands::argument_access::{get_entities, get_integer, get_string};
+use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};

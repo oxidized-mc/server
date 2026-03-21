@@ -17,11 +17,11 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
+use super::compression::{CompressionError, CompressionState};
+use super::crypto::CipherState;
 use crate::codec::frame::{self, FrameError, MAX_PACKET_SIZE};
 use crate::codec::packet::{Packet, PacketDecodeError};
 use crate::codec::varint::{self, VarIntError};
-use super::compression::{CompressionError, CompressionState};
-use super::crypto::CipherState;
 
 // ---------------------------------------------------------------------------
 // ConnectionState

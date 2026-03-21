@@ -1,14 +1,14 @@
 //! Command dispatcher: parse input against the graph, execute, and suggest.
 
 use crate::commands::CommandError;
+use crate::commands::argument_parser::parse_argument;
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::{
     CommandContext, ParseResults, ParsedArgument, StringRange, Suggestion,
 };
-use crate::commands::argument_parser::parse_argument;
-use crate::commands::string_reader::StringReader;
 use crate::commands::nodes::{CommandNode, LiteralBuilder, RootCommandNode};
 use crate::commands::serializer::{CommandTreeData, serialize_tree};
+use crate::commands::string_reader::StringReader;
 use std::collections::HashMap;
 
 /// The top-level command dispatcher holding the full command graph.
@@ -334,8 +334,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use crate::commands::arguments::{ArgumentType, StringKind};
     use crate::commands::argument_access::get_integer;
+    use crate::commands::arguments::{ArgumentType, StringKind};
     use crate::commands::nodes::{CommandNode, argument, literal};
     use crate::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
     use oxidized_protocol::chat::Component;

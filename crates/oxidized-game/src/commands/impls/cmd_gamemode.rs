@@ -4,8 +4,8 @@
 //! `ServerPlayer.game_mode`, syncing abilities, and sending
 //! `ClientboundGameEventPacket` to the client. Not yet available.
 
-use crate::commands::arguments::ArgumentType;
 use crate::commands::argument_access::{get_entities, get_gamemode};
+use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};

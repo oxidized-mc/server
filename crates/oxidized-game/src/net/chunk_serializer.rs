@@ -67,9 +67,9 @@ fn build_heightmap_entries(chunk: &LevelChunk) -> Vec<HeightmapEntry> {
 mod tests {
     use super::*;
     use oxidized_protocol::codec::Packet;
-    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
     use oxidized_world::chunk::ChunkPos;
-        use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
+    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
+    use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
 
     #[test]
     fn test_empty_chunk_packet() {
