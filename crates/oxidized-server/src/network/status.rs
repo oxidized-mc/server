@@ -3,7 +3,6 @@
 //! Responds to server list ping requests with the server's current status
 //! (player count, version, MOTD) and echoes pong packets.
 
-use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, RawPacket};
 use oxidized_protocol::packets::status::{
     ClientboundPongResponsePacket, ClientboundStatusResponsePacket, ServerboundPingRequestPacket,

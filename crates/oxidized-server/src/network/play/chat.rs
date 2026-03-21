@@ -22,11 +22,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
             content: Component::text("You are sending messages too quickly"),
             overlay: false,
         };
-        let _ = ctx
-            .conn
-            .send_raw(ClientboundSystemChatPacket::PACKET_ID, &kick_msg.encode())
-            .await;
-        let _ = ctx.conn.flush().await;
+        let _ = ctx.conn.send_packet(&kick_msg).await;
         return Ok(());
     }
 
@@ -110,10 +106,7 @@ pub async fn handle_chat_command(
                 content: Component::text(format!("{e}")),
                 overlay: false,
             };
-            let _ = conn
-                .send_raw(ClientboundSystemChatPacket::PACKET_ID, &err_msg.encode())
-                .await;
-            let _ = conn.flush().await;
+            let _ = conn.send_packet(&err_msg).await;
             debug!(player = %player_name, command = %command, error = %e, "Command failed");
         },
     }

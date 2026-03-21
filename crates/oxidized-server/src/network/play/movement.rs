@@ -16,8 +16,6 @@ use tracing::{debug, trace};
 
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 
-use crate::network::helpers::decode_packet;
-
 use super::PlayContext;
 
 /// Handles a movement packet (position, rotation, or both).
@@ -35,8 +33,17 @@ pub async fn handle_movement(
         _ => ServerboundMovePlayerPacket::decode_status_only(data),
     };
 
-    let Ok(move_pkt) = decode_packet(decode_result, ctx.addr, ctx.player_name, "MovePlayer") else {
-        return Ok(());
+    let move_pkt = match decode_result {
+        Ok(pkt) => pkt,
+        Err(e) => {
+            debug!(
+                peer = %ctx.addr,
+                name = %ctx.player_name,
+                error = %e,
+                "Failed to decode MovePlayer",
+            );
+            return Ok(());
+        },
     };
 
     if move_pkt.contains_invalid_values() {
@@ -76,13 +83,7 @@ pub async fn handle_movement(
                 relative_flags: RelativeFlags::empty(),
             }
         };
-        ctx.conn
-            .send_raw(
-                ClientboundPlayerPositionPacket::PACKET_ID,
-                &correction.encode(),
-            )
-            .await?;
-        ctx.conn.flush().await?;
+        ctx.conn.send_packet(&correction).await?;
         debug!(peer = %ctx.addr, name = %ctx.player_name, "Position correction sent");
     } else {
         {
