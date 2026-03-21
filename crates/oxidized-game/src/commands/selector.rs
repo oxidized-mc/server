@@ -6,7 +6,7 @@
 //! `advancements`) are parsed and stored but not yet applied during resolution.
 
 use crate::commands::CommandError;
-use crate::commands::context::parse_range;
+use crate::commands::argument_parser::parse_range;
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
 use rand::RngExt;
 use std::str::FromStr;

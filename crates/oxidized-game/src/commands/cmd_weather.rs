@@ -5,7 +5,8 @@
 
 use crate::commands::CommandError;
 use crate::commands::arguments::ArgumentType;
-use crate::commands::context::{CommandContext, get_time};
+use crate::commands::context::CommandContext;
+use crate::commands::argument_access::get_time;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
