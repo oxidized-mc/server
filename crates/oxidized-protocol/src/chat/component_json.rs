@@ -250,7 +250,7 @@ mod tests {
         let c = Component::text("click me").click(ClickEvent::RunCommand("/home".into()));
         let json: serde_json::Value = serde_json::from_str(&c.to_json().unwrap()).unwrap();
         assert_eq!(json["click_event"]["action"], "run_command");
-        assert_eq!(json["click_event"]["value"], "/home");
+        assert_eq!(json["click_event"]["command"], "/home");
     }
 
     #[test]
