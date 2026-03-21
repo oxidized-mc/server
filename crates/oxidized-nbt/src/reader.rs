@@ -224,9 +224,7 @@ fn read_typed_array<R: Read, T>(
         elem_size
             .checked_mul(len)
             .and_then(|v| v.checked_add(24))
-            .ok_or_else(|| {
-                NbtError::InvalidFormat(format!("{type_name} array size overflow"))
-            })?,
+            .ok_or_else(|| NbtError::InvalidFormat(format!("{type_name} array size overflow")))?,
     )?;
     let mut arr = Vec::with_capacity(len);
     for _ in 0..len {

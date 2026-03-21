@@ -25,7 +25,9 @@ macro_rules! impl_empty_packet {
         impl $crate::codec::Packet for $name {
             const PACKET_ID: i32 = $id;
 
-            fn decode(_data: ::bytes::Bytes) -> Result<Self, $crate::codec::packet::PacketDecodeError> {
+            fn decode(
+                _data: ::bytes::Bytes,
+            ) -> Result<Self, $crate::codec::packet::PacketDecodeError> {
                 Ok(Self)
             }
 
