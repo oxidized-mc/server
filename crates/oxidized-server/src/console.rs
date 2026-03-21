@@ -89,9 +89,7 @@ pub fn run_console_loop(server_ctx: Arc<ServerContext>) {
         server_ctx: server_ctx.clone(),
     };
 
-    let config = rustyline::Config::builder()
-        .auto_add_history(true)
-        .build();
+    let config = rustyline::Config::builder().auto_add_history(true).build();
 
     let mut rl = match Editor::with_config(config) {
         Ok(editor) => editor,

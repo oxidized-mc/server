@@ -209,12 +209,10 @@ mod tests {
             .color(TextColor::Named(ChatFormatting::Gold))
             .click(ClickEvent::SuggestCommand("/test ".to_string()))
             .hover(HoverEvent::ShowText(Box::new(
-                Component::text("A test command")
-                    .color(TextColor::Named(ChatFormatting::Yellow)),
+                Component::text("A test command").color(TextColor::Named(ChatFormatting::Yellow)),
             )))
             .append(
-                Component::text(" - A test command")
-                    .color(TextColor::Named(ChatFormatting::White)),
+                Component::text(" - A test command").color(TextColor::Named(ChatFormatting::White)),
             );
 
         let tag = entry.to_nbt();
