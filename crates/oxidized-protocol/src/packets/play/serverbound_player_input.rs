@@ -235,10 +235,10 @@ mod tests {
         };
         let encoded = Packet::encode(&pkt);
         let decoded = <ServerboundPlayerInputPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded.input.forward, true);
-        assert_eq!(decoded.input.shift, true);
-        assert_eq!(decoded.input.backward, false);
-        assert_eq!(decoded.input.sprint, false);
+        assert!(decoded.input.forward);
+        assert!(decoded.input.shift);
+        assert!(!decoded.input.backward);
+        assert!(!decoded.input.sprint);
     }
 
     #[test]
