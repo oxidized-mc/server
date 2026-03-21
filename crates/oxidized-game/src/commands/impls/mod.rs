@@ -16,6 +16,7 @@ mod cmd_say;
 mod cmd_seed;
 mod cmd_setblock;
 mod cmd_stop;
+mod cmd_tick;
 mod cmd_time;
 mod cmd_tp;
 mod cmd_weather;
@@ -42,5 +43,6 @@ pub(crate) fn register_all(d: &mut CommandDispatcher<CommandSourceStack>) {
     cmd_setblock::register(d);
     cmd_effect::register(d);
     cmd_gamerule::register(d);
+    cmd_tick::register(d);
     stubs::register_all(d);
 }

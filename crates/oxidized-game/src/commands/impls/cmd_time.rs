@@ -1,10 +1,8 @@
 //! `/time` command — query or set the world time.
 //!
 //! Query subcommands use real data from `ServerHandle`. Set/add subcommands
-//! send translatable feedback but cannot yet modify the world time.
-//!
-//! TODO: Modifying time requires wrapping `PrimaryLevelData` in a `RwLock`
-//! and broadcasting time update packets to all connected clients.
+//! actually modify the world time via `ServerHandle::set_day_time` /
+//! `add_day_time`.
 
 use crate::commands::CommandError;
 use crate::commands::argument_access::get_time;
@@ -31,7 +29,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     .then(argument("time", ArgumentType::Time { min: 0 }).executes(
                         |ctx: &CommandContext<CommandSourceStack>| {
                             let t = get_time(ctx, "time")?;
-                            // TODO: Actually set the world time
+                            ctx.source.server.set_day_time(i64::from(t));
                             ctx.source.send_success(
                                 &Component::translatable(
                                     "commands.time.set",
@@ -48,7 +46,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                 literal("add").then(argument("time", ArgumentType::Time { min: 0 }).executes(
                     |ctx: &CommandContext<CommandSourceStack>| {
                         let t = get_time(ctx, "time")?;
-                        // TODO: Actually add to the world time
+                        ctx.source.server.add_day_time(i64::from(t));
                         ctx.source.send_success(
                             &Component::translatable(
                                 "commands.time.set",
@@ -115,7 +113,7 @@ fn set_time_fn(
 ) -> impl Fn(&CommandContext<CommandSourceStack>) -> Result<i32, CommandError> + Send + Sync + 'static
 {
     move |ctx| {
-        // TODO: Actually set the world time
+        ctx.source.server.set_day_time(i64::from(ticks));
         ctx.source.send_success(
             &Component::translatable(
                 "commands.time.set",

@@ -1690,3 +1690,68 @@ renames fields for old data:
 - `crates/oxidized-protocol/src/chat/component_json.rs` — Test assertion updated
 - `crates/oxidized-protocol/src/chat/component_nbt.rs` — Debug test cleaned up
 
+---
+
+### Phase 19 — World Ticking (2025)
+
+#### Summary
+
+Added the 20 TPS tick loop, day/night cycle, weather transitions, game rules,
+scheduled block ticking infrastructure, and `/tick` command family. Completed the
+`/time set|add`, `/weather`, and `/gamerule` commands that were previously stubs.
+
+#### Key Learnings
+
+- **26.1 `ClientboundSetTimePacket` changed format**: Now uses `i64 gameTime` +
+  `Map<Holder<WorldClock>, ClockNetworkState>` instead of old `gameTime + dayTime`.
+  Holder encoding: VarInt where 0=inline, N+1=registry ref by network ID N.
+  WorldClock registry: `minecraft:overworld`=0, `minecraft:the_end`=1.
+- **Packet IDs shifted by BundleDelimiter**: SetTime=0x71, TickingState=0x7F,
+  TickingStep=0x80. Count from `withBundlePacket()` at ID 0x00.
+- **VarLong was missing from varint module**: Had to use local helper in SetTimePacket.
+  The `varint.rs` module does have `encode_varlong`/`decode_varlong` but they use
+  `&[u8]` not `Bytes/BytesMut`.
+- **`level_data` wrapped in `parking_lot::RwLock`**: Required for tick loop to modify
+  time/weather concurrently with connection handlers reading it. All access sites
+  updated to `.read()` / `.write()`.
+- **`ServerHandle` trait extended with default impls**: 14 new methods for time, weather,
+  game rules, and tick rate control — all with default no-op impls for backward compat.
+- **Broadcast channel reuse**: `chat_tx` (ChatBroadcastMessage) carries any pre-encoded
+  packet, not just chat. Time, weather, and tick state packets broadcast through it.
+
+#### Architecture Decisions
+
+- **GameRules in `oxidized-game::level::game_rules`** — per-level concept, 42 vanilla
+  rules with typed bool/int storage and camelCase name mapping.
+- **ServerTickRateManager** — freeze/step/sprint state machine, mirrors vanilla's
+  `ServerTickRateManager`.
+- **LevelTicks<T>** — BinaryHeap + HashSet dedup for scheduled block/fluid ticks,
+  ordered by (trigger_time, priority, sub_tick).
+- **Tick loop as Tokio task** — `tokio::time::interval` with `MissedTickBehavior::Skip`,
+  broadcasts `ClientboundSetTimePacket` every 20 ticks.
+
+#### Files Created
+
+- `crates/oxidized-protocol/src/packets/play/clientbound_set_time.rs`
+- `crates/oxidized-protocol/src/packets/play/clientbound_ticking_state.rs`
+- `crates/oxidized-protocol/src/packets/play/clientbound_ticking_step.rs`
+- `crates/oxidized-game/src/level/game_rules.rs`
+- `crates/oxidized-game/src/level/tick_rate.rs`
+- `crates/oxidized-game/src/level/scheduled_tick.rs`
+- `crates/oxidized-game/src/commands/impls/cmd_tick.rs`
+- `crates/oxidized-server/src/tick.rs`
+
+#### Files Modified
+
+- `crates/oxidized-protocol/src/packets/play/mod.rs` — 3 new packet modules + re-exports
+- `crates/oxidized-game/src/level/mod.rs` — 3 new submodules + re-exports
+- `crates/oxidized-game/src/commands/source.rs` — 14 new ServerHandle methods
+- `crates/oxidized-game/src/commands/impls/mod.rs` — cmd_tick registration
+- `crates/oxidized-game/src/commands/impls/stubs.rs` — removed tick stub
+- `crates/oxidized-game/src/commands/impls/cmd_time.rs` — set/add now functional
+- `crates/oxidized-game/src/commands/impls/cmd_weather.rs` — clear/rain/thunder functional
+- `crates/oxidized-game/src/commands/impls/cmd_gamerule.rs` — get/set functional
+- `crates/oxidized-server/src/main.rs` — tick loop spawn, new ServerContext fields
+- `crates/oxidized-server/src/network/mod.rs` — level_data RwLock, game_rules, tick_rate_manager
+- `crates/oxidized-server/src/network/play/mod.rs` — .read() for level_data access
+
