@@ -99,7 +99,7 @@ impl ServerLevel {
     /// Returns [`LevelError::ChunkNotLoaded`] if the chunk is not in the cache.
     /// Returns [`LevelError::Chunk`] if the position is out of bounds within the chunk.
     pub fn get_block_state_loaded(&self, pos: BlockPos) -> Result<u32, LevelError> {
-        let cpos = ChunkPos::from_block(pos.x, pos.z);
+        let cpos = ChunkPos::from_block_coords(pos.x, pos.z);
         let cache = self.chunk_cache.lock();
         let arc = cache.peek(&cpos).ok_or(LevelError::ChunkNotLoaded {
             chunk_x: cpos.x,
@@ -121,7 +121,7 @@ impl ServerLevel {
         state: u32,
         flags: BlockFlags,
     ) -> Result<u32, LevelError> {
-        let cpos = ChunkPos::from_block(pos.x, pos.z);
+        let cpos = ChunkPos::from_block_coords(pos.x, pos.z);
         let cache = self.chunk_cache.lock();
         let arc = cache.peek(&cpos).ok_or(LevelError::ChunkNotLoaded {
             chunk_x: cpos.x,
@@ -278,7 +278,7 @@ mod tests {
         assert_eq!(level.get_block_state_loaded(pos).unwrap(), 0); // now air
 
         let dirty = level.drain_dirty_chunks();
-        assert!(dirty.contains(&ChunkPos::from_block(0, 0)));
+        assert!(dirty.contains(&ChunkPos::from_block_coords(0, 0)));
 
         // After draining, dirty set is empty.
         let dirty2 = level.drain_dirty_chunks();

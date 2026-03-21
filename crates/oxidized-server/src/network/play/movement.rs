@@ -112,7 +112,7 @@ pub async fn handle_movement(
 
         // Check if player crossed a chunk boundary.
         if move_pkt.has_pos() {
-            let new_chunk = ChunkPos::from_block(
+            let new_chunk = ChunkPos::from_block_coords(
                 result.new_pos.x.floor() as i32,
                 result.new_pos.z.floor() as i32,
             );

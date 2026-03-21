@@ -25,7 +25,7 @@ use oxidized_protocol::packets::play::{
     ClientboundSetSimulationDistancePacket,
 };
 use oxidized_protocol::types::ResourceLocation;
-use oxidized_world::chunk::level_chunk::ChunkPos;
+use oxidized_world::chunk::ChunkPos;
 use oxidized_world::chunk::{DataLayer, LevelChunk};
 use oxidized_world::storage::PrimaryLevelData;
 use uuid::Uuid;

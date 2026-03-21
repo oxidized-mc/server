@@ -6,6 +6,7 @@ members = [
     "crates/oxidized-world",
     "crates/oxidized-game",
     "crates/oxidized-macros",
+    "crates/oxidized-types",
 ]
 resolver = "2"
 
@@ -94,6 +95,7 @@ oxidized-nbt      = { path = "crates/oxidized-nbt" }
 oxidized-world    = { path = "crates/oxidized-world" }
 oxidized-game     = { path = "crates/oxidized-game" }
 oxidized-macros   = { path = "crates/oxidized-macros" }
+oxidized-types    = { path = "crates/oxidized-types" }
 
 [profile.release]
 opt-level     = 3

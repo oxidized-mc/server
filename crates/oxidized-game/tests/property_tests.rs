@@ -10,7 +10,7 @@ use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload, spiral_chunks};
 use oxidized_game::net::light_serializer::build_light_data;
 use oxidized_world::chunk::DataLayer;
-use oxidized_world::chunk::level_chunk::ChunkPos;
+use oxidized_world::chunk::ChunkPos;
 
 proptest! {
     /// Spiral chunk count is always (2r+1)² for any center and radius.
