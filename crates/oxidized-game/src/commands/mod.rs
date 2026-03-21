@@ -5,6 +5,8 @@
 //! wire format. Commands are registered via a fluent builder API and
 //! executed by parsing player input against the graph.
 
+pub mod argument_access;
+pub mod argument_parser;
 pub mod arguments;
 pub mod context;
 pub mod coordinates;
@@ -14,6 +16,7 @@ pub mod pagination;
 pub mod selector;
 pub mod serializer;
 pub mod source;
+pub mod string_reader;
 mod stubs;
 
 // Implemented command modules
@@ -34,6 +37,11 @@ mod cmd_time;
 mod cmd_tp;
 mod cmd_weather;
 
+pub use argument_access::{
+    get_block_pos, get_bool, get_double, get_entities, get_entity, get_float, get_game_profile,
+    get_gamemode, get_integer, get_long, get_string, get_time, get_vec3,
+};
+pub use argument_parser::parse_argument;
 pub use arguments::{ArgumentType, StringKind};
 pub use context::{CommandContext, ParsedArgument, StringRange};
 pub use coordinates::{CoordinateKind, Coordinates, EntityAnchorKind, WorldCoordinate};
@@ -43,6 +51,7 @@ pub use pagination::PaginatedMessage;
 pub use selector::{EntitySelector, SelectorFilters, SelectorKind, SelectorTarget};
 pub use serializer::{CommandNodeData, CommandTreeData};
 pub use source::{CommandSourceKind, CommandSourceStack};
+pub use string_reader::StringReader;
 
 /// The command system hub: registers all commands, provides dispatch and
 /// tab-completion, and serializes the command tree for the client.

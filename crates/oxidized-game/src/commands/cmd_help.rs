@@ -5,7 +5,8 @@
 //! (shows the description). Pages are navigated via clickable prev/next.
 
 use crate::commands::arguments::ArgumentType;
-use crate::commands::context::{CommandContext, get_integer};
+use crate::commands::argument_access::get_integer;
+use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::pagination::PaginatedMessage;

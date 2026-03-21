@@ -8,7 +8,7 @@
 //! The `^` form cannot be mixed with `~` or absolute coordinates.
 
 use crate::commands::CommandError;
-use crate::commands::context::StringReader;
+use crate::commands::string_reader::StringReader;
 
 /// A single coordinate component that may be absolute, relative (`~`), or
 /// local (`^`).

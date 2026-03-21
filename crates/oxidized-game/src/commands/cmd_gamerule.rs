@@ -6,7 +6,8 @@
 //! `GameRules.java`.
 
 use crate::commands::arguments::{ArgumentType, StringKind};
-use crate::commands::context::{CommandContext, get_string};
+use crate::commands::argument_access::get_string;
+use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;

@@ -7,7 +7,8 @@
 //! connection with a disconnect packet.
 
 use crate::commands::arguments::{ArgumentType, StringKind};
-use crate::commands::context::{CommandContext, get_entities, get_string};
+use crate::commands::argument_access::{get_entities, get_string};
+use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
