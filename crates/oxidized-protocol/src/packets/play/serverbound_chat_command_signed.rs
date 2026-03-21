@@ -26,7 +26,7 @@ use crate::codec::types;
 /// ```
 ///
 /// We only need the `command` field — the rest is consumed and discarded.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundChatCommandSignedPacket {
     /// The command text without the leading `/`.
     pub command: String,

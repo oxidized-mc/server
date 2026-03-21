@@ -9,7 +9,7 @@ use crate::codec::{types, varint};
 /// Acknowledgement state for recent chat messages.
 ///
 /// Wire format: `VarInt offset` + `FixedBitSet(20) acknowledged` (3 bytes) + `byte checksum`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct LastSeenMessagesUpdate {
     /// Offset into the message chain.
     pub offset: i32,
@@ -47,7 +47,7 @@ impl LastSeenMessagesUpdate {
 }
 
 /// 0x09 — Client sends a plain chat message.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundChatPacket {
     /// The chat message text (max 256 characters).
     pub message: String,

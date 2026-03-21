@@ -65,7 +65,7 @@ impl PlayerCommandAction {
 /// | entity_id | VarInt | Player's entity ID |
 /// | action | VarInt | [`PlayerCommandAction`] ordinal |
 /// | data | VarInt | Action-specific (jump boost for riding) |
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundPlayerCommandPacket {
     /// The player's entity ID.
     pub entity_id: i32,
