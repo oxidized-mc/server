@@ -48,6 +48,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     .executes(|ctx: &CommandContext<CommandSourceStack>| {
                         let rate = get_float(ctx, "rate")?;
                         ctx.source.server.set_tick_rate(rate);
+                        ctx.source.server.broadcast_tick_state();
                         ctx.source.send_success(
                             &Component::text(format!("Set tick rate to {rate:.1}")),
                             true,
@@ -60,6 +61,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             .then(
                 literal("freeze").executes(|ctx: &CommandContext<CommandSourceStack>| {
                     ctx.source.server.set_tick_frozen(true);
+                    ctx.source.server.broadcast_tick_state();
                     ctx.source
                         .send_success(&Component::text("Game is now frozen"), true);
                     Ok(1)
@@ -69,6 +71,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             .then(
                 literal("unfreeze").executes(|ctx: &CommandContext<CommandSourceStack>| {
                     ctx.source.server.set_tick_frozen(false);
+                    ctx.source.server.broadcast_tick_state();
                     ctx.source
                         .send_success(&Component::text("Game is no longer frozen"), true);
                     Ok(1)

@@ -19,6 +19,7 @@ use oxidized_game::commands::source::ServerHandle;
 use oxidized_game::event::EventBus;
 use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::level::tick_rate::ServerTickRateManager;
+use oxidized_game::level::weather::WeatherType;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_protocol::crypto::ServerKeyPair;
@@ -193,29 +194,54 @@ impl ServerHandle for ServerContext {
         ld.day_time = ld.day_time.wrapping_add(ticks);
     }
 
-    fn set_weather(&self, weather: &str, duration: Option<i32>) {
-        let mut ld = self.level_data.write();
-        let dur = duration.unwrap_or(6000);
-        match weather {
-            "clear" => {
-                ld.is_raining = false;
-                ld.is_thundering = false;
-                ld.rain_time = dur;
-                ld.thunder_time = dur;
-            },
-            "rain" => {
-                ld.is_raining = true;
-                ld.is_thundering = false;
-                ld.rain_time = dur;
-                ld.thunder_time = dur;
-            },
-            "thunder" => {
-                ld.is_raining = true;
-                ld.is_thundering = true;
-                ld.rain_time = dur;
-                ld.thunder_time = dur;
-            },
-            _ => {},
+    fn set_weather(&self, weather: WeatherType, duration: Option<i32>) {
+        use oxidized_protocol::codec::Packet;
+        use oxidized_protocol::packets::play::{ClientboundGameEventPacket, GameEventType};
+
+        let was_raining;
+        {
+            let mut ld = self.level_data.write();
+            was_raining = ld.is_raining;
+            let dur = duration.unwrap_or(6000);
+            match weather {
+                WeatherType::Clear => {
+                    ld.clear_weather_time = dur;
+                    ld.is_raining = false;
+                    ld.is_thundering = false;
+                    ld.rain_time = 0;
+                    ld.thunder_time = 0;
+                },
+                WeatherType::Rain => {
+                    ld.clear_weather_time = 0;
+                    ld.is_raining = true;
+                    ld.is_thundering = false;
+                    ld.rain_time = dur;
+                    ld.thunder_time = dur;
+                },
+                WeatherType::Thunder => {
+                    ld.clear_weather_time = 0;
+                    ld.is_raining = true;
+                    ld.is_thundering = true;
+                    ld.rain_time = dur;
+                    ld.thunder_time = dur;
+                },
+            }
+        }
+
+        // Broadcast weather change to all connected clients.
+        let now_raining = self.level_data.read().is_raining;
+        if was_raining != now_raining {
+            let event = if now_raining {
+                GameEventType::StartRaining
+            } else {
+                GameEventType::StopRaining
+            };
+            let pkt = ClientboundGameEventPacket { event, param: 0.0 };
+            let encoded = pkt.encode();
+            let _ = self.chat_tx.send(ChatBroadcastMessage {
+                packet_id: ClientboundGameEventPacket::PACKET_ID,
+                data: encoded.freeze(),
+            });
         }
     }
 
@@ -263,6 +289,23 @@ impl ServerHandle for ServerContext {
 
     fn is_tick_sprinting(&self) -> bool {
         self.tick_rate_manager.read().sprinting
+    }
+
+    fn broadcast_tick_state(&self) {
+        use oxidized_protocol::codec::Packet;
+        use oxidized_protocol::packets::play::ClientboundTickingStatePacket;
+
+        let mgr = self.tick_rate_manager.read();
+        let pkt = ClientboundTickingStatePacket {
+            tick_rate: mgr.tick_rate,
+            is_frozen: mgr.frozen,
+        };
+        drop(mgr);
+        let encoded = pkt.encode();
+        let _ = self.chat_tx.send(ChatBroadcastMessage {
+            packet_id: ClientboundTickingStatePacket::PACKET_ID,
+            data: encoded.freeze(),
+        });
     }
 }
 

@@ -42,6 +42,8 @@ pub struct PrimaryLevelData {
     pub rain_time: i32,
     /// Ticks until thunder stops or starts.
     pub thunder_time: i32,
+    /// Ticks of guaranteed clear weather remaining (overrides rain/thunder when > 0).
+    pub clear_weather_time: i32,
     /// Whether this is a hardcore world.
     pub hardcore: bool,
     /// Difficulty as numeric ID (0=Peaceful, 1=Easy, 2=Normal, 3=Hard).
@@ -77,6 +79,7 @@ impl PrimaryLevelData {
             is_thundering: data.get_byte("thundering").unwrap_or(0) != 0,
             rain_time: data.get_int("rainTime").unwrap_or(0),
             thunder_time: data.get_int("thunderTime").unwrap_or(0),
+            clear_weather_time: data.get_int("clearWeatherTime").unwrap_or(0),
             hardcore: data.get_byte("hardcore").unwrap_or(0) != 0,
             difficulty: data.get_byte("Difficulty").unwrap_or(2) as i32,
             allow_commands: data.get_byte("allowCommands").unwrap_or(0) != 0,
@@ -129,6 +132,7 @@ mod tests {
         data.put_byte("thundering", 0);
         data.put_int("rainTime", 5000);
         data.put_int("thunderTime", 0);
+        data.put_int("clearWeatherTime", 0);
         data.put_byte("hardcore", 0);
         data.put_byte("Difficulty", 2);
         data.put_byte("allowCommands", 1);
@@ -154,6 +158,7 @@ mod tests {
         assert!(!level.is_thundering);
         assert_eq!(level.rain_time, 5000);
         assert_eq!(level.thunder_time, 0);
+        assert_eq!(level.clear_weather_time, 0);
         assert!(!level.hardcore);
         assert_eq!(level.difficulty, 2);
         assert!(level.allow_commands);

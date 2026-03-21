@@ -18,6 +18,8 @@ pub struct ServerTickRateManager {
     pub sprinting: bool,
     /// Remaining ticks in the current sprint.
     pub sprint_ticks_remaining: u64,
+    /// Frozen state saved before a sprint, restored when the sprint ends.
+    previous_frozen: bool,
 }
 
 impl Default for ServerTickRateManager {
@@ -28,6 +30,7 @@ impl Default for ServerTickRateManager {
             steps_remaining: 0,
             sprinting: false,
             sprint_ticks_remaining: 0,
+            previous_frozen: false,
         }
     }
 }
@@ -72,7 +75,9 @@ impl ServerTickRateManager {
                 self.sprint_ticks_remaining -= 1;
                 return true;
             }
+            // Sprint ended — restore previous frozen state.
             self.sprinting = false;
+            self.frozen = self.previous_frozen;
         }
 
         if self.frozen {
@@ -86,8 +91,13 @@ impl ServerTickRateManager {
         true
     }
 
-    /// Starts a sprint of `ticks` duration. Unfreezes the server if frozen.
+    /// Starts a sprint of `ticks` duration.
+    ///
+    /// Saves the current frozen state and unfreezes for the duration of
+    /// the sprint. The frozen state is restored when the sprint ends.
     pub fn start_sprint(&mut self, ticks: u64) {
+        self.previous_frozen = self.frozen;
+        self.frozen = false;
         self.sprinting = true;
         self.sprint_ticks_remaining = ticks;
     }
@@ -181,9 +191,26 @@ mod tests {
         assert!(mgr.should_tick());
         assert!(mgr.should_tick());
         assert!(mgr.should_tick());
-        // Sprint ended, but not frozen — should still tick normally
+        // Sprint ended, but was not frozen before — should still tick normally.
         assert!(mgr.should_tick());
         assert!(!mgr.sprinting);
+        assert!(!mgr.frozen, "was not frozen before sprint");
+    }
+
+    #[test]
+    fn test_sprint_restores_frozen_state() {
+        let mut mgr = ServerTickRateManager {
+            frozen: true,
+            ..Default::default()
+        };
+        mgr.start_sprint(2);
+        // Sprint unfreezes temporarily.
+        assert!(!mgr.frozen);
+        assert!(mgr.should_tick());
+        assert!(mgr.should_tick());
+        // Sprint ended — frozen state should be restored.
+        assert!(!mgr.should_tick(), "should be frozen again after sprint");
+        assert!(mgr.frozen, "frozen state restored after sprint");
     }
 
     #[test]

@@ -21,6 +21,8 @@ pub mod server_level;
 pub mod tick_rate;
 pub mod traits;
 
+pub mod weather;
+
 pub use chunk_cache::ChunkCache;
 pub use dimension::DimensionType;
 pub use dimension_manager::DimensionManager;
@@ -31,3 +33,4 @@ pub use scheduled_tick::{LevelTicks, ScheduledTick, TickPriority};
 pub use server_level::ServerLevel;
 pub use tick_rate::ServerTickRateManager;
 pub use traits::{AIR_STATE_ID, BlockGetter, LevelWriter};
+pub use weather::WeatherType;

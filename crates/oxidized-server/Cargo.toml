@@ -21,6 +21,7 @@ oxidized-game     = { workspace = true }
 tokio             = { workspace = true }
 bytes             = { workspace = true }
 parking_lot       = { workspace = true }
+rand              = { workspace = true }
 tracing           = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde             = { workspace = true }
