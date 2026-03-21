@@ -1557,3 +1557,32 @@ were specified in ADR-007 but the macros in `oxidized-macros/src/lib.rs` are stu
 - Auto-registration (inventory/linkme) — compile-time registration sufficient
 
 **Status:** ADR-038 created, phase-r2-refactoring.md created. Implementation not started.
+
+### Phase R2 Retrospective — Packet Trait & Unified Codec Refactoring (SP1–SP6)
+
+**Completed:** All 6 sub-phases of the Packet Trait & Unified Codec Refactoring.
+
+**What went well:**
+- Incremental migration strategy worked perfectly — trait impls added alongside existing
+  inherent methods, callers migrated one handler at a time, old error types removed last
+- All 12 packet structs missing `PartialEq` could safely derive it (their fields all
+  supported it), enabling uniform roundtrip testing via `assert_roundtrip<P>()`
+- Generic `assert_roundtrip` helper in `tests/roundtrip.rs` exercises all protocol states
+  through a single unified function — 48 deterministic + 27 proptest roundtrip tests
+- Zero clippy warnings throughout; 1646 workspace tests pass
+
+**Final metrics:**
+- Per-packet error types: 15 → 0
+- `map_err` conversions in server: 16 → 0
+- Lines to send a packet: 3 → 1 (`conn.send_packet(&pkt)`)
+- Lines to receive+decode a packet: 5–8 → 1 (`decode_packet::<P>(...)`)
+- Generic roundtrip test helper: No → Yes (75 tests in `roundtrip.rs`)
+- Packets implementing `Packet` trait: 0 → 64 impls across 59 packet files
+- All packets now derive `PartialEq`
+
+**Patterns to reuse:**
+- `assert_roundtrip<P: Packet + PartialEq + Debug>(pkt)` — for any future packet testing
+- When adding new packets: `impl Packet for` is required (no more inherent methods)
+- `PacketDecodeError::InvalidData(String)` for packet-specific validation failures
+
+**Status:** R2 complete. All acceptance criteria met.
