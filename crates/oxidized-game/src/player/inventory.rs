@@ -122,10 +122,31 @@ impl PlayerInventory {
 
     /// Adds a stack to the inventory, first filling existing stacks then empty slots.
     ///
+    /// Only searches hotbar (0–8) and main inventory (9–35), matching vanilla
+    /// behavior. Armor and offhand slots are never auto-filled.
+    ///
     /// Returns the remaining count that could not be inserted (0 = fully inserted).
     pub fn add_item(&mut self, mut stack: ItemStack) -> i32 {
-        // First fill existing stacks of the same item
-        for i in 0..Self::TOTAL_SLOTS {
+        // First try the currently selected slot (vanilla priority)
+        let sel = self.selected_slot as usize;
+        if !self.slots[sel].is_empty() && self.slots[sel].is_stackable_with(&stack) {
+            let max = max_stack_size(&stack.item);
+            let space = max - self.slots[sel].count;
+            if space > 0 {
+                let moved = stack.count.min(space);
+                self.slots[sel].count += moved;
+                stack.count -= moved;
+                if stack.count <= 0 {
+                    return 0;
+                }
+            }
+        }
+
+        // Fill existing stacks of the same item (hotbar + main only)
+        for i in Self::HOTBAR_START..Self::MAIN_END {
+            if i == sel {
+                continue; // already checked
+            }
             if !self.slots[i].is_empty() && self.slots[i].is_stackable_with(&stack) {
                 let max = max_stack_size(&stack.item);
                 let space = max - self.slots[i].count;
@@ -139,8 +160,8 @@ impl PlayerInventory {
                 }
             }
         }
-        // Then fill empty slots (prefer hotbar, then main)
-        for i in 0..Self::TOTAL_SLOTS {
+        // Then fill empty slots (hotbar + main only)
+        for i in Self::HOTBAR_START..Self::MAIN_END {
             if self.slots[i].is_empty() {
                 self.slots[i] = stack;
                 return 0;
@@ -312,7 +333,8 @@ mod tests {
     #[test]
     fn test_add_item_returns_overflow_when_full() {
         let mut inv = PlayerInventory::new();
-        for i in 0..PlayerInventory::TOTAL_SLOTS {
+        // Fill hotbar + main (slots 0–35) — add_item only searches these
+        for i in 0..PlayerInventory::MAIN_END {
             inv.set(i, ItemStack::new("minecraft:stone", 64));
         }
         let leftovers = inv.add_item(ItemStack::new("minecraft:stone", 32));
@@ -327,6 +349,35 @@ mod tests {
         assert_eq!(leftovers, 0);
         assert_eq!(inv.get(1).item.0, "minecraft:stone");
         assert_eq!(inv.get(1).count, 10);
+    }
+
+    #[test]
+    fn test_add_item_never_fills_armor_or_offhand() {
+        let mut inv = PlayerInventory::new();
+        // Fill hotbar + main with different items so no stacking occurs
+        for i in 0..PlayerInventory::MAIN_END {
+            inv.set(i, ItemStack::new(format!("minecraft:item_{i}"), 64));
+        }
+        // Armor and offhand should remain empty after add_item fails
+        let leftovers = inv.add_item(ItemStack::new("minecraft:stone", 10));
+        assert_eq!(leftovers, 10);
+        for i in PlayerInventory::ARMOR_START..=PlayerInventory::OFFHAND_SLOT {
+            assert!(inv.get(i).is_empty(), "slot {i} should remain empty");
+        }
+    }
+
+    #[test]
+    fn test_add_item_prefers_selected_slot() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 3;
+        // Put partial stacks of stone in slots 0 and 3
+        inv.set(0, ItemStack::new("minecraft:stone", 32));
+        inv.set(3, ItemStack::new("minecraft:stone", 32));
+        // Adding more stone should fill selected slot (3) first
+        let leftovers = inv.add_item(ItemStack::new("minecraft:stone", 16));
+        assert_eq!(leftovers, 0);
+        assert_eq!(inv.get(3).count, 48, "selected slot should be filled first");
+        assert_eq!(inv.get(0).count, 32, "non-selected slot should be unchanged");
     }
 
     // --- all_slots ---

@@ -29,7 +29,9 @@ use oxidized_world::storage::PrimaryLevelData;
 use super::game_mode::GameMode;
 use super::player_list::PlayerList;
 use super::server_player::ServerPlayer;
+use crate::inventory::item_ids::item_name_to_id;
 use crate::inventory::ItemStack;
+use crate::player::inventory::PROTOCOL_SLOT_COUNT;
 use crate::player::PlayerInventory;
 
 /// An encoded packet ready to be sent over the wire.
@@ -215,7 +217,7 @@ fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
 }
 
 fn build_container_set_content_packet(player: &ServerPlayer) -> EncodedPacket {
-    let items: Vec<Option<SlotData>> = (0..46i16)
+    let items: Vec<Option<SlotData>> = (0..PROTOCOL_SLOT_COUNT as i16)
         .map(|proto_slot| {
             PlayerInventory::from_protocol_slot(proto_slot).and_then(|internal| {
                 let stack = player.inventory.get(internal);
@@ -251,24 +253,12 @@ fn build_held_slot_packet(player: &ServerPlayer) -> EncodedPacket {
 }
 
 /// Converts a game [`ItemStack`] to a wire [`SlotData`] for the login
-/// sequence. Uses a placeholder item ID mapping until a proper item
-/// registry is built (Phase 22+).
+/// sequence. Uses the shared placeholder item ID mapping from
+/// [`crate::inventory::item_ids`] until a proper item registry is built (Phase 22+).
 fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
-    let item_id = match stack.item.0.as_str() {
-        "minecraft:air" | "" => 0,
-        "minecraft:stone" => 1,
-        "minecraft:dirt" => 10,
-        "minecraft:grass_block" => 8,
-        "minecraft:cobblestone" => 14,
-        "minecraft:oak_planks" => 15,
-        "minecraft:diamond" => 802,
-        "minecraft:diamond_sword" => 824,
-        "minecraft:iron_pickaxe" => 813,
-        _ => 1, // fallback to stone for unknown items
-    };
     SlotData {
         count: stack.count,
-        item_id,
+        item_id: item_name_to_id(&stack.item.0),
         component_data: ComponentPatchData::default(),
     }
 }
