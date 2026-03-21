@@ -1789,6 +1789,7 @@ dependencies = [
  "oxidized-world",
  "parking_lot",
  "proptest",
+ "rand 0.10.0",
  "reqwest",
  "rustyline",
  "serde",

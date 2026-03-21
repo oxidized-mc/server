@@ -1,6 +1,7 @@
 //! Command source — the identity and context of whoever runs a command.
 
 use crate::event::EventBus;
+use crate::level::weather::WeatherType;
 use oxidized_protocol::chat::Component;
 use std::sync::Arc;
 
@@ -62,9 +63,7 @@ pub trait ServerHandle: Send + Sync {
     fn add_day_time(&self, _ticks: i64) {}
 
     /// Sets the weather state and optional duration in ticks.
-    ///
-    /// `weather` is one of `"clear"`, `"rain"`, or `"thunder"`.
-    fn set_weather(&self, _weather: &str, _duration: Option<i32>) {}
+    fn set_weather(&self, _weather: WeatherType, _duration: Option<i32>) {}
 
     /// Returns the string value of a game rule by its camelCase vanilla name.
     fn get_game_rule(&self, _name: &str) -> Option<String> {
@@ -114,6 +113,9 @@ pub trait ServerHandle: Send + Sync {
     fn is_tick_sprinting(&self) -> bool {
         false
     }
+
+    /// Broadcasts the current tick rate and frozen state to all clients.
+    fn broadcast_tick_state(&self) {}
 }
 
 /// The kind of entity that is executing a command.

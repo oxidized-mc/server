@@ -9,6 +9,7 @@ use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
+use crate::level::weather::WeatherType;
 use oxidized_protocol::chat::Component;
 
 /// Registers the `/weather` command.
@@ -19,28 +20,40 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             .requires(|s: &CommandSourceStack| s.has_permission(2))
             .then(
                 literal("clear")
-                    .executes(weather_fn("clear", "commands.weather.set.clear"))
+                    .executes(weather_fn(WeatherType::Clear, "commands.weather.set.clear"))
                     .then(
                         argument("duration", ArgumentType::Time { min: 0 }).executes(
-                            weather_with_duration_fn("clear", "commands.weather.set.clear"),
+                            weather_with_duration_fn(
+                                WeatherType::Clear,
+                                "commands.weather.set.clear",
+                            ),
                         ),
                     ),
             )
             .then(
                 literal("rain")
-                    .executes(weather_fn("rain", "commands.weather.set.rain"))
+                    .executes(weather_fn(WeatherType::Rain, "commands.weather.set.rain"))
                     .then(
                         argument("duration", ArgumentType::Time { min: 0 }).executes(
-                            weather_with_duration_fn("rain", "commands.weather.set.rain"),
+                            weather_with_duration_fn(
+                                WeatherType::Rain,
+                                "commands.weather.set.rain",
+                            ),
                         ),
                     ),
             )
             .then(
                 literal("thunder")
-                    .executes(weather_fn("thunder", "commands.weather.set.thunder"))
+                    .executes(weather_fn(
+                        WeatherType::Thunder,
+                        "commands.weather.set.thunder",
+                    ))
                     .then(
                         argument("duration", ArgumentType::Time { min: 0 }).executes(
-                            weather_with_duration_fn("thunder", "commands.weather.set.thunder"),
+                            weather_with_duration_fn(
+                                WeatherType::Thunder,
+                                "commands.weather.set.thunder",
+                            ),
                         ),
                     ),
             ),
@@ -48,7 +61,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 }
 
 fn weather_fn(
-    weather: &'static str,
+    weather: WeatherType,
     key: &'static str,
 ) -> impl Fn(&CommandContext<CommandSourceStack>) -> Result<i32, CommandError> + Send + Sync + 'static
 {
@@ -61,7 +74,7 @@ fn weather_fn(
 }
 
 fn weather_with_duration_fn(
-    weather: &'static str,
+    weather: WeatherType,
     key: &'static str,
 ) -> impl Fn(&CommandContext<CommandSourceStack>) -> Result<i32, CommandError> + Send + Sync + 'static
 {

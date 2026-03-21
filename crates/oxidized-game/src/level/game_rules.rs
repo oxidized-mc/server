@@ -1,103 +1,381 @@
 //! Game rule system — typed boolean and integer rules with vanilla defaults.
 //!
-//! Each rule has a camelCase string name for NBT serialisation and the
-//! `/gamerule` command. The [`GameRules`] struct stores current values and
-//! provides typed getters/setters.
+//! Each rule has a snake_case string name (new in 26.1) for NBT serialisation
+//! and the `/gamerule` command. The [`GameRules`] struct stores current values
+//! in a flat array indexed by enum discriminant (zero allocation, O(1) access).
 //!
 //! Corresponds to `net.minecraft.world.level.gamerules.GameRules`.
 
-use std::collections::HashMap;
+/// Declares all game rules in a single source of truth.
+///
+/// Generates:
+/// - `GameRuleKey` enum with a variant per rule
+/// - `GameRuleKey::COUNT` (total number of rules)
+/// - `GameRuleKey::name()` → `&'static str` (26.1 snake_case name)
+/// - `GameRuleKey::legacy_name()` → `Option<&'static str>` (pre-26.1 camelCase)
+/// - `GameRuleKey::from_name()` → `Option<GameRuleKey>` (accepts both names)
+/// - `GameRuleKey::all_sorted()` → sorted slice of all keys
+/// - `GameRuleKey::default_value()` → `GameRuleValue`
+macro_rules! define_game_rules {
+    (
+        $(
+            $variant:ident => {
+                name: $name:literal,
+                $(legacy: $legacy:literal,)?
+                default: $default:expr $(,)?
+            }
+        ),+ $(,)?
+    ) => {
+        /// Identifies a specific game rule.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[repr(u16)]
+        #[allow(missing_docs)]
+        pub enum GameRuleKey {
+            $($variant),+
+        }
 
-/// Identifies a specific game rule.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum GameRuleKey {
-    // Boolean rules
-    /// Advance the day/night cycle.
-    DoDaylightCycle,
-    /// Advance weather transitions.
-    DoWeatherCycle,
-    /// Allow natural mob spawning.
-    DoMobSpawning,
-    /// Mobs drop loot on death.
-    DoMobLoot,
-    /// Blocks drop items when broken.
-    DoTileDrops,
-    /// Fire spreads and destroys blocks.
-    DoFireTick,
-    /// Mobs can modify blocks (creeper explosions, enderman griefing, etc.).
-    MobGriefing,
-    /// Players keep inventory on death.
-    KeepInventory,
-    /// Players regenerate health naturally.
-    NaturalRegeneration,
-    /// Players take fall damage.
-    FallDamage,
-    /// Show death messages in chat.
-    ShowDeathMessages,
-    /// Log admin commands to server log.
-    LogAdminCommands,
-    /// Command blocks produce output.
-    CommandBlockOutput,
-    /// Commands send feedback to the executing player.
-    SendCommandFeedback,
-    /// Players can only craft recipes they have unlocked.
-    DoLimitedCrafting,
-    /// Entities other than mobs drop items.
-    DoEntityDrops,
-    /// Player-vs-player combat is allowed.
-    Pvp,
-    /// Entities deal fire damage when on fire.
-    DoFireDamage,
-    /// Drowning damage is applied.
-    DoDrowningDamage,
-    /// Freeze damage is applied.
-    DoFreezeDamage,
-    /// Immediate respawn without death screen.
-    DoImmediateRespawn,
-    /// Forgive angry neutral mobs when the target player dies.
-    ForgiveDeadPlayers,
-    /// Angry neutral mobs attack any nearby player.
-    UniversalAnger,
-    /// Players can sleep during thunderstorms.
-    DoInsomnia,
-    /// Patrol and wandering trader spawning.
-    DoPatrolSpawning,
-    /// Wandering trader spawning.
-    DoTraderSpawning,
-    /// Wardens spawn from sculk shriekers.
-    DoWardenSpawning,
-    /// TNT explodes.
-    TntExplodes,
-    /// Block explosions drop items.
-    BlockExplosionDropDecay,
-    /// Mob explosions drop items.
-    MobExplosionDropDecay,
-    /// TNT explosions drop items.
-    TntExplosionDropDecay,
-    /// Show coordinates on death screen.
-    ShowCoordinates,
+        impl GameRuleKey {
+            /// Total number of game rules.
+            pub const COUNT: usize = {
+                let mut n = 0u16;
+                $(let _ = stringify!($variant); n += 1;)+
+                n as usize
+            };
 
-    // Integer rules
-    /// Number of random ticks per chunk section per game tick.
-    RandomTickSpeed,
-    /// Radius around the world spawn where players initially spawn.
-    SpawnRadius,
-    /// Max entities pushed into the same space before suffocation.
-    MaxEntityCramming,
-    /// Max length of a command chain (command blocks).
-    MaxCommandChainLength,
-    /// Default nether portal cooldown in ticks (survival).
-    PlayersNetherPortalDefaultDelay,
-    /// Nether portal cooldown in ticks (creative).
-    PlayersNetherPortalCreativeDelay,
-    /// Percentage of players that must sleep to skip the night.
-    PlayersSleepingPercentage,
-    /// Max distance from snow layer to ground for snow to form.
-    SnowAccumulationHeight,
-    /// Max length of a command block output string.
-    MaxCommandForkCount,
-    /// How many entity collisions an entity processes per tick.
-    SpawnChunkRadius,
+            /// Returns the 26.1 snake_case wire name for this rule.
+            pub fn name(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $name),+
+                }
+            }
+
+            /// Returns the pre-26.1 camelCase name, if one existed.
+            pub fn legacy_name(self) -> Option<&'static str> {
+                match self {
+                    $(Self::$variant => define_game_rules!(@legacy $($legacy)?)),+
+                }
+            }
+
+            /// Resolves a name (26.1 or legacy) to a [`GameRuleKey`].
+            pub fn from_name(name: &str) -> Option<Self> {
+                // Try 26.1 names first, then legacy.
+                $(if name == $name { return Some(Self::$variant); })+
+                $($(if name == $legacy { return Some(Self::$variant); })?)+
+                None
+            }
+
+            /// Returns all rule keys sorted alphabetically by their 26.1 name.
+            pub fn all_sorted() -> &'static [GameRuleKey] {
+                static SORTED: std::sync::LazyLock<Vec<GameRuleKey>> = std::sync::LazyLock::new(|| {
+                    let mut keys = vec![$(GameRuleKey::$variant),+];
+                    keys.sort_by_key(|k| k.name());
+                    keys
+                });
+                &SORTED
+            }
+
+            /// Returns all 26.1 rule names sorted alphabetically.
+            pub fn all_names() -> Vec<&'static str> {
+                Self::all_sorted().iter().map(|k| k.name()).collect()
+            }
+
+            /// Returns the vanilla default value for this rule.
+            pub fn default_value(self) -> GameRuleValue {
+                match self {
+                    $(Self::$variant => $default),+
+                }
+            }
+        }
+    };
+
+    // Helper: emit None when no legacy name is provided.
+    (@legacy) => { None };
+    (@legacy $legacy:literal) => { Some($legacy) };
+}
+
+use GameRuleValue::{Bool, Int};
+
+define_game_rules! {
+    // ── Boolean rules ────────────────────────────────────────────────
+    AdvanceTime => {
+        name: "advance_time",
+        legacy: "doDaylightCycle",
+        default: Bool(true),
+    },
+    AdvanceWeather => {
+        name: "advance_weather",
+        legacy: "doWeatherCycle",
+        default: Bool(true),
+    },
+    AllowEnteringNetherUsingPortals => {
+        name: "allow_entering_nether_using_portals",
+        default: Bool(true),
+    },
+    BlockDrops => {
+        name: "block_drops",
+        legacy: "doTileDrops",
+        default: Bool(true),
+    },
+    BlockExplosionDropDecay => {
+        name: "block_explosion_drop_decay",
+        legacy: "blockExplosionDropDecay",
+        default: Bool(true),
+    },
+    CommandBlockOutput => {
+        name: "command_block_output",
+        legacy: "commandBlockOutput",
+        default: Bool(true),
+    },
+    CommandBlocksWork => {
+        name: "command_blocks_work",
+        default: Bool(true),
+    },
+    DrowningDamage => {
+        name: "drowning_damage",
+        legacy: "doDrowningDamage",
+        default: Bool(true),
+    },
+    ElytraMovementCheck => {
+        name: "elytra_movement_check",
+        default: Bool(true),
+    },
+    EnderPearlsVanishOnDeath => {
+        name: "ender_pearls_vanish_on_death",
+        default: Bool(true),
+    },
+    EntityDrops => {
+        name: "entity_drops",
+        legacy: "doEntityDrops",
+        default: Bool(true),
+    },
+    FallDamage => {
+        name: "fall_damage",
+        legacy: "fallDamage",
+        default: Bool(true),
+    },
+    FireDamage => {
+        name: "fire_damage",
+        legacy: "doFireDamage",
+        default: Bool(true),
+    },
+    ForgiveDeadPlayers => {
+        name: "forgive_dead_players",
+        legacy: "forgiveDeadPlayers",
+        default: Bool(true),
+    },
+    FreezeDamage => {
+        name: "freeze_damage",
+        legacy: "doFreezeDamage",
+        default: Bool(true),
+    },
+    GlobalSoundEvents => {
+        name: "global_sound_events",
+        default: Bool(true),
+    },
+    ImmediateRespawn => {
+        name: "immediate_respawn",
+        legacy: "doImmediateRespawn",
+        default: Bool(false),
+    },
+    KeepInventory => {
+        name: "keep_inventory",
+        legacy: "keepInventory",
+        default: Bool(false),
+    },
+    LavaSourceConversion => {
+        name: "lava_source_conversion",
+        default: Bool(false),
+    },
+    LimitedCrafting => {
+        name: "limited_crafting",
+        legacy: "doLimitedCrafting",
+        default: Bool(false),
+    },
+    LocatorBar => {
+        name: "locator_bar",
+        default: Bool(true),
+    },
+    LogAdminCommands => {
+        name: "log_admin_commands",
+        legacy: "logAdminCommands",
+        default: Bool(true),
+    },
+    MobDrops => {
+        name: "mob_drops",
+        legacy: "doMobLoot",
+        default: Bool(true),
+    },
+    MobExplosionDropDecay => {
+        name: "mob_explosion_drop_decay",
+        legacy: "mobExplosionDropDecay",
+        default: Bool(true),
+    },
+    MobGriefing => {
+        name: "mob_griefing",
+        legacy: "mobGriefing",
+        default: Bool(true),
+    },
+    NaturalHealthRegeneration => {
+        name: "natural_health_regeneration",
+        legacy: "naturalRegeneration",
+        default: Bool(true),
+    },
+    PlayerMovementCheck => {
+        name: "player_movement_check",
+        default: Bool(true),
+    },
+    ProjectilesCanBreakBlocks => {
+        name: "projectiles_can_break_blocks",
+        default: Bool(true),
+    },
+    Pvp => {
+        name: "pvp",
+        legacy: "pvp",
+        default: Bool(true),
+    },
+    Raids => {
+        name: "raids",
+        default: Bool(true),
+    },
+    ReducedDebugInfo => {
+        name: "reduced_debug_info",
+        legacy: "reducedDebugInfo",
+        default: Bool(false),
+    },
+    SendCommandFeedback => {
+        name: "send_command_feedback",
+        legacy: "sendCommandFeedback",
+        default: Bool(true),
+    },
+    ShowAdvancementMessages => {
+        name: "show_advancement_messages",
+        legacy: "announceAdvancements",
+        default: Bool(true),
+    },
+    ShowDeathMessages => {
+        name: "show_death_messages",
+        legacy: "showDeathMessages",
+        default: Bool(true),
+    },
+    SpawnerBlocksWork => {
+        name: "spawner_blocks_work",
+        default: Bool(true),
+    },
+    SpawnMobs => {
+        name: "spawn_mobs",
+        legacy: "doMobSpawning",
+        default: Bool(true),
+    },
+    SpawnMonsters => {
+        name: "spawn_monsters",
+        default: Bool(true),
+    },
+    SpawnPatrols => {
+        name: "spawn_patrols",
+        legacy: "doPatrolSpawning",
+        default: Bool(true),
+    },
+    SpawnPhantoms => {
+        name: "spawn_phantoms",
+        legacy: "doInsomnia",
+        default: Bool(true),
+    },
+    SpawnWanderingTraders => {
+        name: "spawn_wandering_traders",
+        legacy: "doTraderSpawning",
+        default: Bool(true),
+    },
+    SpawnWardens => {
+        name: "spawn_wardens",
+        legacy: "doWardenSpawning",
+        default: Bool(true),
+    },
+    SpectatorsGenerateChunks => {
+        name: "spectators_generate_chunks",
+        default: Bool(true),
+    },
+    SpreadVines => {
+        name: "spread_vines",
+        default: Bool(true),
+    },
+    TntExplodes => {
+        name: "tnt_explodes",
+        legacy: "tntExplodes",
+        default: Bool(true),
+    },
+    TntExplosionDropDecay => {
+        name: "tnt_explosion_drop_decay",
+        legacy: "tntExplosionDropDecay",
+        default: Bool(false),
+    },
+    UniversalAnger => {
+        name: "universal_anger",
+        legacy: "universalAnger",
+        default: Bool(false),
+    },
+    WaterSourceConversion => {
+        name: "water_source_conversion",
+        default: Bool(true),
+    },
+
+    // ── Integer rules ────────────────────────────────────────────────
+    FireSpreadRadiusAroundPlayer => {
+        name: "fire_spread_radius_around_player",
+        default: Int(128),
+    },
+    MaxBlockModifications => {
+        name: "max_block_modifications",
+        default: Int(32768),
+    },
+    MaxCommandForks => {
+        name: "max_command_forks",
+        legacy: "maxCommandForkCount",
+        default: Int(65536),
+    },
+    MaxCommandSequenceLength => {
+        name: "max_command_sequence_length",
+        legacy: "maxCommandChainLength",
+        default: Int(65536),
+    },
+    MaxEntityCramming => {
+        name: "max_entity_cramming",
+        legacy: "maxEntityCramming",
+        default: Int(24),
+    },
+    MaxMinecartSpeed => {
+        name: "max_minecart_speed",
+        default: Int(8),
+    },
+    MaxSnowAccumulationHeight => {
+        name: "max_snow_accumulation_height",
+        legacy: "snowAccumulationHeight",
+        default: Int(1),
+    },
+    PlayersNetherPortalCreativeDelay => {
+        name: "players_nether_portal_creative_delay",
+        legacy: "playersNetherPortalCreativeDelay",
+        default: Int(0),
+    },
+    PlayersNetherPortalDefaultDelay => {
+        name: "players_nether_portal_default_delay",
+        legacy: "playersNetherPortalDefaultDelay",
+        default: Int(80),
+    },
+    PlayersSleepingPercentage => {
+        name: "players_sleeping_percentage",
+        legacy: "playersSleepingPercentage",
+        default: Int(100),
+    },
+    RandomTickSpeed => {
+        name: "random_tick_speed",
+        legacy: "randomTickSpeed",
+        default: Int(3),
+    },
+    RespawnRadius => {
+        name: "respawn_radius",
+        legacy: "spawnRadius",
+        default: Int(10),
+    },
 }
 
 /// A game rule value — either boolean or integer.
@@ -120,68 +398,23 @@ impl GameRuleValue {
 }
 
 /// Storage for all game rules with typed getters/setters.
+///
+/// Values are stored in a flat array indexed by [`GameRuleKey`] discriminant,
+/// giving O(1) access with no hashing overhead.
 #[derive(Debug, Clone)]
 pub struct GameRules {
-    values: HashMap<GameRuleKey, GameRuleValue>,
+    values: Box<[GameRuleValue]>,
 }
 
 impl Default for GameRules {
     fn default() -> Self {
-        use GameRuleKey::*;
-        use GameRuleValue::{Bool, Int};
-
-        let entries: &[(GameRuleKey, GameRuleValue)] = &[
-            // Boolean defaults
-            (DoDaylightCycle, Bool(true)),
-            (DoWeatherCycle, Bool(true)),
-            (DoMobSpawning, Bool(true)),
-            (DoMobLoot, Bool(true)),
-            (DoTileDrops, Bool(true)),
-            (DoFireTick, Bool(true)),
-            (MobGriefing, Bool(true)),
-            (KeepInventory, Bool(false)),
-            (NaturalRegeneration, Bool(true)),
-            (FallDamage, Bool(true)),
-            (ShowDeathMessages, Bool(true)),
-            (LogAdminCommands, Bool(true)),
-            (CommandBlockOutput, Bool(true)),
-            (SendCommandFeedback, Bool(true)),
-            (DoLimitedCrafting, Bool(false)),
-            (DoEntityDrops, Bool(true)),
-            (Pvp, Bool(true)),
-            (DoFireDamage, Bool(true)),
-            (DoDrowningDamage, Bool(true)),
-            (DoFreezeDamage, Bool(true)),
-            (DoImmediateRespawn, Bool(false)),
-            (ForgiveDeadPlayers, Bool(true)),
-            (UniversalAnger, Bool(false)),
-            (DoInsomnia, Bool(true)),
-            (DoPatrolSpawning, Bool(true)),
-            (DoTraderSpawning, Bool(true)),
-            (DoWardenSpawning, Bool(true)),
-            (TntExplodes, Bool(true)),
-            (BlockExplosionDropDecay, Bool(true)),
-            (MobExplosionDropDecay, Bool(true)),
-            (TntExplosionDropDecay, Bool(false)),
-            (ShowCoordinates, Bool(true)),
-            // Integer defaults
-            (RandomTickSpeed, Int(3)),
-            (SpawnRadius, Int(8)),
-            (MaxEntityCramming, Int(24)),
-            (MaxCommandChainLength, Int(65536)),
-            (PlayersNetherPortalDefaultDelay, Int(80)),
-            (PlayersNetherPortalCreativeDelay, Int(1)),
-            (PlayersSleepingPercentage, Int(100)),
-            (SnowAccumulationHeight, Int(1)),
-            (MaxCommandForkCount, Int(65536)),
-            (SpawnChunkRadius, Int(2)),
-        ];
-
-        let mut values = HashMap::with_capacity(entries.len());
-        for (key, value) in entries {
-            values.insert(*key, value.clone());
+        let mut vals = vec![GameRuleValue::Bool(false); GameRuleKey::COUNT];
+        for &key in GameRuleKey::all_sorted() {
+            vals[key as u16 as usize] = key.default_value();
         }
-        Self { values }
+        Self {
+            values: vals.into_boxed_slice(),
+        }
     }
 }
 
@@ -191,213 +424,83 @@ impl GameRules {
         Self::default()
     }
 
+    #[inline]
+    fn idx(key: GameRuleKey) -> usize {
+        key as u16 as usize
+    }
+
     /// Returns a boolean rule's value, or `false` if the key is not boolean.
     pub fn get_bool(&self, key: GameRuleKey) -> bool {
-        match self.values.get(&key) {
-            Some(GameRuleValue::Bool(v)) => *v,
+        match &self.values[Self::idx(key)] {
+            GameRuleValue::Bool(v) => *v,
             _ => false,
         }
     }
 
     /// Returns an integer rule's value, or `0` if the key is not integer.
     pub fn get_int(&self, key: GameRuleKey) -> i32 {
-        match self.values.get(&key) {
-            Some(GameRuleValue::Int(v)) => *v,
+        match &self.values[Self::idx(key)] {
+            GameRuleValue::Int(v) => *v,
             _ => 0,
         }
     }
 
     /// Sets a boolean rule.
     pub fn set_bool(&mut self, key: GameRuleKey, value: bool) {
-        self.values.insert(key, GameRuleValue::Bool(value));
+        self.values[Self::idx(key)] = GameRuleValue::Bool(value);
     }
 
     /// Sets an integer rule.
     pub fn set_int(&mut self, key: GameRuleKey, value: i32) {
-        self.values.insert(key, GameRuleValue::Int(value));
+        self.values[Self::idx(key)] = GameRuleValue::Int(value);
     }
 
-    /// Returns the raw value for a rule, if present.
-    pub fn get(&self, key: GameRuleKey) -> Option<&GameRuleValue> {
-        self.values.get(&key)
+    /// Returns the raw value for a rule.
+    pub fn get(&self, key: GameRuleKey) -> &GameRuleValue {
+        &self.values[Self::idx(key)]
     }
 
     /// Returns the value of a rule as a displayable string.
     pub fn get_as_string(&self, key: GameRuleKey) -> String {
-        self.values
-            .get(&key)
-            .map_or_else(String::new, GameRuleValue::as_string)
+        self.values[Self::idx(key)].as_string()
     }
 
     /// Sets a rule from a string value. Returns `Err` if the value is invalid
     /// for the rule's type.
     pub fn set_from_string(&mut self, key: GameRuleKey, value: &str) -> Result<(), String> {
-        match self.values.get(&key) {
-            Some(GameRuleValue::Bool(_)) => {
+        match &self.values[Self::idx(key)] {
+            GameRuleValue::Bool(_) => {
                 let b = value
                     .parse::<bool>()
                     .map_err(|_| format!("expected 'true' or 'false', got '{value}'"))?;
                 self.set_bool(key, b);
                 Ok(())
             },
-            Some(GameRuleValue::Int(_)) => {
+            GameRuleValue::Int(_) => {
                 let n = value
                     .parse::<i32>()
                     .map_err(|_| format!("expected integer, got '{value}'"))?;
                 self.set_int(key, n);
                 Ok(())
             },
-            None => Err(format!("unknown game rule key: {key:?}")),
         }
     }
 
-    /// Returns the camelCase vanilla name for a rule (used in NBT and `/gamerule`).
+    // ── Convenience aliases for the old API (delegates to GameRuleKey) ──
+
+    /// Returns the 26.1 snake_case name for a rule.
     pub fn name_of(key: GameRuleKey) -> &'static str {
-        use GameRuleKey::*;
-        match key {
-            DoDaylightCycle => "doDaylightCycle",
-            DoWeatherCycle => "doWeatherCycle",
-            DoMobSpawning => "doMobSpawning",
-            DoMobLoot => "doMobLoot",
-            DoTileDrops => "doTileDrops",
-            DoFireTick => "doFireTick",
-            MobGriefing => "mobGriefing",
-            KeepInventory => "keepInventory",
-            NaturalRegeneration => "naturalRegeneration",
-            FallDamage => "fallDamage",
-            ShowDeathMessages => "showDeathMessages",
-            LogAdminCommands => "logAdminCommands",
-            CommandBlockOutput => "commandBlockOutput",
-            SendCommandFeedback => "sendCommandFeedback",
-            DoLimitedCrafting => "doLimitedCrafting",
-            DoEntityDrops => "doEntityDrops",
-            Pvp => "pvp",
-            DoFireDamage => "doFireDamage",
-            DoDrowningDamage => "doDrowningDamage",
-            DoFreezeDamage => "doFreezeDamage",
-            DoImmediateRespawn => "doImmediateRespawn",
-            ForgiveDeadPlayers => "forgiveDeadPlayers",
-            UniversalAnger => "universalAnger",
-            DoInsomnia => "doInsomnia",
-            DoPatrolSpawning => "doPatrolSpawning",
-            DoTraderSpawning => "doTraderSpawning",
-            DoWardenSpawning => "doWardenSpawning",
-            TntExplodes => "tntExplodes",
-            BlockExplosionDropDecay => "blockExplosionDropDecay",
-            MobExplosionDropDecay => "mobExplosionDropDecay",
-            TntExplosionDropDecay => "tntExplosionDropDecay",
-            ShowCoordinates => "showCoordinates",
-            RandomTickSpeed => "randomTickSpeed",
-            SpawnRadius => "spawnRadius",
-            MaxEntityCramming => "maxEntityCramming",
-            MaxCommandChainLength => "maxCommandChainLength",
-            PlayersNetherPortalDefaultDelay => "playersNetherPortalDefaultDelay",
-            PlayersNetherPortalCreativeDelay => "playersNetherPortalCreativeDelay",
-            PlayersSleepingPercentage => "playersSleepingPercentage",
-            SnowAccumulationHeight => "snowAccumulationHeight",
-            MaxCommandForkCount => "maxCommandForkCount",
-            SpawnChunkRadius => "spawnChunkRadius",
-        }
+        key.name()
     }
 
-    /// Resolves a camelCase vanilla name to a [`GameRuleKey`].
+    /// Resolves a name (26.1 or legacy) to a [`GameRuleKey`].
     pub fn from_name(name: &str) -> Option<GameRuleKey> {
-        use GameRuleKey::*;
-        Some(match name {
-            "doDaylightCycle" => DoDaylightCycle,
-            "doWeatherCycle" => DoWeatherCycle,
-            "doMobSpawning" => DoMobSpawning,
-            "doMobLoot" => DoMobLoot,
-            "doTileDrops" => DoTileDrops,
-            "doFireTick" => DoFireTick,
-            "mobGriefing" => MobGriefing,
-            "keepInventory" => KeepInventory,
-            "naturalRegeneration" => NaturalRegeneration,
-            "fallDamage" => FallDamage,
-            "showDeathMessages" => ShowDeathMessages,
-            "logAdminCommands" => LogAdminCommands,
-            "commandBlockOutput" => CommandBlockOutput,
-            "sendCommandFeedback" => SendCommandFeedback,
-            "doLimitedCrafting" => DoLimitedCrafting,
-            "doEntityDrops" => DoEntityDrops,
-            "pvp" => Pvp,
-            "doFireDamage" => DoFireDamage,
-            "doDrowningDamage" => DoDrowningDamage,
-            "doFreezeDamage" => DoFreezeDamage,
-            "doImmediateRespawn" => DoImmediateRespawn,
-            "forgiveDeadPlayers" => ForgiveDeadPlayers,
-            "universalAnger" => UniversalAnger,
-            "doInsomnia" => DoInsomnia,
-            "doPatrolSpawning" => DoPatrolSpawning,
-            "doTraderSpawning" => DoTraderSpawning,
-            "doWardenSpawning" => DoWardenSpawning,
-            "tntExplodes" => TntExplodes,
-            "blockExplosionDropDecay" => BlockExplosionDropDecay,
-            "mobExplosionDropDecay" => MobExplosionDropDecay,
-            "tntExplosionDropDecay" => TntExplosionDropDecay,
-            "showCoordinates" => ShowCoordinates,
-            "randomTickSpeed" => RandomTickSpeed,
-            "spawnRadius" => SpawnRadius,
-            "maxEntityCramming" => MaxEntityCramming,
-            "maxCommandChainLength" => MaxCommandChainLength,
-            "playersNetherPortalDefaultDelay" => PlayersNetherPortalDefaultDelay,
-            "playersNetherPortalCreativeDelay" => PlayersNetherPortalCreativeDelay,
-            "playersSleepingPercentage" => PlayersSleepingPercentage,
-            "snowAccumulationHeight" => SnowAccumulationHeight,
-            "maxCommandForkCount" => MaxCommandForkCount,
-            "spawnChunkRadius" => SpawnChunkRadius,
-            _ => return None,
-        })
+        GameRuleKey::from_name(name)
     }
 
     /// Returns all rule names sorted alphabetically.
     pub fn all_names() -> Vec<&'static str> {
-        use GameRuleKey::*;
-        let keys = [
-            BlockExplosionDropDecay,
-            CommandBlockOutput,
-            DoDaylightCycle,
-            DoDrowningDamage,
-            DoEntityDrops,
-            DoFireDamage,
-            DoFireTick,
-            DoFreezeDamage,
-            DoImmediateRespawn,
-            DoInsomnia,
-            DoLimitedCrafting,
-            DoMobLoot,
-            DoMobSpawning,
-            DoPatrolSpawning,
-            DoTileDrops,
-            DoTraderSpawning,
-            DoWardenSpawning,
-            DoWeatherCycle,
-            FallDamage,
-            ForgiveDeadPlayers,
-            KeepInventory,
-            LogAdminCommands,
-            MaxCommandChainLength,
-            MaxCommandForkCount,
-            MaxEntityCramming,
-            MobExplosionDropDecay,
-            MobGriefing,
-            NaturalRegeneration,
-            PlayersNetherPortalCreativeDelay,
-            PlayersNetherPortalDefaultDelay,
-            PlayersSleepingPercentage,
-            Pvp,
-            RandomTickSpeed,
-            SendCommandFeedback,
-            ShowCoordinates,
-            ShowDeathMessages,
-            SnowAccumulationHeight,
-            SpawnChunkRadius,
-            SpawnRadius,
-            TntExplodes,
-            TntExplosionDropDecay,
-            UniversalAnger,
-        ];
-        keys.iter().map(|k| Self::name_of(*k)).collect()
+        GameRuleKey::all_names()
     }
 }
 
@@ -409,12 +512,12 @@ mod tests {
     #[test]
     fn test_defaults_match_vanilla() {
         let rules = GameRules::default();
-        assert!(rules.get_bool(GameRuleKey::DoDaylightCycle));
-        assert!(rules.get_bool(GameRuleKey::DoWeatherCycle));
+        assert!(rules.get_bool(GameRuleKey::AdvanceTime));
+        assert!(rules.get_bool(GameRuleKey::AdvanceWeather));
         assert!(!rules.get_bool(GameRuleKey::KeepInventory));
-        assert!(!rules.get_bool(GameRuleKey::DoImmediateRespawn));
+        assert!(!rules.get_bool(GameRuleKey::ImmediateRespawn));
         assert_eq!(rules.get_int(GameRuleKey::RandomTickSpeed), 3);
-        assert_eq!(rules.get_int(GameRuleKey::SpawnRadius), 8);
+        assert_eq!(rules.get_int(GameRuleKey::RespawnRadius), 10);
         assert_eq!(rules.get_int(GameRuleKey::MaxEntityCramming), 24);
         assert_eq!(rules.get_int(GameRuleKey::PlayersSleepingPercentage), 100);
     }
@@ -445,6 +548,30 @@ mod tests {
                 "name_of roundtrip failed for '{name}'"
             );
         }
+    }
+
+    #[test]
+    fn test_legacy_names_resolve() {
+        assert_eq!(
+            GameRuleKey::from_name("doDaylightCycle"),
+            Some(GameRuleKey::AdvanceTime)
+        );
+        assert_eq!(
+            GameRuleKey::from_name("doWeatherCycle"),
+            Some(GameRuleKey::AdvanceWeather)
+        );
+        assert_eq!(
+            GameRuleKey::from_name("doMobSpawning"),
+            Some(GameRuleKey::SpawnMobs)
+        );
+        assert_eq!(
+            GameRuleKey::from_name("keepInventory"),
+            Some(GameRuleKey::KeepInventory)
+        );
+        assert_eq!(
+            GameRuleKey::from_name("randomTickSpeed"),
+            Some(GameRuleKey::RandomTickSpeed)
+        );
     }
 
     #[test]
@@ -488,7 +615,7 @@ mod tests {
     #[test]
     fn test_get_as_string() {
         let rules = GameRules::default();
-        assert_eq!(rules.get_as_string(GameRuleKey::DoDaylightCycle), "true");
+        assert_eq!(rules.get_as_string(GameRuleKey::AdvanceTime), "true");
         assert_eq!(rules.get_as_string(GameRuleKey::RandomTickSpeed), "3");
     }
 
@@ -498,5 +625,21 @@ mod tests {
         let mut sorted = names.clone();
         sorted.sort();
         assert_eq!(names, sorted, "all_names() should return sorted names");
+    }
+
+    #[test]
+    fn test_rule_count() {
+        // 46 boolean + 12 integer = 58 total rules in vanilla 26.1
+        let count = GameRuleKey::COUNT;
+        assert!(count >= 50, "expected at least 50 rules, got {count}");
+    }
+
+    #[test]
+    fn test_array_storage_correct() {
+        // Every key can be accessed without panic.
+        let rules = GameRules::default();
+        for key in GameRuleKey::all_sorted() {
+            let _ = rules.get(*key);
+        }
     }
 }
