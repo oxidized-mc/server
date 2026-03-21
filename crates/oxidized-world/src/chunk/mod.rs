@@ -8,6 +8,7 @@ pub mod data_layer;
 pub mod heightmap;
 pub mod level_chunk;
 pub mod palette;
+mod palette_codec;
 pub mod paletted_container;
 pub mod section;
 
