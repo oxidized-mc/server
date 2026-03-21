@@ -17,25 +17,7 @@ pub mod selector;
 pub mod serializer;
 pub mod source;
 pub mod string_reader;
-mod stubs;
-
-// Implemented command modules
-mod cmd_difficulty;
-mod cmd_effect;
-mod cmd_gamemode;
-mod cmd_gamerule;
-mod cmd_give;
-mod cmd_help;
-mod cmd_kick;
-mod cmd_kill;
-mod cmd_list;
-mod cmd_say;
-mod cmd_seed;
-mod cmd_setblock;
-mod cmd_stop;
-mod cmd_time;
-mod cmd_tp;
-mod cmd_weather;
+mod impls;
 
 pub use argument_access::{
     get_block_pos, get_bool, get_double, get_entities, get_entity, get_float, get_game_profile,
@@ -63,25 +45,7 @@ impl Commands {
     /// Creates a new command system with all vanilla commands registered.
     pub fn new() -> Self {
         let mut d = CommandDispatcher::new();
-        // Implemented commands
-        cmd_stop::register(&mut d);
-        cmd_tp::register(&mut d);
-        cmd_gamemode::register(&mut d);
-        cmd_give::register(&mut d);
-        cmd_kill::register(&mut d);
-        cmd_time::register(&mut d);
-        cmd_weather::register(&mut d);
-        cmd_say::register(&mut d);
-        cmd_list::register(&mut d);
-        cmd_kick::register(&mut d);
-        cmd_difficulty::register(&mut d);
-        cmd_help::register(&mut d);
-        cmd_seed::register(&mut d);
-        cmd_setblock::register(&mut d);
-        cmd_effect::register(&mut d);
-        cmd_gamerule::register(&mut d);
-        // Stub commands (not yet fully implemented)
-        stubs::register_all(&mut d);
+        impls::register_all(&mut d);
         Self { dispatcher: d }
     }
 
