@@ -85,8 +85,6 @@ pub trait Packet: Sized + std::fmt::Debug {
     fn encode(&self) -> BytesMut;
 }
 
-
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
