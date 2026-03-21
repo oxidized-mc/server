@@ -1637,3 +1637,49 @@ Additionally, `HoverEvent` encoding was using the old nested format (wrapping va
 - `crates/oxidized-protocol/src/chat/style.rs` — All field name fixes (NBT + JSON),
   HoverEvent flattening, HoverEntity serde rename, updated tests
 - `crates/oxidized-protocol/src/chat/component_json.rs` — Field names in JSON deserializer
+
+### 2025-07-XX — ClickEvent Action-Specific Field Names (26.1)
+
+#### Problem
+
+After fixing snake_case field names, the client still crashed decoding
+`clientbound/minecraft:system_chat` for messages with click events. The first
+message (header without click/hover) displayed fine, but the second message
+(with ClickEvent) caused `DecoderException: Failed to decode packet`.
+
+#### Root Cause
+
+Vanilla 26.1 changed ClickEvent to use **action-specific field names** instead
+of the generic `"value"` field. The data fixer `TextComponentHoverAndClickEventFix.fixClickEvent()`
+renames fields for old data:
+
+| Action | Old field | New field | Type |
+|--------|-----------|-----------|------|
+| `open_url` | `"value"` | `"url"` | String |
+| `run_command` | `"value"` | `"command"` | String |
+| `suggest_command` | `"value"` | `"command"` | String |
+| `copy_to_clipboard` | `"value"` | `"value"` | String (unchanged) |
+| `change_page` | `"value"` (string) | `"page"` | **TAG_INT** (not string!) |
+| `show_dialog` (new) | N/A | `"dialog"` | String (ResourceLocation) |
+| `custom` (new) | N/A | `"value"` | String |
+
+#### Key Learnings
+
+- **ClickEvent.java failed to decompile** (Vineflower NullPointerException). Field
+  names were inferred from: (1) `TextComponentHoverAndClickEventFix.fixClickEvent()`,
+  (2) `SignBlockEntity.java` accessor pattern matching, (3) DFU codec conventions.
+- **`change_page` is special** — it stores the value as TAG_INT in NBT, not a string.
+  The data fixer explicitly converts `Dynamic.asString → parseInt → createInt`.
+- **Why the crash only appeared after the snake_case fix**: Before, `clickEvent` (wrong
+  name) was silently ignored. After fixing to `click_event`, the client found the field
+  and attempted to decode it, but failed on the inner `"value"` field (expected `"command"`).
+- **Refactored to `to_nbt()`/`from_nbt()` methods** (like HoverEvent) instead of the
+  generic `action_value()` approach — each action type encodes with its correct field name.
+
+#### Files Changed
+
+- `crates/oxidized-protocol/src/chat/style.rs` — ClickEvent methods refactored, NBT
+  encode/decode, JSON Serialize/Deserialize
+- `crates/oxidized-protocol/src/chat/component_json.rs` — Test assertion updated
+- `crates/oxidized-protocol/src/chat/component_nbt.rs` — Debug test cleaned up
+
