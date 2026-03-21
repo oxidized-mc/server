@@ -219,9 +219,9 @@ fn parse_filters(inner: &str) -> Result<SelectorFilters, CommandError> {
                 });
             },
             "limit" => {
-                let n: u32 = value.parse().map_err(|_| {
-                    CommandError::Parse(format!("Invalid limit value: '{value}'"))
-                })?;
+                let n: u32 = value
+                    .parse()
+                    .map_err(|_| CommandError::Parse(format!("Invalid limit value: '{value}'")))?;
                 if n == 0 {
                     return Err(CommandError::Parse("Limit must be at least 1".to_string()));
                 }
@@ -334,9 +334,7 @@ pub fn resolve_selector(
     let filters = &selector.filters;
 
     let mut targets = match kind {
-        SelectorKind::AllPlayers | SelectorKind::AllEntities => {
-            collect_all_players(source)?
-        },
+        SelectorKind::AllPlayers | SelectorKind::AllEntities => collect_all_players(source)?,
         SelectorKind::NearestPlayer | SelectorKind::NearestEntity => {
             // Without entity positions, return the executing player when
             // the source is a player, otherwise fall back to the first online.
@@ -389,9 +387,7 @@ pub fn resolve_selector(
 
     // Apply limit. Default limits depend on selector kind.
     let limit = filters.limit.unwrap_or(match kind {
-        SelectorKind::NearestPlayer
-        | SelectorKind::NearestEntity
-        | SelectorKind::RandomPlayer => 1,
+        SelectorKind::NearestPlayer | SelectorKind::NearestEntity | SelectorKind::RandomPlayer => 1,
         _ => u32::MAX,
     }) as usize;
 
@@ -405,9 +401,7 @@ pub fn resolve_selector(
 }
 
 /// Collects all online players as [`SelectorTarget`]s.
-fn collect_all_players(
-    source: &CommandSourceStack,
-) -> Result<Vec<SelectorTarget>, CommandError> {
+fn collect_all_players(source: &CommandSourceStack) -> Result<Vec<SelectorTarget>, CommandError> {
     let names = source.server.online_player_names();
     if names.is_empty() {
         return Err(CommandError::Execution("No players found".to_string()));
@@ -415,7 +409,10 @@ fn collect_all_players(
     let mut targets = Vec::with_capacity(names.len());
     for name in &names {
         if let Some(uuid) = source.server.find_player_uuid(name) {
-            targets.push(SelectorTarget { name: name.clone(), uuid });
+            targets.push(SelectorTarget {
+                name: name.clone(),
+                uuid,
+            });
         }
     }
     Ok(targets)
@@ -609,19 +606,13 @@ mod tests {
     #[test]
     fn parse_selector_with_gamemode() {
         let sel = parse_selector("@a[gamemode=creative]").unwrap();
-        assert_eq!(
-            sel.filters.gamemode,
-            vec![("creative".to_string(), false)]
-        );
+        assert_eq!(sel.filters.gamemode, vec![("creative".to_string(), false)]);
     }
 
     #[test]
     fn parse_selector_with_negated_gamemode() {
         let sel = parse_selector("@a[gamemode=!spectator]").unwrap();
-        assert_eq!(
-            sel.filters.gamemode,
-            vec![("spectator".to_string(), true)]
-        );
+        assert_eq!(sel.filters.gamemode, vec![("spectator".to_string(), true)]);
     }
 
     #[test]
