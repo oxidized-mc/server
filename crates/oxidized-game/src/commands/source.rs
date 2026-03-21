@@ -1,9 +1,14 @@
 //! Command source — the identity and context of whoever runs a command.
 
+use crate::event::EventBus;
 use oxidized_protocol::chat::Component;
 use std::sync::Arc;
 
 /// A handle to the server, used by commands that need to affect global state.
+///
+/// This trait is also the primary extension point for future plugin support.
+/// Plugins interact with the server through `Arc<dyn ServerHandle>` rather
+/// than depending on concrete server internals.
 pub trait ServerHandle: Send + Sync {
     /// Sends a message to ops (players with op level ≥ `min_level`).
     fn broadcast_to_ops(&self, message: &Component, min_level: u32);
@@ -33,6 +38,22 @@ pub trait ServerHandle: Send + Sync {
     fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid>;
     /// Returns registered command names with optional descriptions, sorted.
     fn command_descriptions(&self) -> Vec<(String, Option<String>)>;
+
+    // --- Plugin-ready extension points (default impls for backward compat) ---
+
+    /// Returns the server's event bus for subscribing to game events.
+    ///
+    /// The default implementation returns `None`. Server implementations
+    /// should override this to provide the real event bus.
+    fn event_bus(&self) -> Option<&EventBus> {
+        None
+    }
+
+    /// Broadcasts a chat message to all connected players.
+    ///
+    /// The default implementation does nothing. Override in the server
+    /// to send via the broadcast channel.
+    fn broadcast_chat(&self, _message: &Component) {}
 }
 
 /// The kind of entity that is executing a command.

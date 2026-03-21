@@ -76,6 +76,16 @@ impl Commands {
     pub fn dispatcher(&self) -> &CommandDispatcher<CommandSourceStack> {
         &self.dispatcher
     }
+
+    /// Registers additional commands via a callback that receives the
+    /// underlying dispatcher. Intended for plugin or extension code that
+    /// needs to add commands after the built-in set is registered.
+    pub fn register(
+        &mut self,
+        f: impl FnOnce(&mut CommandDispatcher<CommandSourceStack>),
+    ) {
+        f(&mut self.dispatcher);
+    }
 }
 
 impl Default for Commands {
