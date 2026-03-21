@@ -1,35 +1,268 @@
 //! Serverbound player movement packets.
 //!
-//! Four variants share the same struct — the difference is which fields
-//! the client populates. Packet IDs correspond to the four Java inner
-//! classes: `Pos`, `Rot`, `PosRot`, `StatusOnly`.
+//! Four wire packets map to four Rust structs, each implementing
+//! [`Packet`](crate::codec::Packet). The packet IDs correspond to the four
+//! Java inner classes: `Pos`, `PosRot`, `Rot`, `StatusOnly`.
 //!
-//! # Packet trait exception
+//! All four variants convert into [`ServerboundMovePlayerPacket`] via `From`,
+//! which unifies them into a single type with optional fields for convenient
+//! handling in the server layer.
 //!
-//! This packet does **not** implement [`Packet`](crate::codec::Packet) because
-//! it maps to four distinct wire packet IDs (`0x1E`–`0x21`) with a single Rust
-//! struct. The [`Packet`](crate::codec::Packet) trait requires a single
-//! `const PACKET_ID`, which cannot represent this 4-ID pattern. The server
-//! handler dispatches manually by packet ID and calls the appropriate
-//! `decode_pos` / `decode_pos_rot` / `decode_rot` / `decode_status_only`
-//! method directly. This is an intentional design choice — see ADR-038.
+//! Corresponds to `net.minecraft.network.protocol.game.ServerboundMovePlayerPacket`
+//! and its inner classes.
 
-use bytes::{Buf, Bytes};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::types::{TypeError, read_f32, read_f64};
+use crate::codec::Packet;
+use crate::codec::packet::PacketDecodeError;
+use crate::codec::types::{read_f32, read_f64, write_f32, write_f64};
 
-/// Serverbound movement packet — decoded from one of four wire formats.
+const FLAG_ON_GROUND: u8 = 0x01;
+const FLAG_HORIZONTAL_COLLISION: u8 = 0x02;
+
+/// Reads the one-byte flags field, returning `(on_ground, horizontal_collision)`.
+fn read_flags(buf: &mut Bytes) -> Result<(bool, bool), PacketDecodeError> {
+    if !buf.has_remaining() {
+        return Err(PacketDecodeError::Type(
+            crate::codec::types::TypeError::UnexpectedEof { need: 1, have: 0 },
+        ));
+    }
+    let flags = buf.get_u8();
+    Ok((
+        flags & FLAG_ON_GROUND != 0,
+        flags & FLAG_HORIZONTAL_COLLISION != 0,
+    ))
+}
+
+/// Encodes the flags byte from on_ground and horizontal_collision.
+fn encode_flags(buf: &mut BytesMut, on_ground: bool, horizontal_collision: bool) {
+    let flags = if on_ground { FLAG_ON_GROUND } else { 0 }
+        | if horizontal_collision {
+            FLAG_HORIZONTAL_COLLISION
+        } else {
+            0
+        };
+    buf.put_u8(flags);
+}
+
+// ---------------------------------------------------------------------------
+// Position-only variant (0x1E)
+// ---------------------------------------------------------------------------
+
+/// Position-only movement packet (0x1E).
 ///
-/// # Wire Formats
+/// # Wire Format
 ///
-/// | Variant | ID | Fields |
-/// |---------|----|--------|
-/// | Pos | 0x1E | f64 x, y, z + u8 flags |
-/// | PosRot | 0x1F | f64 x, y, z + f32 yaw, pitch + u8 flags |
-/// | Rot | 0x20 | f32 yaw, pitch + u8 flags |
-/// | StatusOnly | 0x21 | u8 flags |
+/// | Field | Type |
+/// |-------|------|
+/// | x | f64 |
+/// | y | f64 |
+/// | z | f64 |
+/// | flags | u8 |
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerboundMovePlayerPosPacket {
+    /// World X coordinate.
+    pub x: f64,
+    /// World Y coordinate.
+    pub y: f64,
+    /// World Z coordinate.
+    pub z: f64,
+    /// Whether the player is on the ground.
+    pub on_ground: bool,
+    /// Whether the player is colliding horizontally.
+    pub horizontal_collision: bool,
+}
+
+impl Packet for ServerboundMovePlayerPosPacket {
+    const PACKET_ID: i32 = 0x1E;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let x = read_f64(&mut data)?;
+        let y = read_f64(&mut data)?;
+        let z = read_f64(&mut data)?;
+        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        Ok(Self {
+            x,
+            y,
+            z,
+            on_ground,
+            horizontal_collision,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(25);
+        write_f64(&mut buf, self.x);
+        write_f64(&mut buf, self.y);
+        write_f64(&mut buf, self.z);
+        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        buf
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Position + rotation variant (0x1F)
+// ---------------------------------------------------------------------------
+
+/// Position + rotation movement packet (0x1F).
 ///
-/// Flags byte: bit 0 = on_ground, bit 1 = horizontal_collision.
+/// # Wire Format
+///
+/// | Field | Type |
+/// |-------|------|
+/// | x | f64 |
+/// | y | f64 |
+/// | z | f64 |
+/// | yaw | f32 |
+/// | pitch | f32 |
+/// | flags | u8 |
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerboundMovePlayerPosRotPacket {
+    /// World X coordinate.
+    pub x: f64,
+    /// World Y coordinate.
+    pub y: f64,
+    /// World Z coordinate.
+    pub z: f64,
+    /// Yaw rotation in degrees.
+    pub yaw: f32,
+    /// Pitch rotation in degrees.
+    pub pitch: f32,
+    /// Whether the player is on the ground.
+    pub on_ground: bool,
+    /// Whether the player is colliding horizontally.
+    pub horizontal_collision: bool,
+}
+
+impl Packet for ServerboundMovePlayerPosRotPacket {
+    const PACKET_ID: i32 = 0x1F;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let x = read_f64(&mut data)?;
+        let y = read_f64(&mut data)?;
+        let z = read_f64(&mut data)?;
+        let yaw = read_f32(&mut data)?;
+        let pitch = read_f32(&mut data)?;
+        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        Ok(Self {
+            x,
+            y,
+            z,
+            yaw,
+            pitch,
+            on_ground,
+            horizontal_collision,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(33);
+        write_f64(&mut buf, self.x);
+        write_f64(&mut buf, self.y);
+        write_f64(&mut buf, self.z);
+        write_f32(&mut buf, self.yaw);
+        write_f32(&mut buf, self.pitch);
+        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        buf
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Rotation-only variant (0x20)
+// ---------------------------------------------------------------------------
+
+/// Rotation-only movement packet (0x20).
+///
+/// # Wire Format
+///
+/// | Field | Type |
+/// |-------|------|
+/// | yaw | f32 |
+/// | pitch | f32 |
+/// | flags | u8 |
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerboundMovePlayerRotPacket {
+    /// Yaw rotation in degrees.
+    pub yaw: f32,
+    /// Pitch rotation in degrees.
+    pub pitch: f32,
+    /// Whether the player is on the ground.
+    pub on_ground: bool,
+    /// Whether the player is colliding horizontally.
+    pub horizontal_collision: bool,
+}
+
+impl Packet for ServerboundMovePlayerRotPacket {
+    const PACKET_ID: i32 = 0x20;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let yaw = read_f32(&mut data)?;
+        let pitch = read_f32(&mut data)?;
+        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        Ok(Self {
+            yaw,
+            pitch,
+            on_ground,
+            horizontal_collision,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(9);
+        write_f32(&mut buf, self.yaw);
+        write_f32(&mut buf, self.pitch);
+        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        buf
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Status-only variant (0x21)
+// ---------------------------------------------------------------------------
+
+/// Status-only movement packet (0x21) — on_ground flag only.
+///
+/// # Wire Format
+///
+/// | Field | Type |
+/// |-------|------|
+/// | flags | u8 |
+#[derive(Debug, Clone, PartialEq)]
+pub struct ServerboundMovePlayerStatusOnlyPacket {
+    /// Whether the player is on the ground.
+    pub on_ground: bool,
+    /// Whether the player is colliding horizontally.
+    pub horizontal_collision: bool,
+}
+
+impl Packet for ServerboundMovePlayerStatusOnlyPacket {
+    const PACKET_ID: i32 = 0x21;
+
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        Ok(Self {
+            on_ground,
+            horizontal_collision,
+        })
+    }
+
+    fn encode(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(1);
+        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        buf
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Unified movement data
+// ---------------------------------------------------------------------------
+
+/// Unified serverbound movement data with optional fields.
+///
+/// All four wire variants ([`ServerboundMovePlayerPosPacket`],
+/// [`ServerboundMovePlayerPosRotPacket`], [`ServerboundMovePlayerRotPacket`],
+/// [`ServerboundMovePlayerStatusOnlyPacket`]) convert into this type via
+/// `From`. The server handler uses this unified type after decoding.
 #[derive(Debug, Clone)]
 pub struct ServerboundMovePlayerPacket {
     /// World X coordinate (present in Pos and PosRot).
@@ -49,96 +282,6 @@ pub struct ServerboundMovePlayerPacket {
 }
 
 impl ServerboundMovePlayerPacket {
-    /// Packet ID for position-only variant.
-    pub const PACKET_ID_POS: i32 = 0x1E;
-    /// Packet ID for position + rotation variant.
-    pub const PACKET_ID_POS_ROT: i32 = 0x1F;
-    /// Packet ID for rotation-only variant.
-    pub const PACKET_ID_ROT: i32 = 0x20;
-    /// Packet ID for status-only variant (on_ground flag only).
-    pub const PACKET_ID_STATUS_ONLY: i32 = 0x21;
-
-    const FLAG_ON_GROUND: u8 = 0x01;
-    const FLAG_HORIZONTAL_COLLISION: u8 = 0x02;
-
-    /// Reads the one-byte flags field, returning `(on_ground, horizontal_collision)`.
-    fn read_flags(buf: &mut Bytes) -> Result<(bool, bool), TypeError> {
-        if !buf.has_remaining() {
-            return Err(TypeError::UnexpectedEof { need: 1, have: 0 });
-        }
-        let flags = buf.get_u8();
-        Ok((
-            flags & Self::FLAG_ON_GROUND != 0,
-            flags & Self::FLAG_HORIZONTAL_COLLISION != 0,
-        ))
-    }
-
-    /// Decodes the position-only variant (0x1E).
-    pub fn decode_pos(mut data: Bytes) -> Result<Self, TypeError> {
-        let x = read_f64(&mut data)?;
-        let y = read_f64(&mut data)?;
-        let z = read_f64(&mut data)?;
-        let (on_ground, horizontal_collision) = Self::read_flags(&mut data)?;
-        Ok(Self {
-            x: Some(x),
-            y: Some(y),
-            z: Some(z),
-            yaw: None,
-            pitch: None,
-            on_ground,
-            horizontal_collision,
-        })
-    }
-
-    /// Decodes the position + rotation variant (0x1F).
-    pub fn decode_pos_rot(mut data: Bytes) -> Result<Self, TypeError> {
-        let x = read_f64(&mut data)?;
-        let y = read_f64(&mut data)?;
-        let z = read_f64(&mut data)?;
-        let yaw = read_f32(&mut data)?;
-        let pitch = read_f32(&mut data)?;
-        let (on_ground, horizontal_collision) = Self::read_flags(&mut data)?;
-        Ok(Self {
-            x: Some(x),
-            y: Some(y),
-            z: Some(z),
-            yaw: Some(yaw),
-            pitch: Some(pitch),
-            on_ground,
-            horizontal_collision,
-        })
-    }
-
-    /// Decodes the rotation-only variant (0x20).
-    pub fn decode_rot(mut data: Bytes) -> Result<Self, TypeError> {
-        let yaw = read_f32(&mut data)?;
-        let pitch = read_f32(&mut data)?;
-        let (on_ground, horizontal_collision) = Self::read_flags(&mut data)?;
-        Ok(Self {
-            x: None,
-            y: None,
-            z: None,
-            yaw: Some(yaw),
-            pitch: Some(pitch),
-            on_ground,
-            horizontal_collision,
-        })
-    }
-
-    /// Decodes the status-only variant (0x21).
-    pub fn decode_status_only(mut data: Bytes) -> Result<Self, TypeError> {
-        let (on_ground, horizontal_collision) = Self::read_flags(&mut data)?;
-        Ok(Self {
-            x: None,
-            y: None,
-            z: None,
-            yaw: None,
-            pitch: None,
-            on_ground,
-            horizontal_collision,
-        })
-    }
-
     /// Returns `true` if this packet includes position data.
     pub fn has_pos(&self) -> bool {
         self.x.is_some()
@@ -159,92 +302,195 @@ impl ServerboundMovePlayerPacket {
     }
 }
 
+impl From<ServerboundMovePlayerPosPacket> for ServerboundMovePlayerPacket {
+    fn from(p: ServerboundMovePlayerPosPacket) -> Self {
+        Self {
+            x: Some(p.x),
+            y: Some(p.y),
+            z: Some(p.z),
+            yaw: None,
+            pitch: None,
+            on_ground: p.on_ground,
+            horizontal_collision: p.horizontal_collision,
+        }
+    }
+}
+
+impl From<ServerboundMovePlayerPosRotPacket> for ServerboundMovePlayerPacket {
+    fn from(p: ServerboundMovePlayerPosRotPacket) -> Self {
+        Self {
+            x: Some(p.x),
+            y: Some(p.y),
+            z: Some(p.z),
+            yaw: Some(p.yaw),
+            pitch: Some(p.pitch),
+            on_ground: p.on_ground,
+            horizontal_collision: p.horizontal_collision,
+        }
+    }
+}
+
+impl From<ServerboundMovePlayerRotPacket> for ServerboundMovePlayerPacket {
+    fn from(p: ServerboundMovePlayerRotPacket) -> Self {
+        Self {
+            x: None,
+            y: None,
+            z: None,
+            yaw: Some(p.yaw),
+            pitch: Some(p.pitch),
+            on_ground: p.on_ground,
+            horizontal_collision: p.horizontal_collision,
+        }
+    }
+}
+
+impl From<ServerboundMovePlayerStatusOnlyPacket> for ServerboundMovePlayerPacket {
+    fn from(p: ServerboundMovePlayerStatusOnlyPacket) -> Self {
+        Self {
+            x: None,
+            y: None,
+            z: None,
+            yaw: None,
+            pitch: None,
+            on_ground: p.on_ground,
+            horizontal_collision: p.horizontal_collision,
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use bytes::{BufMut, BytesMut};
-
     use super::*;
 
-    fn encode_pos(x: f64, y: f64, z: f64, on_ground: bool, horiz: bool) -> Bytes {
-        let mut buf = BytesMut::new();
-        buf.put_f64(x);
-        buf.put_f64(y);
-        buf.put_f64(z);
-        let flags = if on_ground { 0x01u8 } else { 0 } | if horiz { 0x02 } else { 0 };
-        buf.put_u8(flags);
-        buf.freeze()
-    }
-
-    fn encode_pos_rot(x: f64, y: f64, z: f64, yaw: f32, pitch: f32, on_ground: bool) -> Bytes {
-        let mut buf = BytesMut::new();
-        buf.put_f64(x);
-        buf.put_f64(y);
-        buf.put_f64(z);
-        buf.put_f32(yaw);
-        buf.put_f32(pitch);
-        let flags = if on_ground { 0x01u8 } else { 0 };
-        buf.put_u8(flags);
-        buf.freeze()
-    }
-
-    fn encode_rot(yaw: f32, pitch: f32, on_ground: bool) -> Bytes {
-        let mut buf = BytesMut::new();
-        buf.put_f32(yaw);
-        buf.put_f32(pitch);
-        let flags = if on_ground { 0x01u8 } else { 0 };
-        buf.put_u8(flags);
-        buf.freeze()
+    #[test]
+    fn test_pos_roundtrip() {
+        let pkt = ServerboundMovePlayerPosPacket {
+            x: 1.5,
+            y: 64.0,
+            z: -3.25,
+            on_ground: true,
+            horizontal_collision: false,
+        };
+        let encoded = pkt.encode();
+        assert_eq!(encoded.len(), 25); // 3×f64 (24) + flags (1)
+        let decoded = ServerboundMovePlayerPosPacket::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
     }
 
     #[test]
-    fn test_decode_pos() {
-        let data = encode_pos(1.5, 64.0, -3.25, true, false);
-        let pkt = ServerboundMovePlayerPacket::decode_pos(data).unwrap();
-        assert!((pkt.x.unwrap() - 1.5).abs() < f64::EPSILON);
-        assert!((pkt.y.unwrap() - 64.0).abs() < f64::EPSILON);
-        assert!((pkt.z.unwrap() + 3.25).abs() < f64::EPSILON);
-        assert!(pkt.yaw.is_none());
-        assert!(pkt.pitch.is_none());
-        assert!(pkt.on_ground);
-        assert!(!pkt.horizontal_collision);
-        assert!(pkt.has_pos());
-        assert!(!pkt.has_rot());
+    fn test_pos_to_unified() {
+        let pkt = ServerboundMovePlayerPosPacket {
+            x: 1.5,
+            y: 64.0,
+            z: -3.25,
+            on_ground: true,
+            horizontal_collision: false,
+        };
+        let unified: ServerboundMovePlayerPacket = pkt.into();
+        assert!((unified.x.unwrap() - 1.5).abs() < f64::EPSILON);
+        assert!((unified.y.unwrap() - 64.0).abs() < f64::EPSILON);
+        assert!((unified.z.unwrap() + 3.25).abs() < f64::EPSILON);
+        assert!(unified.yaw.is_none());
+        assert!(unified.pitch.is_none());
+        assert!(unified.on_ground);
+        assert!(!unified.horizontal_collision);
+        assert!(unified.has_pos());
+        assert!(!unified.has_rot());
     }
 
     #[test]
-    fn test_decode_pos_rot() {
-        let data = encode_pos_rot(10.0, 70.0, 20.0, 90.0, -15.0, false);
-        let pkt = ServerboundMovePlayerPacket::decode_pos_rot(data).unwrap();
-        assert!((pkt.x.unwrap() - 10.0).abs() < f64::EPSILON);
-        assert!((pkt.yaw.unwrap() - 90.0).abs() < f32::EPSILON);
-        assert!((pkt.pitch.unwrap() + 15.0).abs() < f32::EPSILON);
-        assert!(!pkt.on_ground);
-        assert!(pkt.has_pos());
-        assert!(pkt.has_rot());
+    fn test_pos_rot_roundtrip() {
+        let pkt = ServerboundMovePlayerPosRotPacket {
+            x: 10.0,
+            y: 70.0,
+            z: 20.0,
+            yaw: 90.0,
+            pitch: -15.0,
+            on_ground: false,
+            horizontal_collision: false,
+        };
+        let encoded = pkt.encode();
+        assert_eq!(encoded.len(), 33); // 3×f64 (24) + 2×f32 (8) + flags (1)
+        let decoded = ServerboundMovePlayerPosRotPacket::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
     }
 
     #[test]
-    fn test_decode_rot() {
-        let data = encode_rot(180.0, 45.0, true);
-        let pkt = ServerboundMovePlayerPacket::decode_rot(data).unwrap();
-        assert!(pkt.x.is_none());
-        assert!((pkt.yaw.unwrap() - 180.0).abs() < f32::EPSILON);
-        assert!(pkt.on_ground);
-        assert!(!pkt.has_pos());
-        assert!(pkt.has_rot());
+    fn test_pos_rot_to_unified() {
+        let pkt = ServerboundMovePlayerPosRotPacket {
+            x: 10.0,
+            y: 70.0,
+            z: 20.0,
+            yaw: 90.0,
+            pitch: -15.0,
+            on_ground: false,
+            horizontal_collision: false,
+        };
+        let unified: ServerboundMovePlayerPacket = pkt.into();
+        assert!((unified.x.unwrap() - 10.0).abs() < f64::EPSILON);
+        assert!((unified.yaw.unwrap() - 90.0).abs() < f32::EPSILON);
+        assert!((unified.pitch.unwrap() + 15.0).abs() < f32::EPSILON);
+        assert!(!unified.on_ground);
+        assert!(unified.has_pos());
+        assert!(unified.has_rot());
     }
 
     #[test]
-    fn test_decode_status_only() {
-        let data = Bytes::from_static(&[0x03]); // both flags set
-        let pkt = ServerboundMovePlayerPacket::decode_status_only(data).unwrap();
-        assert!(pkt.x.is_none());
-        assert!(pkt.yaw.is_none());
-        assert!(pkt.on_ground);
-        assert!(pkt.horizontal_collision);
-        assert!(!pkt.has_pos());
-        assert!(!pkt.has_rot());
+    fn test_rot_roundtrip() {
+        let pkt = ServerboundMovePlayerRotPacket {
+            yaw: 180.0,
+            pitch: 45.0,
+            on_ground: true,
+            horizontal_collision: false,
+        };
+        let encoded = pkt.encode();
+        assert_eq!(encoded.len(), 9); // 2×f32 (8) + flags (1)
+        let decoded = ServerboundMovePlayerRotPacket::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_rot_to_unified() {
+        let pkt = ServerboundMovePlayerRotPacket {
+            yaw: 180.0,
+            pitch: 45.0,
+            on_ground: true,
+            horizontal_collision: false,
+        };
+        let unified: ServerboundMovePlayerPacket = pkt.into();
+        assert!(unified.x.is_none());
+        assert!((unified.yaw.unwrap() - 180.0).abs() < f32::EPSILON);
+        assert!(unified.on_ground);
+        assert!(!unified.has_pos());
+        assert!(unified.has_rot());
+    }
+
+    #[test]
+    fn test_status_only_roundtrip() {
+        let pkt = ServerboundMovePlayerStatusOnlyPacket {
+            on_ground: true,
+            horizontal_collision: true,
+        };
+        let encoded = pkt.encode();
+        assert_eq!(encoded.len(), 1); // flags only
+        let decoded = ServerboundMovePlayerStatusOnlyPacket::decode(encoded.freeze()).unwrap();
+        assert_eq!(decoded, pkt);
+    }
+
+    #[test]
+    fn test_status_only_to_unified() {
+        let pkt = ServerboundMovePlayerStatusOnlyPacket {
+            on_ground: true,
+            horizontal_collision: true,
+        };
+        let unified: ServerboundMovePlayerPacket = pkt.into();
+        assert!(unified.x.is_none());
+        assert!(unified.yaw.is_none());
+        assert!(unified.on_ground);
+        assert!(unified.horizontal_collision);
+        assert!(!unified.has_pos());
+        assert!(!unified.has_rot());
     }
 
     #[test]
@@ -291,9 +537,30 @@ mod tests {
 
     #[test]
     fn test_horizontal_collision_flag() {
-        let data = encode_pos(0.0, 0.0, 0.0, false, true);
-        let pkt = ServerboundMovePlayerPacket::decode_pos(data).unwrap();
-        assert!(!pkt.on_ground);
-        assert!(pkt.horizontal_collision);
+        let pkt = ServerboundMovePlayerPosPacket {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            on_ground: false,
+            horizontal_collision: true,
+        };
+        let encoded = pkt.encode();
+        let decoded = ServerboundMovePlayerPosPacket::decode(encoded.freeze()).unwrap();
+        assert!(!decoded.on_ground);
+        assert!(decoded.horizontal_collision);
+    }
+
+    #[test]
+    fn test_packet_ids() {
+        assert_eq!(<ServerboundMovePlayerPosPacket as Packet>::PACKET_ID, 0x1E);
+        assert_eq!(
+            <ServerboundMovePlayerPosRotPacket as Packet>::PACKET_ID,
+            0x1F
+        );
+        assert_eq!(<ServerboundMovePlayerRotPacket as Packet>::PACKET_ID, 0x20);
+        assert_eq!(
+            <ServerboundMovePlayerStatusOnlyPacket as Packet>::PACKET_ID,
+            0x21
+        );
     }
 }

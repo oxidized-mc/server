@@ -10,7 +10,8 @@ use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
     ClientboundForgetLevelChunkPacket, ClientboundLevelChunkWithLightPacket,
     ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket, RelativeFlags,
-    ServerboundMovePlayerPacket,
+    ServerboundMovePlayerPacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
+    ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
 use oxidized_world::chunk::{ChunkPos, LevelChunk};
 use tracing::{debug, trace};
@@ -25,13 +26,17 @@ pub async fn handle_movement(
     packet_id: i32,
     data: bytes::Bytes,
 ) -> Result<(), ConnectionError> {
-    let decode_result = match packet_id {
-        ServerboundMovePlayerPacket::PACKET_ID_POS => ServerboundMovePlayerPacket::decode_pos(data),
-        ServerboundMovePlayerPacket::PACKET_ID_POS_ROT => {
-            ServerboundMovePlayerPacket::decode_pos_rot(data)
+    let decode_result: Result<ServerboundMovePlayerPacket, _> = match packet_id {
+        ServerboundMovePlayerPosPacket::PACKET_ID => {
+            ServerboundMovePlayerPosPacket::decode(data).map(Into::into)
         },
-        ServerboundMovePlayerPacket::PACKET_ID_ROT => ServerboundMovePlayerPacket::decode_rot(data),
-        _ => ServerboundMovePlayerPacket::decode_status_only(data),
+        ServerboundMovePlayerPosRotPacket::PACKET_ID => {
+            ServerboundMovePlayerPosRotPacket::decode(data).map(Into::into)
+        },
+        ServerboundMovePlayerRotPacket::PACKET_ID => {
+            ServerboundMovePlayerRotPacket::decode(data).map(Into::into)
+        },
+        _ => ServerboundMovePlayerStatusOnlyPacket::decode(data).map(Into::into),
     };
 
     let move_pkt = match decode_result {

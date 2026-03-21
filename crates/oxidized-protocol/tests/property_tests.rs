@@ -241,11 +241,13 @@ use oxidized_protocol::packets::play::{
     ClientboundEntityPositionSyncPacket, ClientboundMoveEntityPosPacket,
     ClientboundMoveEntityPosRotPacket, ClientboundMoveEntityRotPacket,
     ClientboundPlayerPositionPacket, ClientboundRotateHeadPacket, PlayerCommandAction, PlayerInput,
-    RelativeFlags, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
+    RelativeFlags, ServerboundMovePlayerPacket, ServerboundMovePlayerPosPacket,
+    ServerboundMovePlayerPosRotPacket, ServerboundMovePlayerRotPacket,
+    ServerboundMovePlayerStatusOnlyPacket, ServerboundPlayerCommandPacket,
     ServerboundPlayerInputPacket,
 };
 
-/// Builds raw bytes for `ServerboundMovePlayerPacket::decode_pos`.
+/// Builds raw bytes for `ServerboundMovePlayerPosPacket`.
 fn build_move_pos_bytes(x: f64, y: f64, z: f64, flags: u8) -> Bytes {
     use bytes::BufMut;
     let mut buf = BytesMut::with_capacity(25);
@@ -256,7 +258,7 @@ fn build_move_pos_bytes(x: f64, y: f64, z: f64, flags: u8) -> Bytes {
     buf.freeze()
 }
 
-/// Builds raw bytes for `ServerboundMovePlayerPacket::decode_pos_rot`.
+/// Builds raw bytes for `ServerboundMovePlayerPosRotPacket`.
 fn build_move_pos_rot_bytes(x: f64, y: f64, z: f64, yaw: f32, pitch: f32, flags: u8) -> Bytes {
     use bytes::BufMut;
     let mut buf = BytesMut::with_capacity(33);
@@ -269,7 +271,7 @@ fn build_move_pos_rot_bytes(x: f64, y: f64, z: f64, yaw: f32, pitch: f32, flags:
     buf.freeze()
 }
 
-/// Builds raw bytes for `ServerboundMovePlayerPacket::decode_rot`.
+/// Builds raw bytes for `ServerboundMovePlayerRotPacket`.
 fn build_move_rot_bytes(yaw: f32, pitch: f32, flags: u8) -> Bytes {
     use bytes::BufMut;
     let mut buf = BytesMut::with_capacity(9);
@@ -296,26 +298,25 @@ fn finite_f32() -> impl Strategy<Value = f32> {
 }
 
 proptest! {
-    /// ServerboundMovePlayerPacket Pos variant: bytes → decode → verify fields.
+    /// ServerboundMovePlayerPosPacket: bytes → decode → Into unified → verify fields.
     #[test]
     fn proptest_move_player_pos_roundtrip(
         x in finite_f64(), y in finite_f64(), z in finite_f64(),
         flags in 0u8..=3,
     ) {
         let data = build_move_pos_bytes(x, y, z, flags);
-        let pkt = ServerboundMovePlayerPacket::decode_pos(data).unwrap();
-        prop_assert_eq!(pkt.x.unwrap().to_bits(), x.to_bits());
-        prop_assert_eq!(pkt.y.unwrap().to_bits(), y.to_bits());
-        prop_assert_eq!(pkt.z.unwrap().to_bits(), z.to_bits());
-        prop_assert!(pkt.yaw.is_none());
-        prop_assert!(pkt.pitch.is_none());
-        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
-        prop_assert_eq!(pkt.horizontal_collision, flags & 0x02 != 0);
+        let raw = ServerboundMovePlayerPosPacket::decode(data).unwrap();
+        prop_assert_eq!(raw.x.to_bits(), x.to_bits());
+        prop_assert_eq!(raw.y.to_bits(), y.to_bits());
+        prop_assert_eq!(raw.z.to_bits(), z.to_bits());
+        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(raw.horizontal_collision, flags & 0x02 != 0);
+        let pkt: ServerboundMovePlayerPacket = raw.into();
         prop_assert!(pkt.has_pos());
         prop_assert!(!pkt.has_rot());
     }
 
-    /// ServerboundMovePlayerPacket PosRot variant: bytes → decode → verify fields.
+    /// ServerboundMovePlayerPosRotPacket: bytes → decode → Into unified → verify fields.
     #[test]
     fn proptest_move_player_pos_rot_roundtrip(
         x in finite_f64(), y in finite_f64(), z in finite_f64(),
@@ -323,41 +324,42 @@ proptest! {
         flags in 0u8..=3,
     ) {
         let data = build_move_pos_rot_bytes(x, y, z, yaw, pitch, flags);
-        let pkt = ServerboundMovePlayerPacket::decode_pos_rot(data).unwrap();
-        prop_assert_eq!(pkt.x.unwrap().to_bits(), x.to_bits());
-        prop_assert_eq!(pkt.y.unwrap().to_bits(), y.to_bits());
-        prop_assert_eq!(pkt.z.unwrap().to_bits(), z.to_bits());
-        prop_assert_eq!(pkt.yaw.unwrap().to_bits(), yaw.to_bits());
-        prop_assert_eq!(pkt.pitch.unwrap().to_bits(), pitch.to_bits());
-        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
-        prop_assert_eq!(pkt.horizontal_collision, flags & 0x02 != 0);
+        let raw = ServerboundMovePlayerPosRotPacket::decode(data).unwrap();
+        prop_assert_eq!(raw.x.to_bits(), x.to_bits());
+        prop_assert_eq!(raw.y.to_bits(), y.to_bits());
+        prop_assert_eq!(raw.z.to_bits(), z.to_bits());
+        prop_assert_eq!(raw.yaw.to_bits(), yaw.to_bits());
+        prop_assert_eq!(raw.pitch.to_bits(), pitch.to_bits());
+        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(raw.horizontal_collision, flags & 0x02 != 0);
+        let pkt: ServerboundMovePlayerPacket = raw.into();
         prop_assert!(pkt.has_pos());
         prop_assert!(pkt.has_rot());
     }
 
-    /// ServerboundMovePlayerPacket Rot variant: bytes → decode → verify fields.
+    /// ServerboundMovePlayerRotPacket: bytes → decode → verify fields.
     #[test]
     fn proptest_move_player_rot_roundtrip(
         yaw in finite_f32(), pitch in finite_f32(),
         flags in 0u8..=3,
     ) {
         let data = build_move_rot_bytes(yaw, pitch, flags);
-        let pkt = ServerboundMovePlayerPacket::decode_rot(data).unwrap();
-        prop_assert!(pkt.x.is_none());
-        prop_assert_eq!(pkt.yaw.unwrap().to_bits(), yaw.to_bits());
-        prop_assert_eq!(pkt.pitch.unwrap().to_bits(), pitch.to_bits());
-        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
+        let raw = ServerboundMovePlayerRotPacket::decode(data).unwrap();
+        prop_assert_eq!(raw.yaw.to_bits(), yaw.to_bits());
+        prop_assert_eq!(raw.pitch.to_bits(), pitch.to_bits());
+        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
     }
 
-    /// ServerboundMovePlayerPacket StatusOnly variant: byte → decode → verify flags.
+    /// ServerboundMovePlayerStatusOnlyPacket: byte → decode → verify flags.
     #[test]
     fn proptest_move_player_status_only_roundtrip(flags in 0u8..=3) {
         let data = Bytes::from(vec![flags]);
-        let pkt = ServerboundMovePlayerPacket::decode_status_only(data).unwrap();
+        let raw = ServerboundMovePlayerStatusOnlyPacket::decode(data).unwrap();
+        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(raw.horizontal_collision, flags & 0x02 != 0);
+        let pkt: ServerboundMovePlayerPacket = raw.into();
         prop_assert!(pkt.x.is_none());
         prop_assert!(pkt.yaw.is_none());
-        prop_assert_eq!(pkt.on_ground, flags & 0x01 != 0);
-        prop_assert_eq!(pkt.horizontal_collision, flags & 0x02 != 0);
     }
 
     /// ServerboundPlayerCommandPacket encode → decode roundtrip.
