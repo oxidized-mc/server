@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
-# setup-ref.sh — Download, extract, and decompile the Minecraft 26.1-pre-3 server JAR.
+# setup-ref.sh — Download, extract, and decompile the Minecraft server JAR.
 #
-# Creates the mc-server-ref/ directory with:
+# All output lives under mc-server-ref/<version>/:
+#   server.jar             — downloaded bundled launcher JAR
 #   extracted/server.jar   — unbundled server JAR (class files)
 #   decompiled/            — VineFlower-decompiled Java source (~4 800 files)
-#   mc-extracted/          — data-generated registry/tag JSONs
+#   mc-extracted/          — data extracted from the inner JAR (registries, tags)
 #   generated/             — vanilla data-generator reports (registries.json, etc.)
+#
+# Convenience symlinks are created at mc-server-ref/{decompiled,generated,mc-extracted}
+# pointing into the versioned directory so existing tools work without changes.
 #
 # Prerequisites: java (≥21), curl, jq
 # Usage:  ./tools/setup-ref.sh
@@ -20,10 +24,11 @@ VERSION_MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REF_DIR="${PROJECT_ROOT}/mc-server-ref"
-EXTRACTED_DIR="${REF_DIR}/extracted"
-DECOMPILED_DIR="${REF_DIR}/decompiled"
-MC_EXTRACTED_DIR="${REF_DIR}/mc-extracted"
-GENERATED_DIR="${REF_DIR}/generated"
+VERSION_DIR="${REF_DIR}/${MC_VERSION}"
+EXTRACTED_DIR="${VERSION_DIR}/extracted"
+DECOMPILED_DIR="${VERSION_DIR}/decompiled"
+MC_EXTRACTED_DIR="${VERSION_DIR}/mc-extracted"
+GENERATED_DIR="${VERSION_DIR}/generated"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 info()  { printf '\033[1;34m==> %s\033[0m\n' "$*"; }
@@ -46,10 +51,10 @@ if [ "${JAVA_MAJOR}" -lt 21 ]; then
 fi
 ok "Java ${JAVA_MAJOR} found"
 
-mkdir -p "${REF_DIR}" "${EXTRACTED_DIR}"
+mkdir -p "${VERSION_DIR}" "${EXTRACTED_DIR}"
 
 # ── Step 1: Download server JAR ────────────────────────────────────────────────
-SERVER_JAR="${REF_DIR}/server.jar"
+SERVER_JAR="${VERSION_DIR}/server.jar"
 
 if [ -f "${SERVER_JAR}" ]; then
     ok "Server JAR already exists, skipping download"
@@ -81,32 +86,23 @@ INNER_JAR="${EXTRACTED_DIR}/server.jar"
 if [ -f "${INNER_JAR}" ]; then
     ok "Extracted server JAR already exists, skipping extraction"
 else
-    info "Extracting bundled server JAR from META-INF/versions/..."
+    info "Extracting bundled server JAR..."
 
-    # The bundled JAR launcher packs the real server inside META-INF/versions/<hash>/server.jar
-    BUNDLED_PATH=$(java -jar "${SERVER_JAR}" --help 2>&1 || true)
-
-    # Use the bundler to extract — run it with a special property
-    cd "${EXTRACTED_DIR}"
+    # The bundler unpacks libraries/, versions/, and more into CWD.
+    # Run it inside the version directory so nothing leaks into the repo root.
+    cd "${VERSION_DIR}"
     java -DbundlerMainClass=net.minecraft.bundler.Main -jar "${SERVER_JAR}" --extract 2>/dev/null || true
 
-    # The extract flag may not exist on all versions. Fallback: manually unzip.
+    # If --extract didn't produce the inner JAR, fall back to manual unzip.
     if [ ! -f "${INNER_JAR}" ]; then
-        warn "Bundler extract failed, trying manual extraction..."
-        # Unzip META-INF/versions/ to find the inner JAR
-        TEMP_EXTRACT=$(mktemp -d)
-        cd "${TEMP_EXTRACT}"
-        jar xf "${SERVER_JAR}" META-INF/versions/ 2>/dev/null || unzip -q "${SERVER_JAR}" 'META-INF/versions/*' 2>/dev/null || true
-
-        FOUND_JAR=$(find "${TEMP_EXTRACT}" -name 'server-*.jar' -o -name 'server.jar' 2>/dev/null | head -1)
+        # Check if the bundler placed it in versions/<ver>/server.jar
+        FOUND_JAR=$(find "${VERSION_DIR}/versions" -name '*.jar' 2>/dev/null | head -1)
         if [ -n "${FOUND_JAR}" ]; then
             cp "${FOUND_JAR}" "${INNER_JAR}"
         else
-            # Some versions just have classes directly — copy the outer JAR
             warn "No inner server JAR found; using outer JAR directly"
             cp "${SERVER_JAR}" "${INNER_JAR}"
         fi
-        rm -rf "${TEMP_EXTRACT}"
     fi
 
     cd "${PROJECT_ROOT}"
@@ -145,7 +141,8 @@ if [ -d "${GENERATED_DIR}/reports" ]; then
 else
     info "Running vanilla data generator..."
     mkdir -p "${GENERATED_DIR}"
-    cd "${REF_DIR}"
+    # Run from inside the version dir so any side-effect files stay contained.
+    cd "${VERSION_DIR}"
     java -DbundlerMainClass=net.minecraft.data.Main -jar "${SERVER_JAR}" \
         --all --output "${GENERATED_DIR}" 2>&1 | tail -5
     cd "${PROJECT_ROOT}"
@@ -169,19 +166,38 @@ else
     fi
 fi
 
+# ── Step 7: Create convenience symlinks ────────────────────────────────────────
+info "Creating convenience symlinks..."
+for name in decompiled generated mc-extracted; do
+    LINK="${REF_DIR}/${name}"
+    TARGET="${MC_VERSION}/${name}"
+    if [ -L "${LINK}" ]; then
+        rm "${LINK}"
+    elif [ -e "${LINK}" ]; then
+        warn "${LINK} exists and is not a symlink, skipping"
+        continue
+    fi
+    ln -s "${TARGET}" "${LINK}"
+    ok "${name} → ${TARGET}"
+done
+
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
 info "Setup complete! Directory layout:"
 echo ""
 echo "  mc-server-ref/"
-[ -f "${SERVER_JAR}" ]    && echo "  ├── server.jar              $(du -h "${SERVER_JAR}" | cut -f1)"
-[ -f "${INNER_JAR}" ]     && echo "  ├── extracted/server.jar    $(du -h "${INNER_JAR}" | cut -f1)"
 [ -f "${VINEFLOWER_JAR}" ] && echo "  ├── vineflower-${VINEFLOWER_VERSION}.jar"
+echo "  ├── decompiled -> ${MC_VERSION}/decompiled"
+echo "  ├── generated -> ${MC_VERSION}/generated"
+echo "  ├── mc-extracted -> ${MC_VERSION}/mc-extracted"
+echo "  └── ${MC_VERSION}/"
+[ -f "${SERVER_JAR}" ]    && echo "      ├── server.jar              $(du -h "${SERVER_JAR}" | cut -f1)"
+[ -f "${INNER_JAR}" ]     && echo "      ├── extracted/server.jar    $(du -h "${INNER_JAR}" | cut -f1)"
 if [ -d "${DECOMPILED_DIR}" ]; then
     JAVA_COUNT=$(find "${DECOMPILED_DIR}" -name '*.java' | wc -l)
-    echo "  ├── decompiled/             ${JAVA_COUNT} Java files"
+    echo "      ├── decompiled/             ${JAVA_COUNT} Java files"
 fi
-[ -d "${GENERATED_DIR}" ]    && echo "  ├── generated/              vanilla reports"
-[ -d "${MC_EXTRACTED_DIR}" ] && echo "  └── mc-extracted/           registry & tag data"
+[ -d "${GENERATED_DIR}" ]    && echo "      ├── generated/              vanilla reports"
+[ -d "${MC_EXTRACTED_DIR}" ] && echo "      └── mc-extracted/           registry & tag data"
 echo ""
 ok "Ready to develop! Run 'python3 tools/bundle_registries.py' next if needed."
