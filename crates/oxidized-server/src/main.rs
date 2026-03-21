@@ -6,6 +6,7 @@
 
 mod cli;
 mod config;
+mod console;
 mod logging;
 mod network;
 
@@ -15,7 +16,6 @@ use std::sync::Arc;
 use clap::Parser;
 use mimalloc::MiMalloc;
 use oxidized_game::commands::Commands;
-use oxidized_game::commands::source::{CommandSourceKind, CommandSourceStack};
 use oxidized_game::player::PlayerList;
 use oxidized_nbt::NbtCompound;
 use oxidized_protocol::chat::Component;
@@ -24,9 +24,8 @@ use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::{ServerStatus, StatusPlayers, StatusVersion};
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::storage::PrimaryLevelData;
-use tokio::io::AsyncBufReadExt;
 use tokio::sync::broadcast;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::cli::Args;
 use crate::config::ServerConfig;
@@ -178,10 +177,10 @@ fn main() -> anyhow::Result<()> {
             color_char,
             commands: Commands::new(),
             max_players: config.gameplay.max_players as usize,
+            shutdown_tx: shutdown_tx.clone(),
         });
 
         // Build the shared login context.
-        let console_server_ctx = server_ctx.clone();
         let login_ctx = Arc::new(LoginContext {
             server_status,
             keypair: Arc::new(keypair),
@@ -192,6 +191,9 @@ fn main() -> anyhow::Result<()> {
             server_ctx,
         });
 
+        // Clone the server context for the console before moving login_ctx.
+        let console_server_ctx = login_ctx.server_ctx.clone();
+
         // Spawn the TCP listener.
         let listener_shutdown = shutdown_tx.subscribe();
         let listener_handle = tokio::spawn(async move {
@@ -200,60 +202,14 @@ fn main() -> anyhow::Result<()> {
             }
         });
 
-        // Spawn the console command reader (stdin).
-        let console_shutdown_tx = shutdown_tx.clone();
-        let console_handle = tokio::spawn(async move {
-            let stdin = tokio::io::stdin();
-            let reader = tokio::io::BufReader::new(stdin);
-            let mut lines = reader.lines();
-            loop {
-                match lines.next_line().await {
-                    Ok(Some(line)) => {
-                        let line = line.trim().to_string();
-                        if line.is_empty() {
-                            continue;
-                        }
-                        let ctx = console_server_ctx.clone();
-                        let shutdown = console_shutdown_tx.clone();
-                        // Build a console command source that prints feedback to stdout.
-                        let source = CommandSourceStack {
-                            source: CommandSourceKind::Console,
-                            position: (0.0, 0.0, 0.0),
-                            rotation: (0.0, 0.0),
-                            permission_level: 4,
-                            display_name: "Server".to_string(),
-                            server: ctx.clone(),
-                            feedback_sender: std::sync::Arc::new(|component: &Component| {
-                                println!("{component}");
-                            }),
-                            silent: false,
-                        };
-                        match ctx.commands.dispatch(&line, source) {
-                            Ok(_) => {
-                                debug!(command = %line, "Console command executed");
-                            },
-                            Err(e) => {
-                                eprintln!("Error: {e}");
-                            },
-                        }
-                        // Check if the command was /stop
-                        let cmd_word = line
-                            .trim_start_matches('/')
-                            .split_whitespace()
-                            .next()
-                            .unwrap_or("");
-                        if cmd_word == "stop" {
-                            let _ = shutdown.send(());
-                        }
-                    },
-                    Ok(None) => break, // EOF
-                    Err(e) => {
-                        debug!(error = %e, "Console read error");
-                        break;
-                    },
-                }
-            }
-        });
+        // Spawn the console command reader on a dedicated OS thread.
+        // Rustyline blocks on stdin, so it cannot run in a Tokio task.
+        let _console_thread = std::thread::Builder::new()
+            .name("console".into())
+            .spawn(move || {
+                console::run_console_loop(console_server_ctx);
+            })
+            .expect("failed to spawn console thread");
 
         // Wait for Ctrl+C or shutdown from /stop command, then broadcast shutdown.
         let mut shutdown_rx = shutdown_tx.subscribe();
@@ -269,9 +225,6 @@ fn main() -> anyhow::Result<()> {
         }
         info!("Shutdown signal received");
         let _ = shutdown_tx.send(());
-
-        // Abort the console reader (it blocks on stdin).
-        console_handle.abort();
 
         // Wait for the listener task to finish.
         let _ = listener_handle.await;
