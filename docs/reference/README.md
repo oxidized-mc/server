@@ -23,14 +23,35 @@ The decompiled vanilla reference is at:
 mc-server-ref/decompiled/
 ```
 
-This directory is **gitignored**. To regenerate it, download the Minecraft 26.1-pre-3
-server JAR from the [Mojang version manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json),
-extract the bundled server from `META-INF/versions/`, and decompile with
-[Vineflower](https://github.com/Vineflower/vineflower):
+This directory is **gitignored**. To regenerate the full reference setup
+(download, extract, decompile, and run data generators) in one step:
 
 ```bash
-java -jar vineflower.jar mc-server-ref/extracted/server.jar mc-server-ref/decompiled/
+./tools/setup-ref.sh
 ```
+
+The script is idempotent — it skips any step that has already been completed.
+It requires **Java 21+**, **curl**, and **jq**.
+
+<details>
+<summary>Manual steps (if you prefer)</summary>
+
+1. Download the Minecraft 26.1-pre-3 server JAR from the
+   [Mojang version manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)
+2. Extract the bundled server from `META-INF/versions/`
+3. Decompile with [Vineflower](https://github.com/Vineflower/vineflower):
+   ```bash
+   java -jar vineflower.jar mc-server-ref/extracted/server.jar mc-server-ref/decompiled/
+   ```
+4. Run the data generator:
+   ```bash
+   cd mc-server-ref && java -DbundlerMainClass=net.minecraft.data.Main -jar server.jar --all --output generated
+   ```
+5. Extract data from the inner JAR:
+   ```bash
+   cd mc-server-ref/mc-extracted && jar xf ../extracted/server.jar data/
+   ```
+</details>
 
 The root packages of interest:
 
