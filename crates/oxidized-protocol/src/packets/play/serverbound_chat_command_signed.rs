@@ -10,7 +10,6 @@ use bytes::{Bytes, BytesMut};
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
-use crate::packets::play::PlayPacketError;
 
 /// 0x08 — Signed chat command.
 ///
@@ -33,34 +32,6 @@ pub struct ServerboundChatCommandSignedPacket {
     pub command: String,
 }
 
-impl ServerboundChatCommandSignedPacket {
-    /// Packet ID in the PLAY state serverbound registry.
-    pub const PACKET_ID: i32 = 0x08;
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let command = types::read_string(&mut data, 32767)?;
-        // Skip remaining fields (timestamp, salt, signatures, last-seen, checksum).
-        // We intentionally do not validate them — mirrors vanilla offline-mode behavior
-        // where signature enforcement is disabled.
-        Ok(Self { command })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    ///
-    /// Only the `command` field is encoded — signature/last-seen fields are
-    /// not relevant when re-encoding server-side.
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(self.command.len() + 5);
-        types::write_string(&mut buf, &self.command);
-        buf
-    }
-}
-
 impl Packet for ServerboundChatCommandSignedPacket {
     const PACKET_ID: i32 = 0x08;
 
@@ -70,7 +41,9 @@ impl Packet for ServerboundChatCommandSignedPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(self.command.len() + 5);
+        types::write_string(&mut buf, &self.command);
+        buf
     }
 }
 
@@ -84,7 +57,10 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ServerboundChatCommandSignedPacket::PACKET_ID, 0x08);
+        assert_eq!(
+            <ServerboundChatCommandSignedPacket as Packet>::PACKET_ID,
+            0x08
+        );
     }
 
     #[test]

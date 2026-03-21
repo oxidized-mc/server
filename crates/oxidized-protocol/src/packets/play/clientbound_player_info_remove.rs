@@ -4,7 +4,6 @@ use bytes::{Bytes, BytesMut};
 use uuid::Uuid;
 
 use crate::codec::{types, varint};
-use crate::packets::play::PlayPacketError;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
@@ -14,34 +13,6 @@ use crate::codec::packet::PacketDecodeError;
 pub struct ClientboundPlayerInfoRemovePacket {
     /// UUIDs of players to remove.
     pub uuids: Vec<Uuid>,
-}
-
-impl ClientboundPlayerInfoRemovePacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x45;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let count = varint::read_varint_buf(&mut data)? as usize;
-        if count > 1000 {
-            return Err(PlayPacketError::UnexpectedEof);
-        }
-        let mut uuids = Vec::with_capacity(count);
-        for _ in 0..count {
-            uuids.push(types::read_uuid(&mut data)?);
-        }
-        Ok(Self { uuids })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(5 + self.uuids.len() * 16);
-        varint::write_varint_buf(self.uuids.len() as i32, &mut buf);
-        for uuid in &self.uuids {
-            types::write_uuid(&mut buf, uuid);
-        }
-        buf
-    }
 }
 
 impl Packet for ClientboundPlayerInfoRemovePacket {
@@ -62,7 +33,12 @@ impl Packet for ClientboundPlayerInfoRemovePacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(5 + self.uuids.len() * 16);
+        varint::write_varint_buf(self.uuids.len() as i32, &mut buf);
+        for uuid in &self.uuids {
+            types::write_uuid(&mut buf, uuid);
+        }
+        buf
     }
 }
 
@@ -73,7 +49,10 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundPlayerInfoRemovePacket::PACKET_ID, 0x45);
+        assert_eq!(
+            <ClientboundPlayerInfoRemovePacket as Packet>::PACKET_ID,
+            0x45
+        );
     }
 
     #[test]
@@ -102,24 +81,5 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundPlayerInfoRemovePacket::decode(encoded.freeze()).unwrap();
         assert!(decoded.uuids.is_empty());
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundPlayerInfoRemovePacket {
-            uuids: vec![Uuid::nil()],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundPlayerInfoRemovePacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundPlayerInfoRemovePacket as Packet>::PACKET_ID,
-            0x45
-        );
     }
 }

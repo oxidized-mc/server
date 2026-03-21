@@ -4,7 +4,6 @@ use bytes::{Bytes, BytesMut};
 
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::{Packet, types, varint};
-use crate::packets::play::PlayPacketError;
 
 /// 0x0F — Client requests tab-completion suggestions.
 #[derive(Debug, Clone)]
@@ -13,26 +12,6 @@ pub struct ServerboundCommandSuggestionPacket {
     pub id: i32,
     /// The partial command text (up to 32500 chars).
     pub command: String,
-}
-
-impl ServerboundCommandSuggestionPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x0F;
-
-    /// Decodes the packet from raw bytes.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let id = varint::read_varint_buf(&mut data)?;
-        let command = types::read_string(&mut data, 32500)?;
-        Ok(Self { id, command })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(self.command.len() + 10);
-        varint::write_varint_buf(self.id, &mut buf);
-        types::write_string(&mut buf, &self.command);
-        buf
-    }
 }
 
 impl Packet for ServerboundCommandSuggestionPacket {
@@ -45,7 +24,10 @@ impl Packet for ServerboundCommandSuggestionPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(self.command.len() + 10);
+        varint::write_varint_buf(self.id, &mut buf);
+        types::write_string(&mut buf, &self.command);
+        buf
     }
 }
 

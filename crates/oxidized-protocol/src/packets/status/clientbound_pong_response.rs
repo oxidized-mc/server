@@ -19,18 +19,6 @@ pub struct ClientboundPongResponsePacket {
     pub time: i64,
 }
 
-impl ClientboundPongResponsePacket {
-    /// Packet ID in the STATUS state.
-    pub const PACKET_ID: i32 = 0x01;
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        types::write_i64(&mut buf, self.time);
-        buf
-    }
-}
-
 impl Packet for ClientboundPongResponsePacket {
     const PACKET_ID: i32 = 0x01;
 
@@ -40,7 +28,9 @@ impl Packet for ClientboundPongResponsePacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        types::write_i64(&mut buf, self.time);
+        buf
     }
 }
 

@@ -11,8 +11,6 @@ use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
 
-use super::PlayPacketError;
-
 /// Actions the client can trigger via player command.
 ///
 /// Matches the `Action` enum in `ServerboundPlayerCommandPacket.java`
@@ -41,8 +39,8 @@ impl PlayerCommandAction {
     ///
     /// # Errors
     ///
-    /// Returns [`PlayPacketError::InvalidData`] if `id` is not a known action.
-    pub fn from_id(id: i32) -> Result<Self, PlayPacketError> {
+    /// Returns [`PacketDecodeError::InvalidData`] if `id` is not a known action.
+    pub fn from_id(id: i32) -> Result<Self, PacketDecodeError> {
         match id {
             0 => Ok(Self::StopSleeping),
             1 => Ok(Self::StartSprinting),
@@ -51,7 +49,7 @@ impl PlayerCommandAction {
             4 => Ok(Self::StopRidingJump),
             5 => Ok(Self::OpenInventory),
             6 => Ok(Self::StartFallFlying),
-            _ => Err(PlayPacketError::InvalidData(format!(
+            _ => Err(PacketDecodeError::InvalidData(format!(
                 "unknown PlayerCommandAction: {id}"
             ))),
         }
@@ -77,17 +75,10 @@ pub struct ServerboundPlayerCommandPacket {
     pub data: i32,
 }
 
-impl ServerboundPlayerCommandPacket {
-    /// Packet ID in the PLAY state serverbound registry.
-    pub const PACKET_ID: i32 = 0x2A;
+impl Packet for ServerboundPlayerCommandPacket {
+    const PACKET_ID: i32 = 0x2A;
 
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PlayPacketError`] if the buffer is truncated or the
-    /// action ordinal is unknown.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let entity_id = varint::read_varint_buf(&mut data)?;
         let action_id = varint::read_varint_buf(&mut data)?;
         let action = PlayerCommandAction::from_id(action_id)?;
@@ -99,36 +90,12 @@ impl ServerboundPlayerCommandPacket {
         })
     }
 
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
+    fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(15);
         varint::write_varint_buf(self.entity_id, &mut buf);
         varint::write_varint_buf(self.action as i32, &mut buf);
         varint::write_varint_buf(self.data, &mut buf);
         buf
-    }
-}
-
-impl Packet for ServerboundPlayerCommandPacket {
-    const PACKET_ID: i32 = 0x2A;
-
-    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let action_id = varint::read_varint_buf(&mut data)?;
-        let action = PlayerCommandAction::from_id(action_id).map_err(|e| match e {
-            PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
-            other => PacketDecodeError::InvalidData(other.to_string()),
-        })?;
-        let extra = varint::read_varint_buf(&mut data)?;
-        Ok(Self {
-            entity_id,
-            action,
-            data: extra,
-        })
-    }
-
-    fn encode(&self) -> BytesMut {
-        self.encode()
     }
 }
 
@@ -188,24 +155,5 @@ mod tests {
         let decoded = ServerboundPlayerCommandPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.action, PlayerCommandAction::StartRidingJump);
         assert_eq!(decoded.data, 80);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ServerboundPlayerCommandPacket {
-            entity_id: 1,
-            action: PlayerCommandAction::StartSprinting,
-            data: 0,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ServerboundPlayerCommandPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded.entity_id, 1);
-        assert_eq!(decoded.action, PlayerCommandAction::StartSprinting);
-        assert_eq!(decoded.data, 0);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ServerboundPlayerCommandPacket as Packet>::PACKET_ID, 0x2A);
     }
 }

@@ -12,8 +12,6 @@ use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::varint;
 
-use super::clientbound_login::PlayPacketError;
-
 /// Remove one or more entities (0x4D).
 ///
 /// # Wire Format
@@ -26,42 +24,6 @@ use super::clientbound_login::PlayPacketError;
 pub struct ClientboundRemoveEntitiesPacket {
     /// Entity IDs to remove.
     pub entity_ids: Vec<i32>,
-}
-
-impl ClientboundRemoveEntitiesPacket {
-    /// Packet ID in the PLAY state clientbound registry.
-    pub const PACKET_ID: i32 = 0x4D;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let count = varint::read_varint_buf(&mut data)?;
-        if count < 0 {
-            return Err(PlayPacketError::InvalidData(format!(
-                "negative entity count: {count}"
-            )));
-        }
-        let count = count as usize;
-        // Each VarInt is at least 1 byte, so count cannot exceed remaining data.
-        if count > data.remaining() {
-            return Err(PlayPacketError::InvalidData(format!(
-                "entity count {count} exceeds available data ({} bytes)",
-                data.remaining()
-            )));
-        }
-        let mut entity_ids = Vec::with_capacity(count);
-        for _ in 0..count {
-            entity_ids.push(varint::read_varint_buf(&mut data)?);
-        }
-        Ok(Self { entity_ids })
-    }
-
-    /// Encodes the packet body into `buf`.
-    pub fn encode(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.entity_ids.len() as i32, buf);
-        for &id in &self.entity_ids {
-            varint::write_varint_buf(id, buf);
-        }
-    }
 }
 
 impl Packet for ClientboundRemoveEntitiesPacket {
@@ -90,7 +52,10 @@ impl Packet for ClientboundRemoveEntitiesPacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        self.encode(&mut buf);
+        varint::write_varint_buf(self.entity_ids.len() as i32, &mut buf);
+        for &id in &self.entity_ids {
+            varint::write_varint_buf(id, &mut buf);
+        }
         buf
     }
 }
@@ -103,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ClientboundRemoveEntitiesPacket::PACKET_ID, 0x4D);
+        assert_eq!(<ClientboundRemoveEntitiesPacket as Packet>::PACKET_ID, 0x4D);
     }
 
     #[test]
@@ -111,8 +76,7 @@ mod tests {
         let pkt = ClientboundRemoveEntitiesPacket {
             entity_ids: vec![42],
         };
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         assert_eq!(decoded.entity_ids, vec![42]);
     }
@@ -122,8 +86,7 @@ mod tests {
         let pkt = ClientboundRemoveEntitiesPacket {
             entity_ids: vec![1, 2, 3, 100, 999],
         };
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         assert_eq!(decoded.entity_ids, vec![1, 2, 3, 100, 999]);
     }
@@ -131,8 +94,7 @@ mod tests {
     #[test]
     fn test_encode_decode_empty() {
         let pkt = ClientboundRemoveEntitiesPacket { entity_ids: vec![] };
-        let mut buf = BytesMut::new();
-        pkt.encode(&mut buf);
+        let buf = pkt.encode();
         let decoded = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap();
         assert!(decoded.entity_ids.is_empty());
     }
@@ -147,21 +109,5 @@ mod tests {
             format!("{err:?}").contains("exceeds available data"),
             "expected bounds error, got: {err:?}"
         );
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundRemoveEntitiesPacket {
-            entity_ids: vec![1, 2, 3],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundRemoveEntitiesPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundRemoveEntitiesPacket as Packet>::PACKET_ID, 0x4D);
     }
 }

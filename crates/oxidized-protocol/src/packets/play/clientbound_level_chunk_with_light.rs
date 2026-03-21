@@ -75,29 +75,6 @@ pub struct LightUpdateData {
     pub block_updates: Vec<Vec<u8>>,
 }
 
-impl ClientboundLevelChunkWithLightPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x2D; // 45
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let estimated = 8 + self.chunk_data.buffer.len() + 256;
-        let mut buf = BytesMut::with_capacity(estimated);
-
-        // Chunk coordinates
-        buf.put_i32(self.chunk_x);
-        buf.put_i32(self.chunk_z);
-
-        // Chunk data
-        self.chunk_data.write_to(&mut buf);
-
-        // Light data
-        self.light_data.write_to(&mut buf);
-
-        buf
-    }
-}
-
 impl Packet for ClientboundLevelChunkWithLightPacket {
     const PACKET_ID: i32 = 0x2D;
 
@@ -115,7 +92,20 @@ impl Packet for ClientboundLevelChunkWithLightPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let estimated = 8 + self.chunk_data.buffer.len() + 256;
+        let mut buf = BytesMut::with_capacity(estimated);
+
+        // Chunk coordinates
+        buf.put_i32(self.chunk_x);
+        buf.put_i32(self.chunk_z);
+
+        // Chunk data
+        self.chunk_data.write_to(&mut buf);
+
+        // Light data
+        self.light_data.write_to(&mut buf);
+
+        buf
     }
 }
 
@@ -364,8 +354,8 @@ mod tests {
     #[test]
     fn test_packet_trait_id() {
         assert_eq!(
-            ClientboundLevelChunkWithLightPacket::PACKET_ID,
             <ClientboundLevelChunkWithLightPacket as Packet>::PACKET_ID,
+            0x2D,
         );
     }
 

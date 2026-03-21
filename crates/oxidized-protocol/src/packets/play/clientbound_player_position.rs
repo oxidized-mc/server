@@ -10,8 +10,6 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use crate::codec::types;
 use crate::codec::varint;
 
-use super::clientbound_login::PlayPacketError;
-
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 
@@ -80,57 +78,6 @@ pub struct ClientboundPlayerPositionPacket {
     pub relative_flags: RelativeFlags,
 }
 
-impl ClientboundPlayerPositionPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x48; // 72
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let teleport_id = varint::read_varint_buf(&mut data)?;
-        let x = types::read_f64(&mut data)?;
-        let y = types::read_f64(&mut data)?;
-        let z = types::read_f64(&mut data)?;
-        let dx = types::read_f64(&mut data)?;
-        let dy = types::read_f64(&mut data)?;
-        let dz = types::read_f64(&mut data)?;
-        if data.remaining() < 8 {
-            return Err(PlayPacketError::UnexpectedEof);
-        }
-        let yaw = data.get_f32();
-        let pitch = data.get_f32();
-        let flags = types::read_i32(&mut data)?;
-
-        Ok(Self {
-            teleport_id,
-            x,
-            y,
-            z,
-            dx,
-            dy,
-            dz,
-            yaw,
-            pitch,
-            relative_flags: RelativeFlags(flags),
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(64);
-        varint::write_varint_buf(self.teleport_id, &mut buf);
-        types::write_f64(&mut buf, self.x);
-        types::write_f64(&mut buf, self.y);
-        types::write_f64(&mut buf, self.z);
-        types::write_f64(&mut buf, self.dx);
-        types::write_f64(&mut buf, self.dy);
-        types::write_f64(&mut buf, self.dz);
-        buf.put_f32(self.yaw);
-        buf.put_f32(self.pitch);
-        types::write_i32(&mut buf, self.relative_flags.0);
-        buf
-    }
-}
-
 impl Packet for ClientboundPlayerPositionPacket {
     const PACKET_ID: i32 = 0x48;
 
@@ -166,7 +113,18 @@ impl Packet for ClientboundPlayerPositionPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(64);
+        varint::write_varint_buf(self.teleport_id, &mut buf);
+        types::write_f64(&mut buf, self.x);
+        types::write_f64(&mut buf, self.y);
+        types::write_f64(&mut buf, self.z);
+        types::write_f64(&mut buf, self.dx);
+        types::write_f64(&mut buf, self.dy);
+        types::write_f64(&mut buf, self.dz);
+        buf.put_f32(self.yaw);
+        buf.put_f32(self.pitch);
+        types::write_i32(&mut buf, self.relative_flags.0);
+        buf
     }
 }
 
@@ -244,30 +202,5 @@ mod tests {
         assert!((decoded.dx - 1.5).abs() < 0.001);
         assert!((decoded.dy + 0.08).abs() < 0.001);
         assert!((decoded.dz - 0.3).abs() < 0.001);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundPlayerPositionPacket {
-            teleport_id: 1,
-            x: 100.5,
-            y: 64.0,
-            z: -200.25,
-            dx: 0.0,
-            dy: 0.0,
-            dz: 0.0,
-            yaw: 90.0,
-            pitch: -15.0,
-            relative_flags: RelativeFlags::empty(),
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundPlayerPositionPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundPlayerPositionPacket as Packet>::PACKET_ID, 0x48);
     }
 }

@@ -5,36 +5,12 @@ use bytes::{Bytes, BytesMut};
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
-use crate::packets::play::PlayPacketError;
 
 /// 0x07 — Client dispatches an unsigned command (leading `/` already stripped).
 #[derive(Debug, Clone)]
 pub struct ServerboundChatCommandPacket {
     /// The command text without the leading `/`.
     pub command: String,
-}
-
-impl ServerboundChatCommandPacket {
-    /// Packet ID in the PLAY state serverbound registry.
-    pub const PACKET_ID: i32 = 0x07;
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is malformed or the command string
-    /// exceeds 32 767 characters.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let command = types::read_string(&mut data, 32767)?;
-        Ok(Self { command })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(self.command.len() + 5);
-        types::write_string(&mut buf, &self.command);
-        buf
-    }
 }
 
 impl Packet for ServerboundChatCommandPacket {
@@ -46,7 +22,9 @@ impl Packet for ServerboundChatCommandPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(self.command.len() + 5);
+        types::write_string(&mut buf, &self.command);
+        buf
     }
 }
 
@@ -57,7 +35,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ServerboundChatCommandPacket::PACKET_ID, 0x07);
+        assert_eq!(<ServerboundChatCommandPacket as Packet>::PACKET_ID, 0x07);
     }
 
     #[test]

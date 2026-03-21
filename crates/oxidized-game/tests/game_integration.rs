@@ -17,6 +17,7 @@ use oxidized_game::player::player_list::PlayerList;
 use oxidized_game::player::server_player::ServerPlayer;
 use oxidized_nbt::NbtCompound;
 use oxidized_protocol::auth::GameProfile;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
     ClientboundGameEventPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
     ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,

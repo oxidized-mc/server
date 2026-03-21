@@ -4,20 +4,10 @@
 //! Corresponds to `net.minecraft.network.protocol.login.ClientboundHelloPacket`.
 
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{self, TypeError};
-
-/// Errors from decoding a [`ClientboundHelloPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum HelloError {
-    /// Type decode failure.
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-}
+use crate::codec::types;
 
 /// Clientbound packet `0x01` in the LOGIN state — encryption request.
 ///
@@ -37,40 +27,6 @@ pub struct ClientboundHelloPacket {
     pub should_authenticate: bool,
 }
 
-impl ClientboundHelloPacket {
-    /// Packet ID in the LOGIN state.
-    pub const PACKET_ID: i32 = 0x01;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`HelloError`] if the buffer is truncated or a field is
-    /// malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, HelloError> {
-        let server_id = types::read_string(&mut data, 20)?;
-        let public_key = types::read_byte_array(&mut data, 256)?;
-        let challenge = types::read_byte_array(&mut data, 256)?;
-        let should_authenticate = types::read_bool(&mut data)?;
-        Ok(Self {
-            server_id,
-            public_key,
-            challenge,
-            should_authenticate,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        types::write_string(&mut buf, &self.server_id);
-        types::write_byte_array(&mut buf, &self.public_key);
-        types::write_byte_array(&mut buf, &self.challenge);
-        types::write_bool(&mut buf, self.should_authenticate);
-        buf
-    }
-}
-
 impl Packet for ClientboundHelloPacket {
     const PACKET_ID: i32 = 0x01;
 
@@ -88,7 +44,12 @@ impl Packet for ClientboundHelloPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        types::write_string(&mut buf, &self.server_id);
+        types::write_byte_array(&mut buf, &self.public_key);
+        types::write_byte_array(&mut buf, &self.challenge);
+        types::write_bool(&mut buf, self.should_authenticate);
+        buf
     }
 }
 
@@ -111,20 +72,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundHelloPacket {
-            server_id: "".to_string(),
-            public_key: vec![0x30, 0x82],
-            challenge: vec![0xAB, 0xCD],
-            should_authenticate: false,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundHelloPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(<ClientboundHelloPacket as Packet>::PACKET_ID, 0x01);
     }
 }

@@ -18,18 +18,6 @@ pub struct ClientboundStatusResponsePacket {
     pub status_json: String,
 }
 
-impl ClientboundStatusResponsePacket {
-    /// Packet ID in the STATUS state.
-    pub const PACKET_ID: i32 = 0x00;
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        types::write_string(&mut buf, &self.status_json);
-        buf
-    }
-}
-
 impl Packet for ClientboundStatusResponsePacket {
     const PACKET_ID: i32 = 0x00;
 
@@ -39,7 +27,9 @@ impl Packet for ClientboundStatusResponsePacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        types::write_string(&mut buf, &self.status_json);
+        buf
     }
 }
 

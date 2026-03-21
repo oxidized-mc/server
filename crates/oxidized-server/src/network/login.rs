@@ -6,6 +6,7 @@
 //! to [`ConnectionState::Configuration`].
 
 use oxidized_protocol::auth;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
 use oxidized_protocol::crypto::{generate_challenge, minecraft_digest, offline_uuid};
 use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;

@@ -40,12 +40,28 @@ pub struct CommandNodeData {
     pub suggestions_type: Option<String>,
 }
 
-impl ClientboundCommandsPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x10;
+impl Packet for ClientboundCommandsPacket {
+    const PACKET_ID: i32 = 0x10;
 
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
+    fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
+        let node_count = read_varint_buf(&mut data)?;
+        if node_count < 0 {
+            return Err(PacketDecodeError::InvalidData(format!(
+                "negative node count: {node_count}"
+            )));
+        }
+
+        let mut nodes = Vec::with_capacity(node_count as usize);
+        for _ in 0..node_count {
+            nodes.push(decode_node(&mut data)?);
+        }
+
+        let root_index = read_varint_buf(&mut data)?;
+
+        Ok(Self { nodes, root_index })
+    }
+
+    fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(4096);
 
         // Node count
@@ -101,42 +117,6 @@ impl ClientboundCommandsPacket {
         write_varint_buf(self.root_index, &mut buf);
 
         buf
-    }
-
-    /// Decodes the packet body from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PacketDecodeError`] if the buffer is truncated or a field
-    /// is malformed (e.g. unknown parser ID).
-    pub fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let node_count = read_varint_buf(&mut data)?;
-        if node_count < 0 {
-            return Err(PacketDecodeError::InvalidData(format!(
-                "negative node count: {node_count}"
-            )));
-        }
-
-        let mut nodes = Vec::with_capacity(node_count as usize);
-        for _ in 0..node_count {
-            nodes.push(decode_node(&mut data)?);
-        }
-
-        let root_index = read_varint_buf(&mut data)?;
-
-        Ok(Self { nodes, root_index })
-    }
-}
-
-impl Packet for ClientboundCommandsPacket {
-    const PACKET_ID: i32 = 0x10;
-
-    fn decode(data: Bytes) -> Result<Self, PacketDecodeError> {
-        Self::decode(data)
-    }
-
-    fn encode(&self) -> BytesMut {
-        self.encode()
     }
 }
 
@@ -601,26 +581,6 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundCommandsPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_commands_packet_trait_roundtrip() {
-        let pkt = ClientboundCommandsPacket {
-            nodes: vec![
-                root_node(vec![1, 2]),
-                literal_node("help", 0x04, vec![]),
-                literal_node("list", 0x04, vec![]),
-            ],
-            root_index: 0,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundCommandsPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_commands_packet_trait_id() {
-        assert_eq!(<ClientboundCommandsPacket as Packet>::PACKET_ID, 0x10);
     }
 
     #[test]

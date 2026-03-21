@@ -5,7 +5,6 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::{types, varint};
-use crate::packets::play::PlayPacketError;
 
 /// Acknowledgement state for recent chat messages.
 ///
@@ -22,10 +21,12 @@ pub struct LastSeenMessagesUpdate {
 
 impl LastSeenMessagesUpdate {
     /// Decodes from a buffer.
-    pub fn decode(data: &mut Bytes) -> Result<Self, PlayPacketError> {
+    pub fn decode(data: &mut Bytes) -> Result<Self, PacketDecodeError> {
         let offset = varint::read_varint_buf(data)?;
         if data.remaining() < 4 {
-            return Err(PlayPacketError::UnexpectedEof);
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of packet data".into(),
+            ));
         }
         let mut acknowledged = [0u8; 3];
         data.copy_to_slice(&mut acknowledged);
@@ -60,77 +61,10 @@ pub struct ServerboundChatPacket {
     pub last_seen: LastSeenMessagesUpdate,
 }
 
-impl ServerboundChatPacket {
-    /// Packet ID in the PLAY state serverbound registry.
-    pub const PACKET_ID: i32 = 0x09;
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is malformed, the message exceeds 256
-    /// characters, or the message starts with `/` (commands must use
-    /// [`ServerboundChatCommandPacket`](super::ServerboundChatCommandPacket)).
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let message = types::read_string(&mut data, 256)?;
-        if message.starts_with('/') {
-            return Err(PlayPacketError::InvalidData(
-                "chat message must not start with '/'".to_string(),
-            ));
-        }
-        let timestamp = types::read_i64(&mut data)?;
-        let salt = types::read_i64(&mut data)?;
-        let has_sig = types::read_bool(&mut data)?;
-        let signature = if has_sig {
-            if data.remaining() < 256 {
-                return Err(PlayPacketError::UnexpectedEof);
-            }
-            let mut sig = [0u8; 256];
-            data.copy_to_slice(&mut sig);
-            Some(sig)
-        } else {
-            None
-        };
-        let last_seen = LastSeenMessagesUpdate::decode(&mut data)?;
-        Ok(Self {
-            message,
-            timestamp,
-            salt,
-            signature,
-            last_seen,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(512);
-        types::write_string(&mut buf, &self.message);
-        types::write_i64(&mut buf, self.timestamp);
-        types::write_i64(&mut buf, self.salt);
-        types::write_bool(&mut buf, self.signature.is_some());
-        if let Some(ref sig) = self.signature {
-            buf.put_slice(sig);
-        }
-        self.last_seen.encode(&mut buf);
-        buf
-    }
-}
-
 impl Packet for ServerboundChatPacket {
     const PACKET_ID: i32 = 0x09;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let map_err = |e: PlayPacketError| -> PacketDecodeError {
-            match e {
-                PlayPacketError::UnexpectedEof => {
-                    PacketDecodeError::InvalidData("unexpected end of packet data".into())
-                },
-                PlayPacketError::InvalidData(s) => PacketDecodeError::InvalidData(s),
-                PlayPacketError::VarInt(e) => e.into(),
-                PlayPacketError::Type(e) => e.into(),
-                PlayPacketError::ResourceLocation(e) => e.into(),
-            }
-        };
         let message = types::read_string(&mut data, 256)?;
         if message.starts_with('/') {
             return Err(PacketDecodeError::InvalidData(
@@ -152,7 +86,7 @@ impl Packet for ServerboundChatPacket {
         } else {
             None
         };
-        let last_seen = LastSeenMessagesUpdate::decode(&mut data).map_err(map_err)?;
+        let last_seen = LastSeenMessagesUpdate::decode(&mut data)?;
         Ok(Self {
             message,
             timestamp,
@@ -163,7 +97,16 @@ impl Packet for ServerboundChatPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(512);
+        types::write_string(&mut buf, &self.message);
+        types::write_i64(&mut buf, self.timestamp);
+        types::write_i64(&mut buf, self.salt);
+        types::write_bool(&mut buf, self.signature.is_some());
+        if let Some(ref sig) = self.signature {
+            buf.put_slice(sig);
+        }
+        self.last_seen.encode(&mut buf);
+        buf
     }
 }
 
@@ -184,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ServerboundChatPacket::PACKET_ID, 0x09);
+        assert_eq!(<ServerboundChatPacket as Packet>::PACKET_ID, 0x09);
     }
 
     #[test]

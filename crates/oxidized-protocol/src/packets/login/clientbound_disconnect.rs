@@ -4,20 +4,13 @@
 //! Corresponds to `net.minecraft.network.protocol.login.ClientboundLoginDisconnectPacket`.
 
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{self, TypeError};
+use crate::codec::types;
 
-/// Errors from decoding a [`ClientboundDisconnectPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum DisconnectError {
-    /// Type decode failure.
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-}
+/// Maximum character length for the reason JSON.
+const MAX_REASON_CHARS: usize = 262_144;
 
 /// Clientbound packet `0x00` in the LOGIN state — disconnect.
 ///
@@ -29,42 +22,18 @@ pub struct ClientboundDisconnectPacket {
     pub reason: String,
 }
 
-impl ClientboundDisconnectPacket {
-    /// Packet ID in the LOGIN state.
-    pub const PACKET_ID: i32 = 0x00;
-
-    /// Maximum character length for the reason JSON.
-    const MAX_REASON_CHARS: usize = 262_144;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DisconnectError`] if the buffer is truncated or the string
-    /// is invalid.
-    pub fn decode(mut data: Bytes) -> Result<Self, DisconnectError> {
-        let reason = types::read_string(&mut data, Self::MAX_REASON_CHARS)?;
-        Ok(Self { reason })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        types::write_string(&mut buf, &self.reason);
-        buf
-    }
-}
-
 impl Packet for ClientboundDisconnectPacket {
     const PACKET_ID: i32 = 0x00;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let reason = types::read_string(&mut data, Self::MAX_REASON_CHARS)?;
+        let reason = types::read_string(&mut data, MAX_REASON_CHARS)?;
         Ok(Self { reason })
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        types::write_string(&mut buf, &self.reason);
+        buf
     }
 }
 
@@ -84,17 +53,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundDisconnectPacket {
-            reason: r#"{"text":"Kicked"}"#.to_string(),
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundDisconnectPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(<ClientboundDisconnectPacket as Packet>::PACKET_ID, 0x00);
     }
 }

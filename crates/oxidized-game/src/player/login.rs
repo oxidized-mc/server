@@ -12,6 +12,7 @@
 
 use bytes::BytesMut;
 
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
     ClientboundGameEventPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
     ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,

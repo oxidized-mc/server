@@ -12,8 +12,6 @@ use bytes::{Bytes, BytesMut};
 use crate::codec::types;
 use crate::codec::varint;
 
-use super::clientbound_login::PlayPacketError;
-
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 
@@ -42,38 +40,6 @@ pub struct ClientboundMoveEntityPosPacket {
     pub on_ground: bool,
 }
 
-impl ClientboundMoveEntityPosPacket {
-    /// Packet ID in the PLAY state clientbound registry.
-    pub const PACKET_ID: i32 = 0x35;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let dx = types::read_i16(&mut data)?;
-        let dy = types::read_i16(&mut data)?;
-        let dz = types::read_i16(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
-        Ok(Self {
-            entity_id,
-            dx,
-            dy,
-            dz,
-            on_ground,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(8);
-        varint::write_varint_buf(self.entity_id, &mut buf);
-        types::write_i16(&mut buf, self.dx);
-        types::write_i16(&mut buf, self.dy);
-        types::write_i16(&mut buf, self.dz);
-        types::write_bool(&mut buf, self.on_ground);
-        buf
-    }
-}
-
 impl Packet for ClientboundMoveEntityPosPacket {
     const PACKET_ID: i32 = 0x35;
 
@@ -93,7 +59,13 @@ impl Packet for ClientboundMoveEntityPosPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(8);
+        varint::write_varint_buf(self.entity_id, &mut buf);
+        types::write_i16(&mut buf, self.dx);
+        types::write_i16(&mut buf, self.dy);
+        types::write_i16(&mut buf, self.dz);
+        types::write_bool(&mut buf, self.on_ground);
+        buf
     }
 }
 
@@ -128,44 +100,6 @@ pub struct ClientboundMoveEntityPosRotPacket {
     pub on_ground: bool,
 }
 
-impl ClientboundMoveEntityPosRotPacket {
-    /// Packet ID in the PLAY state clientbound registry.
-    pub const PACKET_ID: i32 = 0x36;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let dx = types::read_i16(&mut data)?;
-        let dy = types::read_i16(&mut data)?;
-        let dz = types::read_i16(&mut data)?;
-        let yaw = types::read_u8(&mut data)?;
-        let pitch = types::read_u8(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
-        Ok(Self {
-            entity_id,
-            dx,
-            dy,
-            dz,
-            yaw,
-            pitch,
-            on_ground,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(10);
-        varint::write_varint_buf(self.entity_id, &mut buf);
-        types::write_i16(&mut buf, self.dx);
-        types::write_i16(&mut buf, self.dy);
-        types::write_i16(&mut buf, self.dz);
-        types::write_u8(&mut buf, self.yaw);
-        types::write_u8(&mut buf, self.pitch);
-        types::write_bool(&mut buf, self.on_ground);
-        buf
-    }
-}
-
 impl Packet for ClientboundMoveEntityPosRotPacket {
     const PACKET_ID: i32 = 0x36;
 
@@ -189,7 +123,15 @@ impl Packet for ClientboundMoveEntityPosRotPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(10);
+        varint::write_varint_buf(self.entity_id, &mut buf);
+        types::write_i16(&mut buf, self.dx);
+        types::write_i16(&mut buf, self.dy);
+        types::write_i16(&mut buf, self.dz);
+        types::write_u8(&mut buf, self.yaw);
+        types::write_u8(&mut buf, self.pitch);
+        types::write_bool(&mut buf, self.on_ground);
+        buf
     }
 }
 
@@ -215,35 +157,6 @@ pub struct ClientboundMoveEntityRotPacket {
     pub on_ground: bool,
 }
 
-impl ClientboundMoveEntityRotPacket {
-    /// Packet ID in the PLAY state clientbound registry.
-    pub const PACKET_ID: i32 = 0x38;
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        let entity_id = varint::read_varint_buf(&mut data)?;
-        let yaw = types::read_u8(&mut data)?;
-        let pitch = types::read_u8(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
-        Ok(Self {
-            entity_id,
-            yaw,
-            pitch,
-            on_ground,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(4);
-        varint::write_varint_buf(self.entity_id, &mut buf);
-        types::write_u8(&mut buf, self.yaw);
-        types::write_u8(&mut buf, self.pitch);
-        types::write_bool(&mut buf, self.on_ground);
-        buf
-    }
-}
-
 impl Packet for ClientboundMoveEntityRotPacket {
     const PACKET_ID: i32 = 0x38;
 
@@ -261,7 +174,12 @@ impl Packet for ClientboundMoveEntityRotPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(4);
+        varint::write_varint_buf(self.entity_id, &mut buf);
+        types::write_u8(&mut buf, self.yaw);
+        types::write_u8(&mut buf, self.pitch);
+        types::write_bool(&mut buf, self.on_ground);
+        buf
     }
 }
 
@@ -321,70 +239,11 @@ mod tests {
 
     #[test]
     fn test_packet_ids() {
-        assert_eq!(ClientboundMoveEntityPosPacket::PACKET_ID, 0x35);
-        assert_eq!(ClientboundMoveEntityPosRotPacket::PACKET_ID, 0x36);
-        assert_eq!(ClientboundMoveEntityRotPacket::PACKET_ID, 0x38);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip_pos() {
-        let pkt = ClientboundMoveEntityPosPacket {
-            entity_id: 1,
-            dx: 4096,
-            dy: 0,
-            dz: -4096,
-            on_ground: true,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundMoveEntityPosPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id_pos() {
         assert_eq!(<ClientboundMoveEntityPosPacket as Packet>::PACKET_ID, 0x35);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip_pos_rot() {
-        let pkt = ClientboundMoveEntityPosRotPacket {
-            entity_id: 1,
-            dx: 100,
-            dy: 200,
-            dz: -100,
-            yaw: 128,
-            pitch: 64,
-            on_ground: false,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundMoveEntityPosRotPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id_pos_rot() {
         assert_eq!(
             <ClientboundMoveEntityPosRotPacket as Packet>::PACKET_ID,
             0x36
         );
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip_rot() {
-        let pkt = ClientboundMoveEntityRotPacket {
-            entity_id: 42,
-            yaw: 0,
-            pitch: 255,
-            on_ground: true,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundMoveEntityRotPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id_rot() {
         assert_eq!(<ClientboundMoveEntityRotPacket as Packet>::PACKET_ID, 0x38);
     }
 }

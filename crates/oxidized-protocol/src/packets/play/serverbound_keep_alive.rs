@@ -7,39 +7,11 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::packets::play::PlayPacketError;
-
 /// 0x1C — Keepalive response from client to server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundKeepAlivePacket {
     /// Challenge ID, must match the server's most recent keepalive.
     pub id: i64,
-}
-
-impl ServerboundKeepAlivePacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x1C;
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(8);
-        buf.put_i64(self.id);
-        buf
-    }
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer has fewer than 8 bytes.
-    pub fn decode(mut data: Bytes) -> Result<Self, PlayPacketError> {
-        if data.remaining() < 8 {
-            return Err(PlayPacketError::InvalidData(
-                "KeepAlive packet too short".to_string(),
-            ));
-        }
-        Ok(Self { id: data.get_i64() })
-    }
 }
 
 impl Packet for ServerboundKeepAlivePacket {
@@ -55,7 +27,9 @@ impl Packet for ServerboundKeepAlivePacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(8);
+        buf.put_i64(self.id);
+        buf
     }
 }
 
@@ -66,7 +40,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ServerboundKeepAlivePacket::PACKET_ID, 0x1C);
+        assert_eq!(<ServerboundKeepAlivePacket as Packet>::PACKET_ID, 0x1C);
     }
 
     #[test]
@@ -89,18 +63,5 @@ mod tests {
     fn test_decode_too_short() {
         let data = Bytes::from_static(&[0]);
         assert!(ServerboundKeepAlivePacket::decode(data).is_err());
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ServerboundKeepAlivePacket { id: 987_654_321 };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ServerboundKeepAlivePacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ServerboundKeepAlivePacket as Packet>::PACKET_ID, 0x1C);
     }
 }

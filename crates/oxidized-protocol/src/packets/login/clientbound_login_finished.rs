@@ -4,25 +4,14 @@
 //! Corresponds to `net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket`.
 
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{self, TypeError};
-use crate::codec::varint::{self, VarIntError};
+use crate::codec::types;
+use crate::codec::varint;
 
-/// Errors from decoding a [`ClientboundLoginFinishedPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum LoginFinishedError {
-    /// VarInt decode failure.
-    #[error("varint error: {0}")]
-    VarInt(#[from] VarIntError),
-
-    /// Type decode failure.
-    #[error("type error: {0}")]
-    Type(#[from] TypeError),
-}
+/// Maximum length for property strings.
+const MAX_PROPERTY_STRING: usize = 32767;
 
 /// A single profile property (e.g. textures) attached to a player profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,71 +39,6 @@ pub struct ClientboundLoginFinishedPacket {
     pub properties: Vec<ProfileProperty>,
 }
 
-impl ClientboundLoginFinishedPacket {
-    /// Packet ID in the LOGIN state.
-    pub const PACKET_ID: i32 = 0x02;
-
-    /// Maximum length for property strings.
-    const MAX_PROPERTY_STRING: usize = 32767;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`LoginFinishedError`] if the buffer is truncated or any field
-    /// is malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, LoginFinishedError> {
-        let uuid = types::read_uuid(&mut data)?;
-        let username = types::read_string(&mut data, 16)?;
-
-        let count = varint::read_varint_buf(&mut data)?;
-        let mut properties = Vec::with_capacity(count as usize);
-
-        for _ in 0..count {
-            let name = types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?;
-            let value = types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?;
-            let has_signature = types::read_bool(&mut data)?;
-            let signature = if has_signature {
-                Some(types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?)
-            } else {
-                None
-            };
-            properties.push(ProfileProperty {
-                name,
-                value,
-                signature,
-            });
-        }
-
-        Ok(Self {
-            uuid,
-            username,
-            properties,
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        types::write_uuid(&mut buf, &self.uuid);
-        types::write_string(&mut buf, &self.username);
-
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        varint::write_varint_buf(self.properties.len() as i32, &mut buf);
-
-        for prop in &self.properties {
-            types::write_string(&mut buf, &prop.name);
-            types::write_string(&mut buf, &prop.value);
-            types::write_bool(&mut buf, prop.signature.is_some());
-            if let Some(sig) = &prop.signature {
-                types::write_string(&mut buf, sig);
-            }
-        }
-
-        buf
-    }
-}
-
 impl Packet for ClientboundLoginFinishedPacket {
     const PACKET_ID: i32 = 0x02;
 
@@ -126,11 +50,11 @@ impl Packet for ClientboundLoginFinishedPacket {
         let mut properties = Vec::with_capacity(count as usize);
 
         for _ in 0..count {
-            let name = types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?;
-            let value = types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?;
+            let name = types::read_string(&mut data, MAX_PROPERTY_STRING)?;
+            let value = types::read_string(&mut data, MAX_PROPERTY_STRING)?;
             let has_signature = types::read_bool(&mut data)?;
             let signature = if has_signature {
-                Some(types::read_string(&mut data, Self::MAX_PROPERTY_STRING)?)
+                Some(types::read_string(&mut data, MAX_PROPERTY_STRING)?)
             } else {
                 None
             };
@@ -149,7 +73,23 @@ impl Packet for ClientboundLoginFinishedPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        types::write_uuid(&mut buf, &self.uuid);
+        types::write_string(&mut buf, &self.username);
+
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        varint::write_varint_buf(self.properties.len() as i32, &mut buf);
+
+        for prop in &self.properties {
+            types::write_string(&mut buf, &prop.name);
+            types::write_string(&mut buf, &prop.value);
+            types::write_bool(&mut buf, prop.signature.is_some());
+            if let Some(sig) = &prop.signature {
+                types::write_string(&mut buf, sig);
+            }
+        }
+
+        buf
     }
 }
 
@@ -194,23 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundLoginFinishedPacket {
-            uuid: uuid::Uuid::from_u128(0xABCD),
-            username: "Test".to_string(),
-            properties: vec![ProfileProperty {
-                name: "textures".to_string(),
-                value: "val".to_string(),
-                signature: None,
-            }],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundLoginFinishedPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(<ClientboundLoginFinishedPacket as Packet>::PACKET_ID, 0x02);
     }
 }

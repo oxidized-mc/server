@@ -78,38 +78,6 @@ pub struct ClientboundGameEventPacket {
     pub param: f32,
 }
 
-impl ClientboundGameEventPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x26; // 38
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, std::io::Error> {
-        if data.remaining() < 5 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for GameEventPacket",
-            ));
-        }
-        let type_id = data.get_u8();
-        let param = data.get_f32();
-        let event = GameEventType::from_id(type_id).ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("unknown game event type: {type_id}"),
-            )
-        })?;
-        Ok(Self { event, param })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(5);
-        buf.put_u8(self.event as u8);
-        buf.put_f32(self.param);
-        buf
-    }
-}
-
 impl Packet for ClientboundGameEventPacket {
     const PACKET_ID: i32 = 0x26;
 
@@ -129,7 +97,10 @@ impl Packet for ClientboundGameEventPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(5);
+        buf.put_u8(self.event as u8);
+        buf.put_f32(self.param);
+        buf
     }
 }
 
@@ -157,21 +128,5 @@ mod tests {
         buf.put_f32(0.0);
         let result = ClientboundGameEventPacket::decode(buf.freeze());
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundGameEventPacket {
-            event: GameEventType::ChangeGameMode,
-            param: 1.0,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundGameEventPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(<ClientboundGameEventPacket as Packet>::PACKET_ID, 0x26);
     }
 }

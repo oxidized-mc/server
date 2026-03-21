@@ -19,24 +19,6 @@ pub struct ClientboundSetChunkCacheRadiusPacket {
     pub radius: i32,
 }
 
-impl ClientboundSetChunkCacheRadiusPacket {
-    /// Packet ID in the PLAY state.
-    pub const PACKET_ID: i32 = 0x5F; // 95
-
-    /// Decodes from the raw packet body.
-    pub fn decode(mut data: Bytes) -> Result<Self, varint::VarIntError> {
-        let radius = varint::read_varint_buf(&mut data)?;
-        Ok(Self { radius })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(5);
-        varint::write_varint_buf(self.radius, &mut buf);
-        buf
-    }
-}
-
 impl Packet for ClientboundSetChunkCacheRadiusPacket {
     const PACKET_ID: i32 = 0x5F;
 
@@ -46,7 +28,9 @@ impl Packet for ClientboundSetChunkCacheRadiusPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(5);
+        varint::write_varint_buf(self.radius, &mut buf);
+        buf
     }
 }
 
@@ -77,22 +61,5 @@ mod tests {
         let encoded = pkt.encode();
         let decoded = ClientboundSetChunkCacheRadiusPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.radius, 32);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundSetChunkCacheRadiusPacket { radius: 10 };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSetChunkCacheRadiusPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ClientboundSetChunkCacheRadiusPacket as Packet>::PACKET_ID,
-            0x5F
-        );
     }
 }

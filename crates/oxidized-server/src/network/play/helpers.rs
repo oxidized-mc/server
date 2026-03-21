@@ -4,6 +4,7 @@
 
 use oxidized_game::chunk::view_distance::spiral_chunks;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,

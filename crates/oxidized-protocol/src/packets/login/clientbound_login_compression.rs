@@ -4,20 +4,10 @@
 //! Corresponds to `net.minecraft.network.protocol.login.ClientboundLoginCompressionPacket`.
 
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint::{self, VarIntError};
-
-/// Errors from decoding a [`ClientboundLoginCompressionPacket`].
-#[derive(Debug, Error)]
-#[non_exhaustive]
-pub enum LoginCompressionError {
-    /// VarInt decode failure.
-    #[error("varint error: {0}")]
-    VarInt(#[from] VarIntError),
-}
+use crate::codec::varint;
 
 /// Clientbound packet `0x03` in the LOGIN state — set compression.
 ///
@@ -30,28 +20,6 @@ pub struct ClientboundLoginCompressionPacket {
     pub threshold: i32,
 }
 
-impl ClientboundLoginCompressionPacket {
-    /// Packet ID in the LOGIN state.
-    pub const PACKET_ID: i32 = 0x03;
-
-    /// Decodes from the raw packet body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`LoginCompressionError`] if the VarInt is malformed.
-    pub fn decode(mut data: Bytes) -> Result<Self, LoginCompressionError> {
-        let threshold = varint::read_varint_buf(&mut data)?;
-        Ok(Self { threshold })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::new();
-        varint::write_varint_buf(self.threshold, &mut buf);
-        buf
-    }
-}
-
 impl Packet for ClientboundLoginCompressionPacket {
     const PACKET_ID: i32 = 0x03;
 
@@ -61,7 +29,9 @@ impl Packet for ClientboundLoginCompressionPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::new();
+        varint::write_varint_buf(self.threshold, &mut buf);
+        buf
     }
 }
 
@@ -87,16 +57,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ClientboundLoginCompressionPacket { threshold: 512 };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundLoginCompressionPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(pkt, decoded);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
+    fn test_packet_id() {
         assert_eq!(
             <ClientboundLoginCompressionPacket as Packet>::PACKET_ID,
             0x03

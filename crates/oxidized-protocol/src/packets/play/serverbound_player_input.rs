@@ -99,36 +99,6 @@ pub struct ServerboundPlayerInputPacket {
     pub input: PlayerInput,
 }
 
-impl ServerboundPlayerInputPacket {
-    /// Packet ID in the PLAY state serverbound registry.
-    pub const PACKET_ID: i32 = 0x2B;
-
-    /// Decodes the packet from raw bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the buffer is empty.
-    pub fn decode(mut data: Bytes) -> Result<Self, std::io::Error> {
-        if !data.has_remaining() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for PlayerInput flags byte",
-            ));
-        }
-        let flags = data.get_u8();
-        Ok(Self {
-            input: PlayerInput::from_byte(flags),
-        })
-    }
-
-    /// Encodes the packet body (without packet ID).
-    pub fn encode(&self) -> BytesMut {
-        let mut buf = BytesMut::with_capacity(1);
-        buf.put_u8(self.input.to_byte());
-        buf
-    }
-}
-
 impl Packet for ServerboundPlayerInputPacket {
     const PACKET_ID: i32 = 0x2B;
 
@@ -145,7 +115,9 @@ impl Packet for ServerboundPlayerInputPacket {
     }
 
     fn encode(&self) -> BytesMut {
-        self.encode()
+        let mut buf = BytesMut::with_capacity(1);
+        buf.put_u8(self.input.to_byte());
+        buf
     }
 }
 
@@ -221,28 +193,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(ServerboundPlayerInputPacket::PACKET_ID, 0x2B);
-    }
-
-    #[test]
-    fn test_packet_trait_roundtrip() {
-        let pkt = ServerboundPlayerInputPacket {
-            input: PlayerInput {
-                forward: true,
-                shift: true,
-                ..Default::default()
-            },
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ServerboundPlayerInputPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert!(decoded.input.forward);
-        assert!(decoded.input.shift);
-        assert!(!decoded.input.backward);
-        assert!(!decoded.input.sprint);
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
         assert_eq!(<ServerboundPlayerInputPacket as Packet>::PACKET_ID, 0x2B);
     }
 }
