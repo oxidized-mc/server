@@ -368,10 +368,9 @@ mod tests {
         let sections = nbt.get_list("sections").unwrap();
 
         // Section 4 should have SkyLight
-        if let Some(NbtTag::Compound(sec)) = sections.get(4) {
-            assert!(sec.get_byte_array("SkyLight").is_some());
-        } else {
-            panic!("expected compound");
-        }
+        let Some(NbtTag::Compound(sec)) = sections.get(4) else {
+            unreachable!("expected compound");
+        };
+        assert!(sec.get_byte_array("SkyLight").is_some());
     }
 }

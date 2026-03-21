@@ -489,22 +489,20 @@ mod tests {
         let items: Vec<_> = inv.iter().collect();
 
         // Check slot 0
-        if let NbtTag::Compound(item) = &items[0] {
-            assert_eq!(item.get_byte("Slot"), Some(0));
-            assert_eq!(item.get_string("id"), Some("minecraft:diamond_sword"));
-            assert_eq!(item.get_int("count"), Some(1));
-        } else {
-            panic!("Expected compound tag");
-        }
+        let NbtTag::Compound(item) = &items[0] else {
+            unreachable!("Expected compound tag");
+        };
+        assert_eq!(item.get_byte("Slot"), Some(0));
+        assert_eq!(item.get_string("id"), Some("minecraft:diamond_sword"));
+        assert_eq!(item.get_int("count"), Some(1));
 
         // Check slot 9
-        if let NbtTag::Compound(item) = &items[1] {
-            assert_eq!(item.get_byte("Slot"), Some(9));
-            assert_eq!(item.get_string("id"), Some("minecraft:stone"));
-            assert_eq!(item.get_int("count"), Some(64));
-        } else {
-            panic!("Expected compound tag");
-        }
+        let NbtTag::Compound(item) = &items[1] else {
+            unreachable!("Expected compound tag");
+        };
+        assert_eq!(item.get_byte("Slot"), Some(9));
+        assert_eq!(item.get_string("id"), Some("minecraft:stone"));
+        assert_eq!(item.get_int("count"), Some(64));
     }
 
     #[test]
