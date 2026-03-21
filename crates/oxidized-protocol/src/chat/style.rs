@@ -152,9 +152,10 @@ fn default_count() -> i32 {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HoverEntity {
     /// Entity type (e.g. `"minecraft:player"`).
-    #[serde(rename = "type")]
+    #[serde(rename = "id")]
     pub entity_type: String,
     /// Entity UUID as string.
+    #[serde(rename = "uuid")]
     pub id: String,
     /// Optional display name.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -179,24 +180,21 @@ impl HoverEvent {
         match self {
             Self::ShowText(c) => {
                 compound.put_string("action", "show_text");
-                compound.put("contents", c.to_nbt());
+                compound.put("value", c.to_nbt());
             },
             Self::ShowItem(item) => {
                 compound.put_string("action", "show_item");
-                let mut item_nbt = NbtCompound::new();
-                item_nbt.put_string("id", &item.id);
-                item_nbt.put_int("count", item.count);
-                compound.put("contents", NbtTag::Compound(item_nbt));
+                compound.put_string("id", &item.id);
+                compound.put_int("count", item.count);
             },
             Self::ShowEntity(entity) => {
                 compound.put_string("action", "show_entity");
-                let mut ent_nbt = NbtCompound::new();
-                ent_nbt.put_string("type", &entity.entity_type);
-                ent_nbt.put_string("id", &entity.id);
+                compound.put_string("id", &entity.entity_type);
+                // Store UUID as int array (vanilla UUIDUtil.LENIENT_CODEC)
+                compound.put_string("uuid", &entity.id);
                 if let Some(ref name) = entity.name {
-                    ent_nbt.put("name", name.to_nbt());
+                    compound.put("name", name.to_nbt());
                 }
-                compound.put("contents", NbtTag::Compound(ent_nbt));
             },
         }
         compound
@@ -213,26 +211,29 @@ impl HoverEvent {
         match action {
             "show_text" => {
                 let component = compound
-                    .get("contents")
+                    .get("value")
                     .map(super::Component::from_nbt)
                     .transpose()?;
                 Ok(component.map(|c| Self::ShowText(Box::new(c))))
             },
+            "show_item" => {
+                let id = compound.get_string("id").unwrap_or_default().to_string();
+                let count = compound.get_int("count").unwrap_or(1);
+                Ok(Some(Self::ShowItem(HoverItem { id, count, components: None })))
+            },
             "show_entity" => {
-                if let Some(NbtTag::Compound(ent)) = compound.get("contents") {
-                    let name = ent
-                        .get("name")
-                        .map(super::Component::from_nbt)
-                        .transpose()?
-                        .map(Box::new);
-                    Ok(Some(Self::ShowEntity(HoverEntity {
-                        entity_type: ent.get_string("type").unwrap_or_default().to_string(),
-                        id: ent.get_string("id").unwrap_or_default().to_string(),
-                        name,
-                    })))
-                } else {
-                    Ok(None)
-                }
+                let entity_type = compound.get_string("id").unwrap_or_default().to_string();
+                let id = compound.get_string("uuid").unwrap_or_default().to_string();
+                let name = compound
+                    .get("name")
+                    .map(super::Component::from_nbt)
+                    .transpose()?
+                    .map(Box::new);
+                Ok(Some(Self::ShowEntity(HoverEntity {
+                    entity_type,
+                    id,
+                    name,
+                })))
             },
             _ => Ok(None),
         }
@@ -241,45 +242,85 @@ impl HoverEvent {
 
 impl Serialize for HoverEvent {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut map = s.serialize_map(Some(2))?;
         match self {
             Self::ShowText(c) => {
+                let mut map = s.serialize_map(Some(2))?;
                 map.serialize_entry("action", "show_text")?;
-                map.serialize_entry("contents", c)?;
+                map.serialize_entry("value", c)?;
+                map.end()
             },
             Self::ShowItem(item) => {
+                let mut map = s.serialize_map(Some(3))?;
                 map.serialize_entry("action", "show_item")?;
-                map.serialize_entry("contents", item)?;
+                map.serialize_entry("id", &item.id)?;
+                map.serialize_entry("count", &item.count)?;
+                map.end()
             },
             Self::ShowEntity(entity) => {
+                let n = 3 + usize::from(entity.name.is_some());
+                let mut map = s.serialize_map(Some(n))?;
                 map.serialize_entry("action", "show_entity")?;
-                map.serialize_entry("contents", entity)?;
+                map.serialize_entry("id", &entity.entity_type)?;
+                map.serialize_entry("uuid", &entity.id)?;
+                if let Some(ref name) = entity.name {
+                    map.serialize_entry("name", name)?;
+                }
+                map.end()
             },
         }
-        map.end()
     }
 }
 
 impl<'de> Deserialize<'de> for HoverEvent {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
-        struct Raw {
-            action: String,
-            contents: serde_json::Value,
-        }
-        let raw = Raw::deserialize(d)?;
-        match raw.action.as_str() {
+        let raw: serde_json::Value = serde_json::Value::deserialize(d)?;
+        let obj = raw.as_object().ok_or_else(|| de::Error::custom("expected object"))?;
+        let action = obj
+            .get("action")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| de::Error::missing_field("action"))?;
+        match action {
             "show_text" => {
-                let c = serde_json::from_value(raw.contents).map_err(de::Error::custom)?;
+                let value = obj
+                    .get("value")
+                    .ok_or_else(|| de::Error::missing_field("value"))?;
+                let c = serde_json::from_value(value.clone()).map_err(de::Error::custom)?;
                 Ok(Self::ShowText(Box::new(c)))
             },
             "show_item" => {
-                let item = serde_json::from_value(raw.contents).map_err(de::Error::custom)?;
-                Ok(Self::ShowItem(item))
+                let id = obj
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let count = obj
+                    .get("count")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(1) as i32;
+                Ok(Self::ShowItem(HoverItem { id, count, components: None }))
             },
             "show_entity" => {
-                let entity = serde_json::from_value(raw.contents).map_err(de::Error::custom)?;
-                Ok(Self::ShowEntity(entity))
+                let entity_type = obj
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let id = obj
+                    .get("uuid")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                let name = obj
+                    .get("name")
+                    .map(|v| serde_json::from_value(v.clone()))
+                    .transpose()
+                    .map_err(de::Error::custom)?
+                    .map(Box::new);
+                Ok(Self::ShowEntity(HoverEntity {
+                    entity_type,
+                    id,
+                    name,
+                }))
             },
             other => Err(de::Error::custom(format!(
                 "unknown hover event action: {other}"
@@ -435,10 +476,10 @@ impl Style {
             map.serialize_entry("insertion", ins)?;
         }
         if let Some(ref ce) = self.click_event {
-            map.serialize_entry("clickEvent", ce)?;
+            map.serialize_entry("click_event", ce)?;
         }
         if let Some(ref he) = self.hover_event {
-            map.serialize_entry("hoverEvent", he)?;
+            map.serialize_entry("hover_event", he)?;
         }
         if let Some(ref f) = self.font {
             map.serialize_entry("font", &f.to_string())?;
@@ -481,10 +522,10 @@ impl Style {
             let (action, value) = ce.action_value();
             ce_nbt.put_string("action", action);
             ce_nbt.put_string("value", value);
-            compound.put("clickEvent", NbtTag::Compound(ce_nbt));
+            compound.put("click_event", NbtTag::Compound(ce_nbt));
         }
         if let Some(ref he) = self.hover_event {
-            compound.put("hoverEvent", NbtTag::Compound(he.to_nbt()));
+            compound.put("hover_event", NbtTag::Compound(he.to_nbt()));
         }
         if let Some(ref f) = self.font {
             compound.put_string("font", f.to_string());
@@ -521,12 +562,12 @@ impl Style {
         if let Some(ins) = compound.get_string("insertion") {
             style.insertion = Some(ins.to_string());
         }
-        if let Some(NbtTag::Compound(ce)) = compound.get("clickEvent") {
+        if let Some(NbtTag::Compound(ce)) = compound.get("click_event") {
             if let (Some(action), Some(value)) = (ce.get_string("action"), ce.get_string("value")) {
                 style.click_event = ClickEvent::from_action_value(action, value);
             }
         }
-        if let Some(NbtTag::Compound(he)) = compound.get("hoverEvent") {
+        if let Some(NbtTag::Compound(he)) = compound.get("hover_event") {
             style.hover_event = HoverEvent::from_nbt(he)?;
         }
         if let Some(f) = compound.get_string("font") {
@@ -566,8 +607,8 @@ impl<'de> Deserialize<'de> for Style {
                         "strikethrough" => style.strikethrough = Some(map.next_value()?),
                         "obfuscated" => style.obfuscated = Some(map.next_value()?),
                         "insertion" => style.insertion = Some(map.next_value()?),
-                        "clickEvent" => style.click_event = Some(map.next_value()?),
-                        "hoverEvent" => style.hover_event = Some(map.next_value()?),
+                        "click_event" => style.click_event = Some(map.next_value()?),
+                        "hover_event" => style.hover_event = Some(map.next_value()?),
                         "font" => {
                             let s: String = map.next_value()?;
                             style.font =
@@ -763,7 +804,7 @@ mod tests {
         let he = HoverEvent::ShowText(Box::new(super::super::Component::text("tooltip")));
         let json: serde_json::Value = serde_json::to_value(&he).unwrap();
         assert_eq!(json["action"], "show_text");
-        assert_eq!(json["contents"]["text"], "tooltip");
+        assert_eq!(json["value"]["text"], "tooltip");
     }
 
     #[test]
@@ -775,8 +816,8 @@ mod tests {
         });
         let json: serde_json::Value = serde_json::to_value(&he).unwrap();
         assert_eq!(json["action"], "show_item");
-        assert_eq!(json["contents"]["id"], "minecraft:diamond");
-        assert_eq!(json["contents"]["count"], 64);
+        assert_eq!(json["id"], "minecraft:diamond");
+        assert_eq!(json["count"], 64);
     }
 
     #[test]
@@ -811,7 +852,7 @@ mod tests {
     }
 
     #[test]
-    fn test_style_json_uses_camel_case() {
+    fn test_style_json_uses_snake_case() {
         let style = Style {
             click_event: Some(ClickEvent::RunCommand("/test".into())),
             hover_event: Some(HoverEvent::ShowText(Box::new(
@@ -820,7 +861,7 @@ mod tests {
             ..Default::default()
         };
         let json = serde_json::to_string(&style).unwrap();
-        assert!(json.contains("clickEvent"), "got: {json}");
-        assert!(json.contains("hoverEvent"), "got: {json}");
+        assert!(json.contains("click_event"), "got: {json}");
+        assert!(json.contains("hover_event"), "got: {json}");
     }
 }

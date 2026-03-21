@@ -1085,7 +1085,7 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - ServerboundChatCommandPacket = 0x07
 - ServerboundChatAckPacket = 0x06
 - ClientboundPlayerChatPacket = 0x40
-- ClientboundSystemChatPacket = 0x78
+- ClientboundSystemChatPacket = 0x79
 - ClientboundDisguisedChatPacket = 0x20
 - ClientboundDeleteChatPacket = 0x1E
 
@@ -1296,6 +1296,12 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 - **Interactive chat (ClickEvent/HoverEvent) IS fully implemented** at the protocol level —
   `Component::to_nbt()` and `to_json()` both serialize click/hover events. The `feedback_sender`
   closure sends `ClientboundSystemChatPacket` which preserves the full component tree.
+  **IMPORTANT:** Vanilla uses snake_case field names (`click_event`, `hover_event`) in both
+  JSON and NBT serialization, NOT camelCase (`clickEvent`, `hoverEvent`). The data fixer
+  `TextComponentHoverAndClickEventFix` renamed these fields. HoverEvent uses a flattened
+  dispatch codec — ShowText uses `"value"` (not `"contents"`), ShowEntity uses `"id"` for
+  entity type and `"uuid"` for UUID (not nested under `"contents"`), ShowItem fields are
+  flattened directly into the hover event compound.
 
 #### Test Coverage
 
@@ -1586,3 +1592,48 @@ were specified in ADR-007 but the macros in `oxidized-macros/src/lib.rs` are stu
 - `PacketDecodeError::InvalidData(String)` for packet-specific validation failures
 
 **Status:** R2 complete. All acceptance criteria met.
+
+### 2025-07-XX — Chat Component Field Name Fix
+
+#### Bug
+
+Interactive chat messages (click events, hover events) were not working in the client.
+The /help command pagination buttons did nothing when clicked, and hover tooltips didn't
+appear.
+
+#### Root Cause
+
+Vanilla Minecraft 26.1 uses **snake_case** field names in both NBT and JSON serialization
+for Component styles, but our code was using camelCase:
+- `clickEvent` → `click_event`
+- `hoverEvent` → `hover_event`
+
+Additionally, `HoverEvent` encoding was using the old nested format (wrapping values under
+`"contents"`) instead of vanilla's flattened dispatch codec format:
+- ShowText: uses `"value"` field directly (not `"contents"`)
+- ShowEntity: uses `"id"` (entity type), `"uuid"` (entity UUID), `"name"` (display name)
+  all flattened into the hover event compound — NOT nested under `"contents"` with different
+  field names
+- ShowItem: uses `"id"`, `"count"` flattened directly
+
+#### Key Learnings
+
+- **Vanilla uses DFU codecs** — the same `Codec` serializes both JSON (JsonOps) and NBT
+  (NbtOps), so field names are IDENTICAL in both formats.
+- **`TextComponentHoverAndClickEventFix.java`** is a data fixer that migrated old camelCase
+  to snake_case — confirms this was an intentional rename.
+- **HoverEvent uses `Action.CODEC.dispatch("action", ...)`** which flattens all inner codec
+  fields into the same compound. No `"contents"` wrapper.
+- **BundleDelimiterPacket occupies ID 0x00** — `withBundlePacket()` is called BEFORE any
+  `addPacket()` calls in `GameProtocols.java`. This shifts all addPacket-registered IDs by +1.
+  ALL our packet IDs were verified correct. The memories.md entry for SystemChatPacket was
+  corrected from 0x78 to 0x79.
+- **CommonPacketTypes are included in Play state** — GameProtocols registers both
+  `GamePacketTypes` AND `CommonPacketTypes` (KeepAlive, CustomPayload, Disconnect, Ping,
+  Pong, Cookie, Transfer). Must count ALL when computing packet IDs.
+
+#### Files Changed
+
+- `crates/oxidized-protocol/src/chat/style.rs` — All field name fixes (NBT + JSON),
+  HoverEvent flattening, HoverEntity serde rename, updated tests
+- `crates/oxidized-protocol/src/chat/component_json.rs` — Field names in JSON deserializer
