@@ -16,6 +16,7 @@
 pub mod chat;
 pub mod commands;
 pub mod helpers;
+pub mod inventory;
 pub mod movement;
 
 use std::net::SocketAddr;
@@ -40,6 +41,7 @@ use oxidized_protocol::packets::play::{
     ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
     ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -415,6 +417,12 @@ pub async fn handle_play_entry(
                             },
                             ServerboundCommandSuggestionPacket::PACKET_ID => {
                                 commands::handle_command_suggestion(&mut play_ctx, pkt.data).await?;
+                            },
+                            ServerboundSetCarriedItemPacket::PACKET_ID => {
+                                inventory::handle_set_carried_item(&mut play_ctx, pkt.data).await?;
+                            },
+                            ServerboundSetCreativeModeSlotPacket::PACKET_ID => {
+                                inventory::handle_set_creative_mode_slot(&mut play_ctx, pkt.data).await?;
                             },
                             unknown if !(0..=MAX_SERVERBOUND_PLAY_ID).contains(&unknown) => {
                                 warn!(

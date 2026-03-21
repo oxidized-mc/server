@@ -19,9 +19,10 @@ use oxidized_nbt::NbtCompound;
 use oxidized_protocol::auth::GameProfile;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
-    ClientboundGameEventPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
-    ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
-    ClientboundSetChunkCacheCenterPacket, ClientboundSetDefaultSpawnPositionPacket,
+    ClientboundContainerSetContentPacket, ClientboundGameEventPacket, ClientboundLoginPacket,
+    ClientboundPlayerAbilitiesPacket, ClientboundPlayerInfoUpdatePacket,
+    ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket,
+    ClientboundSetDefaultSpawnPositionPacket, ClientboundSetHeldSlotPacket,
     ClientboundSetSimulationDistancePacket,
 };
 use oxidized_protocol::types::ResourceLocation;
@@ -191,8 +192,8 @@ fn test_build_login_sequence() {
 
     let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
 
-    // Exactly 8 packets
-    assert_eq!(packets.len(), 8);
+    // Exactly 10 packets
+    assert_eq!(packets.len(), 10);
 
     // Verify packet IDs in the correct order
     assert_eq!(packets[0].id, ClientboundLoginPacket::PACKET_ID);
@@ -205,13 +206,18 @@ fn test_build_login_sequence() {
     assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
     assert_eq!(
         packets[5].id,
+        ClientboundContainerSetContentPacket::PACKET_ID
+    );
+    assert_eq!(packets[6].id, ClientboundSetHeldSlotPacket::PACKET_ID);
+    assert_eq!(
+        packets[7].id,
         ClientboundSetChunkCacheCenterPacket::PACKET_ID
     );
     assert_eq!(
-        packets[6].id,
+        packets[8].id,
         ClientboundSetSimulationDistancePacket::PACKET_ID
     );
-    assert_eq!(packets[7].id, ClientboundPlayerPositionPacket::PACKET_ID);
+    assert_eq!(packets[9].id, ClientboundPlayerPositionPacket::PACKET_ID);
 }
 
 // ---------------------------------------------------------------------------

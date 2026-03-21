@@ -8,6 +8,7 @@ pub mod chunk;
 pub mod commands;
 pub mod entity;
 pub mod event;
+pub mod inventory;
 pub mod level;
 pub mod net;
 pub mod physics;
