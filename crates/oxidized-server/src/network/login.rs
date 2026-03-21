@@ -47,8 +47,7 @@ pub async fn handle_login(
         return Err(disconnect_err(conn, "Unexpected packet during login").await);
     }
 
-    let hello: ServerboundHelloPacket =
-        decode_packet(hello_pkt.data, addr, "", "LoginHello")?;
+    let hello: ServerboundHelloPacket = decode_packet(hello_pkt.data, addr, "", "LoginHello")?;
 
     debug!(peer = %addr, name = %hello.name, profile_id = %hello.profile_id, "Login hello received");
 
@@ -159,8 +158,7 @@ async fn authenticate_online(
         return Err(disconnect_err(conn, "Unexpected packet — expected encryption response").await);
     }
 
-    let key: ServerboundKeyPacket =
-        decode_packet(key_pkt.data, addr, "", "KeyResponse")?;
+    let key: ServerboundKeyPacket = decode_packet(key_pkt.data, addr, "", "KeyResponse")?;
 
     // d. Decrypt shared secret and challenge.
     let shared_secret = ctx
