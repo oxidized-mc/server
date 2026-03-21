@@ -209,7 +209,7 @@ fn main() -> anyhow::Result<()> {
             .spawn(move || {
                 console::run_console_loop(console_server_ctx);
             })
-            .expect("failed to spawn console thread");
+            .map_err(|e| anyhow::anyhow!("failed to spawn console thread: {e}"))?;
 
         // Wait for Ctrl+C or shutdown from /stop command, then broadcast shutdown.
         let mut shutdown_rx = shutdown_tx.subscribe();
