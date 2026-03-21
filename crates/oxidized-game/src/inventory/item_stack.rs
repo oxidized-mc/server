@@ -408,10 +408,7 @@ mod tests {
     #[test]
     fn test_max_stack_size_tools() {
         assert_eq!(max_stack_size(&ItemId("minecraft:diamond_sword".into())), 1);
-        assert_eq!(
-            max_stack_size(&ItemId("minecraft:iron_pickaxe".into())),
-            1
-        );
+        assert_eq!(max_stack_size(&ItemId("minecraft:iron_pickaxe".into())), 1);
     }
 
     #[test]

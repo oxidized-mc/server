@@ -63,15 +63,15 @@ pub fn write_slot(buf: &mut BytesMut, slot: Option<&SlotData>) {
     match slot {
         None => {
             varint::write_varint_buf(0, buf);
-        }
+        },
         Some(data) if data.count <= 0 => {
             varint::write_varint_buf(0, buf);
-        }
+        },
         Some(data) => {
             varint::write_varint_buf(data.count, buf);
             varint::write_varint_buf(data.item_id, buf);
             write_component_patch(buf, &data.component_data);
-        }
+        },
     }
 }
 
@@ -264,6 +264,9 @@ mod tests {
 
         let mut data = buf.freeze();
         let result = read_slot(&mut data);
-        assert!(result.is_err(), "non-zero component counts should be rejected");
+        assert!(
+            result.is_err(),
+            "non-zero component counts should be rejected"
+        );
     }
 }

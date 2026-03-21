@@ -54,8 +54,7 @@ mod tests {
             }),
         };
         let encoded = pkt.encode();
-        let decoded =
-            ServerboundSetCreativeModeSlotPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ServerboundSetCreativeModeSlotPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.slot, 36);
         assert_eq!(decoded.item.as_ref().unwrap().count, 1);
         assert_eq!(decoded.item.as_ref().unwrap().item_id, 50);
@@ -68,8 +67,7 @@ mod tests {
             item: None,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ServerboundSetCreativeModeSlotPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ServerboundSetCreativeModeSlotPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.slot, 36);
         assert!(decoded.item.is_none());
     }

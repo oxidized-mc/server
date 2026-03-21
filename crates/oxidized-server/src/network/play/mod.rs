@@ -40,8 +40,8 @@ use oxidized_protocol::packets::play::{
     ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
-    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
-    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
+    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket, ServerboundSetCarriedItemPacket,
+    ServerboundSetCreativeModeSlotPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;

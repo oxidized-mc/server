@@ -74,8 +74,7 @@ mod tests {
             carried_item: None,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundContainerSetContentPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundContainerSetContentPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.container_id, 0);
         assert_eq!(decoded.state_id, 1);
         assert_eq!(decoded.items.len(), 46);
@@ -104,8 +103,7 @@ mod tests {
             carried_item: None,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundContainerSetContentPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundContainerSetContentPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.items.len(), 3);
         assert_eq!(decoded.items[0].as_ref().unwrap().count, 64);
         assert!(decoded.items[1].is_none());

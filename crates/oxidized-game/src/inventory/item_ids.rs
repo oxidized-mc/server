@@ -41,7 +41,7 @@ pub fn item_name_to_id(name: &str) -> i32 {
                 hash = hash.wrapping_mul(31).wrapping_add(b as i32);
             }
             hash.abs() % 2000 + 100
-        }
+        },
     }
 }
 

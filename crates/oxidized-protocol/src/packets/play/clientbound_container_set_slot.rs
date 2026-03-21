@@ -66,8 +66,7 @@ mod tests {
             item: None,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundContainerSetSlotPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundContainerSetSlotPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.container_id, 0);
         assert_eq!(decoded.state_id, 3);
         assert_eq!(decoded.slot, 36);
@@ -87,8 +86,7 @@ mod tests {
             }),
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundContainerSetSlotPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundContainerSetSlotPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.slot, 36);
         let item = decoded.item.unwrap();
         assert_eq!(item.count, 1);
@@ -104,8 +102,7 @@ mod tests {
             item: None,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundContainerSetSlotPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundContainerSetSlotPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.container_id, -1);
         assert_eq!(decoded.slot, -1);
     }

@@ -10,7 +10,7 @@
 //! [`PlayerInventory::to_protocol_slot`] and [`PlayerInventory::from_protocol_slot`]
 //! to convert between internal and protocol indices.
 
-use crate::inventory::item_stack::{max_stack_size, ItemStack};
+use crate::inventory::item_stack::{ItemStack, max_stack_size};
 
 /// The number of protocol slots for window 0 (includes crafting grid).
 pub const PROTOCOL_SLOT_COUNT: usize = 46;
@@ -181,10 +181,10 @@ impl PlayerInventory {
     /// - 45: offhand
     pub fn to_protocol_slot(internal: usize) -> i16 {
         match internal {
-            0..9 => (internal as i16) + 36,  // hotbar → protocol 36–44
+            0..9 => (internal as i16) + 36,   // hotbar → protocol 36–44
             9..36 => internal as i16,         // main   → protocol 9–35
             36..40 => (internal as i16) - 31, // armor  → protocol 5–8
-            40 => 45,                          // offhand → protocol 45
+            40 => 45,                         // offhand → protocol 45
             _ => -1,
         }
     }
@@ -196,9 +196,9 @@ impl PlayerInventory {
     pub fn from_protocol_slot(protocol: i16) -> Option<usize> {
         match protocol {
             5..=8 => Some((protocol as usize) + 31),   // armor
-            9..=35 => Some(protocol as usize),           // main
-            36..=44 => Some((protocol as usize) - 36),  // hotbar
-            45 => Some(40),                               // offhand
+            9..=35 => Some(protocol as usize),         // main
+            36..=44 => Some((protocol as usize) - 36), // hotbar
+            45 => Some(40),                            // offhand
             _ => None,
         }
     }
@@ -268,7 +268,7 @@ mod tests {
     fn test_protocol_slot_hotbar_roundtrip() {
         for i in 0u8..9 {
             let proto = PlayerInventory::to_protocol_slot(i as usize);
-            assert!(proto >= 36 && proto <= 44, "hotbar {i} -> proto {proto}");
+            assert!((36..=44).contains(&proto), "hotbar {i} -> proto {proto}");
             let back = PlayerInventory::from_protocol_slot(proto).unwrap();
             assert_eq!(back, i as usize, "hotbar slot {i} roundtrip failed");
         }
@@ -288,7 +288,7 @@ mod tests {
     fn test_protocol_slot_armor_roundtrip() {
         for i in 36usize..40 {
             let proto = PlayerInventory::to_protocol_slot(i);
-            assert!(proto >= 5 && proto <= 8, "armor {i} -> proto {proto}");
+            assert!((5..=8).contains(&proto), "armor {i} -> proto {proto}");
             let back = PlayerInventory::from_protocol_slot(proto).unwrap();
             assert_eq!(back, i, "armor slot {i} roundtrip failed");
         }
@@ -377,7 +377,11 @@ mod tests {
         let leftovers = inv.add_item(ItemStack::new("minecraft:stone", 16));
         assert_eq!(leftovers, 0);
         assert_eq!(inv.get(3).count, 48, "selected slot should be filled first");
-        assert_eq!(inv.get(0).count, 32, "non-selected slot should be unchanged");
+        assert_eq!(
+            inv.get(0).count,
+            32,
+            "non-selected slot should be unchanged"
+        );
     }
 
     // --- all_slots ---
@@ -388,4 +392,3 @@ mod tests {
         assert_eq!(inv.all_slots().count(), PlayerInventory::TOTAL_SLOTS);
     }
 }
-
