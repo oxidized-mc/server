@@ -23,10 +23,11 @@ use oxidized_protocol::codec::Packet;
 /// Panics if decoding fails or if the decoded packet differs from the original.
 fn assert_roundtrip<P: Packet + PartialEq + std::fmt::Debug>(pkt: &P) {
     let encoded = pkt.encode();
-    let decoded = P::decode(encoded.freeze())
-        .expect("decode should succeed for a packet we just encoded");
+    let decoded =
+        P::decode(encoded.freeze()).expect("decode should succeed for a packet we just encoded");
     assert_eq!(
-        pkt, &decoded,
+        pkt,
+        &decoded,
         "roundtrip mismatch for {} (packet ID 0x{:02X})",
         std::any::type_name::<P>(),
         P::PACKET_ID,
@@ -262,11 +263,10 @@ fn roundtrip_client_information() {
 
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
-    ClientboundForgetLevelChunkPacket, ClientboundKeepAlivePacket,
-    ClientboundRemoveEntitiesPacket, ClientboundRotateHeadPacket,
-    ClientboundSetChunkCacheCenterPacket, ClientboundSetChunkCacheRadiusPacket,
-    ServerboundAcceptTeleportationPacket, ServerboundChatAckPacket,
-    ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket,
+    ClientboundForgetLevelChunkPacket, ClientboundKeepAlivePacket, ClientboundRemoveEntitiesPacket,
+    ClientboundRotateHeadPacket, ClientboundSetChunkCacheCenterPacket,
+    ClientboundSetChunkCacheRadiusPacket, ServerboundAcceptTeleportationPacket,
+    ServerboundChatAckPacket, ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket,
     ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket,
 };
