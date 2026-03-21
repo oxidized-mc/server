@@ -13,7 +13,7 @@ use crate::commands::pagination::PaginatedMessage;
 use crate::commands::source::CommandSourceStack;
 use oxidized_protocol::chat::ChatFormatting;
 use oxidized_protocol::chat::Component;
-use oxidized_protocol::chat::style::{ClickEvent, HoverEvent, TextColor};
+use oxidized_protocol::chat::{ClickEvent, HoverEvent, TextColor};
 
 /// Registers the `/help` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
