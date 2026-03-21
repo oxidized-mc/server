@@ -1453,11 +1453,16 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
   variants) use `get_arg_result` directly — correct design choice.
 - Per-type parser functions (14 total) make `parse_argument()` a clean dispatch table where
   each match arm is a single function call.
-- Coordinate helpers (`parse_single_coordinate`, `parse_coordinates3`,
-  `parse_int_coordinates3`, `parse_coordinates2`) support absolute, `~` relative,
-  and `^` local coordinate forms. Returns `Coordinates` when any component is relative,
-  legacy `Vec3`/`BlockPos` types for fully absolute coords (backwards compat).
-- 16 new tests added without modifying any existing test — all 42 original tests pass.
+- Coordinate parsing moved to `commands/coordinates.rs` module. Functions: `parse_single_coordinate`,
+  `parse_coordinates3`, `parse_int_coordinates3`, `parse_coordinates2`. Types: `WorldCoordinate`,
+  `CoordinateKind`, `Coordinates`, `EntityAnchorKind`. Support absolute, `~` relative, and `^` local
+  coordinate forms. Returns `Coordinates` when any component is relative.
+- `NamedColor` removed — use `ChatFormatting` from `oxidized-protocol::chat::formatting` (same 16 colors).
+  Filter with `.is_color()` to reject bold/italic/etc modifiers.
+- Generic `parse_range<T: FromStr + Copy>()` replaces 3 duplicate range parsers (int, float, double).
+- `/tp` consolidated from 6 near-identical exec functions into `exec_tp_targets_to_location`.
+- `/list` consolidated into `execute_list_impl(ctx, include_uuids: bool)`.
+- `StringReader::advance(n)` added for cross-module cursor advancement (field is private).
 
 **Patterns to reuse:**
 - `get_typed()` pattern: `extract(get_arg_result(ctx, name)?).ok_or_else(...)` — clean

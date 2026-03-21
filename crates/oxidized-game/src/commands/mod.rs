@@ -7,6 +7,7 @@
 
 pub mod arguments;
 pub mod context;
+pub mod coordinates;
 pub mod dispatcher;
 pub mod nodes;
 pub mod pagination;
@@ -35,6 +36,7 @@ mod cmd_weather;
 
 pub use arguments::{ArgumentType, StringKind};
 pub use context::{CommandContext, ParsedArgument, StringRange};
+pub use coordinates::{CoordinateKind, Coordinates, EntityAnchorKind, WorldCoordinate};
 pub use dispatcher::CommandDispatcher;
 pub use nodes::{ArgumentCommandNode, CommandNode, LiteralCommandNode, RootCommandNode};
 pub use pagination::PaginatedMessage;
