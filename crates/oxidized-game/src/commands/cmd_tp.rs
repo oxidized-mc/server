@@ -12,14 +12,12 @@
 //!
 //! TODO: Actual teleportation requires sending `ClientboundPlayerPositionPacket`.
 
+use crate::commands::CommandError;
 use crate::commands::arguments::ArgumentType;
-use crate::commands::context::{
-    get_entity, get_vec3, CommandContext,
-};
+use crate::commands::context::{CommandContext, get_entity, get_vec3};
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
-use crate::commands::CommandError;
 use oxidized_protocol::chat::Component;
 
 /// Registers the `/tp` and `/teleport` commands with all vanilla branches.
@@ -63,21 +61,20 @@ fn build_tp_tree(name: &'static str) -> crate::commands::nodes::LiteralBuilder<C
                                     .executes(exec_tp_targets_to_location),
                             )
                             .then(
-                                literal("entity")
+                                literal("entity").then(
+                                    argument(
+                                        "facingEntity",
+                                        ArgumentType::Entity {
+                                            single: true,
+                                            player_only: false,
+                                        },
+                                    )
+                                    .executes(exec_tp_targets_to_location)
                                     .then(
-                                        argument(
-                                            "facingEntity",
-                                            ArgumentType::Entity {
-                                                single: true,
-                                                player_only: false,
-                                            },
-                                        )
-                                        .executes(exec_tp_targets_to_location)
-                                        .then(
-                                            argument("anchor", ArgumentType::EntityAnchor)
-                                                .executes(exec_tp_targets_to_location),
-                                        ),
+                                        argument("anchor", ArgumentType::EntityAnchor)
+                                            .executes(exec_tp_targets_to_location),
                                     ),
+                                ),
                             ),
                     ),
             )
@@ -100,20 +97,16 @@ fn build_tp_tree(name: &'static str) -> crate::commands::nodes::LiteralBuilder<C
 /// `/tp <location>` — teleport source to coordinates.
 fn exec_tp_location(ctx: &CommandContext<CommandSourceStack>) -> Result<i32, CommandError> {
     let (x, y, z) = get_vec3(ctx, "location")?;
-    ctx.source.send_success(
-        &tp_location_msg(&ctx.source.display_name, x, y, z),
-        true,
-    );
+    ctx.source
+        .send_success(&tp_location_msg(&ctx.source.display_name, x, y, z), true);
     Ok(1)
 }
 
 /// `/tp <destination>` — teleport source to entity.
 fn exec_tp_destination(ctx: &CommandContext<CommandSourceStack>) -> Result<i32, CommandError> {
     let dest = get_entity(ctx, "destination")?;
-    ctx.source.send_success(
-        &tp_entity_msg(&ctx.source.display_name, &dest.name),
-        true,
-    );
+    ctx.source
+        .send_success(&tp_entity_msg(&ctx.source.display_name, &dest.name), true);
     Ok(1)
 }
 
@@ -126,10 +119,8 @@ fn exec_tp_targets_to_location(
     let target = get_entity(ctx, "destination")?;
     let (x, y, z) = get_vec3(ctx, "location")?;
     // TODO: apply rotation/facing from optional args once teleport is real
-    ctx.source.send_success(
-        &tp_location_msg(&target.name, x, y, z),
-        true,
-    );
+    ctx.source
+        .send_success(&tp_location_msg(&target.name, x, y, z), true);
     Ok(1)
 }
 
@@ -139,10 +130,8 @@ fn exec_tp_targets_destination(
 ) -> Result<i32, CommandError> {
     let target = get_entity(ctx, "destination")?;
     let dest = get_entity(ctx, "dest")?;
-    ctx.source.send_success(
-        &tp_entity_msg(&target.name, &dest.name),
-        true,
-    );
+    ctx.source
+        .send_success(&tp_entity_msg(&target.name, &dest.name), true);
     Ok(1)
 }
 
@@ -165,9 +154,6 @@ fn tp_location_msg(target: &str, x: f64, y: f64, z: f64) -> Component {
 fn tp_entity_msg(target: &str, destination: &str) -> Component {
     Component::translatable(
         "commands.teleport.success.entity.single",
-        vec![
-            Component::text(target),
-            Component::text(destination),
-        ],
+        vec![Component::text(target), Component::text(destination)],
     )
 }

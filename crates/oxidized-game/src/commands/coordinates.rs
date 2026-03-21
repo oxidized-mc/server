@@ -58,10 +58,13 @@ impl Coordinates {
     pub fn resolve(&self, position: (f64, f64, f64), rotation: (f32, f32)) -> (f64, f64, f64) {
         match self.kind {
             CoordinateKind::World => {
-                let resolve_axis =
-                    |coord: &WorldCoordinate, base: f64| -> f64 {
-                        if coord.relative { base + coord.value } else { coord.value }
-                    };
+                let resolve_axis = |coord: &WorldCoordinate, base: f64| -> f64 {
+                    if coord.relative {
+                        base + coord.value
+                    } else {
+                        coord.value
+                    }
+                };
                 (
                     resolve_axis(&self.x, position.0),
                     resolve_axis(&self.y, position.1),
@@ -119,10 +122,7 @@ impl Coordinates {
 
     /// Returns `true` if any component is relative or local.
     pub fn has_relative(&self) -> bool {
-        self.kind == CoordinateKind::Local
-            || self.x.relative
-            || self.y.relative
-            || self.z.relative
+        self.kind == CoordinateKind::Local || self.x.relative || self.y.relative || self.z.relative
     }
 }
 
@@ -148,7 +148,13 @@ fn parse_single_coord(
         Some(b'~') => (false, true),
         _ => {
             let value = read_value(reader)?;
-            return Ok((WorldCoordinate { value, relative: false }, false));
+            return Ok((
+                WorldCoordinate {
+                    value,
+                    relative: false,
+                },
+                false,
+            ));
         },
     };
 
@@ -158,7 +164,13 @@ fn parse_single_coord(
     } else {
         0.0
     };
-    Ok((WorldCoordinate { value, relative: true }, is_local))
+    Ok((
+        WorldCoordinate {
+            value,
+            relative: true,
+        },
+        is_local,
+    ))
 }
 
 /// Validates that all axes use the same coordinate system and returns the kind.
@@ -168,7 +180,11 @@ fn validate_coordinate_mix(locals: &[bool]) -> Result<CoordinateKind, CommandErr
             "Cannot mix world and local coordinates (^ and ~)".to_string(),
         ));
     }
-    Ok(if locals[0] { CoordinateKind::Local } else { CoordinateKind::World })
+    Ok(if locals[0] {
+        CoordinateKind::Local
+    } else {
+        CoordinateKind::World
+    })
 }
 
 /// Parses three whitespace-separated double coordinates supporting `~`/`^`.
@@ -203,7 +219,10 @@ pub fn parse_coordinates2(reader: &mut StringReader<'_>) -> Result<Coordinates, 
     let kind = validate_coordinate_mix(&[x_local, z_local])?;
     Ok(Coordinates {
         x,
-        y: WorldCoordinate { value: 0.0, relative: false },
+        y: WorldCoordinate {
+            value: 0.0,
+            relative: false,
+        },
         z,
         kind,
     })
@@ -217,9 +236,18 @@ mod tests {
     #[test]
     fn test_resolve_absolute() {
         let coords = Coordinates {
-            x: WorldCoordinate { value: 100.0, relative: false },
-            y: WorldCoordinate { value: 64.0, relative: false },
-            z: WorldCoordinate { value: -200.0, relative: false },
+            x: WorldCoordinate {
+                value: 100.0,
+                relative: false,
+            },
+            y: WorldCoordinate {
+                value: 64.0,
+                relative: false,
+            },
+            z: WorldCoordinate {
+                value: -200.0,
+                relative: false,
+            },
             kind: CoordinateKind::World,
         };
         let (x, y, z) = coords.resolve((0.0, 0.0, 0.0), (0.0, 0.0));
@@ -231,9 +259,18 @@ mod tests {
     #[test]
     fn test_resolve_relative() {
         let coords = Coordinates {
-            x: WorldCoordinate { value: 10.0, relative: true },
-            y: WorldCoordinate { value: 0.0, relative: true },
-            z: WorldCoordinate { value: -5.0, relative: true },
+            x: WorldCoordinate {
+                value: 10.0,
+                relative: true,
+            },
+            y: WorldCoordinate {
+                value: 0.0,
+                relative: true,
+            },
+            z: WorldCoordinate {
+                value: -5.0,
+                relative: true,
+            },
             kind: CoordinateKind::World,
         };
         let (x, y, z) = coords.resolve((50.0, 100.0, 200.0), (0.0, 0.0));
@@ -245,9 +282,18 @@ mod tests {
     #[test]
     fn test_resolve_mixed() {
         let coords = Coordinates {
-            x: WorldCoordinate { value: 100.0, relative: false },
-            y: WorldCoordinate { value: 5.0, relative: true },
-            z: WorldCoordinate { value: -200.0, relative: false },
+            x: WorldCoordinate {
+                value: 100.0,
+                relative: false,
+            },
+            y: WorldCoordinate {
+                value: 5.0,
+                relative: true,
+            },
+            z: WorldCoordinate {
+                value: -200.0,
+                relative: false,
+            },
             kind: CoordinateKind::World,
         };
         let (x, y, z) = coords.resolve((50.0, 60.0, 200.0), (0.0, 0.0));
@@ -259,9 +305,18 @@ mod tests {
     #[test]
     fn test_resolve_block_pos_floors() {
         let coords = Coordinates {
-            x: WorldCoordinate { value: 10.7, relative: false },
-            y: WorldCoordinate { value: -0.3, relative: false },
-            z: WorldCoordinate { value: 5.9, relative: false },
+            x: WorldCoordinate {
+                value: 10.7,
+                relative: false,
+            },
+            y: WorldCoordinate {
+                value: -0.3,
+                relative: false,
+            },
+            z: WorldCoordinate {
+                value: 5.9,
+                relative: false,
+            },
             kind: CoordinateKind::World,
         };
         let (x, y, z) = coords.resolve_block_pos((0.0, 0.0, 0.0), (0.0, 0.0));
@@ -271,9 +326,18 @@ mod tests {
     #[test]
     fn test_has_relative_false() {
         let coords = Coordinates {
-            x: WorldCoordinate { value: 1.0, relative: false },
-            y: WorldCoordinate { value: 2.0, relative: false },
-            z: WorldCoordinate { value: 3.0, relative: false },
+            x: WorldCoordinate {
+                value: 1.0,
+                relative: false,
+            },
+            y: WorldCoordinate {
+                value: 2.0,
+                relative: false,
+            },
+            z: WorldCoordinate {
+                value: 3.0,
+                relative: false,
+            },
             kind: CoordinateKind::World,
         };
         assert!(!coords.has_relative());
@@ -282,9 +346,18 @@ mod tests {
     #[test]
     fn test_has_relative_true() {
         let coords = Coordinates {
-            x: WorldCoordinate { value: 1.0, relative: true },
-            y: WorldCoordinate { value: 2.0, relative: false },
-            z: WorldCoordinate { value: 3.0, relative: false },
+            x: WorldCoordinate {
+                value: 1.0,
+                relative: true,
+            },
+            y: WorldCoordinate {
+                value: 2.0,
+                relative: false,
+            },
+            z: WorldCoordinate {
+                value: 3.0,
+                relative: false,
+            },
             kind: CoordinateKind::World,
         };
         assert!(coords.has_relative());
