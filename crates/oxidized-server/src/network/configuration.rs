@@ -6,9 +6,9 @@
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_protocol::packets::configuration::{
     ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
-    ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket,
-    KnownPack, RegistryEntry, ServerboundClientInformationPacket,
-    ServerboundFinishConfigurationPacket, ServerboundSelectKnownPacksPacket,
+    ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket, KnownPack,
+    RegistryEntry, ServerboundClientInformationPacket, ServerboundFinishConfigurationPacket,
+    ServerboundSelectKnownPacksPacket,
 };
 use oxidized_protocol::registry;
 use oxidized_protocol::types::resource_location::ResourceLocation;

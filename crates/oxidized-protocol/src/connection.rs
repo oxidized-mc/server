@@ -332,10 +332,7 @@ impl Connection {
     /// # Errors
     ///
     /// Returns [`ConnectionError`] on I/O failure or compression errors.
-    pub async fn send_packet<P: Packet>(
-        &mut self,
-        pkt: &P,
-    ) -> Result<(), ConnectionError> {
+    pub async fn send_packet<P: Packet>(&mut self, pkt: &P) -> Result<(), ConnectionError> {
         let body = pkt.encode();
         self.send_raw(P::PACKET_ID, &body).await?;
         self.flush().await

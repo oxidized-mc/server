@@ -21,13 +21,13 @@ use oxidized_protocol::auth;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundGameEventPacket, ClientboundKeepAlivePacket,
-    ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundSetChunkCacheRadiusPacket, GameEventType, PlayerCommandAction, PlayerInfoActions,
-    PlayerInfoEntry, ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
-    ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
-    ServerboundCommandSuggestionPacket, ServerboundKeepAlivePacket, ServerboundMovePlayerPacket,
-    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ClientboundGameEventPacket, ClientboundKeepAlivePacket, ClientboundPlayerInfoRemovePacket,
+    ClientboundPlayerInfoUpdatePacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
+    PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, ServerboundAcceptTeleportationPacket,
+    ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket, ServerboundChatPacket,
+    ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
+    ServerboundKeepAlivePacket, ServerboundMovePlayerPacket, ServerboundPlayerCommandPacket,
+    ServerboundPlayerInputPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -461,12 +461,9 @@ fn handle_keepalive(
     keepalive_challenge: i64,
     keepalive_sent_at: &Instant,
 ) {
-    if let Ok(ka) = decode_packet::<ServerboundKeepAlivePacket>(
-        data,
-        addr,
-        player_name,
-        "KeepAlive",
-    ) {
+    if let Ok(ka) =
+        decode_packet::<ServerboundKeepAlivePacket>(data, addr, player_name, "KeepAlive")
+    {
         if *keepalive_pending && ka.id == keepalive_challenge {
             *keepalive_pending = false;
             let latency = keepalive_sent_at.elapsed().as_millis();
