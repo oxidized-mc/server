@@ -198,4 +198,40 @@ mod tests {
         let c = Component::from_nbt(&tag).unwrap();
         assert_eq!(c.content, ComponentContent::Text("simple".into()));
     }
+
+    /// Encode a help-like component with click/hover to network NBT,
+    /// then verify it roundtrips through read_network_nbt.
+    #[test]
+    fn test_help_entry_nbt_wire_roundtrip() {
+        use crate::chat::style::{ClickEvent, HoverEvent};
+
+        let entry = Component::text("/test")
+            .color(TextColor::Named(ChatFormatting::Gold))
+            .click(ClickEvent::SuggestCommand("/test ".to_string()))
+            .hover(HoverEvent::ShowText(Box::new(
+                Component::text("A test command")
+                    .color(TextColor::Named(ChatFormatting::Yellow)),
+            )))
+            .append(
+                Component::text(" - A test command")
+                    .color(TextColor::Named(ChatFormatting::White)),
+            );
+
+        let tag = entry.to_nbt();
+        let compound = match &tag {
+            NbtTag::Compound(c) => c,
+            _ => panic!("expected compound"),
+        };
+
+        // Write to network NBT bytes and read back
+        let mut buf = Vec::new();
+        oxidized_nbt::write_network_nbt(&mut buf, compound).unwrap();
+
+        let mut reader = buf.as_slice();
+        let mut acc = oxidized_nbt::NbtAccounter::unlimited();
+        let read_compound = oxidized_nbt::read_network_nbt(&mut reader, &mut acc).unwrap();
+
+        let decoded = Component::from_nbt(&NbtTag::Compound(read_compound)).unwrap();
+        assert_eq!(decoded, entry);
+    }
 }
