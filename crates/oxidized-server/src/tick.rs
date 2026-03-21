@@ -333,23 +333,31 @@ fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
     let _ = ctx.chat_tx.send(msg);
 }
 
-/// Saves level.dat to disk as part of periodic autosave.
+/// Saves level.dat to disk via `spawn_blocking` (ADR-015).
 ///
 /// Takes a snapshot of `level_data` under a read lock, then writes to disk
-/// via [`tokio::task::spawn_blocking`] to avoid blocking the async runtime (ADR-015).
-/// Errors are logged but do not crash the server.
-async fn autosave_level_dat(ctx: &ServerContext) {
+/// on a blocking thread. Returns `Ok(())` on success or the error.
+///
+/// Used by both the periodic autosave and the shutdown save path.
+pub(crate) async fn save_level_dat(
+    ctx: &ServerContext,
+) -> Result<(), Box<dyn std::error::Error + Send>> {
     let level_data = ctx.level_data.read().clone();
-    let level_dat_path = format!("{}/level.dat", ctx.world_dir);
-    debug!("Autosaving level.dat...");
-    let result = tokio::task::spawn_blocking(move || {
-        level_data.save(std::path::Path::new(&level_dat_path))
-    })
-    .await;
+    let level_dat_path = ctx.storage.level_dat_path();
+    let result = tokio::task::spawn_blocking(move || level_data.save(&level_dat_path)).await;
     match result {
-        Ok(Ok(())) => debug!("Autosave complete"),
-        Ok(Err(e)) => warn!(error = %e, "Autosave failed for level.dat"),
-        Err(e) => warn!(error = %e, "Autosave task panicked"),
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(Box::new(e)),
+        Err(e) => Err(Box::new(e)),
+    }
+}
+
+/// Autosaves level.dat, logging the outcome without crashing the server.
+async fn autosave_level_dat(ctx: &ServerContext) {
+    debug!("Autosaving level.dat...");
+    match save_level_dat(ctx).await {
+        Ok(()) => debug!("Autosave complete"),
+        Err(e) => warn!(error = %e, "Autosave failed for level.dat"),
     }
 }
 
@@ -360,7 +368,7 @@ mod tests {
     use oxidized_game::level::{GameRules, ServerTickRateManager};
     use oxidized_game::player::PlayerList;
     use oxidized_protocol::types::resource_location::ResourceLocation;
-    use oxidized_world::storage::PrimaryLevelData;
+    use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
     use parking_lot::RwLock;
     use rand::SeedableRng;
 
@@ -383,7 +391,7 @@ mod tests {
             shutdown_tx: broadcast::channel(1).0,
             game_rules: RwLock::new(GameRules::default()),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
-            world_dir: String::new(),
+            storage: LevelStorageSource::new(""),
         })
     }
 

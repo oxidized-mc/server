@@ -9,10 +9,10 @@ use std::sync::Arc;
 use oxidized_nbt::{NbtCompound, NbtList, NbtTag, TAG_COMPOUND, TAG_STRING};
 
 use super::error::AnvilError;
+use crate::chunk::LevelChunk;
 use crate::chunk::data_layer::DATA_LAYER_SIZE;
 use crate::chunk::heightmap::HeightmapType;
 use crate::chunk::level_chunk::OVERWORLD_MIN_Y;
-use crate::chunk::LevelChunk;
 use crate::registry::{BlockRegistry, BlockStateId};
 
 /// Data version for Minecraft 26.1-pre-3.
@@ -45,7 +45,7 @@ impl ChunkSerializer {
     /// Returns an error if NBT serialization fails.
     pub fn serialize(&self, chunk: &LevelChunk) -> Result<Vec<u8>, AnvilError> {
         let root = self.to_nbt(chunk);
-        oxidized_nbt::write_bytes(&root).map_err(|e| AnvilError::Nbt(e))
+        oxidized_nbt::write_bytes(&root).map_err(AnvilError::Nbt)
     }
 
     /// Serializes a chunk to an NBT compound.
@@ -168,10 +168,7 @@ impl ChunkSerializer {
     }
 
     /// Serializes biome data for a section.
-    fn serialize_biomes(
-        &self,
-        section: &crate::chunk::section::LevelChunkSection,
-    ) -> NbtCompound {
+    fn serialize_biomes(&self, section: &crate::chunk::section::LevelChunkSection) -> NbtCompound {
         let biomes = section.biomes_clone();
         let (palette_ids, data_longs) = biomes.to_nbt_data();
 
@@ -196,6 +193,9 @@ impl ChunkSerializer {
     ///
     /// Currently uses a placeholder mapping since the biome registry is not
     /// yet implemented. ID 0 = "minecraft:plains".
+    // TODO(phase-23): Replace with proper biome registry lookup once biome
+    // registry is implemented. Non-zero IDs currently produce synthetic names
+    // that vanilla will not recognize.
     fn biome_name(&self, biome_id: u32) -> String {
         // Placeholder: no biome registry yet
         match biome_id {

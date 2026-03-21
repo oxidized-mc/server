@@ -427,13 +427,14 @@ impl RegionFile {
             .write_all(compressed_data)
             .map_err(|e| AnvilError::io(&self.path, e))?;
 
-        // Pad to sector boundary
+        // Pad to sector boundary (max 4095 bytes) using a stack buffer.
         let written = total_on_disk;
         let padded = sectors_needed * SECTOR_BYTES;
         if padded > written {
-            let padding = vec![0u8; padded - written];
+            let pad_len = padded - written;
+            let zeros = [0u8; SECTOR_BYTES];
             self.file
-                .write_all(&padding)
+                .write_all(&zeros[..pad_len])
                 .map_err(|e| AnvilError::io(&self.path, e))?;
         }
 
@@ -445,12 +446,106 @@ impl RegionFile {
         self.timestamps[idx] = timestamp;
         self.file_len = self.file_len.max(byte_offset + padded as u64);
 
-        // Flush header
+        // Flush header and data to disk.
         self.write_header()?;
 
         self.file
             .flush()
             .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        Ok(())
+    }
+
+    /// Writes multiple chunks then flushes the header once at the end.
+    ///
+    /// More efficient than calling [`write_chunk_data`](Self::write_chunk_data)
+    /// in a loop when saving many chunks to the same region, since the header
+    /// is only written once.
+    ///
+    /// Each entry is `(chunk_x, chunk_z, compressed_data, timestamp)`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first I/O error encountered. Chunks written before the
+    /// error remain on disk but the header may not be flushed.
+    pub fn write_chunk_data_batch(
+        &mut self,
+        chunks: &[(i32, i32, &[u8], u32)],
+    ) -> Result<(), AnvilError> {
+        for &(cx, cz, data, ts) in chunks {
+            self.write_chunk_data_no_flush(cx, cz, data, ts)?;
+        }
+        self.write_header()?;
+        self.file
+            .flush()
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+        Ok(())
+    }
+
+    /// Writes a single chunk's data without flushing the header.
+    ///
+    /// Used internally by [`write_chunk_data_batch`](Self::write_chunk_data_batch).
+    fn write_chunk_data_no_flush(
+        &mut self,
+        chunk_x: i32,
+        chunk_z: i32,
+        compressed_data: &[u8],
+        timestamp: u32,
+    ) -> Result<(), AnvilError> {
+        let idx = Self::chunk_index(chunk_x, chunk_z);
+
+        let payload_len = (compressed_data.len() + 1) as u32;
+        let total_on_disk = 4 + payload_len as usize;
+        let sectors_needed = total_on_disk.div_ceil(SECTOR_BYTES);
+
+        if sectors_needed > 255 {
+            return Err(AnvilError::ChunkTooLarge {
+                size: compressed_data.len(),
+                sectors: sectors_needed,
+            });
+        }
+        let sectors_needed_u8 = sectors_needed as u8;
+
+        let new_sector = (self.file_len as usize).div_ceil(SECTOR_BYTES) as u32;
+        let new_sector = new_sector.max(2);
+
+        if new_sector > 0xFF_FFFF {
+            return Err(AnvilError::InvalidHeader(
+                "region file too large: sector offset exceeds 24-bit limit".into(),
+            ));
+        }
+
+        let byte_offset = new_sector as u64 * SECTOR_BYTES as u64;
+
+        self.file
+            .seek(SeekFrom::Start(byte_offset))
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+        self.file
+            .write_all(&payload_len.to_be_bytes())
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+        self.file
+            .write_all(&[CompressionType::ZLIB_BYTE])
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+        self.file
+            .write_all(compressed_data)
+            .map_err(|e| AnvilError::io(&self.path, e))?;
+
+        let written = total_on_disk;
+        let padded = sectors_needed * SECTOR_BYTES;
+        if padded > written {
+            let pad_len = padded - written;
+            let zeros = [0u8; SECTOR_BYTES];
+            self.file
+                .write_all(&zeros[..pad_len])
+                .map_err(|e| AnvilError::io(&self.path, e))?;
+        }
+
+        self.offsets[idx] = OffsetEntry {
+            sector_number: new_sector,
+            sector_count: sectors_needed_u8,
+        };
+        self.timestamps[idx] = timestamp;
+        self.file_len = self.file_len.max(byte_offset + padded as u64);
 
         Ok(())
     }
@@ -812,10 +907,7 @@ mod tests {
         for i in 0..5 {
             assert!(region.has_chunk(i, 0));
             let data = region.read_chunk_data(i, 0).unwrap().unwrap();
-            assert_eq!(
-                String::from_utf8(data).unwrap(),
-                format!("chunk data {i}")
-            );
+            assert_eq!(String::from_utf8(data).unwrap(), format!("chunk data {i}"));
         }
 
         let _ = std::fs::remove_file(&path);
@@ -843,8 +935,12 @@ mod tests {
         // Write two chunks
         {
             let mut region = RegionFile::create(&path).unwrap();
-            region.write_chunk_data(0, 0, &compress(data1), 100).unwrap();
-            region.write_chunk_data(1, 1, &compress(data2), 200).unwrap();
+            region
+                .write_chunk_data(0, 0, &compress(data1), 100)
+                .unwrap();
+            region
+                .write_chunk_data(1, 1, &compress(data2), 200)
+                .unwrap();
         }
 
         // Re-open and verify header persisted
@@ -856,6 +952,58 @@ mod tests {
 
             assert_eq!(region.read_chunk_data(0, 0).unwrap().unwrap(), data1);
             assert_eq!(region.read_chunk_data(1, 1).unwrap().unwrap(), data2);
+        }
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn test_write_chunk_data_batch() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir();
+        let path = dir.join("oxidized_test_batch_write.mca");
+        let _ = std::fs::remove_file(&path);
+
+        let compress = |data: &[u8]| -> Vec<u8> {
+            let mut enc =
+                flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+            enc.write_all(data).unwrap();
+            enc.finish().unwrap()
+        };
+
+        let c1 = compress(b"batch chunk 1");
+        let c2 = compress(b"batch chunk 2");
+        let c3 = compress(b"batch chunk 3");
+
+        {
+            let mut region = RegionFile::create(&path).unwrap();
+            let chunks: Vec<(i32, i32, &[u8], u32)> = vec![
+                (0, 0, c1.as_slice(), 100),
+                (5, 5, c2.as_slice(), 200),
+                (31, 31, c3.as_slice(), 300),
+            ];
+            region.write_chunk_data_batch(&chunks).unwrap();
+        }
+
+        // Re-open and verify all three chunks
+        {
+            let mut region = RegionFile::open(&path).unwrap();
+            assert_eq!(
+                region.read_chunk_data(0, 0).unwrap().unwrap(),
+                b"batch chunk 1"
+            );
+            assert_eq!(
+                region.read_chunk_data(5, 5).unwrap().unwrap(),
+                b"batch chunk 2"
+            );
+            assert_eq!(
+                region.read_chunk_data(31, 31).unwrap().unwrap(),
+                b"batch chunk 3"
+            );
+            assert_eq!(region.chunk_timestamp(0, 0), 100);
+            assert_eq!(region.chunk_timestamp(5, 5), 200);
+            assert_eq!(region.chunk_timestamp(31, 31), 300);
         }
 
         let _ = std::fs::remove_file(&path);

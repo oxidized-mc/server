@@ -66,10 +66,7 @@ pub fn compress_zlib(data: &[u8]) -> Result<Vec<u8>, AnvilError> {
 /// # Errors
 ///
 /// Returns [`AnvilError::Compression`] if compression fails.
-pub fn compress_zlib_level(
-    data: &[u8],
-    level: flate2::Compression,
-) -> Result<Vec<u8>, AnvilError> {
+pub fn compress_zlib_level(data: &[u8], level: flate2::Compression) -> Result<Vec<u8>, AnvilError> {
     use std::io::Write;
     let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), level);
     encoder

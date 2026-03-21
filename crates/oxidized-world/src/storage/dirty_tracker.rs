@@ -3,13 +3,13 @@
 //! Used by the autosave system to efficiently determine which chunks need to be
 //! written to disk. Thread-safe via `parking_lot::Mutex`.
 
-use std::collections::HashSet;
+use ahash::AHashSet;
 
 use oxidized_types::ChunkPos;
 
 /// Tracks which chunks have been modified and need saving.
 ///
-/// Uses a `HashSet<ChunkPos>` internally for O(1) insert and deduplication.
+/// Uses an `AHashSet<ChunkPos>` internally for O(1) insert and deduplication.
 ///
 /// # Examples
 ///
@@ -28,7 +28,7 @@ use oxidized_types::ChunkPos;
 /// ```
 #[derive(Debug, Clone)]
 pub struct DirtyChunkTracker {
-    dirty: HashSet<ChunkPos>,
+    dirty: AHashSet<ChunkPos>,
 }
 
 impl DirtyChunkTracker {
@@ -36,7 +36,7 @@ impl DirtyChunkTracker {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            dirty: HashSet::new(),
+            dirty: AHashSet::new(),
         }
     }
 
@@ -113,7 +113,11 @@ mod tests {
         tracker.mark_dirty(pos);
         tracker.mark_dirty(pos);
         tracker.mark_dirty(pos);
-        assert_eq!(tracker.dirty_count(), 1, "same pos marked thrice should not duplicate");
+        assert_eq!(
+            tracker.dirty_count(),
+            1,
+            "same pos marked thrice should not duplicate"
+        );
     }
 
     #[test]
