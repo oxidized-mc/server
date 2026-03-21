@@ -70,6 +70,8 @@ pub struct ServerContext {
     pub commands: Commands,
     /// Maximum number of players allowed on the server.
     pub max_players: usize,
+    /// Broadcast sender used to trigger a graceful server shutdown.
+    pub shutdown_tx: broadcast::Sender<()>,
 }
 
 impl ServerHandle for ServerContext {
@@ -78,8 +80,8 @@ impl ServerHandle for ServerContext {
     }
 
     fn request_shutdown(&self) {
-        // TODO(phase-18): graceful shutdown trigger
         info!("Server shutdown requested via /stop");
+        let _ = self.shutdown_tx.send(());
     }
 
     fn seed(&self) -> i64 {
@@ -332,6 +334,7 @@ mod tests {
                 color_char: Some('&'),
                 commands: oxidized_game::commands::Commands::new(),
                 max_players: 20,
+                shutdown_tx: broadcast::channel(1).0,
             }),
         })
     }

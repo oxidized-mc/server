@@ -31,6 +31,7 @@ thiserror         = { workspace = true }
 uuid              = { workspace = true }
 mimalloc          = { workspace = true }
 clap              = { workspace = true }
+rustyline         = { workspace = true }
 reqwest           = { workspace = true }
 
 [dev-dependencies]
