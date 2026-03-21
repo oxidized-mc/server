@@ -143,7 +143,7 @@ impl Component {
 mod tests {
     use super::*;
     use crate::chat::formatting::ChatFormatting;
-    use crate::chat::style::TextColor;
+    use crate::chat::text_color::TextColor;
 
     #[test]
     fn test_nbt_text_component() {
@@ -203,7 +203,8 @@ mod tests {
     /// then verify it roundtrips through read_network_nbt.
     #[test]
     fn test_help_entry_nbt_wire_roundtrip() {
-        use crate::chat::style::{ClickEvent, HoverEvent};
+        use crate::chat::click_event::ClickEvent;
+        use crate::chat::hover_event::HoverEvent;
 
         let entry = Component::text("/test")
             .color(TextColor::Named(ChatFormatting::Gold))

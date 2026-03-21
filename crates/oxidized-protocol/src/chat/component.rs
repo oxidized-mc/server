@@ -16,7 +16,10 @@ use serde::Serialize;
 use serde::ser::SerializeMap;
 
 use super::formatting::ChatFormatting;
-use super::style::{ClickEvent, HoverEvent, Style, TextColor};
+use super::click_event::ClickEvent;
+use super::hover_event::HoverEvent;
+use super::style::Style;
+use super::text_color::TextColor;
 use crate::types::ResourceLocation;
 
 /// A Minecraft text component.
