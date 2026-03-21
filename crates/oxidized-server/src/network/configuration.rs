@@ -3,12 +3,11 @@
 //! Sends registry data, tags, enabled features, and transitions the
 //! client to PLAY state. The configuration flow is server-driven.
 
-use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_protocol::packets::configuration::{
     ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
     ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket,
-    ClientboundUpdateTagsPacket, KnownPack, RegistryEntry, ServerboundClientInformationPacket,
+    KnownPack, RegistryEntry, ServerboundClientInformationPacket,
     ServerboundFinishConfigurationPacket, ServerboundSelectKnownPacksPacket,
 };
 use oxidized_protocol::registry;
