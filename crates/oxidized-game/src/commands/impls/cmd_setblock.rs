@@ -1,7 +1,4 @@
 //! `/setblock` command — set a block at a position.
-//!
-//! TODO: Actually setting blocks requires `ServerLevel` access from commands
-//! and broadcasting block change packets to nearby clients.
 
 use crate::commands::argument_access::{get_block_pos, get_string};
 use crate::commands::arguments::ArgumentType;
@@ -35,8 +32,22 @@ fn setblock_exec(
     ctx: &CommandContext<CommandSourceStack>,
 ) -> Result<i32, crate::commands::CommandError> {
     let (x, y, z) = get_block_pos(ctx, "pos")?;
-    let _block = get_string(ctx, "block")?;
-    // TODO: Actually set the block via ServerLevel
+    let block = get_string(ctx, "block")?;
+
+    let block_name = if block.contains(':') {
+        block.to_string()
+    } else {
+        format!("minecraft:{block}")
+    };
+
+    if !ctx.source.server.set_block(x, y, z, &block_name) {
+        ctx.source.send_failure(&Component::translatable(
+            "commands.setblock.failed",
+            vec![],
+        ));
+        return Ok(0);
+    }
+
     ctx.source.send_success(
         &Component::translatable(
             "commands.setblock.success",

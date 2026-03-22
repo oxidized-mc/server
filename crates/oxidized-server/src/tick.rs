@@ -15,7 +15,7 @@ use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
     ClientboundGameEventPacket, ClientboundSetTimePacket, ClientboundTickingStepPacket,
-    ClockNetworkState, ClockUpdate, GameEventType,
+    GameEventType,
 };
 use rand::Rng;
 use rand::RngExt;
@@ -48,9 +48,6 @@ const THUNDER_DURATION_MAX: i32 = 15_600;
 /// Per-tick delta for rain/thunder visual level interpolation.
 const WEATHER_LEVEL_DELTA: f32 = 0.01;
 
-/// Autosave interval in ticks (6000 ticks = 5 minutes at 20 TPS).
-const AUTOSAVE_INTERVAL_TICKS: u64 = 6000;
-
 /// Tracks interpolated rain/thunder visual intensity levels across ticks.
 struct WeatherLevels {
     rain_level: f32,
@@ -68,7 +65,7 @@ struct WeatherLevels {
 pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::Receiver<()>) {
     let mut tick_count: u64 = 0;
     let mut timer = interval(Duration::from_millis(50));
-    timer.set_missed_tick_behavior(MissedTickBehavior::Burst);
+    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let mut rng = rand::rngs::SmallRng::seed_from_u64(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -177,8 +174,12 @@ async fn do_tick(
         broadcast_time(ctx, do_daylight);
     }
 
-    // Autosave level.dat every 5 minutes (6000 ticks).
-    if tick_count > 0 && tick_count % AUTOSAVE_INTERVAL_TICKS == 0 {
+    // Autosave level.dat at a dynamic interval: max(100, tps * 300) ticks.
+    let autosave_interval = {
+        let mgr = ctx.tick_rate_manager.read();
+        (mgr.tick_rate * 300.0).max(100.0) as u64
+    };
+    if tick_count > 0 && tick_count % autosave_interval == 0 {
         autosave_level_dat(ctx).await;
     }
 }
@@ -306,18 +307,14 @@ fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLe
 }
 
 /// Broadcasts a [`ClientboundSetTimePacket`] to all connected players.
-fn broadcast_time(ctx: &ServerContext, do_daylight: bool) {
+///
+/// Periodic syncs send empty `clock_updates` (vanilla behaviour). Full
+/// clock data is only sent on join or when the clock parameters change.
+fn broadcast_time(ctx: &ServerContext, _do_daylight: bool) {
     let ld = ctx.level_data.read();
     let pkt = ClientboundSetTimePacket {
         game_time: ld.time,
-        clock_updates: vec![ClockUpdate {
-            clock_id: ClientboundSetTimePacket::OVERWORLD_CLOCK_ID,
-            state: ClockNetworkState {
-                total_ticks: ld.day_time,
-                partial_tick: 0.0,
-                rate: if do_daylight { 1.0 } else { 0.0 },
-            },
-        }],
+        clock_updates: vec![],
     };
     drop(ld);
     broadcast_packet(ctx, &pkt);

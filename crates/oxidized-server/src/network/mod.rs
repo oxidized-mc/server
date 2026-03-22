@@ -440,6 +440,45 @@ impl ServerHandle for ServerContext {
             target_entity: Some(entity_id),
         });
     }
+
+    fn set_block(&self, x: i32, y: i32, z: i32, block_name: &str) -> bool {
+        use oxidized_protocol::codec::Packet;
+        use oxidized_protocol::packets::play::ClientboundBlockUpdatePacket;
+        use oxidized_protocol::types::BlockPos;
+
+        let state_id = match self.block_registry.default_state(block_name) {
+            Some(id) => u32::from(id.0),
+            None => return false,
+        };
+
+        let pos = BlockPos::new(x, y, z);
+        let chunk_pos = ChunkPos::from_block_coords(x, z);
+        if let Some(chunk_ref) = self.chunks.get(&chunk_pos) {
+            let mut chunk = chunk_ref.write();
+            if chunk.set_block_state(x, y, z, state_id).is_ok() {
+                self.dirty_chunks.insert(chunk_pos);
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+
+        // Broadcast block change to all players.
+        let pkt = ClientboundBlockUpdatePacket {
+            pos,
+            block_state: state_id as i32,
+        };
+        let encoded = pkt.encode();
+        let _ = self.broadcast_tx.send(BroadcastMessage {
+            packet_id: ClientboundBlockUpdatePacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: None,
+        });
+
+        true
+    }
 }
 
 /// A packet broadcast to all connected players (or a targeted subset).
