@@ -1861,3 +1861,72 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - `crates/oxidized-game/tests/game_integration.rs` — Updated for 10-packet login sequence
 - `crates/oxidized-protocol/src/packets/play/mod.rs` — 6 new packet module registrations
 - `crates/oxidized-server/src/network/play/mod.rs` — 2 new dispatch arms + inventory module
+
+---
+
+### Phase 22 — Block Interaction (Retrospective)
+
+**Date:** Phase 22 completed
+**Scope:** Block breaking, block placing, block change broadcasting
+
+#### What Went Well
+
+- Packet ID verification against `packets.json` caught ALL wrong IDs from the phase doc
+- Code review passed clean — no significant issues
+- DashMap + Arc<RwLock<LevelChunk>> chunk storage pattern works well for concurrent access
+- Reusing `chat_tx` broadcast channel for block updates was simple and effective
+
+#### Key Decisions
+
+- **Chunk storage**: `DashMap<ChunkPos, Arc<parking_lot::RwLock<LevelChunk>>>` on `ServerContext`
+- Chunks registered in shared storage during `send_initial_chunks` (not at startup)
+- Block breaking: creative=instant on StartDestroyBlock, survival=on StopDestroyBlock
+- No tick-based mining progress tracking (simplified — all survival breaks accepted)
+- `held_item_to_block_state()` uses BlockRegistry to map held item → default block state
+- Sign update handler is a stub (requires block entities, not yet implemented)
+- `MAX_SERVERBOUND_PLAY_ID` fixed from 0x39 to 0x44 (was wrong since initial impl)
+
+#### Packet IDs (Verified)
+
+| Packet | Wire ID |
+|---|---|
+| PlayerAction (SB) | 0x29 |
+| UseItemOn (SB) | 0x42 |
+| UseItem (SB) | 0x43 |
+| SignUpdate (SB) | 0x3D |
+| BlockChangedAck (CB) | 0x04 |
+| BlockDestruction (CB) | 0x05 |
+| BlockEvent (CB) | 0x07 |
+| BlockUpdate (CB) | 0x08 |
+| SectionBlocksUpdate (CB) | 0x54 |
+
+#### Files Created
+
+- `crates/oxidized-protocol/src/packets/play/serverbound_player_action.rs` — PlayerAction enum + packet
+- `crates/oxidized-protocol/src/packets/play/serverbound_use_item_on.rs` — InteractionHand, BlockHitResult, packet
+- `crates/oxidized-protocol/src/packets/play/serverbound_use_item.rs` — UseItem packet
+- `crates/oxidized-protocol/src/packets/play/serverbound_sign_update.rs` — SignUpdate packet
+- `crates/oxidized-protocol/src/packets/play/clientbound_block_changed_ack.rs` — Ack packet
+- `crates/oxidized-protocol/src/packets/play/clientbound_block_destruction.rs` — Break animation packet
+- `crates/oxidized-protocol/src/packets/play/clientbound_block_event.rs` — Block event packet
+- `crates/oxidized-protocol/src/packets/play/clientbound_block_update.rs` — Single block update packet
+- `crates/oxidized-protocol/src/packets/play/clientbound_section_blocks_update.rs` — Batch section update
+- `crates/oxidized-server/src/network/play/block_interaction.rs` — Breaking/placing handlers (6 tests)
+
+#### Files Modified
+
+- `crates/oxidized-protocol/src/packets/play/mod.rs` — 9 new packet module registrations
+- `crates/oxidized-server/Cargo.toml` — Added `dashmap` dependency
+- `crates/oxidized-server/src/main.rs` — Added `chunks` to ServerContext constructor
+- `crates/oxidized-server/src/network/mod.rs` — Added `chunks` field, fixed MAX_SERVERBOUND_PLAY_ID
+- `crates/oxidized-server/src/network/play/helpers.rs` — Stores chunks in DashMap during initial send
+- `crates/oxidized-server/src/network/play/mod.rs` — 4 new dispatch arms + block_interaction module
+- `crates/oxidized-server/src/tick.rs` — Added `chunks` to test_ctx()
+
+#### Gotchas & Future Notes
+
+- `ServerContext` now has 4 constructor sites (main.rs, network/mod.rs test, tick.rs test, block_interaction.rs test) — grep for `ServerContext {` when adding fields
+- `BlockRegistry::load()` is called per-placement (not cached on ServerContext) — may want to cache in future
+- No collision detection for block placement — players can place blocks inside themselves
+- No block drop/item entity creation on break — needs entity physics (future phase)
+- No tool speed / mining progress validation — all survival StopDestroyBlock accepted
