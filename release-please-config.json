@@ -19,7 +19,12 @@
     ".": {
       "component": "oxidized",
       "changelog-path": "CHANGELOG.md",
-      "extra-files": ["Cargo.toml"]
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "Cargo.toml"
+        }
+      ]
     }
   }
 }
