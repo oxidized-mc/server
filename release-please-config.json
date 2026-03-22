@@ -18,16 +18,7 @@
   "packages": {
     ".": {
       "component": "oxidized",
-      "changelog-path": "CHANGELOG.md",
-      "extra-files": [
-        "crates/oxidized-nbt/Cargo.toml",
-        "crates/oxidized-macros/Cargo.toml",
-        "crates/oxidized-types/Cargo.toml",
-        "crates/oxidized-protocol/Cargo.toml",
-        "crates/oxidized-world/Cargo.toml",
-        "crates/oxidized-game/Cargo.toml",
-        "crates/oxidized-server/Cargo.toml"
-      ]
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }
