@@ -7,6 +7,8 @@ authors.workspace     = true
 license.workspace     = true
 repository.workspace  = true
 rust-version.workspace = true
+keywords    = ["minecraft", "proc-macro", "derive", "packet"]
+categories  = ["game-development", "development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true

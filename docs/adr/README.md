@@ -160,6 +160,7 @@ These principles inform every ADR:
 |-----|-------|--------|--------|
 | [033](adr-033-configuration-format.md) | Configuration Format Evolution | Accepted | P01 (retrofit) |
 | [034](adr-034-testing-strategy.md) | Comprehensive Testing Strategy | Accepted | All |
+| [039](adr-039-release-strategy.md) | Release Strategy & Automation | Accepted | All |
 
 ### Code Structure & Refactoring
 

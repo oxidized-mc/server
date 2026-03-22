@@ -15,6 +15,7 @@ Thank you for your interest in contributing! This document explains the process.
 - [Commit Style](#commit-style)
 - [Pull Request Process](#pull-request-process)
 - [Testing](#testing)
+- [Release Process](#release-process)
 - [Continuous Improvement](#continuous-improvement)
 
 ---
@@ -212,6 +213,47 @@ Run with nextest for faster feedback:
 ```bash
 cargo nextest run --workspace
 ```
+
+---
+
+## Release Process
+
+Oxidized uses automated versioning and release management based on conventional commits.
+See [ADR-039](./docs/adr/adr-039-release-strategy.md) for the full design rationale.
+
+### How It Works
+
+1. **Commit with conventional prefixes** — `feat`, `fix`, `perf`, etc.
+2. **release-please** automatically creates and maintains a "Release PR" on GitHub that
+   accumulates changes and proposes the next version bump.
+3. When a maintainer merges the Release PR, a git tag (`v0.X.Y`) and GitHub Release are
+   created automatically.
+4. A build pipeline then compiles cross-platform binaries and attaches them to the release.
+
+### Development (Nightly) Releases
+
+Every push to `main` that passes CI automatically publishes a **nightly pre-release** with
+cross-platform binaries. These are tagged `nightly` and are always overwritten with the
+latest build.
+
+### Version Bump Rules
+
+| Commit prefix | Bump |
+|--------------|------|
+| `feat!:` or `BREAKING CHANGE:` footer | Minor (pre-1.0) / Major (post-1.0) |
+| `feat(scope):` | Minor |
+| `fix(scope):`, `perf(scope):` | Patch |
+| `refactor`, `test`, `docs`, `chore`, `ci` | No version bump |
+
+### Binary Targets
+
+| Platform | Archive |
+|----------|---------|
+| Linux x86_64 (glibc) | `.tar.gz` |
+| Linux x86_64 (musl/static) | `.tar.gz` |
+| Windows x86_64 | `.zip` |
+| macOS Intel | `.tar.gz` |
+| macOS Apple Silicon | `.tar.gz` |
 
 ---
 

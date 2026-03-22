@@ -364,6 +364,9 @@ In addition to the above, PR reviews check:
   - ✅ cargo-deny (licences + advisories)
   - ✅ MSRV check
   - ✅ Security audit (cargo-audit)
+  - ✅ Commit lint (conventional commit validation)
+  - ✅ Release Please (release PR updated, if applicable)
+  - ✅ Dev release (nightly binaries built and published, push to `main` only)
 - If **any** CI job fails:
   1. Read the failure logs immediately
   2. Diagnose root cause (compile error? test flake? CI config issue? dependency advisory?)

@@ -7,6 +7,8 @@ authors.workspace     = true
 license.workspace     = true
 repository.workspace  = true
 rust-version.workspace = true
+keywords    = ["nbt", "minecraft", "binary-format", "serialization"]
+categories  = ["encoding", "parser-implementations", "game-development"]
 
 [dependencies]
 serde        = { workspace = true }
