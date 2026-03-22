@@ -10,19 +10,18 @@ use tracing::debug;
 
 use oxidized_game::player::GameMode;
 use oxidized_protocol::codec::Packet;
-use oxidized_protocol::packets::play::{
-    ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket,
-    ServerboundPlayerActionPacket, ServerboundSignUpdatePacket, ServerboundUseItemOnPacket,
-    ServerboundUseItemPacket,
-};
 use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
+use oxidized_protocol::packets::play::{
+    ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket, ServerboundPlayerActionPacket,
+    ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
+};
 use oxidized_protocol::types::BlockPos;
 use oxidized_world::chunk::ChunkPos;
 use oxidized_world::registry::AIR;
 
 use super::PlayContext;
-use crate::network::{ChatBroadcastMessage, ConnectionError, ServerContext};
 use crate::network::helpers::decode_packet;
+use crate::network::{ChatBroadcastMessage, ConnectionError, ServerContext};
 
 /// Handles `ServerboundPlayerActionPacket` (0x29) — block digging actions.
 ///
@@ -56,7 +55,7 @@ pub async fn handle_player_action(
                 );
                 send_ack(play_ctx, pkt.sequence).await?;
             }
-        }
+        },
         PlayerAction::StopDestroyBlock => {
             let game_mode = play_ctx.player.read().game_mode;
             if game_mode != GameMode::Creative {
@@ -65,7 +64,7 @@ pub async fn handle_player_action(
             } else {
                 send_ack(play_ctx, pkt.sequence).await?;
             }
-        }
+        },
         PlayerAction::AbortDestroyBlock => {
             debug!(
                 peer = %play_ctx.addr,
@@ -74,7 +73,7 @@ pub async fn handle_player_action(
                 "Block mining aborted"
             );
             send_ack(play_ctx, pkt.sequence).await?;
-        }
+        },
         PlayerAction::DropAllItems
         | PlayerAction::DropItem
         | PlayerAction::ReleaseUseItem
@@ -85,7 +84,7 @@ pub async fn handle_player_action(
                 action = ?pkt.action,
                 "PlayerAction: not yet implemented"
             );
-        }
+        },
     }
 
     Ok(())
@@ -124,7 +123,7 @@ pub async fn handle_use_item_on(
             // Not a placeable block — just acknowledge.
             send_ack(play_ctx, pkt.sequence).await?;
             return Ok(());
-        }
+        },
     };
 
     // Set the block in chunk storage.
@@ -252,10 +251,7 @@ async fn do_block_break(
 }
 
 /// Sends a `ClientboundBlockChangedAckPacket` for the given sequence number.
-async fn send_ack(
-    play_ctx: &mut PlayContext<'_>,
-    sequence: i32,
-) -> Result<(), ConnectionError> {
+async fn send_ack(play_ctx: &mut PlayContext<'_>, sequence: i32) -> Result<(), ConnectionError> {
     let pkt = ClientboundBlockChangedAckPacket { sequence };
     play_ctx.conn.send_packet(&pkt).await?;
     Ok(())
@@ -268,7 +264,10 @@ fn get_block(ctx: &Arc<ServerContext>, pos: BlockPos) -> Option<i32> {
     let chunk_pos = ChunkPos::from_block_coords(pos.x, pos.z);
     let chunk_ref = ctx.chunks.get(&chunk_pos)?;
     let chunk = chunk_ref.read();
-    chunk.get_block_state(pos.x, pos.y, pos.z).ok().map(|s| s as i32)
+    chunk
+        .get_block_state(pos.x, pos.y, pos.z)
+        .ok()
+        .map(|s| s as i32)
 }
 
 /// Sets the block state at a position in shared chunk storage.

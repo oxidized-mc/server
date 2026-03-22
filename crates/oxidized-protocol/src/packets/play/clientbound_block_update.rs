@@ -51,8 +51,7 @@ mod tests {
             block_state: 1,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundBlockUpdatePacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundBlockUpdatePacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.pos, pkt.pos);
         assert_eq!(decoded.block_state, 1);
     }
@@ -64,8 +63,7 @@ mod tests {
             block_state: 0,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundBlockUpdatePacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundBlockUpdatePacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 }

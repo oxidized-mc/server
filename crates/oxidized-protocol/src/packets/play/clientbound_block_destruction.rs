@@ -67,8 +67,7 @@ mod tests {
             progress: 5,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundBlockDestructionPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundBlockDestructionPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.entity_id, 42);
         assert_eq!(decoded.pos, pkt.pos);
         assert_eq!(decoded.progress, 5);
@@ -82,8 +81,7 @@ mod tests {
             progress: 10,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundBlockDestructionPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundBlockDestructionPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.progress, 10);
     }
 }
