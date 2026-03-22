@@ -31,23 +31,29 @@ use oxidized_game::player::{
     build_spawn_position_packet, handle_accept_teleportation,
 };
 use oxidized_protocol::auth;
+use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundAddEntityPacket, ClientboundEntityEventPacket, ClientboundGameEventPacket,
+    ClientboundAddEntityPacket, ClientboundAnimatePacket, ClientboundEntityEventPacket,
+    ClientboundGameEventPacket,
     ClientboundInitializeBorderPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundRemoveEntitiesPacket, ClientboundSetTimePacket, ClockNetworkState, ClockUpdate,
+    ClientboundRemoveEntitiesPacket, ClientboundSetTimePacket, ClientboundSystemChatPacket,
+    ClockNetworkState, ClockUpdate,
     GameEventType, PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry,
     ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
     ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
-    ServerboundCommandSuggestionPacket, ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket,
+    ServerboundClientInformationPlayPacket, ServerboundCommandSuggestionPacket,
+    ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket,
     ServerboundMovePlayerPosRotPacket, ServerboundMovePlayerRotPacket,
     ServerboundMovePlayerStatusOnlyPacket, ServerboundPickItemFromBlockPacket,
-    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ServerboundPlayerAbilitiesPacket, ServerboundPlayerActionPacket,
+    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
     ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
-    ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
+    ServerboundSignUpdatePacket, ServerboundSwingPacket, ServerboundUseItemOnPacket,
+    ServerboundUseItemPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -313,7 +319,30 @@ pub async fn handle_play_entry(
     );
 
     // Add player to the server player list (only after successful send).
-    let player_arc = server_ctx.player_list.write().add(player);
+    let (player_arc, old_player) = server_ctx.player_list.write().add(player);
+    if let Some(old) = old_player {
+        let old_p = old.read();
+        let old_entity_id = old_p.entity_id;
+        drop(old_p);
+        warn!(
+            peer = %addr,
+            uuid = %uuid,
+            name = %player_name,
+            old_entity_id = old_entity_id,
+            "Duplicate login — replacing existing player session",
+        );
+        // Remove old entity from all clients.
+        let remove_entity = ClientboundRemoveEntitiesPacket {
+            entity_ids: vec![old_entity_id],
+        };
+        let encoded = remove_entity.encode();
+        server_ctx.broadcast(BroadcastMessage {
+            packet_id: ClientboundRemoveEntitiesPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: None,
+        });
+    }
 
     // Send the joining player their own tab list entry (the login sequence
     // was built before the player was added to the list, so it's missing).
@@ -449,6 +478,24 @@ pub async fn handle_play_entry(
         for pkt in &other_entities {
             conn.send_packet(pkt).await?;
         }
+    }
+
+    // Broadcast "Player joined the game" system message (vanilla yellow text).
+    {
+        let join_msg = ClientboundSystemChatPacket {
+            content: Component::translatable(
+                "multiplayer.player.joined",
+                vec![Component::text(&player_name)],
+            ),
+            overlay: false,
+        };
+        let encoded = join_msg.encode();
+        server_ctx.broadcast(BroadcastMessage {
+            packet_id: ClientboundSystemChatPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: None,
+        });
     }
 
     // Track which chunks the player has loaded.
@@ -688,6 +735,59 @@ pub async fn handle_play_entry(
                             ServerboundPickItemFromBlockPacket::PACKET_ID => {
                                 block_interaction::handle_pick_item_from_block(&mut play_ctx, pkt.data).await?;
                             },
+                            ServerboundSwingPacket::PACKET_ID => {
+                                if let Ok(swing) = decode_packet::<ServerboundSwingPacket>(
+                                    pkt.data, addr, &player_name, "Swing",
+                                ) {
+                                    let entity_id = play_ctx.player.read().entity_id;
+                                    let action = if swing.hand == 1 { 3u8 } else { 0u8 };
+                                    let animate = ClientboundAnimatePacket { entity_id, action };
+                                    let encoded = animate.encode();
+                                    server_ctx.broadcast(BroadcastMessage {
+                                        packet_id: ClientboundAnimatePacket::PACKET_ID,
+                                        data: encoded.into(),
+                                        exclude_entity: Some(entity_id),
+                                        target_entity: None,
+                                    });
+                                }
+                            },
+                            ServerboundPlayerAbilitiesPacket::PACKET_ID => {
+                                if let Ok(abilities_pkt) = decode_packet::<ServerboundPlayerAbilitiesPacket>(
+                                    pkt.data, addr, &player_name, "PlayerAbilities",
+                                ) {
+                                    let mut p = play_ctx.player.write();
+                                    p.abilities.flying =
+                                        abilities_pkt.is_flying() && p.abilities.can_fly;
+                                    debug!(
+                                        peer = %addr,
+                                        name = %player_name,
+                                        flying = p.abilities.flying,
+                                        "Player abilities update",
+                                    );
+                                }
+                            },
+                            ServerboundClientInformationPlayPacket::PACKET_ID => {
+                                if let Ok(info_pkt) = decode_packet::<ServerboundClientInformationPlayPacket>(
+                                    pkt.data, addr, &player_name, "ClientInformation",
+                                ) {
+                                    let new_view_distance =
+                                        i32::from(info_pkt.information.view_distance)
+                                            .min(server_ctx.max_view_distance);
+                                    let mut p = play_ctx.player.write();
+                                    let old_view_distance = p.view_distance;
+                                    p.view_distance = new_view_distance;
+                                    drop(p);
+                                    if new_view_distance != old_view_distance {
+                                        debug!(
+                                            peer = %addr,
+                                            name = %player_name,
+                                            old = old_view_distance,
+                                            new = new_view_distance,
+                                            "View distance changed",
+                                        );
+                                    }
+                                }
+                            },
                             unknown if !(0..=MAX_SERVERBOUND_PLAY_ID).contains(&unknown) => {
                                 warn!(
                                     peer = %addr,
@@ -719,6 +819,24 @@ pub async fn handle_play_entry(
                 }
             },
         }
+    }
+
+    // Broadcast "Player left the game" system message.
+    {
+        let leave_msg = ClientboundSystemChatPacket {
+            content: Component::translatable(
+                "multiplayer.player.left",
+                vec![Component::text(player_name.clone())],
+            ),
+            overlay: false,
+        };
+        let encoded = leave_msg.encode();
+        server_ctx.broadcast(BroadcastMessage {
+            packet_id: ClientboundSystemChatPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: None,
+        });
     }
 
     // Clean up — remove player from the list and broadcast removal to tab lists.
