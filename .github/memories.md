@@ -1995,3 +1995,39 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 
 - ADR-016 (Worldgen Pipeline) partially implemented — trait defined, flat generator done. Rayon parallelism and noise generation deferred to Phase 25.
 - No ADR changes needed — existing ADRs are adequate for this phase.
+
+---
+
+## Vanilla Compliance Audit — Post-Phase-23 Retrospective
+
+**Date:** After Phase 23 completion
+**Scope:** Full 8-subsystem audit comparing all implemented code against vanilla 26.1-pre-3
+
+### Key Findings & Fixes (15 bugs)
+
+1. **Light serialization**: `None` sections were setting `empty_mask` bit — vanilla excludes them entirely. Only `Some(all-zeros)` sets `empty_mask`.
+2. **Login sequence**: `LEVEL_CHUNKS_LOAD_START` was sent AFTER chunks — must be BEFORE. Missing difficulty, weather, and world border packets on join.
+3. **Game rules**: `reduced_debug_info`, `show_death_screen`, `do_limited_crafting` were hardcoded — now read from `GameRules`.
+4. **Movement validation**: Y not clamped (vanilla uses ±20M, different from X/Z ±30M). No NaN/Infinity check existed.
+5. **Physics**: Block speed factors (soul sand 0.4, honey 0.4, powder snow 0.9) were defined but never applied.
+6. **SetTime**: Sent full `clock_updates` every 20 ticks — vanilla sends `Map.of()` (empty) for periodic sync.
+7. **Tick catchup**: Used `MissedTickBehavior::Burst` — vanilla skips missed ticks (`Skip`).
+8. **Autosave**: Fixed 6000 ticks — vanilla scales: `max(100, tps * 300)`.
+9. **Block resync**: Only sent target block, not adjacent face — vanilla sends both.
+10. **`/setblock`**: Was a complete no-op (printed success but didn't modify any block).
+11. **VarLong encoding**: Custom `write_varlong` used signed right-shift (`value >>= 7`) — infinite loop on negative values. Fixed to use unsigned shift.
+
+### Patterns Observed
+
+- **Hardcoded defaults accumulate**: Login packet fields, tick intervals, and command behaviors were all hardcoded early and never updated as GameRules, weather, and other systems were added. Future phases should check if join-time packets need updating.
+- **Custom codec functions are risky**: The VarLong bug came from a custom `write_varlong` in the border packet instead of reusing the existing `varint` module. Prefer reusing existing codec functions.
+- **Vanilla has subtle ordering requirements**: The client expects packets in specific orders during login. Always verify sequence against decompiled reference.
+- **Different coordinate limits**: Y uses ±20M while X/Z use ±30M. This is easy to miss.
+
+### New Packets Added
+- `ClientboundChangeDifficultyPacket` (ID 0x0A) — sent on join
+- `ClientboundInitializeBorderPacket` (ID 0x2B) — sent on join with default border
+
+### Test Count
+- Before audit: 1,923 tests
+- After audit: 1,936 tests (all passing)
