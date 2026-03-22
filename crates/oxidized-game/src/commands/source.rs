@@ -134,6 +134,12 @@ pub trait ServerHandle: Send + Sync {
         false
     }
 
+    /// Returns the namespaced block name (e.g. `"minecraft:stone"`) at the
+    /// given position, or `None` if the chunk is not loaded / out of bounds.
+    fn get_block(&self, _x: i32, _y: i32, _z: i32) -> Option<String> {
+        None
+    }
+
     /// Sends a system chat message to a specific player by UUID.
     fn send_system_message_to_player(&self, _uuid: uuid::Uuid, _message: &Component) {}
 }
