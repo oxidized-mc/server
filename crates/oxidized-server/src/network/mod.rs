@@ -196,6 +196,7 @@ impl ServerHandle for ServerContext {
             packet_id: ClientboundSystemChatPacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
+            target_entity: None,
         };
         let _ = self.broadcast_tx.send(broadcast);
     }
@@ -257,6 +258,7 @@ impl ServerHandle for ServerContext {
                 packet_id: ClientboundGameEventPacket::PACKET_ID,
                 data: encoded.freeze(),
                 exclude_entity: None,
+                target_entity: None,
             });
         }
     }
@@ -322,14 +324,128 @@ impl ServerHandle for ServerContext {
             packet_id: ClientboundTickingStatePacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
+            target_entity: None,
+        });
+    }
+
+    fn set_player_game_mode(
+        &self,
+        uuid: uuid::Uuid,
+        mode: oxidized_game::player::game_mode::GameMode,
+    ) -> bool {
+        use oxidized_game::player::abilities::PlayerAbilities;
+        use oxidized_protocol::codec::Packet;
+        use oxidized_protocol::packets::play::{
+            ClientboundGameEventPacket, ClientboundPlayerAbilitiesPacket,
+            ClientboundPlayerInfoUpdatePacket, GameEventType, PlayerInfoActions, PlayerInfoEntry,
+        };
+
+        // Clone the Arc so we can drop the player_list lock early.
+        let player_arc = {
+            let player_list = self.player_list.read();
+            match player_list.get(&uuid) {
+                Some(p) => Arc::clone(p),
+                None => return false,
+            }
+        };
+
+        let entity_id;
+        {
+            let mut player = player_arc.write();
+            if player.game_mode == mode {
+                return false;
+            }
+            player.previous_game_mode = Some(player.game_mode);
+            player.game_mode = mode;
+            player.abilities = PlayerAbilities::for_game_mode(mode);
+            entity_id = player.entity_id;
+        }
+
+        // Send ChangeGameMode event to the target player only.
+        let game_event = ClientboundGameEventPacket {
+            event: GameEventType::ChangeGameMode,
+            param: mode.id() as f32,
+        };
+        let encoded = game_event.encode();
+        let _ = self.broadcast_tx.send(BroadcastMessage {
+            packet_id: ClientboundGameEventPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: Some(entity_id),
+        });
+
+        // Send updated abilities to the target player only.
+        let abilities = player_arc.read().abilities.clone();
+        let abilities_pkt = ClientboundPlayerAbilitiesPacket {
+            flags: abilities.flags_byte(),
+            fly_speed: abilities.fly_speed,
+            walk_speed: abilities.walk_speed,
+        };
+        let encoded = abilities_pkt.encode();
+        let _ = self.broadcast_tx.send(BroadcastMessage {
+            packet_id: ClientboundPlayerAbilitiesPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: Some(entity_id),
+        });
+
+        // Broadcast tab list game mode update to all players.
+        let player_name = player_arc.read().name.clone();
+        let info_update = ClientboundPlayerInfoUpdatePacket {
+            actions: PlayerInfoActions(PlayerInfoActions::UPDATE_GAME_MODE),
+            entries: vec![PlayerInfoEntry {
+                uuid,
+                name: player_name,
+                properties: vec![],
+                game_mode: mode.id(),
+                latency: 0,
+                listed: true,
+                has_display_name: false,
+                show_hat: false,
+                list_order: 0,
+            }],
+        };
+        let encoded = info_update.encode();
+        let _ = self.broadcast_tx.send(BroadcastMessage {
+            packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: None,
+        });
+
+        true
+    }
+
+    fn send_system_message_to_player(&self, uuid: uuid::Uuid, message: &Component) {
+        use oxidized_protocol::codec::Packet;
+        use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
+
+        let entity_id = {
+            let player_list = self.player_list.read();
+            match player_list.get(&uuid) {
+                Some(p) => p.read().entity_id,
+                None => return,
+            }
+        };
+
+        let pkt = ClientboundSystemChatPacket {
+            content: message.clone(),
+            overlay: false,
+        };
+        let encoded = pkt.encode();
+        let _ = self.broadcast_tx.send(BroadcastMessage {
+            packet_id: ClientboundSystemChatPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: Some(entity_id),
         });
     }
 }
 
-/// A packet broadcast to all connected players.
+/// A packet broadcast to all connected players (or a targeted subset).
 ///
 /// Used for chat, block updates, weather changes, tick state, and any other
-/// packet that needs to reach all clients.
+/// packet that needs to reach clients.
 #[derive(Debug, Clone)]
 pub struct BroadcastMessage {
     /// Pre-encoded packet bytes (packet ID + body) ready for `send_raw`.
@@ -339,6 +455,9 @@ pub struct BroadcastMessage {
     /// If set, skip sending to the player with this entity ID.
     /// Used for block updates where the acting player already received an ack.
     pub exclude_entity: Option<i32>,
+    /// If set, send ONLY to the player with this entity ID.
+    /// Used for targeted packets like game mode changes and abilities updates.
+    pub target_entity: Option<i32>,
 }
 
 /// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.

@@ -2,6 +2,7 @@
 
 use crate::event::EventBus;
 use crate::level::weather::WeatherType;
+use crate::player::game_mode::GameMode;
 use oxidized_protocol::chat::Component;
 use std::sync::Arc;
 
@@ -116,6 +117,17 @@ pub trait ServerHandle: Send + Sync {
 
     /// Broadcasts the current tick rate and frozen state to all clients.
     fn broadcast_tick_state(&self) {}
+
+    /// Sets a player's game mode and syncs the change to clients.
+    ///
+    /// Returns `true` if the game mode actually changed (`false` if already
+    /// in the requested mode or the player was not found).
+    fn set_player_game_mode(&self, _uuid: uuid::Uuid, _mode: GameMode) -> bool {
+        false
+    }
+
+    /// Sends a system chat message to a specific player by UUID.
+    fn send_system_message_to_player(&self, _uuid: uuid::Uuid, _message: &Component) {}
 }
 
 /// The kind of entity that is executing a command.

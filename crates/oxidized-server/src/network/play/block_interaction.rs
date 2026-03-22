@@ -428,6 +428,7 @@ fn broadcast_block_update(
         packet_id: ClientboundBlockUpdatePacket::PACKET_ID,
         data: data.freeze(),
         exclude_entity,
+        target_entity: None,
     });
 }
 

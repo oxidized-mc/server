@@ -44,6 +44,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
         packet_id: ClientboundSystemChatPacket::PACKET_ID,
         data: encoded.freeze(),
         exclude_entity: None,
+        target_entity: None,
     };
     let _ = ctx.server_ctx.broadcast_tx.send(broadcast_msg);
     info!(

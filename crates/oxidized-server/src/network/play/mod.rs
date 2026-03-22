@@ -248,6 +248,7 @@ pub async fn handle_play_entry(
             packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
+            target_entity: None,
         };
         let _ = server_ctx.broadcast_tx.send(broadcast);
     }
@@ -321,9 +322,16 @@ pub async fn handle_play_entry(
             broadcast_result = broadcast_rx.recv() => {
                 match broadcast_result {
                     Ok(msg) => {
+                        let my_entity_id = play_ctx.player.read().entity_id;
+                        // Skip if this broadcast targets a different player.
+                        if let Some(target_id) = msg.target_entity {
+                            if target_id != my_entity_id {
+                                continue;
+                            }
+                        }
                         // Skip if this broadcast excludes the current player.
                         if let Some(exclude_id) = msg.exclude_entity {
-                            if exclude_id == play_ctx.player.read().entity_id {
+                            if exclude_id == my_entity_id {
                                 continue;
                             }
                         }
@@ -493,6 +501,7 @@ pub async fn handle_play_entry(
             packet_id: ClientboundPlayerInfoRemovePacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
+            target_entity: None,
         };
         let _ = server_ctx.broadcast_tx.send(broadcast);
     }

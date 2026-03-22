@@ -330,6 +330,7 @@ fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
         packet_id: P::PACKET_ID,
         data: encoded.freeze(),
         exclude_entity: None,
+        target_entity: None,
     };
     let _ = ctx.broadcast_tx.send(msg);
 }
