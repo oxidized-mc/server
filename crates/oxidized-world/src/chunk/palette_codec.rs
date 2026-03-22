@@ -104,7 +104,6 @@ pub(super) fn write_varint(buf: &mut Vec<u8>, mut value: i32) {
 }
 
 pub(super) fn write_longs(buf: &mut Vec<u8>, longs: &[u64]) {
-    write_varint(buf, longs.len() as i32);
     for &l in longs {
         buf.extend_from_slice(&l.to_be_bytes());
     }
@@ -146,7 +145,11 @@ pub(super) fn read_bit_storage(
     size: usize,
     data: &mut &[u8],
 ) -> Result<BitStorage, PalettedContainerError> {
-    let num_longs = read_varint(data)? as usize;
+    // Compute the number of longs from bits_per_entry and entry count.
+    // Entries don't span long boundaries: each long holds floor(64/bits) entries.
+    // The client uses readFixedSizeLongArray — no VarInt length prefix on wire.
+    let values_per_long = 64 / bits as usize;
+    let num_longs = size.div_ceil(values_per_long);
     let byte_len = num_longs * 8;
     if data.len() < byte_len {
         return Err(PalettedContainerError::InsufficientData {
