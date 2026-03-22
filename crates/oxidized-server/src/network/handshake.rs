@@ -31,8 +31,10 @@ pub async fn handle_handshake(
     conn.protocol_version = intention.protocol_version;
 
     // Validate protocol version for login connections (not status pings).
-    if matches!(intention.next_state, ClientIntent::Login | ClientIntent::Transfer)
-        && intention.protocol_version != oxidized_protocol::constants::PROTOCOL_VERSION
+    if matches!(
+        intention.next_state,
+        ClientIntent::Login | ClientIntent::Transfer
+    ) && intention.protocol_version != oxidized_protocol::constants::PROTOCOL_VERSION
     {
         warn!(
             peer = %conn.remote_addr(),
