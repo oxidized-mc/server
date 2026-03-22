@@ -159,6 +159,11 @@ impl PrimaryLevelData {
     pub fn save(&self, path: &Path) -> Result<(), AnvilError> {
         let nbt = self.to_nbt();
 
+        // Ensure parent directories exist before writing.
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| AnvilError::io(parent, e))?;
+        }
+
         let tmp_path = path.with_extension("dat_new");
         let old_path = path.with_extension("dat_old");
 

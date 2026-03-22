@@ -166,6 +166,15 @@ impl BlockRegistry {
     pub fn get_block_by_index(&self, index: u16) -> Option<&Block> {
         self.blocks.get(index as usize)
     }
+
+    /// Returns the block name for a given state ID (e.g., `"minecraft:stone"`).
+    ///
+    /// Looks up the state, finds its parent block, and returns the block name.
+    pub fn block_name_from_state_id(&self, state_id: u32) -> Option<&str> {
+        let state = self.states.get(state_id as usize)?.as_ref()?;
+        let block = self.blocks.get(state.block_index as usize)?;
+        Some(&block.name)
+    }
 }
 
 /// Parse property definitions from a block JSON value.

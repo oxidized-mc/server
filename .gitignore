@@ -13,6 +13,7 @@ oxidized.toml
 # World data / test worlds (large binary files)
 *.mca
 *.mcworld
+/world/
 /worlds/
 /run/worlds/
 

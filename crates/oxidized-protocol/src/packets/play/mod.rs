@@ -23,6 +23,7 @@ pub mod clientbound_keep_alive;
 pub mod clientbound_level_chunk_with_light;
 pub mod clientbound_login;
 pub mod clientbound_move_entity;
+pub mod clientbound_open_sign_editor;
 pub mod clientbound_player_abilities;
 pub mod clientbound_player_chat;
 pub mod clientbound_player_info_remove;
@@ -52,6 +53,7 @@ pub mod serverbound_chunk_batch_received;
 pub mod serverbound_command_suggestion;
 pub mod serverbound_keep_alive;
 pub mod serverbound_move_player;
+pub mod serverbound_pick_item_from_block;
 pub mod serverbound_player_action;
 pub mod serverbound_player_command;
 pub mod serverbound_player_input;
@@ -89,6 +91,7 @@ pub use clientbound_move_entity::{
     ClientboundMoveEntityRotPacket,
 };
 pub use clientbound_player_abilities::ClientboundPlayerAbilitiesPacket;
+pub use clientbound_open_sign_editor::ClientboundOpenSignEditorPacket;
 pub use clientbound_player_chat::{ClientboundPlayerChatPacket, FilterMask};
 pub use clientbound_player_info_remove::ClientboundPlayerInfoRemovePacket;
 pub use clientbound_player_info_update::{
@@ -127,6 +130,7 @@ pub use serverbound_move_player::{
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
 pub use serverbound_player_action::{PlayerAction, ServerboundPlayerActionPacket};
+pub use serverbound_pick_item_from_block::ServerboundPickItemFromBlockPacket;
 pub use serverbound_player_command::{PlayerCommandAction, ServerboundPlayerCommandPacket};
 pub use serverbound_player_input::{PlayerInput, ServerboundPlayerInputPacket};
 pub use serverbound_set_carried_item::ServerboundSetCarriedItemPacket;

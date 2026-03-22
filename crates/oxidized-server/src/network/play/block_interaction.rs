@@ -8,12 +8,16 @@ use std::sync::Arc;
 use bytes::Bytes;
 use tracing::{debug, warn};
 
+use oxidized_game::inventory::item_ids::item_name_to_id;
+use oxidized_game::inventory::item_stack::ItemStack;
 use oxidized_game::player::GameMode;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
 use oxidized_protocol::packets::play::{
-    ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket, ServerboundPlayerActionPacket,
-    ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
+    ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket,
+    ClientboundOpenSignEditorPacket, ClientboundSetPlayerInventoryPacket,
+    ServerboundPickItemFromBlockPacket, ServerboundPlayerActionPacket, ServerboundSignUpdatePacket,
+    ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
 use oxidized_protocol::types::{BlockPos, Vec3};
 use oxidized_world::chunk::ChunkPos;
@@ -246,6 +250,15 @@ pub async fn handle_use_item_on(
         Some(entity_id),
     );
 
+    // If the placed block is a sign, open the sign editor UI.
+    if is_sign_block(&held_item) {
+        let sign_editor = ClientboundOpenSignEditorPacket {
+            pos: place_pos,
+            is_front_text: true,
+        };
+        play_ctx.conn.send_packet(&sign_editor).await?;
+    }
+
     // Acknowledge the sequence.
     send_ack(play_ctx, pkt.sequence).await?;
 
@@ -443,6 +456,87 @@ fn held_item_to_block_state(item_name: &str, registry: &BlockRegistry) -> Option
 
     let state = registry.default_state(item_name)?;
     Some(u32::from(state.0))
+}
+
+/// Returns `true` if the item name represents a sign block.
+fn is_sign_block(item_name: &str) -> bool {
+    item_name.contains("sign") && !item_name.contains("signal")
+}
+
+/// Handles `ServerboundPickItemFromBlockPacket` (0x24) — creative pick block.
+///
+/// Looks up the block at the target position and places the corresponding
+/// item into the player's hotbar, then notifies the client of the slot change.
+pub async fn handle_pick_item_from_block(
+    play_ctx: &mut PlayContext<'_>,
+    data: Bytes,
+) -> Result<(), ConnectionError> {
+    let pkt = decode_packet::<ServerboundPickItemFromBlockPacket>(
+        data,
+        play_ctx.addr,
+        play_ctx.player_name,
+        "PickItemFromBlock",
+    )?;
+
+    // Only creative players can pick blocks.
+    let game_mode = play_ctx.player.read().game_mode;
+    if game_mode != GameMode::Creative {
+        return Ok(());
+    }
+
+    // Look up the block state at the target position.
+    let block_state = match get_block(play_ctx.server_ctx, pkt.pos) {
+        Some(state) if state != u32::from(AIR.0) => state,
+        _ => return Ok(()),
+    };
+
+    // Resolve block state to item name.
+    let item_name = match play_ctx
+        .server_ctx
+        .block_registry
+        .block_name_from_state_id(block_state)
+    {
+        Some(name) => name.to_owned(),
+        None => return Ok(()),
+    };
+
+    // Resolve item name to item ID.
+    let item_id = item_name_to_id(&item_name);
+
+    // Place the item into the selected hotbar slot.
+    let (selected, item_name_log) = {
+        let mut player = play_ctx.player.write();
+        let slot = player.inventory.selected_slot as usize;
+        let name_log = item_name.clone();
+        player.inventory.set(slot, ItemStack::new(item_name, 1));
+        (player.inventory.selected_slot, name_log)
+    };
+
+    // Notify the client of the slot change.
+    let slot_data = {
+        use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
+        Some(SlotData {
+            item_id,
+            count: 1,
+            component_data: ComponentPatchData::default(),
+        })
+    };
+
+    let set_slot = ClientboundSetPlayerInventoryPacket {
+        slot: i32::from(selected) + 36, // hotbar protocol offset
+        contents: slot_data,
+    };
+    play_ctx.conn.send_packet(&set_slot).await?;
+
+    debug!(
+        peer = %play_ctx.addr,
+        name = %play_ctx.player_name,
+        pos = ?pkt.pos,
+        item = %item_name_log,
+        "Creative pick block"
+    );
+
+    Ok(())
 }
 
 #[cfg(test)]
