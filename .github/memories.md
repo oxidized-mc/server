@@ -2054,3 +2054,24 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - **`item_stack_to_slot_data` was private**: Made `pub(crate)` for cross-module inventory sync
 - **ServerContext grows often**: Now has `op_permission_level: i32` — always grep `ServerContext {` when adding fields (4 constructor sites)
 - **Tests reference packet indices**: When reordering the login sequence, ALL tests that index into `packets[N]` break. Always search integration tests too.
+
+### 2026-07 — Vanilla Compliance Audit Round 3
+
+**Context:** Further audit pass fixing protocol-level bugs found via code review.
+
+### Bugs Fixed
+1. **is_flat flag**: Was hardcoded `false` — now reads `chunk_generator.generator_type()` to determine flat worlds
+2. **Spurious ChangeGameMode event**: Removed from login sequence (game mode is already in LoginPacket)
+3. **Login packet ordering**: Reordered to match vanilla `PlayerList.placeNewPlayer()` — HeldSlot moved up, SpawnPos/Inventory moved out
+4. **Missing time sync**: Added `ClientboundSetTimePacket` during login (vanilla sends clock data on join)
+5. **Simulation distance**: Was using client's view_distance; fixed to use `server_ctx.max_simulation_distance`
+6. **Movement broadcast**: Players now send delta-encoded movement to other players (was completely missing)
+7. **EntityEvent permission level**: Added `ClientboundEntityEventPacket` (0x22) on login for permission level
+8. **Delta encoding overflow**: `broadcast_movement` was casting `f64*4096.0` to `i16` directly — now uses `classify_move()`/`encode_delta()` with fallback to full position sync
+9. **pack_angle wrapping**: `(-90.0 / 360.0 * 256.0) as u8` = 0 (wrong). Now delegates to `pack_degrees()` which uses `as i32 & 0xFF` for correct wrapping
+
+### Patterns Observed
+- **Always use existing helpers**: `encode_delta()`, `pack_degrees()`, `classify_move()` exist in `oxidized_game::net::entity_movement` — never hand-roll delta encoding or angle packing
+- **EntityEventPacket uses raw i32 entity_id** (NOT VarInt) — unusual compared to most packets
+- **Login sequence is split**: `build_login_sequence()` returns 8 core packets, then `play/mod.rs` sends additional packets (EntityEvent, Commands, WorldBorder, Time, SpawnPos, Weather, chunks, Inventory) in vanilla order
+- **ClientboundEntityPositionSyncPacket fields are vx/vy/vz** (velocity), NOT dx/dy/dz — easy to mix up
