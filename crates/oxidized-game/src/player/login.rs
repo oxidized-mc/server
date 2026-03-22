@@ -56,10 +56,10 @@ pub struct EncodedPacket {
 /// 2. `ClientboundChangeDifficultyPacket` — world difficulty
 /// 3. `ClientboundPlayerAbilitiesPacket` — ability flags + speeds
 /// 4. `ClientboundSetHeldSlotPacket` — selected hotbar slot
-/// 5. `ClientboundPlayerInfoUpdatePacket` — all online players for tab list
-/// 6. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
-/// 7. `ClientboundSetSimulationDistancePacket` — simulation distance
-/// 8. `ClientboundPlayerPositionPacket` — initial position + teleport ID
+/// 5. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
+/// 6. `ClientboundSetSimulationDistancePacket` — simulation distance
+/// 7. `ClientboundPlayerPositionPacket` — initial position + teleport ID
+/// 8. `ClientboundPlayerInfoUpdatePacket` — all online players for tab list
 ///
 /// The following packets are sent separately by the server crate at the
 /// correct point in the join sequence:
@@ -95,10 +95,10 @@ pub fn build_login_sequence(
         build_difficulty_packet(level_data),
         build_abilities_packet(player),
         build_held_slot_packet(player),
-        build_player_info_packet(all_players),
         build_chunk_center_packet(player),
         build_simulation_distance_packet(player),
         build_position_packet(player, teleport_id),
+        build_player_info_packet(all_players),
     ]
 }
 
@@ -209,7 +209,10 @@ fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
                 | PlayerInfoActions::INITIALIZE_CHAT
                 | PlayerInfoActions::UPDATE_GAME_MODE
                 | PlayerInfoActions::UPDATE_LISTED
-                | PlayerInfoActions::UPDATE_LATENCY,
+                | PlayerInfoActions::UPDATE_LATENCY
+                | PlayerInfoActions::UPDATE_DISPLAY_NAME
+                | PlayerInfoActions::UPDATE_LIST_ORDER
+                | PlayerInfoActions::UPDATE_HAT,
         ),
         entries: info_entries,
     };
@@ -410,16 +413,16 @@ mod tests {
         assert_eq!(packets[1].id, ClientboundChangeDifficultyPacket::PACKET_ID);
         assert_eq!(packets[2].id, ClientboundPlayerAbilitiesPacket::PACKET_ID);
         assert_eq!(packets[3].id, ClientboundSetHeldSlotPacket::PACKET_ID);
-        assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
         assert_eq!(
-            packets[5].id,
+            packets[4].id,
             ClientboundSetChunkCacheCenterPacket::PACKET_ID
         );
         assert_eq!(
-            packets[6].id,
+            packets[5].id,
             ClientboundSetSimulationDistancePacket::PACKET_ID
         );
-        assert_eq!(packets[7].id, ClientboundPlayerPositionPacket::PACKET_ID);
+        assert_eq!(packets[6].id, ClientboundPlayerPositionPacket::PACKET_ID);
+        assert_eq!(packets[7].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
     }
 
     #[test]
@@ -541,7 +544,7 @@ mod tests {
             false,
         );
         let info =
-            ClientboundPlayerInfoUpdatePacket::decode(packets[4].body.clone().freeze()).unwrap();
+            ClientboundPlayerInfoUpdatePacket::decode(packets[7].body.clone().freeze()).unwrap();
 
         // Should contain Alice and Bob (the players in the list).
         assert_eq!(info.entries.len(), 2);
@@ -570,7 +573,7 @@ mod tests {
             false,
         );
         let center =
-            ClientboundSetChunkCacheCenterPacket::decode(packets[5].body.clone().freeze()).unwrap();
+            ClientboundSetChunkCacheCenterPacket::decode(packets[4].body.clone().freeze()).unwrap();
 
         assert_eq!(center.chunk_x, 6); // 100 >> 4 = 6
         assert_eq!(center.chunk_z, -13); // -200 >> 4 = -13
@@ -598,7 +601,7 @@ mod tests {
             false,
         );
         let pos =
-            ClientboundPlayerPositionPacket::decode(packets[7].body.clone().freeze()).unwrap();
+            ClientboundPlayerPositionPacket::decode(packets[6].body.clone().freeze()).unwrap();
 
         assert_eq!(pos.teleport_id, 42);
         assert!((pos.x - 50.5).abs() < 0.001);

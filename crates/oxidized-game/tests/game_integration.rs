@@ -212,16 +212,16 @@ fn test_build_login_sequence() {
     assert_eq!(packets[1].id, ClientboundChangeDifficultyPacket::PACKET_ID);
     assert_eq!(packets[2].id, ClientboundPlayerAbilitiesPacket::PACKET_ID);
     assert_eq!(packets[3].id, ClientboundSetHeldSlotPacket::PACKET_ID);
-    assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
     assert_eq!(
-        packets[5].id,
+        packets[4].id,
         ClientboundSetChunkCacheCenterPacket::PACKET_ID
     );
     assert_eq!(
-        packets[6].id,
+        packets[5].id,
         ClientboundSetSimulationDistancePacket::PACKET_ID
     );
-    assert_eq!(packets[7].id, ClientboundPlayerPositionPacket::PACKET_ID);
+    assert_eq!(packets[6].id, ClientboundPlayerPositionPacket::PACKET_ID);
+    assert_eq!(packets[7].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +436,7 @@ fn test_movement_validation_normal_walk() {
         Some(-50.0),
         Some(91.0),
         Some(0.0),
+        false,
     );
     assert!(result.accepted, "normal walk should be accepted");
     assert!(!result.needs_correction);
@@ -458,6 +459,7 @@ fn test_movement_validation_too_fast_triggers_correction() {
         Some(0.0),
         None,
         None,
+        false,
     );
     assert!(!result.accepted, "200-block jump must be rejected");
     assert!(result.needs_correction);
@@ -479,12 +481,13 @@ fn test_movement_validation_preserves_unchanged_fields() {
         None,
         Some(180.0),
         Some(30.0),
+        false,
     );
     assert!(result.accepted);
     assert!((result.new_pos.x - 42.0).abs() < f64::EPSILON);
     assert!((result.new_pos.y - 100.0).abs() < f64::EPSILON);
     assert!((result.new_pos.z + 7.5).abs() < f64::EPSILON);
-    assert!((result.new_yaw - 180.0).abs() < f32::EPSILON);
+    assert!((result.new_yaw - (-180.0)).abs() < f32::EPSILON);
     assert!((result.new_pitch - 30.0).abs() < f32::EPSILON);
 }
 

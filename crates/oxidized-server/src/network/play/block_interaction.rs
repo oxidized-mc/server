@@ -27,9 +27,15 @@ use super::PlayContext;
 use crate::network::helpers::decode_packet;
 use crate::network::{BroadcastMessage, ConnectionError, ServerContext};
 
-/// Maximum block interaction reach (squared) — 6 blocks + 1 tolerance.
-/// Vanilla uses `isWithinBlockInteractionRange(pos, 1.0)` → ~6 blocks.
-const MAX_REACH_DISTANCE_SQ: f64 = 7.0 * 7.0;
+/// Maximum block interaction reach (squared).
+///
+/// Vanilla calculates: `getBlockInteractionRange() + additionalRange + 0.5`
+/// - Survival: 4.5 + 1.0 + 0.5 = 6.0 blocks → 36.0 sq
+/// - Creative: 5.0 + 1.0 + 0.5 = 6.5 blocks → 42.25 sq
+///
+/// We use the creative range (6.5²) as the server-side ceiling since the
+/// game mode check is applied separately.
+const MAX_REACH_DISTANCE_SQ: f64 = 6.5 * 6.5;
 
 /// Maximum distance from a sign the player can edit (squared).
 const MAX_SIGN_EDIT_DISTANCE_SQ: f64 = 8.0 * 8.0;

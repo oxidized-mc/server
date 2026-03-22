@@ -80,6 +80,7 @@ pub async fn handle_movement(
             move_pkt.z,
             move_pkt.yaw,
             move_pkt.pitch,
+            false, // TODO: pass actual elytra state once tracked
         )
     };
 

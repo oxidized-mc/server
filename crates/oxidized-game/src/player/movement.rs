@@ -6,18 +6,27 @@
 
 use oxidized_protocol::types::Vec3;
 
-/// Normalizes an angle to the range `[0, 360)`.
+/// Normalizes an angle to the range `[-180, 180)`.
 ///
-/// Handles negative values correctly — e.g. `−10°` → `350°`.
+/// Matches vanilla `Mth.wrapDegrees()` — e.g. `−10°` → `−10°`, `350°` → `−10°`.
 fn normalize_angle(angle: f32) -> f32 {
-    ((angle % 360.0) + 360.0) % 360.0
+    let mut result = angle % 360.0;
+    if result >= 180.0 {
+        result -= 360.0;
+    }
+    if result < -180.0 {
+        result += 360.0;
+    }
+    result
 }
 
 /// Maximum distance a player may travel in a single tick (blocks).
-///
-/// Exceeding this triggers a server-side position correction. Vanilla
-/// uses 100 m for normal movement and 300 m during elytra flight.
+/// Vanilla: 100 m for normal movement.
 pub const MAX_MOVEMENT_PER_TICK: f64 = 100.0;
+
+/// Maximum distance during elytra flight.
+/// Vanilla: `isFallFlying ? 300.0F : 100.0F`.
+pub const MAX_ELYTRA_MOVEMENT_PER_TICK: f64 = 300.0;
 
 /// Maximum valid horizontal coordinate value (±30 million blocks).
 pub const MAX_COORDINATE: f64 = 3.0e7;
@@ -64,6 +73,7 @@ pub struct MovementResult {
 /// let result = validate_movement(
 ///     Vec3::ZERO, 0.0, 0.0,
 ///     Some(1.0), Some(0.0), Some(0.0), None, None,
+///     false,
 /// );
 /// assert!(result.accepted);
 ///
@@ -71,9 +81,11 @@ pub struct MovementResult {
 /// let result = validate_movement(
 ///     Vec3::ZERO, 0.0, 0.0,
 ///     Some(200.0), Some(0.0), Some(0.0), None, None,
+///     false,
 /// );
 /// assert!(result.needs_correction);
 /// ```
+#[allow(clippy::too_many_arguments)]
 pub fn validate_movement(
     current_pos: Vec3,
     current_yaw: f32,
@@ -83,6 +95,7 @@ pub fn validate_movement(
     new_z: Option<f64>,
     new_yaw: Option<f32>,
     new_pitch: Option<f32>,
+    is_fall_flying: bool,
 ) -> MovementResult {
     let resolved_x = new_x.unwrap_or(current_pos.x);
     let resolved_y = new_y.unwrap_or(current_pos.y);
@@ -121,7 +134,12 @@ pub fn validate_movement(
     let dz = new_pos.z - current_pos.z;
     let dist_sq = dx * dx + dy * dy + dz * dz;
 
-    let needs_correction = dist_sq > MAX_MOVEMENT_PER_TICK * MAX_MOVEMENT_PER_TICK;
+    let max_dist = if is_fall_flying {
+        MAX_ELYTRA_MOVEMENT_PER_TICK
+    } else {
+        MAX_MOVEMENT_PER_TICK
+    };
+    let needs_correction = dist_sq > max_dist * max_dist;
 
     MovementResult {
         accepted: !needs_correction,
@@ -148,6 +166,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         assert!(result.accepted);
         assert!(!result.needs_correction);
@@ -165,6 +184,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -181,6 +201,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         // 100^2 = 10000 which equals MAX^2, so NOT greater — accepted
         assert!(result.accepted);
@@ -197,6 +218,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -214,12 +236,13 @@ mod tests {
             None,
             Some(180.0),
             Some(45.0),
+            false,
         );
         assert!(result.accepted);
         assert!((result.new_pos.x - 50.0).abs() < f64::EPSILON);
         assert!((result.new_pos.y - 64.0).abs() < f64::EPSILON);
         assert!((result.new_pos.z + 30.0).abs() < f64::EPSILON);
-        assert!((result.new_yaw - 180.0).abs() < f32::EPSILON);
+        assert!((result.new_yaw - (-180.0)).abs() < f32::EPSILON);
     }
 
     #[test]
@@ -233,6 +256,7 @@ mod tests {
             Some(1.0),
             None,
             None,
+            false,
         );
         assert!((result.new_yaw - 45.0).abs() < f32::EPSILON);
         assert!((result.new_pitch + 10.0).abs() < f32::EPSILON);
@@ -249,6 +273,7 @@ mod tests {
             None,
             None,
             Some(100.0), // > 90°
+            false,
         );
         assert!((result.new_pitch - 90.0).abs() < f32::EPSILON);
     }
@@ -264,6 +289,7 @@ mod tests {
             None,
             None,
             Some(-100.0), // < -90°
+            false,
         );
         assert!((result.new_pitch + 90.0).abs() < f32::EPSILON);
     }
@@ -279,6 +305,7 @@ mod tests {
             Some(0.0), // way beyond 30M
             None,
             None,
+            false,
         );
         // X should be clamped to 3.0e7
         assert!((result.new_pos.x - 3.0e7).abs() < 1.0);
@@ -296,6 +323,7 @@ mod tests {
             Some(80.0),
             None,
             None,
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -313,6 +341,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         assert!(!result.accepted);
     }
@@ -328,6 +357,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         // Y should be clamped to 2.0e7
         assert!((result.new_pos.y - 2.0e7).abs() < 1.0);
@@ -344,6 +374,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         assert!((result.new_pos.y - (-2.0e7)).abs() < 1.0);
     }
@@ -359,6 +390,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -375,6 +407,7 @@ mod tests {
             Some(0.0),
             None,
             None,
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -389,6 +422,7 @@ mod tests {
             Some(f64::NAN),
             None,
             None,
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -405,6 +439,7 @@ mod tests {
             Some(0.0),
             Some(f32::INFINITY),
             None,
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -418,6 +453,7 @@ mod tests {
             Some(0.0),
             None,
             Some(f32::NEG_INFINITY),
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -435,6 +471,7 @@ mod tests {
             Some(3.0),
             Some(f32::NAN),
             Some(10.0),
+            false,
         );
         assert!(!result.accepted);
         assert!(result.needs_correction);
@@ -448,7 +485,7 @@ mod tests {
     fn test_normalize_angle_positive() {
         assert!((normalize_angle(90.0) - 90.0).abs() < f32::EPSILON);
         assert!((normalize_angle(0.0) - 0.0).abs() < f32::EPSILON);
-        assert!((normalize_angle(359.9) - 359.9).abs() < 0.001);
+        assert!((normalize_angle(359.9) - (-0.1)).abs() < 0.001);
     }
 
     #[test]
@@ -459,15 +496,16 @@ mod tests {
 
     #[test]
     fn test_normalize_angle_negative() {
-        assert!((normalize_angle(-10.0) - 350.0).abs() < f32::EPSILON);
-        assert!((normalize_angle(-90.0) - 270.0).abs() < f32::EPSILON);
+        assert!((normalize_angle(-10.0) - (-10.0)).abs() < f32::EPSILON);
+        assert!((normalize_angle(-90.0) - (-90.0)).abs() < f32::EPSILON);
         assert!((normalize_angle(-360.0) - 0.0).abs() < f32::EPSILON);
     }
 
     #[test]
     fn test_negative_yaw_normalized() {
-        let result = validate_movement(Vec3::ZERO, 0.0, 0.0, None, None, None, Some(-10.0), None);
+        let result =
+            validate_movement(Vec3::ZERO, 0.0, 0.0, None, None, None, Some(-10.0), None, false);
         assert!(result.accepted);
-        assert!((result.new_yaw - 350.0).abs() < f32::EPSILON);
+        assert!((result.new_yaw - (-10.0)).abs() < f32::EPSILON);
     }
 }
