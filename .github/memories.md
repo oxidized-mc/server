@@ -2075,3 +2075,28 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - **EntityEventPacket uses raw i32 entity_id** (NOT VarInt) — unusual compared to most packets
 - **Login sequence is split**: `build_login_sequence()` returns 8 core packets, then `play/mod.rs` sends additional packets (EntityEvent, Commands, WorldBorder, Time, SpawnPos, Weather, chunks, Inventory) in vanilla order
 - **ClientboundEntityPositionSyncPacket fields are vx/vy/vz** (velocity), NOT dx/dy/dz — easy to mix up
+
+---
+
+### 2026-07 — Vanilla Compliance Audit Round 4
+
+**Context:** Full repository review comparing all implemented behavior against vanilla Java decompiled reference.
+
+### Bugs Fixed (11 total)
+1. **Yaw normalization range**: Was `[0, 360)`, vanilla uses `[-180, 180)` via `Mth.wrapDegrees()`. Caused rotation display issues for angles >180°.
+2. **Elytra speed limit**: `MAX_MOVEMENT_PER_TICK` hardcoded to 100.0 but vanilla uses 300.0 for elytra flight. Added `is_fall_flying` parameter.
+3. **No protocol version validation**: Handshake stored version but never checked it. Now rejects mismatched login attempts.
+4. **Missing brand payload**: Configuration phase didn't send `minecraft:brand` custom payload. Now sends "Oxidized" as first config packet.
+5. **UpdateEnabledFeatures ordering**: Was sent AFTER registries, but vanilla sends it BEFORE. Fixed to match vanilla order.
+6. **Spawn Y condition bug**: Checked `spawn_y == 0` but `PrimaryLevelData` defaults to 64. Condition never triggered for new worlds. Now always computes for new worlds.
+7. **Block reach distance**: Was `7.0² = 49.0`, vanilla creative ceiling is `6.5² = 42.25`. Reach was ~7% too generous.
+8. **PlayerInfo too early**: Sent as packet #5 in login batch, vanilla sends it after teleport. Moved to position #8 (last).
+9. **Missing PlayerInfo actions**: Was sending 5 of 8 flags. Added UPDATE_DISPLAY_NAME, UPDATE_LIST_ORDER, UPDATE_HAT.
+10. **Login packet order**: Packet ordering now matches vanilla `PlayerList.placeNewPlayer()` sequence.
+11. **Configuration flow**: Full reorder to: Brand → Features → SelectKnownPacks → Registries → Tags → Finish.
+
+### Key Patterns
+- **Always verify defaults**: `PrimaryLevelData` defaults are in `from_nbt()` not `Default` — check actual values before writing conditions
+- **Vanilla angle range is [-180, 180)**: All angle normalization must use this range
+- **Config ordering matters**: Brand first, features before registries — clients may process in strict order
+- **PlayerInfo needs ALL 8 flags**: Missing flags cause invisible hat layers, wrong list ordering, missing display names
