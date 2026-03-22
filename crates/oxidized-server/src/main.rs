@@ -183,7 +183,10 @@ fn main() -> anyhow::Result<()> {
         let is_new_world = !level_dat_path.exists();
         if is_new_world && level_data.spawn_y == 0 {
             level_data.spawn_y = chunk_generator.find_spawn_y();
-            info!(spawn_y = level_data.spawn_y, "Set spawn Y from flat world generator");
+            info!(
+                spawn_y = level_data.spawn_y,
+                "Set spawn Y from flat world generator"
+            );
         }
 
         let server_ctx = Arc::new(ServerContext {

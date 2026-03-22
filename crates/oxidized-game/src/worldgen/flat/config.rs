@@ -5,7 +5,7 @@
 //! starting at the minimum build height (y = −64).
 
 use oxidized_world::chunk::level_chunk::OVERWORLD_MIN_Y;
-use oxidized_world::registry::{BlockRegistry, BlockStateId, BEDROCK, DIRT, GRASS_BLOCK};
+use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
 
 /// Errors that can occur when parsing a flat world layer string.
 #[derive(Debug, thiserror::Error)]
@@ -172,10 +172,7 @@ impl FlatWorldConfig {
     /// ).unwrap();
     /// assert_eq!(config.total_height(), 4);
     /// ```
-    pub fn from_layers_string(
-        s: &str,
-        registry: &BlockRegistry,
-    ) -> Result<Self, FlatConfigError> {
+    pub fn from_layers_string(s: &str, registry: &BlockRegistry) -> Result<Self, FlatConfigError> {
         let mut layers = Vec::new();
         for part in s.split(',') {
             let part = part.trim();
@@ -183,12 +180,13 @@ impl FlatWorldConfig {
                 continue;
             }
             let (block_name, height) = if let Some((id, count_str)) = part.split_once('*') {
-                let count: u32 = count_str.parse().map_err(|source| {
-                    FlatConfigError::InvalidHeight {
-                        entry: part.to_owned(),
-                        source,
-                    }
-                })?;
+                let count: u32 =
+                    count_str
+                        .parse()
+                        .map_err(|source| FlatConfigError::InvalidHeight {
+                            entry: part.to_owned(),
+                            source,
+                        })?;
                 (id.trim(), count)
             } else {
                 (part, 1)
@@ -196,12 +194,11 @@ impl FlatWorldConfig {
             if height == 0 {
                 continue;
             }
-            let block_state_id =
-                registry
-                    .default_state(block_name)
-                    .ok_or_else(|| FlatConfigError::UnknownBlock {
-                        name: block_name.to_owned(),
-                    })?;
+            let block_state_id = registry.default_state(block_name).ok_or_else(|| {
+                FlatConfigError::UnknownBlock {
+                    name: block_name.to_owned(),
+                }
+            })?;
             layers.push(FlatLayerInfo {
                 block: block_state_id,
                 height,
@@ -251,23 +248,14 @@ mod tests {
     #[test]
     fn block_at_y_dirt_layers() {
         let config = FlatWorldConfig::default();
-        assert_eq!(
-            config.block_at_y(OVERWORLD_MIN_Y + 1),
-            Some(DIRT)
-        );
-        assert_eq!(
-            config.block_at_y(OVERWORLD_MIN_Y + 2),
-            Some(DIRT)
-        );
+        assert_eq!(config.block_at_y(OVERWORLD_MIN_Y + 1), Some(DIRT));
+        assert_eq!(config.block_at_y(OVERWORLD_MIN_Y + 2), Some(DIRT));
     }
 
     #[test]
     fn block_at_y_surface_is_grass() {
         let config = FlatWorldConfig::default();
-        assert_eq!(
-            config.block_at_y(OVERWORLD_MIN_Y + 3),
-            Some(GRASS_BLOCK)
-        );
+        assert_eq!(config.block_at_y(OVERWORLD_MIN_Y + 3), Some(GRASS_BLOCK));
     }
 
     #[test]
@@ -333,11 +321,7 @@ mod tests {
 
     #[test]
     fn from_layers_skips_zero_height() {
-        let config = FlatWorldConfig::from_layers(&[
-            (BEDROCK, 1),
-            (DIRT, 0),
-            (GRASS_BLOCK, 1),
-        ]);
+        let config = FlatWorldConfig::from_layers(&[(BEDROCK, 1), (DIRT, 0), (GRASS_BLOCK, 1)]);
         assert_eq!(config.layers.len(), 2);
         assert_eq!(config.total_height(), 2);
     }

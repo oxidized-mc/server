@@ -835,8 +835,8 @@ fn test_tracking_range_boundary_conditions() {
 // Flat world generation — integration tests
 // =============================================================================
 
-use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
 use oxidized_game::worldgen::ChunkGenerator;
+use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
 use oxidized_world::chunk::heightmap::HeightmapType;
 use oxidized_world::registry::{BEDROCK, DIRT, GRASS_BLOCK};
 
@@ -872,10 +872,18 @@ fn flat_chunk_all_columns_match_config() {
             let grass = chunk.get_block_state(x, -61, z).unwrap();
             let air = chunk.get_block_state(x, -60, z).unwrap();
 
-            assert_eq!(bedrock, u32::from(BEDROCK.0), "({x},{z}) y=-64 should be bedrock");
+            assert_eq!(
+                bedrock,
+                u32::from(BEDROCK.0),
+                "({x},{z}) y=-64 should be bedrock"
+            );
             assert_eq!(dirt1, u32::from(DIRT.0), "({x},{z}) y=-63 should be dirt");
             assert_eq!(dirt2, u32::from(DIRT.0), "({x},{z}) y=-62 should be dirt");
-            assert_eq!(grass, u32::from(GRASS_BLOCK.0), "({x},{z}) y=-61 should be grass_block");
+            assert_eq!(
+                grass,
+                u32::from(GRASS_BLOCK.0),
+                "({x},{z}) y=-61 should be grass_block"
+            );
             assert_eq!(air, 0, "({x},{z}) y=-60 should be air");
         }
     }
@@ -897,7 +905,9 @@ fn flat_chunk_has_heightmaps() {
         "WORLD_SURFACE heightmap missing"
     );
     assert!(
-        chunk.heightmap(HeightmapType::MotionBlockingNoLeaves).is_some(),
+        chunk
+            .heightmap(HeightmapType::MotionBlockingNoLeaves)
+            .is_some(),
         "MOTION_BLOCKING_NO_LEAVES heightmap missing"
     );
 }
@@ -916,15 +926,15 @@ fn flat_spawn_y_is_above_surface() {
 fn flat_custom_layers_generate_correctly() {
     use oxidized_world::registry::SAND;
 
-    let config = FlatWorldConfig::from_layers(&[
-        (BEDROCK, 1),
-        (SAND, 5),
-    ]);
+    let config = FlatWorldConfig::from_layers(&[(BEDROCK, 1), (SAND, 5)]);
     let generator = FlatChunkGenerator::new(config);
     let chunk = generator.generate_chunk(ChunkPos { x: 0, z: 0 });
 
     // Bedrock at bottom
-    assert_eq!(chunk.get_block_state(0, -64, 0).unwrap(), u32::from(BEDROCK.0));
+    assert_eq!(
+        chunk.get_block_state(0, -64, 0).unwrap(),
+        u32::from(BEDROCK.0)
+    );
     // Sand for 5 layers
     for y in -63..=-59_i32 {
         assert_eq!(

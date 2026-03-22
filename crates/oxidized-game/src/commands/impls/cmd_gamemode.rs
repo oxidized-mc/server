@@ -4,13 +4,13 @@
 //! Sends `ClientboundGameEventPacket`, `ClientboundPlayerAbilitiesPacket`,
 //! and `ClientboundPlayerInfoUpdatePacket` via `ServerHandle`.
 
+use crate::commands::CommandError;
 use crate::commands::argument_access::{get_entities, get_gamemode};
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
-use crate::commands::CommandError;
 use crate::player::game_mode::GameMode;
 use oxidized_protocol::chat::Component;
 
@@ -54,16 +54,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                 };
                                 let mut count = 0i32;
                                 for target in &targets {
-                                    let is_self =
-                                        source_uuid.is_some_and(|u| u == target.uuid);
-                                    if set_game_mode(
-                                        ctx,
-                                        target.uuid,
-                                        &target.name,
-                                        mode,
-                                        is_self,
-                                    )
-                                    .is_ok()
+                                    let is_self = source_uuid.is_some_and(|u| u == target.uuid);
+                                    if set_game_mode(ctx, target.uuid, &target.name, mode, is_self)
+                                        .is_ok()
                                     {
                                         count += 1;
                                     }
@@ -114,10 +107,7 @@ fn set_game_mode(
 
     if is_self {
         ctx.source.send_success(
-            &Component::translatable(
-                "commands.gamemode.success.self",
-                vec![mode_component],
-            ),
+            &Component::translatable("commands.gamemode.success.self", vec![mode_component]),
             true,
         );
     } else {
@@ -155,9 +145,21 @@ mod tests {
 
     #[test]
     fn test_mode_translation_keys() {
-        assert_eq!(mode_translation_key(GameMode::Survival), "gameMode.survival");
-        assert_eq!(mode_translation_key(GameMode::Creative), "gameMode.creative");
-        assert_eq!(mode_translation_key(GameMode::Adventure), "gameMode.adventure");
-        assert_eq!(mode_translation_key(GameMode::Spectator), "gameMode.spectator");
+        assert_eq!(
+            mode_translation_key(GameMode::Survival),
+            "gameMode.survival"
+        );
+        assert_eq!(
+            mode_translation_key(GameMode::Creative),
+            "gameMode.creative"
+        );
+        assert_eq!(
+            mode_translation_key(GameMode::Adventure),
+            "gameMode.adventure"
+        );
+        assert_eq!(
+            mode_translation_key(GameMode::Spectator),
+            "gameMode.spectator"
+        );
     }
 }

@@ -43,9 +43,9 @@ use oxidized_protocol::packets::play::{
     ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
     ServerboundPickItemFromBlockPacket, ServerboundPlayerActionPacket,
-    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
-    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
-    ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
+    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket, ServerboundSetCarriedItemPacket,
+    ServerboundSetCreativeModeSlotPacket, ServerboundSignUpdatePacket, ServerboundUseItemOnPacket,
+    ServerboundUseItemPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
