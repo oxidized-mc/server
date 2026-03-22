@@ -53,10 +53,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ClientboundOpenSignEditorPacket as Packet>::PACKET_ID,
-            0x3C
-        );
+        assert_eq!(<ClientboundOpenSignEditorPacket as Packet>::PACKET_ID, 0x3C);
     }
 
     #[test]

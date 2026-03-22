@@ -5,7 +5,9 @@
 //! layers, biomes, and heightmaps are uniform across all positions.
 
 use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT};
+use oxidized_world::chunk::level_chunk::{
+    OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT,
+};
 use oxidized_world::chunk::{ChunkPos, DataLayer, LevelChunk};
 
 use super::config::FlatWorldConfig;
