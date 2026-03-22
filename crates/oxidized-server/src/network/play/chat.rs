@@ -13,18 +13,14 @@ use tracing::{debug, info, warn};
 
 use super::PlayContext;
 use super::commands::make_command_source_for_player;
+use crate::network::helpers::disconnect_err;
 use crate::network::{BroadcastMessage, ServerContext};
 
 /// Handles an incoming chat message from a player.
 pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(), ConnectionError> {
     if !ctx.rate_limiter.try_acquire() {
-        warn!(peer = %ctx.addr, name = %ctx.player_name, "Chat rate-limited");
-        let kick_msg = ClientboundSystemChatPacket {
-            content: Component::text("You are sending messages too quickly"),
-            overlay: false,
-        };
-        let _ = ctx.conn.send_packet(&kick_msg).await;
-        return Ok(());
+        warn!(peer = %ctx.addr, name = %ctx.player_name, "Chat rate-limited — disconnecting");
+        return Err(disconnect_err(ctx.conn, "disconnect.spam").await);
     }
 
     let message_component = match ctx.server_ctx.color_char {
