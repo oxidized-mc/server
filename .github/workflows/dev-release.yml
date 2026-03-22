@@ -89,7 +89,7 @@ jobs:
           DIST_DIR="${{ env.BINARY_NAME }}-nightly-${{ matrix.target }}"
           mkdir -p "${DIST_DIR}"
           cp "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}" "${DIST_DIR}/"
-          cp oxidized.toml "${DIST_DIR}/"
+          [ -f oxidized.toml ] && cp oxidized.toml "${DIST_DIR}/" || true
           cp LICENSE-MIT LICENSE-APACHE README.md "${DIST_DIR}/"
           tar czf "${DIST_DIR}.tar.gz" "${DIST_DIR}"
           echo "ASSET=${DIST_DIR}.tar.gz" >> "$GITHUB_ENV"
@@ -101,7 +101,7 @@ jobs:
           $DIST_DIR = "${{ env.BINARY_NAME }}-nightly-${{ matrix.target }}"
           New-Item -ItemType Directory -Path $DIST_DIR
           Copy-Item "target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}.exe" "$DIST_DIR/"
-          Copy-Item "oxidized.toml" "$DIST_DIR/"
+          if (Test-Path "oxidized.toml") { Copy-Item "oxidized.toml" "$DIST_DIR/" }
           Copy-Item "LICENSE-MIT", "LICENSE-APACHE", "README.md" "$DIST_DIR/"
           Compress-Archive -Path "$DIST_DIR/*" -DestinationPath "$DIST_DIR.zip"
           echo "ASSET=$DIST_DIR.zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
