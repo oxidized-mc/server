@@ -9,6 +9,7 @@
 use std::collections::HashSet;
 
 use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload, spiral_chunks};
+use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_game::net::light_serializer::build_light_data;
 use oxidized_game::player::game_mode::GameMode;
@@ -114,9 +115,10 @@ fn test_build_light_data_empty() {
     assert!(data.block_y_mask.is_empty());
     assert!(data.sky_updates.is_empty());
     assert!(data.block_updates.is_empty());
-    // But the empty masks should be set for all 26 sections
-    assert!(!data.empty_sky_y_mask.is_empty());
-    assert!(!data.empty_block_y_mask.is_empty());
+    // None sections are excluded from all masks (vanilla behavior).
+    // Only Some(all-zeros) sets empty mask bits.
+    assert!(data.empty_sky_y_mask.is_empty());
+    assert!(data.empty_block_y_mask.is_empty());
 }
 
 #[test]
@@ -190,7 +192,15 @@ fn test_build_login_sequence() {
         ResourceLocation::minecraft("the_end"),
     ];
 
-    let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+    let packets = build_login_sequence(
+        &player,
+        1,
+        &level_data,
+        &player_list,
+        &dimensions,
+        0,
+        &GameRules::default(),
+    );
 
     // Exactly 10 packets
     assert_eq!(packets.len(), 10);

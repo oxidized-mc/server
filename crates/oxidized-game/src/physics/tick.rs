@@ -57,6 +57,11 @@ pub fn physics_tick(
         entity.vy -= GRAVITY;
     }
 
+    // Apply block speed factor (e.g., soul sand, honey) BEFORE collision.
+    let speed_factor = get_block_speed_factor(level, entity, block_physics);
+    entity.vx *= speed_factor;
+    entity.vz *= speed_factor;
+
     let mut dx = entity.vx;
     let dy = entity.vy;
     let mut dz = entity.vz;
@@ -163,6 +168,28 @@ fn is_on_slime(
     match level.get_block_state(below) {
         Ok(state_id) => block_physics.is_slime_block(state_id),
         Err(_) => false,
+    }
+}
+
+/// Returns the speed factor of the block below the entity's feet.
+///
+/// Uses [`PhysicsBlockProperties`] for per-block speed factor lookups.
+/// Returns 1.0 for normal blocks and < 1.0 for slow blocks (e.g.,
+/// soul sand at 0.4, honey at 0.4, powder snow at 0.9).
+fn get_block_speed_factor(
+    level: &impl BlockGetter,
+    entity: &Entity,
+    block_physics: &PhysicsBlockProperties,
+) -> f64 {
+    let below = BlockPos::new(
+        entity.x.floor() as i32,
+        (entity.bounding_box.min_y - 0.5000001).floor() as i32,
+        entity.z.floor() as i32,
+    );
+
+    match level.get_block_state(below) {
+        Ok(state_id) => block_physics.speed_factor(state_id),
+        Err(_) => 1.0,
     }
 }
 
@@ -508,6 +535,76 @@ mod tests {
             entity.vy > 0.0,
             "Slime should bounce entity upward: vy={}",
             entity.vy
+        );
+    }
+
+    #[test]
+    fn test_soul_sand_slows_movement() {
+        let shapes = FullCubeShapeProvider::new();
+        let bp = registry_physics();
+        let reg = BlockRegistry::load().unwrap();
+        let soul_id = reg.default_state("minecraft:soul_sand").unwrap().0 as u32;
+        let soul_level = SpecificFloorLevel {
+            floor_state_id: soul_id,
+        };
+
+        let mut entity = make_entity_above_floor(0.0);
+        entity.on_ground = true;
+        entity.vx = 1.0;
+        entity.vy = 0.0;
+        entity.vz = 0.0;
+
+        physics_tick(&mut entity, &soul_level, &shapes, &bp, false, false);
+        let soul_vx = entity.vx;
+
+        // Compare with normal floor.
+        let mut entity2 = make_entity_above_floor(0.0);
+        entity2.on_ground = true;
+        entity2.vx = 1.0;
+        entity2.vy = 0.0;
+        entity2.vz = 0.0;
+
+        physics_tick(&mut entity2, &FloorLevel, &shapes, &bp, false, false);
+        let normal_vx = entity2.vx;
+
+        assert!(
+            soul_vx < normal_vx,
+            "Soul sand should slow movement: soul_vx={soul_vx} < normal_vx={normal_vx}"
+        );
+    }
+
+    #[test]
+    fn test_honey_block_slows_movement() {
+        let shapes = FullCubeShapeProvider::new();
+        let bp = registry_physics();
+        let reg = BlockRegistry::load().unwrap();
+        let honey_id = reg.default_state("minecraft:honey_block").unwrap().0 as u32;
+        let honey_level = SpecificFloorLevel {
+            floor_state_id: honey_id,
+        };
+
+        let mut entity = make_entity_above_floor(0.0);
+        entity.on_ground = true;
+        entity.vx = 1.0;
+        entity.vy = 0.0;
+        entity.vz = 0.0;
+
+        physics_tick(&mut entity, &honey_level, &shapes, &bp, false, false);
+        let honey_vx = entity.vx;
+
+        // Compare with normal floor.
+        let mut entity2 = make_entity_above_floor(0.0);
+        entity2.on_ground = true;
+        entity2.vx = 1.0;
+        entity2.vy = 0.0;
+        entity2.vz = 0.0;
+
+        physics_tick(&mut entity2, &FloorLevel, &shapes, &bp, false, false);
+        let normal_vx = entity2.vx;
+
+        assert!(
+            honey_vx < normal_vx,
+            "Honey should slow movement: honey_vx={honey_vx} < normal_vx={normal_vx}"
         );
     }
 }
