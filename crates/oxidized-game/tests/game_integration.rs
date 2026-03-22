@@ -830,3 +830,116 @@ fn test_tracking_range_boundary_conditions() {
         TRACKING_RANGE_MISC
     ));
 }
+
+// =============================================================================
+// Flat world generation — integration tests
+// =============================================================================
+
+use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
+use oxidized_game::worldgen::ChunkGenerator;
+use oxidized_world::chunk::heightmap::HeightmapType;
+use oxidized_world::registry::{BEDROCK, DIRT, GRASS_BLOCK};
+
+/// A full generate→serialize round-trip: the generated chunk must produce a
+/// valid chunk packet that the client can decode (non-empty, starts with
+/// valid data).
+#[test]
+fn flat_chunk_generate_and_serialize_roundtrip() {
+    let generator = FlatChunkGenerator::new(FlatWorldConfig::default());
+    let chunk = generator.generate_chunk(ChunkPos { x: 3, z: -7 });
+    let pkt = build_chunk_packet(&chunk);
+    let encoded = pkt.encode();
+    // Packet must be non-empty and significantly larger than an air-only chunk
+    // (air chunk is mostly zeros; generated chunk has palette entries).
+    assert!(
+        encoded.len() > 100,
+        "encoded chunk packet is suspiciously small: {} bytes",
+        encoded.len()
+    );
+}
+
+/// Every column in a generated chunk must have the correct block stack.
+#[test]
+fn flat_chunk_all_columns_match_config() {
+    let generator = FlatChunkGenerator::new(FlatWorldConfig::default());
+    let chunk = generator.generate_chunk(ChunkPos { x: 0, z: 0 });
+
+    for x in 0..16_i32 {
+        for z in 0..16_i32 {
+            let bedrock = chunk.get_block_state(x, -64, z).unwrap();
+            let dirt1 = chunk.get_block_state(x, -63, z).unwrap();
+            let dirt2 = chunk.get_block_state(x, -62, z).unwrap();
+            let grass = chunk.get_block_state(x, -61, z).unwrap();
+            let air = chunk.get_block_state(x, -60, z).unwrap();
+
+            assert_eq!(bedrock, u32::from(BEDROCK.0), "({x},{z}) y=-64 should be bedrock");
+            assert_eq!(dirt1, u32::from(DIRT.0), "({x},{z}) y=-63 should be dirt");
+            assert_eq!(dirt2, u32::from(DIRT.0), "({x},{z}) y=-62 should be dirt");
+            assert_eq!(grass, u32::from(GRASS_BLOCK.0), "({x},{z}) y=-61 should be grass_block");
+            assert_eq!(air, 0, "({x},{z}) y=-60 should be air");
+        }
+    }
+}
+
+/// Heightmaps must be computed and present after generation.
+#[test]
+fn flat_chunk_has_heightmaps() {
+    let generator = FlatChunkGenerator::new(FlatWorldConfig::default());
+    let chunk = generator.generate_chunk(ChunkPos { x: 0, z: 0 });
+
+    // All three client heightmap types should exist.
+    assert!(
+        chunk.heightmap(HeightmapType::MotionBlocking).is_some(),
+        "MOTION_BLOCKING heightmap missing"
+    );
+    assert!(
+        chunk.heightmap(HeightmapType::WorldSurface).is_some(),
+        "WORLD_SURFACE heightmap missing"
+    );
+    assert!(
+        chunk.heightmap(HeightmapType::MotionBlockingNoLeaves).is_some(),
+        "MOTION_BLOCKING_NO_LEAVES heightmap missing"
+    );
+}
+
+/// find_spawn_y returns a Y one above the surface (players stand on grass).
+#[test]
+fn flat_spawn_y_is_above_surface() {
+    let generator = FlatChunkGenerator::new(FlatWorldConfig::default());
+    let spawn_y = generator.find_spawn_y();
+    // Default flat: 4 layers starting at y=-64, surface at y=-61, spawn at y=-60.
+    assert_eq!(spawn_y, -60);
+}
+
+/// Custom layer config produces correct blocks.
+#[test]
+fn flat_custom_layers_generate_correctly() {
+    use oxidized_world::registry::SAND;
+
+    let config = FlatWorldConfig::from_layers(&[
+        (BEDROCK, 1),
+        (SAND, 5),
+    ]);
+    let generator = FlatChunkGenerator::new(config);
+    let chunk = generator.generate_chunk(ChunkPos { x: 0, z: 0 });
+
+    // Bedrock at bottom
+    assert_eq!(chunk.get_block_state(0, -64, 0).unwrap(), u32::from(BEDROCK.0));
+    // Sand for 5 layers
+    for y in -63..=-59_i32 {
+        assert_eq!(
+            chunk.get_block_state(0, y, 0).unwrap(),
+            u32::from(SAND.0),
+            "y={y} should be sand"
+        );
+    }
+    // Air above
+    assert_eq!(chunk.get_block_state(0, -58, 0).unwrap(), 0);
+}
+
+/// Generator type is correct.
+#[test]
+fn flat_generator_type_string() {
+    let generator = FlatChunkGenerator::new(FlatWorldConfig::default());
+    assert_eq!(generator.generator_type(), "minecraft:flat");
+}

@@ -3,6 +3,8 @@
 //! Processes position/rotation updates from the client, validates them,
 //! and sends/forgets chunks when the player crosses chunk boundaries.
 
+use std::sync::Arc;
+
 use oxidized_game::player::movement::validate_movement;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::ConnectionError;
@@ -13,7 +15,8 @@ use oxidized_protocol::packets::play::{
     ServerboundMovePlayerPacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
-use oxidized_world::chunk::{ChunkPos, LevelChunk};
+use oxidized_world::chunk::ChunkPos;
+use parking_lot::RwLock;
 use tracing::{debug, trace};
 
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
@@ -167,7 +170,7 @@ async fn send_chunk_updates(
             .await?;
 
         for pos in to_load {
-            let chunk = LevelChunk::new(*pos);
+            let chunk = ctx.server_ctx.chunk_generator.generate_chunk(*pos);
             let chunk_pkt = build_chunk_packet(&chunk);
             ctx.conn
                 .send_raw(
@@ -175,6 +178,12 @@ async fn send_chunk_updates(
                     &chunk_pkt.encode(),
                 )
                 .await?;
+
+            // Register the chunk in shared storage for block interaction.
+            ctx.server_ctx
+                .chunks
+                .entry(*pos)
+                .or_insert_with(|| Arc::new(RwLock::new(chunk)));
         }
 
         let batch_finished = ClientboundChunkBatchFinishedPacket {

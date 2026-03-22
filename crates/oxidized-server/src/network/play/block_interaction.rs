@@ -548,6 +548,11 @@ mod tests {
             chunks: dashmap::DashMap::new(),
             dirty_chunks: dashmap::DashSet::new(),
             block_registry: Arc::new(BlockRegistry::load().unwrap()),
+            chunk_generator: Arc::new(
+                oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                ),
+            ),
         })
     }
 }
