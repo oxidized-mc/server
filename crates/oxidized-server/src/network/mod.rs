@@ -14,7 +14,7 @@ mod status;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use oxidized_game::commands::Commands;
 use oxidized_game::commands::source::ServerHandle;
 use oxidized_game::event::EventBus;
@@ -27,6 +27,7 @@ use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::ServerStatus;
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::{ChunkPos, LevelChunk};
+use oxidized_world::registry::BlockRegistry;
 use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
@@ -68,8 +69,8 @@ pub struct ServerContext {
     pub max_view_distance: i32,
     /// Maximum simulation distance allowed by the server config (2–32 chunks).
     pub max_simulation_distance: i32,
-    /// Broadcast channel for chat messages sent to all connected players.
-    pub chat_tx: broadcast::Sender<ChatBroadcastMessage>,
+    /// Broadcast channel for packets sent to all connected players.
+    pub broadcast_tx: broadcast::Sender<BroadcastMessage>,
     /// Alternate color code prefix character, or `None` if disabled.
     pub color_char: Option<char>,
     /// Brigadier command framework — shared across all connections.
@@ -88,11 +89,15 @@ pub struct ServerContext {
     pub storage: LevelStorageSource,
     /// Loaded chunk columns keyed by position. Thread-safe via `DashMap`.
     pub chunks: DashMap<ChunkPos, Arc<RwLock<LevelChunk>>>,
+    /// Chunk positions that have been modified and need saving.
+    pub dirty_chunks: DashSet<ChunkPos>,
+    /// Block registry — loaded once at startup, shared across all handlers.
+    pub block_registry: Arc<BlockRegistry>,
 }
 
 impl ServerHandle for ServerContext {
     fn broadcast_to_ops(&self, _message: &Component, _min_level: u32) {
-        // TODO(phase-18): broadcast to ops via chat_tx
+        // TODO(phase-18): broadcast to ops via broadcast_tx
     }
 
     fn request_shutdown(&self) {
@@ -184,11 +189,12 @@ impl ServerHandle for ServerContext {
             overlay: false,
         };
         let encoded = pkt.encode();
-        let broadcast = ChatBroadcastMessage {
+        let broadcast = BroadcastMessage {
             packet_id: ClientboundSystemChatPacket::PACKET_ID,
             data: encoded.freeze(),
+            exclude_entity: None,
         };
-        let _ = self.chat_tx.send(broadcast);
+        let _ = self.broadcast_tx.send(broadcast);
     }
 
     fn set_day_time(&self, time: i64) {
@@ -244,9 +250,10 @@ impl ServerHandle for ServerContext {
             };
             let pkt = ClientboundGameEventPacket { event, param: 0.0 };
             let encoded = pkt.encode();
-            let _ = self.chat_tx.send(ChatBroadcastMessage {
+            let _ = self.broadcast_tx.send(BroadcastMessage {
                 packet_id: ClientboundGameEventPacket::PACKET_ID,
                 data: encoded.freeze(),
+                exclude_entity: None,
             });
         }
     }
@@ -308,20 +315,27 @@ impl ServerHandle for ServerContext {
         };
         drop(mgr);
         let encoded = pkt.encode();
-        let _ = self.chat_tx.send(ChatBroadcastMessage {
+        let _ = self.broadcast_tx.send(BroadcastMessage {
             packet_id: ClientboundTickingStatePacket::PACKET_ID,
             data: encoded.freeze(),
+            exclude_entity: None,
         });
     }
 }
 
-/// A chat message broadcast to all connected players.
+/// A packet broadcast to all connected players.
+///
+/// Used for chat, block updates, weather changes, tick state, and any other
+/// packet that needs to reach all clients.
 #[derive(Debug, Clone)]
-pub struct ChatBroadcastMessage {
+pub struct BroadcastMessage {
     /// Pre-encoded packet bytes (packet ID + body) ready for `send_raw`.
     pub packet_id: i32,
     /// Encoded packet body bytes.
     pub data: bytes::Bytes,
+    /// If set, skip sending to the player with this entity ID.
+    /// Used for block updates where the acting player already received an ack.
+    pub exclude_entity: Option<i32>,
 }
 
 /// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.
@@ -491,7 +505,7 @@ mod tests {
                 dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
                 max_view_distance: 10,
                 max_simulation_distance: 10,
-                chat_tx: broadcast::channel(256).0,
+                broadcast_tx: broadcast::channel(256).0,
                 color_char: Some('&'),
                 commands: oxidized_game::commands::Commands::new(),
                 event_bus: oxidized_game::event::EventBus::new(),
@@ -503,6 +517,8 @@ mod tests {
                 ),
                 storage: LevelStorageSource::new(""),
                 chunks: dashmap::DashMap::new(),
+                dirty_chunks: dashmap::DashSet::new(),
+                block_registry: Arc::new(BlockRegistry::load().unwrap()),
             }),
         })
     }

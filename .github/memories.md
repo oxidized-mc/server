@@ -1930,3 +1930,25 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - No collision detection for block placement — players can place blocks inside themselves
 - No block drop/item entity creation on break — needs entity physics (future phase)
 - No tool speed / mining progress validation — all survival StopDestroyBlock accepted
+
+### Phase 22 Review Improvements (Post-Implementation)
+
+**Changes made:**
+
+1. **BlockRegistry cached in ServerContext** — `Arc<BlockRegistry>` loaded once at startup, eliminating gzip+JSON decompression on every block placement
+2. **Renamed ChatBroadcastMessage → BroadcastMessage**, `chat_tx` → `broadcast_tx` — reflects actual general-purpose broadcast usage
+3. **Broadcast sender exclusion** — `BroadcastMessage.exclude_entity: Option<i32>` skips sending to the acting player; relay loop in play/mod.rs filters by entity_id
+4. **Reach/distance validation** — `MAX_REACH_DISTANCE_SQ = 7.0²` for break/place, `MAX_SIGN_EDIT_DISTANCE_SQ = 8.0²` for sign editing; uses squared distance (no sqrt)
+5. **Survival mining guard** — StartDestroyBlock stores position in `spawn_pos` (temporary reuse), StopDestroyBlock validates position matches (no tick-based progress yet)
+6. **Type consistency** — `get_block()` returns `Option<u32>`, internal functions use u32, i32 only at wire boundaries (`as i32` for packet fields)
+7. **Dirty chunk marking** — `DashSet<ChunkPos>` on ServerContext; `set_block()` inserts chunk_pos after modification
+8. **Inventory decrement** — Validates count > 0 before placement in non-Creative; decrements after successful place; clears slot via `ItemStack::empty()` when depleted
+9. **Inventory validation before placement** — Checks `is_empty()` and `count > 0` before allowing block placement to prevent exploiting zero-count stacks
+
+#### Gotchas Updated
+
+- `ServerContext` still has 4 constructor sites — all updated with `dirty_chunks`, `block_registry`, `broadcast_tx`
+- `spawn_pos` field on ServerPlayer is temporarily reused for mining position tracking — needs a proper `mining_pos: Option<BlockPos>` field added to ServerPlayer in future
+- `BlockStateId` is `u16` (in oxidized-world), chunk API uses `u32` — convert with `u32::from(state.0)` at boundary
+- `BroadcastMessage` is the single broadcast channel type for ALL broadcast types (chat, block updates, weather, tick state, player info)
+- Block interaction handlers do NOT hold lock guards across `.await` points — always extract data into locals first, drop guard, then await

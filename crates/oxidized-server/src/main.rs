@@ -23,6 +23,7 @@ use oxidized_protocol::constants;
 use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::{ServerStatus, StatusPlayers, StatusVersion};
 use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::registry::BlockRegistry;
 use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
@@ -166,6 +167,11 @@ fn main() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("invalid dimension resource location: {e}"))?,
         ];
 
+        let block_registry = Arc::new(
+            BlockRegistry::load()
+                .map_err(|e| anyhow::anyhow!("failed to load block registry: {e}"))?,
+        );
+
         let server_ctx = Arc::new(ServerContext {
             player_list: parking_lot::RwLock::new(PlayerList::new(
                 config.gameplay.max_players as usize,
@@ -174,7 +180,7 @@ fn main() -> anyhow::Result<()> {
             dimensions,
             max_view_distance: config.world.view_distance as i32,
             max_simulation_distance: config.world.simulation_distance as i32,
-            chat_tx: broadcast::channel(256).0,
+            broadcast_tx: broadcast::channel(256).0,
             color_char,
             commands: Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
@@ -186,6 +192,8 @@ fn main() -> anyhow::Result<()> {
             ),
             storage,
             chunks: dashmap::DashMap::new(),
+            dirty_chunks: dashmap::DashSet::new(),
+            block_registry,
         });
 
         // Build the shared login context.
