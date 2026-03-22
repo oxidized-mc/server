@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (MSRV)
+        uses: dtolnay/rust-toolchain@1.85
         with:
           components: rustfmt, clippy
 
@@ -65,6 +65,9 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+      - name: Check no-default-features
+        run: cargo check --workspace --no-default-features
 
   deny:
     name: cargo-deny (licences + advisories)
