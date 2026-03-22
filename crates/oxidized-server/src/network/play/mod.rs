@@ -13,12 +13,12 @@
 //! The `EventBus` in `ServerContext` already provides the event-level
 //! extensibility; the packet registry would add raw-packet-level hooks.
 
+pub mod block_interaction;
 pub mod chat;
 pub mod commands;
 pub mod helpers;
 pub mod inventory;
 pub mod movement;
-pub mod block_interaction;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -194,7 +194,8 @@ pub async fn handle_play_entry(
     // Send initial chunk batch — empty air chunks in a spiral pattern.
     let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
     let chunk_count =
-        helpers::send_initial_chunks(conn, chunk_center, player_view_distance, &server_ctx.chunks).await?;
+        helpers::send_initial_chunks(conn, chunk_center, player_view_distance, &server_ctx.chunks)
+            .await?;
 
     // Signal the client that initial chunks have been sent.
     let chunks_load_start = ClientboundGameEventPacket {

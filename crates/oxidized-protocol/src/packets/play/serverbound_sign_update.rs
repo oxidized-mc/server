@@ -73,12 +73,7 @@ mod tests {
         let original = ServerboundSignUpdatePacket {
             pos: BlockPos::new(10, 64, -5),
             is_front_text: true,
-            lines: [
-                "Hello".into(),
-                "World".into(),
-                String::new(),
-                "!".into(),
-            ],
+            lines: ["Hello".into(), "World".into(), String::new(), "!".into()],
         };
         let encoded = original.encode();
         let decoded = ServerboundSignUpdatePacket::decode(encoded.freeze()).unwrap();

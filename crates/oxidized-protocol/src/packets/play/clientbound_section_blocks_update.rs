@@ -73,8 +73,7 @@ impl Packet for ClientboundSectionBlocksUpdatePacket {
     }
 
     fn encode(&self) -> BytesMut {
-        let mut buf =
-            BytesMut::with_capacity(8 + 5 + self.updates.len() * 10);
+        let mut buf = BytesMut::with_capacity(8 + 5 + self.updates.len() * 10);
         buf.put_i64(self.section_pos.as_long());
         varint::write_varint_buf(self.updates.len() as i32, &mut buf);
         for update in &self.updates {
@@ -94,9 +93,7 @@ fn read_varlong(buf: &mut Bytes) -> Result<i64, PacketDecodeError> {
     let mut shift: u32 = 0;
     loop {
         if buf.remaining() < 1 {
-            return Err(PacketDecodeError::InvalidData(
-                "VarLong truncated".into(),
-            ));
+            return Err(PacketDecodeError::InvalidData("VarLong truncated".into()));
         }
         let byte = buf.get_u8();
         value |= ((byte & 0x7F) as i64) << shift;
@@ -105,9 +102,7 @@ fn read_varlong(buf: &mut Bytes) -> Result<i64, PacketDecodeError> {
         }
         shift += 7;
         if shift >= 70 {
-            return Err(PacketDecodeError::InvalidData(
-                "VarLong too long".into(),
-            ));
+            return Err(PacketDecodeError::InvalidData("VarLong too long".into()));
         }
     }
 }
@@ -142,9 +137,7 @@ mod tests {
             }],
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundSectionBlocksUpdatePacket::decode(encoded.freeze())
-                .unwrap();
+        let decoded = ClientboundSectionBlocksUpdatePacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.section_pos, pkt.section_pos);
         assert_eq!(decoded.updates.len(), 1);
         assert_eq!(decoded.updates[0].local_x, 5);
@@ -179,9 +172,7 @@ mod tests {
             ],
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundSectionBlocksUpdatePacket::decode(encoded.freeze())
-                .unwrap();
+        let decoded = ClientboundSectionBlocksUpdatePacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.updates.len(), 3);
         assert_eq!(decoded.updates[1].local_x, 15);
         assert_eq!(decoded.updates[1].block_state, 29872);
@@ -194,9 +185,7 @@ mod tests {
             updates: vec![],
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundSectionBlocksUpdatePacket::decode(encoded.freeze())
-                .unwrap();
+        let decoded = ClientboundSectionBlocksUpdatePacket::decode(encoded.freeze()).unwrap();
         assert!(decoded.updates.is_empty());
     }
 }

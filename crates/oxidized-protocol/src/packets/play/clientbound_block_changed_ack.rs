@@ -44,8 +44,7 @@ mod tests {
     fn test_roundtrip() {
         let pkt = ClientboundBlockChangedAckPacket { sequence: 42 };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundBlockChangedAckPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundBlockChangedAckPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.sequence, 42);
     }
 
@@ -53,8 +52,7 @@ mod tests {
     fn test_zero_sequence() {
         let pkt = ClientboundBlockChangedAckPacket { sequence: 0 };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundBlockChangedAckPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundBlockChangedAckPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded, pkt);
     }
 }

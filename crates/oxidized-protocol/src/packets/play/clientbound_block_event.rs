@@ -72,8 +72,7 @@ mod tests {
             block_type_id: 100,
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundBlockEventPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundBlockEventPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.pos, pkt.pos);
         assert_eq!(decoded.action_type, 1);
         assert_eq!(decoded.action_param, 2);
