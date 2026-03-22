@@ -50,11 +50,11 @@ pub mod clientbound_ticking_state;
 pub mod clientbound_ticking_step;
 pub mod serverbound_accept_teleportation;
 pub mod serverbound_chat;
-pub mod serverbound_client_information;
 pub mod serverbound_chat_ack;
 pub mod serverbound_chat_command;
 pub mod serverbound_chat_command_signed;
 pub mod serverbound_chunk_batch_received;
+pub mod serverbound_client_information;
 pub mod serverbound_command_suggestion;
 pub mod serverbound_keep_alive;
 pub mod serverbound_move_player;
@@ -72,7 +72,7 @@ pub mod serverbound_use_item_on;
 
 pub use clientbound_add_entity::ClientboundAddEntityPacket;
 pub use clientbound_animate::{
-    ClientboundAnimatePacket, CRITICAL_HIT, MAGIC_CRITICAL_HIT, SWING_MAIN_HAND, SWING_OFF_HAND,
+    CRITICAL_HIT, ClientboundAnimatePacket, MAGIC_CRITICAL_HIT, SWING_MAIN_HAND, SWING_OFF_HAND,
     WAKE_UP,
 };
 pub use clientbound_block_changed_ack::ClientboundBlockChangedAckPacket;
