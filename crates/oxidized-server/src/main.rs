@@ -255,7 +255,7 @@ fn main() -> anyhow::Result<()> {
 
         // Spawn the console command reader on a dedicated OS thread.
         // Rustyline blocks on stdin, so it cannot run in a Tokio task.
-        let _console_thread = std::thread::Builder::new()
+        let console_thread = std::thread::Builder::new()
             .name("console".into())
             .spawn(move || {
                 app::console::run_console_loop(console_server_ctx);
@@ -300,6 +300,28 @@ fn main() -> anyhow::Result<()> {
                     SHUTDOWN_TIMEOUT.as_secs()
                 );
             },
+        }
+
+        // Join the console thread so it doesn't outlive the runtime.
+        // The thread should exit once shutdown is broadcast and the
+        // console loop detects it.
+        const CONSOLE_JOIN_TIMEOUT: Duration = Duration::from_secs(3);
+        let join_start = std::time::Instant::now();
+        loop {
+            if console_thread.is_finished() {
+                if let Err(e) = console_thread.join() {
+                    warn!("Console thread panicked: {e:?}");
+                }
+                break;
+            }
+            if join_start.elapsed() > CONSOLE_JOIN_TIMEOUT {
+                warn!(
+                    "Console thread did not exit within {}s",
+                    CONSOLE_JOIN_TIMEOUT.as_secs()
+                );
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
         }
 
         // --- Plugin shutdown hook ---

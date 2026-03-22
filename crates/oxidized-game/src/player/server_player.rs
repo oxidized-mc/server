@@ -115,6 +115,10 @@ impl ServerPlayer {
     /// Creates a new player with the given entity ID, profile, dimension, and game mode.
     ///
     /// The entity ID should be obtained from [`PlayerList::next_entity_id`].
+    ///
+    /// Only 4 required parameters — a builder is not needed. If the
+    /// constructor grows beyond 5 parameters, introduce a
+    /// `ServerPlayerBuilder` at that point.
     pub fn new(
         entity_id: i32,
         profile: GameProfile,

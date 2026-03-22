@@ -62,14 +62,9 @@ fn difficulty_fn(
             ));
             return Ok(0);
         }
-        // TODO: Actually change the difficulty
-        ctx.source.send_success(
-            &Component::translatable(
-                "commands.difficulty.success",
-                vec![Component::translatable(difficulty_key(level), vec![])],
-            ),
-            true,
-        );
-        Ok(level)
+        // TODO: Actually change the difficulty — requires wrapping
+        // `PrimaryLevelData` in a `RwLock` and broadcasting
+        // `ClientboundChangeDifficultyPacket` to all clients.
+        Err(CommandError::NotImplemented("difficulty set".into()))
     }
 }

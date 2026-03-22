@@ -87,10 +87,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ClientboundEntityEventPacket as Packet>::PACKET_ID,
-            0x22
-        );
+        assert_eq!(<ClientboundEntityEventPacket as Packet>::PACKET_ID, 0x22);
     }
 
     #[test]

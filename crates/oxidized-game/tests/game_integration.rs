@@ -22,8 +22,8 @@ use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
     ClientboundChangeDifficultyPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
     ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
-    ClientboundSetChunkCacheCenterPacket,
-    ClientboundSetHeldSlotPacket, ClientboundSetSimulationDistancePacket,
+    ClientboundSetChunkCacheCenterPacket, ClientboundSetHeldSlotPacket,
+    ClientboundSetSimulationDistancePacket,
 };
 use oxidized_protocol::types::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;

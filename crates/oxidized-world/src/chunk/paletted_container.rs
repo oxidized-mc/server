@@ -570,7 +570,7 @@ impl PalettedContainer {
                 // Uses a HashMap for O(1) dedup instead of O(n) linear scan.
                 let size = self.strategy.size();
                 let mut seen = Vec::new();
-                let mut seen_map = std::collections::HashMap::<u32, usize>::new();
+                let mut seen_map = ahash::AHashMap::<u32, usize>::new();
                 let mut indices = Vec::with_capacity(size);
                 for i in 0..size {
                     #[allow(clippy::cast_possible_truncation)]
@@ -910,6 +910,168 @@ mod tests {
             let y = ((i / 16) % 16) as usize;
             let z = (i / 256) as usize;
             assert_eq!(c2.get(x, y, z).unwrap(), i + 1);
+        }
+    }
+
+    // ── Property-based tests ────────────────────────────────────────
+
+    mod proptests {
+        use super::PalettedContainer;
+        use crate::chunk::paletted_container::Strategy as PaletteStrategy;
+        use proptest::prelude::*;
+
+        /// Generate a vec of (x, y, z, value) entries for BlockStates (16³).
+        fn block_entries(
+            max_len: usize,
+        ) -> impl proptest::strategy::Strategy<Value = Vec<(usize, usize, usize, u32)>> {
+            proptest::collection::vec(
+                (0..16_usize, 0..16_usize, 0..16_usize, 1..500_u32),
+                1..=max_len,
+            )
+        }
+
+        /// Generate a vec of (x, y, z, value) entries for Biomes (4³).
+        fn biome_entries(
+            max_len: usize,
+        ) -> impl proptest::strategy::Strategy<Value = Vec<(usize, usize, usize, u32)>> {
+            proptest::collection::vec(
+                (0..4_usize, 0..4_usize, 0..4_usize, 1..100_u32),
+                1..=max_len,
+            )
+        }
+
+        proptest! {
+            #![proptest_config(ProptestConfig::with_cases(64))]
+
+            #[test]
+            fn proptest_blockstates_set_get_roundtrip(entries in block_entries(64)) {
+                let mut c = PalettedContainer::empty(PaletteStrategy::BlockStates);
+                // Insert all values, keeping track of the last value at each position
+                let mut expected = std::collections::HashMap::<(usize, usize, usize), u32>::new();
+                for &(x, y, z, val) in &entries {
+                    c.set(x, y, z, val).unwrap();
+                    expected.insert((x, y, z), val);
+                }
+                // Verify every written position returns the correct value
+                for (&(x, y, z), &val) in &expected {
+                    prop_assert_eq!(c.get(x, y, z).unwrap(), val);
+                }
+            }
+
+            #[test]
+            fn proptest_biomes_set_get_roundtrip(entries in biome_entries(32)) {
+                let mut c = PalettedContainer::empty(PaletteStrategy::Biomes);
+                let mut expected = std::collections::HashMap::<(usize, usize, usize), u32>::new();
+                for &(x, y, z, val) in &entries {
+                    c.set(x, y, z, val).unwrap();
+                    expected.insert((x, y, z), val);
+                }
+                for (&(x, y, z), &val) in &expected {
+                    prop_assert_eq!(c.get(x, y, z).unwrap(), val);
+                }
+            }
+
+            #[test]
+            fn proptest_blockstates_palette_upgrade(
+                // Use up to 300 distinct values to force Single → Linear → HashMap → Global
+                num_unique in 1..300_u32,
+            ) {
+                let mut c = PalettedContainer::empty(PaletteStrategy::BlockStates);
+                // Insert num_unique distinct values at distinct positions
+                let count = num_unique.min(4096) as usize;
+                for i in 0..count {
+                    let x = i % 16;
+                    let y = (i / 16) % 16;
+                    let z = i / 256;
+                    c.set(x, y, z, (i as u32) + 1).unwrap();
+                }
+                // Verify all inserted values read back correctly
+                for i in 0..count {
+                    let x = i % 16;
+                    let y = (i / 16) % 16;
+                    let z = i / 256;
+                    prop_assert_eq!(c.get(x, y, z).unwrap(), (i as u32) + 1);
+                }
+                // Verify unset positions are still 0
+                if count < 4096 {
+                    let x = count % 16;
+                    let y = (count / 16) % 16;
+                    let z = count / 256;
+                    prop_assert_eq!(c.get(x, y, z).unwrap(), 0);
+                }
+            }
+
+            #[test]
+            fn proptest_nbt_roundtrip_blockstates(entries in block_entries(64)) {
+                let mut c = PalettedContainer::empty(PaletteStrategy::BlockStates);
+                let mut expected = std::collections::HashMap::<(usize, usize, usize), u32>::new();
+                for &(x, y, z, val) in &entries {
+                    c.set(x, y, z, val).unwrap();
+                    expected.insert((x, y, z), val);
+                }
+
+                let (palette, data) = c.to_nbt_data();
+                let c2 = PalettedContainer::from_nbt_data(
+                    PaletteStrategy::BlockStates,
+                    palette,
+                    &data,
+                ).unwrap();
+
+                for (&(x, y, z), &val) in &expected {
+                    prop_assert_eq!(c2.get(x, y, z).unwrap(), val);
+                }
+            }
+
+            #[test]
+            fn proptest_nbt_roundtrip_global_palette(
+                num_unique in 257..400_u32,
+            ) {
+                let mut c = PalettedContainer::empty(PaletteStrategy::BlockStates);
+                let count = num_unique as usize;
+                for i in 0..count {
+                    let x = i % 16;
+                    let y = (i / 16) % 16;
+                    let z = i / 256;
+                    c.set(x, y, z, (i as u32) + 1).unwrap();
+                }
+                // Verify we're in Global palette territory
+                prop_assert_eq!(c.bits_per_entry(), 15);
+
+                let (palette, data) = c.to_nbt_data();
+                let c2 = PalettedContainer::from_nbt_data(
+                    PaletteStrategy::BlockStates,
+                    palette,
+                    &data,
+                ).unwrap();
+
+                for i in 0..count {
+                    let x = i % 16;
+                    let y = (i / 16) % 16;
+                    let z = i / 256;
+                    prop_assert_eq!(c2.get(x, y, z).unwrap(), (i as u32) + 1);
+                }
+            }
+
+            #[test]
+            fn proptest_wire_roundtrip_blockstates(entries in block_entries(64)) {
+                let mut c = PalettedContainer::empty(PaletteStrategy::BlockStates);
+                let mut expected = std::collections::HashMap::<(usize, usize, usize), u32>::new();
+                for &(x, y, z, val) in &entries {
+                    c.set(x, y, z, val).unwrap();
+                    expected.insert((x, y, z), val);
+                }
+
+                let bytes = c.write_to_bytes();
+                let mut cursor = bytes.as_slice();
+                let c2 = PalettedContainer::read_from_bytes(
+                    PaletteStrategy::BlockStates,
+                    &mut cursor,
+                ).unwrap();
+
+                for (&(x, y, z), &val) in &expected {
+                    prop_assert_eq!(c2.get(x, y, z).unwrap(), val);
+                }
+            }
         }
     }
 }

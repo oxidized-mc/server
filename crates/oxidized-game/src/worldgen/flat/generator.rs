@@ -47,7 +47,13 @@ fn resolve_biome_id(biome_key: &str) -> u32 {
         "minecraft:the_void" => 57,
         "minecraft:snowy_plains" => 46,
         "minecraft:mushroom_fields" => 33,
-        _ => PLAINS_BIOME_ID,
+        _ => {
+            tracing::warn!(
+                biome_key,
+                "unknown biome key, falling back to minecraft:plains"
+            );
+            PLAINS_BIOME_ID
+        },
     }
 }
 

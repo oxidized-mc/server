@@ -46,7 +46,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
         exclude_entity: None,
         target_entity: None,
     };
-    let _ = ctx.server_ctx.broadcast_tx.send(broadcast_msg);
+    ctx.server_ctx.broadcast(broadcast_msg);
     info!(
         peer = %ctx.addr,
         player = %ctx.player_name,

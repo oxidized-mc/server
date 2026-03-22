@@ -143,6 +143,18 @@ impl ChunkPos {
     }
 }
 
+impl From<(i32, i32)> for ChunkPos {
+    fn from((x, z): (i32, i32)) -> Self {
+        Self { x, z }
+    }
+}
+
+impl From<ChunkPos> for (i32, i32) {
+    fn from(pos: ChunkPos) -> Self {
+        (pos.x, pos.z)
+    }
+}
+
 impl fmt::Display for ChunkPos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}, {}]", self.x, self.z)
@@ -215,5 +227,105 @@ mod tests {
     #[test]
     fn test_display() {
         assert_eq!(format!("{}", ChunkPos::new(3, -7)), "[3, -7]");
+    }
+
+    // --- Tuple conversion tests ---
+
+    #[test]
+    fn test_from_tuple() {
+        let pos: ChunkPos = (5, -3).into();
+        assert_eq!(pos, ChunkPos::new(5, -3));
+    }
+
+    #[test]
+    fn test_into_tuple() {
+        let tuple: (i32, i32) = ChunkPos::new(5, -3).into();
+        assert_eq!(tuple, (5, -3));
+    }
+
+    #[test]
+    fn test_tuple_roundtrip() {
+        let original = ChunkPos::new(-42, 99);
+        let tuple: (i32, i32) = original.into();
+        let back: ChunkPos = tuple.into();
+        assert_eq!(back, original);
+    }
+
+    // --- Boundary tests ---
+
+    #[test]
+    fn test_from_block_coords_i32_min() {
+        let pos = ChunkPos::from_block_coords(i32::MIN, i32::MIN);
+        assert_eq!(pos.x, i32::MIN >> 4);
+        assert_eq!(pos.z, i32::MIN >> 4);
+    }
+
+    #[test]
+    fn test_from_block_coords_i32_max() {
+        let pos = ChunkPos::from_block_coords(i32::MAX, i32::MAX);
+        assert_eq!(pos.x, i32::MAX >> 4);
+        assert_eq!(pos.z, i32::MAX >> 4);
+    }
+
+    #[test]
+    fn test_as_long_from_long_roundtrip_extremes() {
+        let extremes = [
+            (i32::MIN, i32::MIN),
+            (i32::MAX, i32::MAX),
+            (i32::MIN, i32::MAX),
+            (i32::MAX, i32::MIN),
+            (0, i32::MIN),
+            (0, i32::MAX),
+            (i32::MIN, 0),
+            (i32::MAX, 0),
+        ];
+        for (x, z) in extremes {
+            let pos = ChunkPos::new(x, z);
+            assert_eq!(
+                ChunkPos::from_long(pos.as_long()),
+                pos,
+                "roundtrip failed for ({x}, {z})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_chessboard_distance_extremes() {
+        let min_pos = ChunkPos::new(i32::MIN, i32::MIN);
+        let max_pos = ChunkPos::new(i32::MAX, i32::MAX);
+        let expected = i64::from(i32::MAX) - i64::from(i32::MIN);
+        assert_eq!(min_pos.chessboard_distance(&max_pos), expected);
+        assert_eq!(max_pos.chessboard_distance(&min_pos), expected);
+    }
+
+    #[test]
+    fn test_chessboard_distance_opposite_corners() {
+        let a = ChunkPos::new(i32::MIN, i32::MAX);
+        let b = ChunkPos::new(i32::MAX, i32::MIN);
+        let expected = i64::from(i32::MAX) - i64::from(i32::MIN);
+        assert_eq!(a.chessboard_distance(&b), expected);
+    }
+
+    // --- Property-based tests ---
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn proptest_as_long_from_long_roundtrip(x: i32, z: i32) {
+                let pos = ChunkPos::new(x, z);
+                prop_assert_eq!(ChunkPos::from_long(pos.as_long()), pos);
+            }
+
+            #[test]
+            fn proptest_tuple_roundtrip(x: i32, z: i32) {
+                let pos = ChunkPos::new(x, z);
+                let tuple: (i32, i32) = pos.into();
+                let back: ChunkPos = tuple.into();
+                prop_assert_eq!(back, pos);
+            }
+        }
     }
 }

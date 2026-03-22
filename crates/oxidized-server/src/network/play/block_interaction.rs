@@ -183,10 +183,7 @@ pub async fn handle_use_item_on(
         pkt.hit_result.cursor_y,
         pkt.hit_result.cursor_z,
     );
-    if !((-1.0..=2.0).contains(&cx)
-        && (-1.0..=2.0).contains(&cy)
-        && (-1.0..=2.0).contains(&cz))
-    {
+    if !((-1.0..=2.0).contains(&cx) && (-1.0..=2.0).contains(&cy) && (-1.0..=2.0).contains(&cz)) {
         debug!(
             peer = %play_ctx.addr,
             name = %play_ctx.player_name,
@@ -505,7 +502,7 @@ fn broadcast_block_update(
 ) {
     let pkt = ClientboundBlockUpdatePacket { pos, block_state };
     let data = pkt.encode();
-    let _ = ctx.broadcast_tx.send(BroadcastMessage {
+    ctx.broadcast(BroadcastMessage {
         packet_id: ClientboundBlockUpdatePacket::PACKET_ID,
         data: data.freeze(),
         exclude_entity,

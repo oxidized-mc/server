@@ -2,6 +2,18 @@
 //!
 //! Mirrors the vanilla Java implementation with idiomatic Rust types.
 //! All structures support network serialization matching the Minecraft wire format.
+//!
+//! # Coordinate System
+//!
+//! Chunk sections use Minecraft's coordinate system:
+//! - **X**: 0–15 (west to east)
+//! - **Y**: 0–15 (within section; world Y = `min_y + section_idx * 16 + local_y`)
+//! - **Z**: 0–15 (north to south)
+//! - **Index**: `(y * 16 + z) * 16 + x`
+//!
+//! Block-state containers (`PalettedContainer<BlockStates>`) use 16³ = 4096 entries.
+//! Biome containers (`PalettedContainer<Biomes>`) use 4³ = 64 entries (one biome per
+//! 4×4×4 sub-section).
 
 pub mod bit_storage;
 pub mod data_layer;

@@ -132,13 +132,7 @@ fn read_component_patch(buf: &mut Bytes) -> Result<ComponentPatchData, PacketDec
     // Without a registry we cannot determine the byte length of each entry,
     // so reject packets with components rather than desync the stream.
     if added_count != 0 || removed_count != 0 {
-        return Err(PacketDecodeError::Io(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            format!(
-                "data component patch with {added_count} added / {removed_count} removed \
-                 not yet supported (Phase 21)"
-            ),
-        )));
+        return Err(PacketDecodeError::ComponentDataNotSupported);
     }
 
     Ok(ComponentPatchData {

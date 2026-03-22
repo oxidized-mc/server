@@ -6,6 +6,13 @@
 
 use oxidized_protocol::types::Vec3;
 
+/// Normalizes an angle to the range `[0, 360)`.
+///
+/// Handles negative values correctly — e.g. `−10°` → `350°`.
+fn normalize_angle(angle: f32) -> f32 {
+    ((angle % 360.0) + 360.0) % 360.0
+}
+
 /// Maximum distance a player may travel in a single tick (blocks).
 ///
 /// Exceeding this triggers a server-side position correction. Vanilla
@@ -94,7 +101,7 @@ pub fn validate_movement(
             accepted: false,
             needs_correction: true,
             new_pos: current_pos,
-            new_yaw: current_yaw % 360.0,
+            new_yaw: normalize_angle(current_yaw),
             new_pitch: current_pitch.clamp(-90.0, 90.0),
         };
     }
@@ -120,7 +127,7 @@ pub fn validate_movement(
         accepted: !needs_correction,
         needs_correction,
         new_pos,
-        new_yaw: resolved_yaw % 360.0,
+        new_yaw: normalize_angle(resolved_yaw),
         new_pitch: resolved_pitch,
     }
 }
@@ -433,5 +440,34 @@ mod tests {
         assert!(result.needs_correction);
         // Should return current (zero) position, not the proposed one
         assert!((result.new_pos.x).abs() < f64::EPSILON);
+    }
+
+    // ── normalize_angle tests ──────────────────────────────────────
+
+    #[test]
+    fn test_normalize_angle_positive() {
+        assert!((normalize_angle(90.0) - 90.0).abs() < f32::EPSILON);
+        assert!((normalize_angle(0.0) - 0.0).abs() < f32::EPSILON);
+        assert!((normalize_angle(359.9) - 359.9).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_normalize_angle_over_360() {
+        assert!((normalize_angle(370.0) - 10.0).abs() < f32::EPSILON);
+        assert!((normalize_angle(720.0) - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_normalize_angle_negative() {
+        assert!((normalize_angle(-10.0) - 350.0).abs() < f32::EPSILON);
+        assert!((normalize_angle(-90.0) - 270.0).abs() < f32::EPSILON);
+        assert!((normalize_angle(-360.0) - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_negative_yaw_normalized() {
+        let result = validate_movement(Vec3::ZERO, 0.0, 0.0, None, None, None, Some(-10.0), None);
+        assert!(result.accepted);
+        assert!((result.new_yaw - 350.0).abs() < f32::EPSILON);
     }
 }

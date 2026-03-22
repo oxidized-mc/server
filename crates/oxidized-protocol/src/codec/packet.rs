@@ -42,6 +42,10 @@ pub enum PacketDecodeError {
     #[error(transparent)]
     Nbt(#[from] oxidized_nbt::NbtError),
 
+    /// Data component patch decoding is not yet implemented.
+    #[error("data component patch not yet supported (Phase 29+)")]
+    ComponentDataNotSupported,
+
     /// Packet-specific decode failure with a descriptive message.
     #[error("{0}")]
     InvalidData(String),

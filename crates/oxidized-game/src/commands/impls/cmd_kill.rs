@@ -3,13 +3,12 @@
 //! TODO: Actually killing entities requires health/damage system and death
 //! event handling. Needs `ServerHandle::kill_entity()` or similar.
 
-use crate::commands::argument_access::get_entities;
+use crate::commands::CommandError;
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
 
 /// Registers the `/kill` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -18,16 +17,10 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             .description("Kills entities")
             .requires(|s: &CommandSourceStack| s.has_permission(2))
             // /kill — kill self
-            .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                // TODO: Actually kill the source player
-                ctx.source.send_success(
-                    &Component::translatable(
-                        "commands.kill.success.single",
-                        vec![Component::text(&ctx.source.display_name)],
-                    ),
-                    true,
-                );
-                Ok(1)
+            .executes(|_ctx: &CommandContext<CommandSourceStack>| {
+                // TODO: Actually kill the source player — requires
+                // health/damage system and death event handling.
+                Err(CommandError::NotImplemented("kill".into()))
             })
             // /kill <targets>
             .then(
@@ -38,19 +31,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         player_only: false,
                     },
                 )
-                .executes(|ctx: &CommandContext<CommandSourceStack>| {
-                    let targets = get_entities(ctx, "targets")?;
+                .executes(|_ctx: &CommandContext<CommandSourceStack>| {
                     // TODO: Resolve entity selector and kill matching entities
-                    for target in &targets {
-                        ctx.source.send_success(
-                            &Component::translatable(
-                                "commands.kill.success.single",
-                                vec![Component::text(&target.name)],
-                            ),
-                            true,
-                        );
-                    }
-                    Ok(targets.len() as i32)
+                    Err(CommandError::NotImplemented("kill".into()))
                 }),
             ),
     );
