@@ -369,17 +369,16 @@ impl PalettedContainer {
 
     /// Serializes this container to bytes matching the Minecraft wire format.
     ///
-    /// Format: `[u8 bits_per_entry] [palette data] [VarInt num_longs] [longs...]`
+    /// Format: `[u8 bits_per_entry] [palette data] [longs...]`
     #[must_use]
     pub fn write_to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         match &self.data {
             PaletteData::Single(palette) => {
                 buf.push(0); // 0 bits per entry
-                // Palette: single VarInt
+                // Palette: single VarInt value
                 write_varint(&mut buf, palette.value().unwrap_or(0) as i32);
-                // Data: 0 longs
-                write_varint(&mut buf, 0);
+                // No data longs for single-value palette
             },
             PaletteData::Linear(palette, storage) => {
                 buf.push(storage.bits());
@@ -422,9 +421,8 @@ impl PalettedContainer {
         let size = strategy.size();
 
         if bits_per_entry == 0 {
-            // Single value
+            // Single value — no data longs on wire
             let value = read_varint(data)? as u32;
-            let _num_longs = read_varint(data)?; // Should be 0
             Ok(Self {
                 strategy,
                 data: PaletteData::Single(SingleValuePalette::with_value(value)),
