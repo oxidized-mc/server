@@ -101,11 +101,16 @@ fn build_template(config: &FlatWorldConfig) -> ChunkTemplate {
         }
     }
 
-    // Build heightmaps.
+    // Build heightmaps (both client and worldgen types).
     let surface_height = total_height as u32;
-    let mut heightmaps = Vec::with_capacity(3);
-    for htype in HeightmapType::CLIENT_TYPES {
-        if let Ok(mut hm) = Heightmap::new(*htype, OVERWORLD_HEIGHT) {
+    let all_types: Vec<HeightmapType> = HeightmapType::CLIENT_TYPES
+        .iter()
+        .chain(HeightmapType::WORLDGEN_TYPES.iter())
+        .copied()
+        .collect();
+    let mut heightmaps = Vec::with_capacity(all_types.len());
+    for htype in all_types {
+        if let Ok(mut hm) = Heightmap::new(htype, OVERWORLD_HEIGHT) {
             for x in 0..16usize {
                 for z in 0..16usize {
                     let _ = hm.set(x, z, surface_height);
@@ -117,7 +122,7 @@ fn build_template(config: &FlatWorldConfig) -> ChunkTemplate {
 
     // Build sky light.
     let mut sky_light = vec![None; OVERWORLD_SECTION_COUNT + 2];
-    let surface_section = total_height / 16;
+    let surface_section = total_height.div_ceil(16);
     // Sections fully above the surface get full brightness.
     for slot in &mut sky_light[(surface_section + 2)..] {
         *slot = Some(DataLayer::filled(15));

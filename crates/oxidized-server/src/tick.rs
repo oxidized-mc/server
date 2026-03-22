@@ -399,6 +399,7 @@ mod tests {
             chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
                 oxidized_game::worldgen::flat::FlatWorldConfig::default(),
             )),
+            op_permission_level: 4,
         })
     }
 

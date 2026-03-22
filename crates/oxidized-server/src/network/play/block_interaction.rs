@@ -65,6 +65,13 @@ pub async fn handle_player_action(
         "PlayerAction",
     )?;
 
+    // Spectators cannot interact with blocks.
+    if play_ctx.player.read().game_mode == GameMode::Spectator {
+        resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
     // Validate reach distance for destroy actions.
     if matches!(
         pkt.action,
@@ -164,6 +171,34 @@ pub async fn handle_use_item_on(
         "UseItemOn",
     )?;
 
+    // Spectators cannot place or interact with blocks.
+    if play_ctx.player.read().game_mode == GameMode::Spectator {
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
+    // Validate cursor position — vanilla clamps to [-1, 2] per axis.
+    let (cx, cy, cz) = (
+        pkt.hit_result.cursor_x,
+        pkt.hit_result.cursor_y,
+        pkt.hit_result.cursor_z,
+    );
+    if !((-1.0..=2.0).contains(&cx)
+        && (-1.0..=2.0).contains(&cy)
+        && (-1.0..=2.0).contains(&cz))
+    {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            cursor_x = cx,
+            cursor_y = cy,
+            cursor_z = cz,
+            "UseItemOn rejected: cursor out of range"
+        );
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
     // Validate reach distance.
     if !is_within_reach(play_ctx, pkt.hit_result.pos) {
         debug!(
@@ -215,6 +250,10 @@ pub async fn handle_use_item_on(
             pos = ?place_pos,
             "Block place failed: chunk not loaded"
         );
+        // Re-sync both the placement target and the clicked face so the
+        // client doesn't display a phantom block.
+        resync_block(play_ctx, place_pos, None).await?;
+        resync_block(play_ctx, pkt.hit_result.pos, Some(pkt.hit_result.direction)).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
     }
@@ -229,16 +268,30 @@ pub async fn handle_use_item_on(
 
     // Decrement item count in survival/adventure modes.
     if game_mode != GameMode::Creative {
-        let mut player = play_ctx.player.write();
-        let slot = player.inventory.selected_slot as usize;
-        let stack = player.inventory.get_mut(slot);
-        stack.count -= 1;
-        if stack.count <= 0 {
-            player.inventory.set(
-                slot,
-                oxidized_game::inventory::item_stack::ItemStack::empty(),
-            );
-        }
+        let (slot_idx, updated) = {
+            let mut player = play_ctx.player.write();
+            let slot = player.inventory.selected_slot as usize;
+            let stack = player.inventory.get_mut(slot);
+            stack.count -= 1;
+            if stack.count <= 0 {
+                player.inventory.set(
+                    slot,
+                    oxidized_game::inventory::item_stack::ItemStack::empty(),
+                );
+            }
+            (slot, player.inventory.get(slot).clone())
+        };
+        // Sync the updated slot back to the client to prevent desync.
+        let slot_data = if updated.is_empty() {
+            None
+        } else {
+            Some(super::inventory::item_stack_to_slot_data(&updated))
+        };
+        let sync_pkt = ClientboundSetPlayerInventoryPacket {
+            slot: slot_idx as i32,
+            contents: slot_data,
+        };
+        play_ctx.conn.send_packet(&sync_pkt).await?;
     }
 
     // Broadcast block change to all players except the acting player.
@@ -661,6 +714,7 @@ mod tests {
             chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
                 oxidized_game::worldgen::flat::FlatWorldConfig::default(),
             )),
+            op_permission_level: 4,
         })
     }
 }

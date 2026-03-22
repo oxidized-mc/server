@@ -34,7 +34,7 @@ use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundAddEntityPacket, ClientboundChangeDifficultyPacket, ClientboundGameEventPacket,
+    ClientboundAddEntityPacket, ClientboundGameEventPacket,
     ClientboundInitializeBorderPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
     ClientboundRemoveEntitiesPacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
@@ -99,7 +99,7 @@ fn is_movement_packet(id: i32) -> bool {
 /// Handles the PLAY-state login sequence for a newly joined player.
 ///
 /// Creates a [`ServerPlayer`], loads saved player data (if available),
-/// builds the 10-packet login sequence via [`build_login_sequence`], and
+/// builds the 11-packet login sequence via [`build_login_sequence`], and
 /// sends them to the client. Then enters the main play loop to process
 /// incoming PLAY packets.
 ///
@@ -191,16 +191,6 @@ pub async fn handle_play_entry(
         conn.send_raw(pkt.id, &pkt.body).await?;
     }
     conn.flush().await?;
-
-    // Send difficulty to the client.
-    let difficulty_pkt = {
-        let ld = server_ctx.level_data.read();
-        ClientboundChangeDifficultyPacket {
-            difficulty: ld.difficulty.clamp(0, 3) as u8,
-            locked: false,
-        }
-    };
-    conn.send_packet(&difficulty_pkt).await?;
 
     // Send weather state if it is currently raining.
     let (is_raining, is_thundering) = {
@@ -441,6 +431,10 @@ pub async fn handle_play_entry(
     let mut keepalive_challenge: i64 = 0;
     let mut keepalive_sent_at = Instant::now();
 
+    // Per-tick timer for chat rate limiter decay (50 ms = 1 game tick).
+    let mut tick_timer = tokio::time::interval(Duration::from_millis(50));
+    tick_timer.tick().await;
+
     // Build the play context for handler dispatch.
     let mut play_ctx = PlayContext {
         conn,
@@ -477,6 +471,10 @@ pub async fn handle_play_entry(
                         break;
                     }
                 }
+            },
+            // Per-tick decay for chat rate limiter.
+            _ = tick_timer.tick() => {
+                play_ctx.rate_limiter.tick();
             },
             // Receive broadcast packets from other systems (chat, block updates, etc.).
             broadcast_result = broadcast_rx.recv() => {
@@ -519,10 +517,28 @@ pub async fn handle_play_entry(
                     Ok(pkt) => {
                         match pkt.id {
                             ServerboundKeepAlivePacket::PACKET_ID => {
-                                handle_keepalive(
+                                if let Some((ka_uuid, ka_latency)) = handle_keepalive(
                                     pkt.data, addr, &player_name,
                                     &mut keepalive_pending, keepalive_challenge, &keepalive_sent_at,
-                                );
+                                    &player_arc,
+                                ) {
+                                    // Broadcast latency update to all players' tab lists.
+                                    let latency_update = ClientboundPlayerInfoUpdatePacket {
+                                        actions: PlayerInfoActions(PlayerInfoActions::UPDATE_LATENCY),
+                                        entries: vec![PlayerInfoEntry {
+                                            uuid: ka_uuid,
+                                            latency: ka_latency,
+                                            ..Default::default()
+                                        }],
+                                    };
+                                    let encoded = latency_update.encode();
+                                    let _ = server_ctx.broadcast_tx.send(BroadcastMessage {
+                                        packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
+                                        data: encoded.into(),
+                                        exclude_entity: None,
+                                        target_entity: None,
+                                    });
+                                }
                             },
                             id if is_movement_packet(id) => {
                                 movement::handle_movement(&mut play_ctx, id, pkt.data).await?;
@@ -555,7 +571,7 @@ pub async fn handle_play_entry(
                                     pkt.data,
                                     addr, &player_name, "ChatCommand",
                                 ) {
-                                    if !play_ctx.rate_limiter.try_acquire(std::time::Instant::now()) {
+                                    if !play_ctx.rate_limiter.try_acquire() {
                                         warn!(peer = %addr, name = %player_name, "Command rate-limited");
                                     } else {
                                         let (pos, rot) = {
@@ -568,7 +584,9 @@ pub async fn handle_play_entry(
                                             &player_name,
                                             uuid,
                                             pos, rot,
-                                            4,
+                                            // TODO: implement per-player ops (ops.json) instead of
+                                            // giving all players the configured op level.
+                                            server_ctx.op_permission_level as u32,
                                             server_ctx,
                                         ).await;
                                     }
@@ -579,7 +597,7 @@ pub async fn handle_play_entry(
                                     pkt.data,
                                     addr, &player_name, "ChatCommandSigned",
                                 ) {
-                                    if !play_ctx.rate_limiter.try_acquire(std::time::Instant::now()) {
+                                    if !play_ctx.rate_limiter.try_acquire() {
                                         warn!(peer = %addr, name = %player_name, "Command rate-limited (signed)");
                                     } else {
                                         let (pos, rot) = {
@@ -592,7 +610,7 @@ pub async fn handle_play_entry(
                                             &player_name,
                                             uuid,
                                             pos, rot,
-                                            4,
+                                            server_ctx.op_permission_level as u32,
                                             server_ctx,
                                         ).await;
                                     }
@@ -688,6 +706,12 @@ pub async fn handle_play_entry(
 }
 
 /// Handles a keepalive response from the client.
+///
+/// Computes latency as an exponential moving average:
+/// `latency = (old * 3 + sample) / 4` (matching vanilla).
+///
+/// Returns `Some((uuid, latency))` when the response is valid so the caller can
+/// broadcast a latency update to all players.
 fn handle_keepalive(
     data: bytes::Bytes,
     addr: SocketAddr,
@@ -695,24 +719,30 @@ fn handle_keepalive(
     keepalive_pending: &mut bool,
     keepalive_challenge: i64,
     keepalive_sent_at: &Instant,
-) {
-    if let Ok(ka) =
-        decode_packet::<ServerboundKeepAlivePacket>(data, addr, player_name, "KeepAlive")
-    {
-        if *keepalive_pending && ka.id == keepalive_challenge {
-            *keepalive_pending = false;
-            let latency = keepalive_sent_at.elapsed().as_millis();
-            debug!(peer = %addr, name = %player_name, latency_ms = latency, "Keepalive response");
-        } else {
-            debug!(
-                peer = %addr,
-                name = %player_name,
-                expected = keepalive_challenge,
-                got = ka.id,
-                pending = *keepalive_pending,
-                "Unexpected keepalive response",
-            );
-        }
+    player: &Arc<RwLock<ServerPlayer>>,
+) -> Option<(uuid::Uuid, i32)> {
+    let ka =
+        decode_packet::<ServerboundKeepAlivePacket>(data, addr, player_name, "KeepAlive").ok()?;
+
+    if *keepalive_pending && ka.id == keepalive_challenge {
+        *keepalive_pending = false;
+        let sample = keepalive_sent_at.elapsed().as_millis() as i32;
+        let mut p = player.write();
+        p.latency = (p.latency * 3 + sample) / 4;
+        let latency = p.latency;
+        let uuid = p.uuid;
+        debug!(peer = %addr, name = %player_name, latency_ms = latency, "Keepalive response");
+        Some((uuid, latency))
+    } else {
+        debug!(
+            peer = %addr,
+            name = %player_name,
+            expected = keepalive_challenge,
+            got = ka.id,
+            pending = *keepalive_pending,
+            "Unexpected keepalive response",
+        );
+        None
     }
 }
 

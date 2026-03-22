@@ -2031,3 +2031,26 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 ### Test Count
 - Before audit: 1,923 tests
 - After audit: 1,936 tests (all passing)
+
+### 2026-07 — Vanilla Compliance Audit (Post-Phase-23)
+**Context:** Full codebase audit comparing all subsystems with vanilla 26.1-pre-3 reference.
+
+### Bugs Fixed
+1. **Login sequence**: Difficulty packet added as 2nd packet in sequence (was sent separately after). 11-packet sequence now.
+2. **Latency tracking**: ServerPlayer.latency field + EMA calculation `(old*3+sample)/4` in keepalive handler + latency broadcast via PlayerInfoUpdate
+3. **Chat rate limiter**: Rewritten from sliding-window (200/60s) to vanilla's TickThrottler (increment 20/message, decay 1/tick, threshold 200)
+4. **Permission level**: No longer hardcoded `4` — reads from `ServerContext.op_permission_level` (from server config)
+5. **Item sync after placement**: `ClientboundSetPlayerInventoryPacket` sent after decrementing item count
+6. **Command redirects**: Serializer now builds ptr→index map and resolves redirect_node in a fixup pass
+7. **Spectator block actions**: Spectators rejected from both PlayerAction and UseItemOn handlers
+8. **Cursor validation**: UseItemOn rejects cursor coords outside [-1,2] range
+9. **Failed placement resync**: Both placement target AND hit position are re-synced on failure
+10. **Biome name stub**: Replaced `"minecraft:biome_N"` with proper 65-entry static lookup table
+11. **WG heightmaps**: FlatChunkGenerator now generates both CLIENT_TYPES and WORLDGEN_TYPES heightmaps
+12. **Sky light indexing**: Fixed floor division to ceiling (`div_ceil`) for surface section index
+
+### Patterns Observed
+- **`parking_lot::RwLockWriteGuard` across `.await`**: Scoping lock guards in a block `{ let guard = x.write(); ... }` prevents Send issues
+- **`item_stack_to_slot_data` was private**: Made `pub(crate)` for cross-module inventory sync
+- **ServerContext grows often**: Now has `op_permission_level: i32` — always grep `ServerContext {` when adding fields (4 constructor sites)
+- **Tests reference packet indices**: When reordering the login sequence, ALL tests that index into `packets[N]` break. Always search integration tests too.

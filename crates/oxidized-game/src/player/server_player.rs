@@ -105,6 +105,10 @@ pub struct ServerPlayer {
     pub spawn_pos: BlockPos,
     /// Spawn yaw angle.
     pub spawn_angle: f32,
+
+    // -- Network state --
+    /// Smoothed round-trip latency in milliseconds (exponential moving average).
+    pub latency: i32,
 }
 
 impl ServerPlayer {
@@ -147,6 +151,7 @@ impl ServerPlayer {
             dimension,
             spawn_pos: BlockPos::new(0, 64, 0),
             spawn_angle: 0.0,
+            latency: 0,
         }
     }
 

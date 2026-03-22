@@ -191,17 +191,14 @@ impl ChunkSerializer {
 
     /// Resolves a biome ID to a registry name.
     ///
-    /// Currently uses a placeholder mapping since the biome registry is not
-    /// yet implemented. ID 0 = "minecraft:plains".
-    // TODO(phase-23): Replace with proper biome registry lookup once biome
-    // registry is implemented. Non-zero IDs currently produce synthetic names
-    // that vanilla will not recognize.
+    /// Uses the alphabetically-sorted vanilla biome registry (65 biomes).
+    /// IDs outside the valid range fall back to `"minecraft:plains"`.
     fn biome_name(&self, biome_id: u32) -> String {
-        // Placeholder: no biome registry yet
-        match biome_id {
-            0 => "minecraft:plains".to_owned(),
-            _ => format!("minecraft:biome_{biome_id}"),
-        }
+        BIOME_NAMES
+            .get(biome_id as usize)
+            .copied()
+            .unwrap_or("minecraft:plains")
+            .to_owned()
     }
 
     /// Serializes heightmaps for a chunk.
@@ -225,6 +222,76 @@ impl ChunkSerializer {
         nbt
     }
 }
+
+/// All 65 vanilla biome registry names, sorted alphabetically.
+/// Index = protocol ID (data-driven registries assign IDs in alphabetical order).
+static BIOME_NAMES: &[&str] = &[
+    "minecraft:badlands",
+    "minecraft:bamboo_jungle",
+    "minecraft:basalt_deltas",
+    "minecraft:beach",
+    "minecraft:birch_forest",
+    "minecraft:cherry_grove",
+    "minecraft:cold_ocean",
+    "minecraft:crimson_forest",
+    "minecraft:dark_forest",
+    "minecraft:deep_cold_ocean",
+    "minecraft:deep_dark",
+    "minecraft:deep_frozen_ocean",
+    "minecraft:deep_lukewarm_ocean",
+    "minecraft:deep_ocean",
+    "minecraft:desert",
+    "minecraft:dripstone_caves",
+    "minecraft:end_barrens",
+    "minecraft:end_highlands",
+    "minecraft:end_midlands",
+    "minecraft:eroded_badlands",
+    "minecraft:flower_forest",
+    "minecraft:forest",
+    "minecraft:frozen_ocean",
+    "minecraft:frozen_peaks",
+    "minecraft:frozen_river",
+    "minecraft:grove",
+    "minecraft:ice_spikes",
+    "minecraft:jagged_peaks",
+    "minecraft:jungle",
+    "minecraft:lukewarm_ocean",
+    "minecraft:lush_caves",
+    "minecraft:mangrove_swamp",
+    "minecraft:meadow",
+    "minecraft:mushroom_fields",
+    "minecraft:nether_wastes",
+    "minecraft:ocean",
+    "minecraft:old_growth_birch_forest",
+    "minecraft:old_growth_pine_taiga",
+    "minecraft:old_growth_spruce_taiga",
+    "minecraft:pale_garden",
+    "minecraft:plains",
+    "minecraft:river",
+    "minecraft:savanna",
+    "minecraft:savanna_plateau",
+    "minecraft:small_end_islands",
+    "minecraft:snowy_beach",
+    "minecraft:snowy_plains",
+    "minecraft:snowy_slopes",
+    "minecraft:snowy_taiga",
+    "minecraft:soul_sand_valley",
+    "minecraft:sparse_jungle",
+    "minecraft:stony_peaks",
+    "minecraft:stony_shore",
+    "minecraft:sunflower_plains",
+    "minecraft:swamp",
+    "minecraft:taiga",
+    "minecraft:the_end",
+    "minecraft:the_void",
+    "minecraft:warm_ocean",
+    "minecraft:warped_forest",
+    "minecraft:windswept_forest",
+    "minecraft:windswept_gravelly_hills",
+    "minecraft:windswept_hills",
+    "minecraft:windswept_savanna",
+    "minecraft:wooded_badlands",
+];
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
