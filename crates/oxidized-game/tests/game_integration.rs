@@ -573,8 +573,12 @@ fn test_teleport_accept_correct_id() {
     let profile = GameProfile::new(uuid, "TeleportTest".into());
     let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
     let mut player = ServerPlayer::new(1, profile, dim, GameMode::Survival);
-    player.pending_teleports.push_back((42, oxidized_protocol::types::Vec3::ZERO));
-    player.pending_teleports.push_back((43, oxidized_protocol::types::Vec3::ZERO));
+    player
+        .pending_teleports
+        .push_back((42, oxidized_protocol::types::Vec3::ZERO));
+    player
+        .pending_teleports
+        .push_back((43, oxidized_protocol::types::Vec3::ZERO));
 
     assert!(
         handle_accept_teleportation(&mut player, 42),
@@ -592,7 +596,9 @@ fn test_teleport_accept_wrong_id_fails() {
     let profile = GameProfile::new(uuid, "TeleportTest2".into());
     let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
     let mut player = ServerPlayer::new(2, profile, dim, GameMode::Survival);
-    player.pending_teleports.push_back((10, oxidized_protocol::types::Vec3::ZERO));
+    player
+        .pending_teleports
+        .push_back((10, oxidized_protocol::types::Vec3::ZERO));
 
     assert!(
         !handle_accept_teleportation(&mut player, 99),

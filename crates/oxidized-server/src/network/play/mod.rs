@@ -165,7 +165,9 @@ pub async fn handle_play_entry(
 
     // Assign a teleport ID for the initial position packet.
     let teleport_id = player.next_teleport_id();
-    player.pending_teleports.push_back((teleport_id, player.pos));
+    player
+        .pending_teleports
+        .push_back((teleport_id, player.pos));
 
     let player_name = player.name.clone();
     let player_view_distance = player.view_distance;

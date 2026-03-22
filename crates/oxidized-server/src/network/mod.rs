@@ -658,6 +658,7 @@ async fn handle_connection(
     ctx: &LoginContext,
 ) -> Result<(), ConnectionError> {
     let mut conn = Connection::new(stream, addr)?;
+    let mut has_requested_status = false;
     debug!(
         peer = %addr,
         state = %conn.state,
@@ -680,7 +681,9 @@ async fn handle_connection(
                         handshake::handle_handshake(&mut conn, pkt).await?;
                     },
                     ConnectionState::Status => {
-                        let done = status::handle_status(&mut conn, pkt, ctx).await?;
+                        let done =
+                            status::handle_status(&mut conn, pkt, ctx, &mut has_requested_status)
+                                .await?;
                         if done {
                             debug!(peer = %addr, "Status exchange complete");
                             return Ok(());
@@ -689,6 +692,22 @@ async fn handle_connection(
                     ConnectionState::Login => {
                         let profile = login::handle_login(&mut conn, pkt, ctx).await?;
                         let client_info = configuration::handle_configuration(&mut conn).await?;
+
+                        // Vanilla: disconnect if a player with the same UUID is already online.
+                        let uuid = profile.uuid().unwrap_or_default();
+                        if ctx.server_ctx.player_list.read().contains(&uuid) {
+                            warn!(
+                                peer = %addr,
+                                %uuid,
+                                "Duplicate login — disconnecting new connection",
+                            );
+                            return Err(helpers::disconnect_err(
+                                &mut conn,
+                                "You logged in from another location",
+                            )
+                            .await);
+                        }
+
                         play::handle_play_entry(&mut conn, profile, client_info, ctx).await?;
                         info!(peer = %addr, "Player session ended");
                         return Ok(());

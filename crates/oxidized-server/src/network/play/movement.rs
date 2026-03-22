@@ -82,7 +82,14 @@ pub async fn handle_movement(
 
     let (old_pos, old_yaw, old_pitch, entity_id, is_fall_flying, game_mode) = {
         let p = ctx.player.read();
-        (p.pos, p.yaw, p.pitch, p.entity_id, p.is_fall_flying, p.game_mode)
+        (
+            p.pos,
+            p.yaw,
+            p.pitch,
+            p.entity_id,
+            p.is_fall_flying,
+            p.game_mode,
+        )
     };
 
     let skip_speed_check = game_mode.is_creative_or_spectator();
