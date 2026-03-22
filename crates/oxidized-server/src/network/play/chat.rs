@@ -13,7 +13,7 @@ use tracing::{debug, info, warn};
 
 use super::PlayContext;
 use super::commands::make_command_source_for_player;
-use crate::network::{ChatBroadcastMessage, ServerContext};
+use crate::network::{BroadcastMessage, ServerContext};
 
 /// Handles an incoming chat message from a player.
 pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(), ConnectionError> {
@@ -40,11 +40,12 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
         overlay: false,
     };
     let encoded = sys_pkt.encode();
-    let broadcast_msg = ChatBroadcastMessage {
+    let broadcast_msg = BroadcastMessage {
         packet_id: ClientboundSystemChatPacket::PACKET_ID,
         data: encoded.freeze(),
+        exclude_entity: None,
     };
-    let _ = ctx.server_ctx.chat_tx.send(broadcast_msg);
+    let _ = ctx.server_ctx.broadcast_tx.send(broadcast_msg);
     info!(
         peer = %ctx.addr,
         player = %ctx.player_name,

@@ -51,7 +51,7 @@ use parking_lot::RwLock;
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
-use crate::network::{ChatBroadcastMessage, LoginContext, MAX_SERVERBOUND_PLAY_ID, ServerContext};
+use crate::network::{BroadcastMessage, LoginContext, MAX_SERVERBOUND_PLAY_ID, ServerContext};
 
 use crate::network::helpers::decode_packet;
 
@@ -239,19 +239,20 @@ pub async fn handle_play_entry(
         };
         drop(p);
         let encoded = join_info.encode();
-        let broadcast = ChatBroadcastMessage {
+        let broadcast = BroadcastMessage {
             packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
             data: encoded.freeze(),
+            exclude_entity: None,
         };
-        let _ = server_ctx.chat_tx.send(broadcast);
+        let _ = server_ctx.broadcast_tx.send(broadcast);
     }
 
     // Track which chunks the player has loaded.
     let initial_chunk = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
     let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, player_view_distance);
 
-    // Subscribe to chat broadcast channel.
-    let mut chat_rx = server_ctx.chat_tx.subscribe();
+    // Subscribe to broadcast channel.
+    let mut broadcast_rx = server_ctx.broadcast_tx.subscribe();
 
     // Per-player chat rate limiter.
     let mut rate_limiter = ChatRateLimiter::new();
@@ -311,24 +312,30 @@ pub async fn handle_play_entry(
                     }
                 }
             },
-            // Receive broadcast chat messages from other players.
-            broadcast_result = chat_rx.recv() => {
+            // Receive broadcast packets from other systems (chat, block updates, etc.).
+            broadcast_result = broadcast_rx.recv() => {
                 match broadcast_result {
                     Ok(msg) => {
+                        // Skip if this broadcast excludes the current player.
+                        if let Some(exclude_id) = msg.exclude_entity {
+                            if exclude_id == play_ctx.player.read().entity_id {
+                                continue;
+                            }
+                        }
                         if let Err(e) = play_ctx.conn.send_raw(msg.packet_id, &msg.data).await {
-                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to send broadcast chat");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to send broadcast");
                             break;
                         }
                         if let Err(e) = play_ctx.conn.flush().await {
-                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to flush broadcast chat");
+                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to flush broadcast");
                             break;
                         }
                     },
                     Err(broadcast::error::RecvError::Lagged(n)) => {
-                        debug!(peer = %addr, name = %player_name, missed = n, "Chat broadcast lagged — dropped messages");
+                        debug!(peer = %addr, name = %player_name, missed = n, "Broadcast lagged — dropped messages");
                     },
                     Err(broadcast::error::RecvError::Closed) => {
-                        debug!(peer = %addr, name = %player_name, "Chat broadcast channel closed");
+                        debug!(peer = %addr, name = %player_name, "Broadcast channel closed");
                         break;
                     },
                 }
@@ -477,11 +484,12 @@ pub async fn handle_play_entry(
     {
         let remove_pkt = ClientboundPlayerInfoRemovePacket { uuids: vec![uuid] };
         let encoded = remove_pkt.encode();
-        let broadcast = ChatBroadcastMessage {
+        let broadcast = BroadcastMessage {
             packet_id: ClientboundPlayerInfoRemovePacket::PACKET_ID,
             data: encoded.freeze(),
+            exclude_entity: None,
         };
-        let _ = server_ctx.chat_tx.send(broadcast);
+        let _ = server_ctx.broadcast_tx.send(broadcast);
     }
     info!(peer = %addr, uuid = %uuid, name = %player_name, "Player removed from player list");
 

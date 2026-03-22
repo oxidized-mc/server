@@ -24,7 +24,7 @@ use tokio::sync::broadcast;
 use tokio::time::{MissedTickBehavior, interval};
 use tracing::{debug, warn};
 
-use crate::network::{ChatBroadcastMessage, ServerContext};
+use crate::network::{BroadcastMessage, ServerContext};
 
 /// Overload warning threshold — if a single tick exceeds this, log a warning.
 const OVERLOAD_THRESHOLD: Duration = Duration::from_millis(2000);
@@ -323,14 +323,15 @@ fn broadcast_time(ctx: &ServerContext, do_daylight: bool) {
     broadcast_packet(ctx, &pkt);
 }
 
-/// Encodes and broadcasts any packet through the chat broadcast channel.
+/// Encodes and broadcasts any packet through the broadcast channel.
 fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
     let encoded = pkt.encode();
-    let msg = ChatBroadcastMessage {
+    let msg = BroadcastMessage {
         packet_id: P::PACKET_ID,
         data: encoded.freeze(),
+        exclude_entity: None,
     };
-    let _ = ctx.chat_tx.send(msg);
+    let _ = ctx.broadcast_tx.send(msg);
 }
 
 /// Saves level.dat to disk via `spawn_blocking` (ADR-015).
@@ -375,6 +376,8 @@ mod tests {
     const TICKS_PER_DAY: i64 = 24_000;
 
     fn test_ctx() -> Arc<ServerContext> {
+        use oxidized_world::registry::BlockRegistry;
+
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
             level_data: RwLock::new(
@@ -383,7 +386,7 @@ mod tests {
             dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
             max_view_distance: 10,
             max_simulation_distance: 10,
-            chat_tx: broadcast::channel(256).0,
+            broadcast_tx: broadcast::channel(256).0,
             color_char: None,
             commands: oxidized_game::commands::Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
@@ -393,6 +396,8 @@ mod tests {
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
             storage: LevelStorageSource::new(""),
             chunks: dashmap::DashMap::new(),
+            dirty_chunks: dashmap::DashSet::new(),
+            block_registry: Arc::new(BlockRegistry::load().unwrap()),
         })
     }
 
