@@ -5,6 +5,7 @@
 //! when the player crosses chunk boundaries.
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use oxidized_game::player::movement::validate_movement;
 use oxidized_protocol::codec::Packet;
@@ -65,12 +66,28 @@ pub async fn handle_movement(
         return Ok(());
     }
 
-    let (old_pos, old_yaw, old_pitch, entity_id) = {
+    // Rate-limit movement packets: max 120/second (6 per tick × 20 ticks).
+    {
+        let mut p = ctx.player.write();
+        let now = Instant::now();
+        if now.duration_since(p.movement_rate.1).as_secs() >= 1 {
+            p.movement_rate = (0, now);
+        }
+        p.movement_rate.0 += 1;
+        if p.movement_rate.0 > 120 {
+            debug!(peer = %ctx.addr, name = %ctx.player_name, "Movement packet throttled");
+            return Ok(());
+        }
+    }
+
+    let (old_pos, old_yaw, old_pitch, entity_id, is_fall_flying, game_mode) = {
         let p = ctx.player.read();
-        (p.pos, p.yaw, p.pitch, p.entity_id)
+        (p.pos, p.yaw, p.pitch, p.entity_id, p.is_fall_flying, p.game_mode)
     };
 
-    let result = {
+    let skip_speed_check = game_mode.is_creative_or_spectator();
+
+    let mut result = {
         validate_movement(
             old_pos,
             old_yaw,
@@ -80,15 +97,22 @@ pub async fn handle_movement(
             move_pkt.z,
             move_pkt.yaw,
             move_pkt.pitch,
-            false, // TODO: pass actual elytra state once tracked
+            is_fall_flying,
         )
     };
+
+    // Creative/Spectator: keep NaN/coordinate sanitization but skip speed limits.
+    if skip_speed_check {
+        result.needs_correction = false;
+        result.accepted = true;
+    }
 
     if result.needs_correction {
         let correction = {
             let mut p = ctx.player.write();
             let teleport_id = p.next_teleport_id();
-            p.pending_teleports.push_back(teleport_id);
+            let pos = p.pos;
+            p.pending_teleports.push_back((teleport_id, pos));
             ClientboundPlayerPositionPacket {
                 teleport_id,
                 x: p.pos.x,

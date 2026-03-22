@@ -64,6 +64,8 @@ pub struct ServerPlayer {
     pub sneaking: bool,
     /// Whether the player is currently sprinting.
     pub sprinting: bool,
+    /// Whether the player is currently fall-flying (elytra glide).
+    pub is_fall_flying: bool,
 
     // -- Game state --
     /// Current game mode.
@@ -93,8 +95,8 @@ pub struct ServerPlayer {
     pub chunk_send_rate: f32,
 
     // -- Teleport confirmation --
-    /// Pending teleport IDs the client has not yet confirmed.
-    pub pending_teleports: VecDeque<i32>,
+    /// Pending teleports the client has not yet confirmed (ID + target position).
+    pub pending_teleports: VecDeque<(i32, Vec3)>,
     /// Next teleport ID to assign.
     teleport_id_counter: i32,
 
@@ -109,6 +111,10 @@ pub struct ServerPlayer {
     // -- Network state --
     /// Smoothed round-trip latency in milliseconds (exponential moving average).
     pub latency: i32,
+
+    // -- Rate limiting --
+    /// Movement packet rate limiter: (count this second, second start instant).
+    pub movement_rate: (u32, std::time::Instant),
 }
 
 impl ServerPlayer {
@@ -139,6 +145,7 @@ impl ServerPlayer {
             on_ground: false,
             sneaking: false,
             sprinting: false,
+            is_fall_flying: false,
             game_mode,
             previous_game_mode: None,
             abilities,
@@ -156,6 +163,7 @@ impl ServerPlayer {
             spawn_pos: BlockPos::new(0, 64, 0),
             spawn_angle: 0.0,
             latency: 0,
+            movement_rate: (0, std::time::Instant::now()),
         }
     }
 

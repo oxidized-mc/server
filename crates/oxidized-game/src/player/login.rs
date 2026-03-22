@@ -324,8 +324,8 @@ fn build_position_packet(player: &ServerPlayer, teleport_id: i32) -> EncodedPack
 /// `true` if the teleport ID matched and was removed, `false` otherwise
 /// (unexpected or duplicate confirmation).
 pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) -> bool {
-    if let Some(&front) = player.pending_teleports.front() {
-        if front == teleport_id {
+    if let Some(&(front_id, _)) = player.pending_teleports.front() {
+        if front_id == teleport_id {
             player.pending_teleports.pop_front();
             return true;
         }
@@ -338,6 +338,7 @@ pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) 
 mod tests {
     use oxidized_nbt::NbtCompound;
     use oxidized_protocol::auth::GameProfile;
+    use oxidized_protocol::types::Vec3;
     use uuid::Uuid;
 
     use super::*;
@@ -615,18 +616,18 @@ mod tests {
     #[test]
     fn accept_teleportation_removes_matching_id() {
         let mut player = make_player(1, "Test");
-        player.pending_teleports.push_back(1);
-        player.pending_teleports.push_back(2);
+        player.pending_teleports.push_back((1, Vec3::ZERO));
+        player.pending_teleports.push_back((2, Vec3::ZERO));
 
         assert!(handle_accept_teleportation(&mut player, 1));
         assert_eq!(player.pending_teleports.len(), 1);
-        assert_eq!(*player.pending_teleports.front().unwrap(), 2);
+        assert_eq!(player.pending_teleports.front().unwrap().0, 2);
     }
 
     #[test]
     fn accept_teleportation_rejects_wrong_id() {
         let mut player = make_player(1, "Test");
-        player.pending_teleports.push_back(1);
+        player.pending_teleports.push_back((1, Vec3::ZERO));
 
         assert!(!handle_accept_teleportation(&mut player, 99));
         assert_eq!(player.pending_teleports.len(), 1);
@@ -641,9 +642,9 @@ mod tests {
     #[test]
     fn accept_teleportation_clears_all_sequential() {
         let mut player = make_player(1, "Test");
-        player.pending_teleports.push_back(1);
-        player.pending_teleports.push_back(2);
-        player.pending_teleports.push_back(3);
+        player.pending_teleports.push_back((1, Vec3::ZERO));
+        player.pending_teleports.push_back((2, Vec3::ZERO));
+        player.pending_teleports.push_back((3, Vec3::ZERO));
 
         assert!(handle_accept_teleportation(&mut player, 1));
         assert!(handle_accept_teleportation(&mut player, 2));
