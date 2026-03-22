@@ -5,8 +5,8 @@
 //! layers, biomes, and heightmaps are uniform across all positions.
 
 use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
-use oxidized_world::chunk::{ChunkPos, LevelChunk};
+use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT};
+use oxidized_world::chunk::{ChunkPos, DataLayer, LevelChunk};
 
 use super::config::FlatWorldConfig;
 use crate::worldgen::ChunkGenerator;
@@ -88,6 +88,17 @@ impl ChunkGenerator for FlatChunkGenerator {
                 }
                 chunk.set_heightmap(hm);
             }
+        }
+
+        // Initialize sky light.
+        // For a flat world, sections fully above the surface get full brightness
+        // (15). The light layers have section_count + 2 entries (one below, one
+        // above). Index 0 = one section below min_y; index i+1 = section i.
+        let surface_section = ((surface_y - OVERWORLD_MIN_Y) / 16) as usize;
+        // Sections above the surface (index surface_section+2 and higher), plus
+        // the extra "above" entry, get full sky light.
+        for light_idx in (surface_section + 2)..=(OVERWORLD_SECTION_COUNT + 1) {
+            chunk.set_sky_light(light_idx, DataLayer::filled(15));
         }
 
         chunk

@@ -170,20 +170,25 @@ async fn send_chunk_updates(
             .await?;
 
         for pos in to_load {
-            let chunk = ctx.server_ctx.chunk_generator.generate_chunk(*pos);
-            let chunk_pkt = build_chunk_packet(&chunk);
+            // Use the existing chunk from storage if available (preserves block
+            // changes), otherwise generate a new one.
+            let chunk_ref = ctx
+                .server_ctx
+                .chunks
+                .entry(*pos)
+                .or_insert_with(|| {
+                    let chunk = ctx.server_ctx.chunk_generator.generate_chunk(*pos);
+                    Arc::new(RwLock::new(chunk))
+                })
+                .clone();
+
+            let chunk_pkt = build_chunk_packet(&chunk_ref.read());
             ctx.conn
                 .send_raw(
                     ClientboundLevelChunkWithLightPacket::PACKET_ID,
                     &chunk_pkt.encode(),
                 )
                 .await?;
-
-            // Register the chunk in shared storage for block interaction.
-            ctx.server_ctx
-                .chunks
-                .entry(*pos)
-                .or_insert_with(|| Arc::new(RwLock::new(chunk)));
         }
 
         let batch_finished = ClientboundChunkBatchFinishedPacket {

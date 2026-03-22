@@ -153,6 +153,11 @@ impl RegionFile {
     ///
     /// Returns [`AnvilError::Io`] on file creation failure.
     pub fn create(path: &Path) -> Result<Self, AnvilError> {
+        // Ensure parent directories exist before creating the file.
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| AnvilError::io(parent, e))?;
+        }
+
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)

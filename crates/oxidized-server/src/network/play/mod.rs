@@ -34,14 +34,16 @@ use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundGameEventPacket, ClientboundKeepAlivePacket, ClientboundPlayerInfoRemovePacket,
-    ClientboundPlayerInfoUpdatePacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
+    ClientboundAddEntityPacket, ClientboundGameEventPacket, ClientboundKeepAlivePacket,
+    ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
+    ClientboundRemoveEntitiesPacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
     PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, ServerboundAcceptTeleportationPacket,
     ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket, ServerboundChatPacket,
     ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
-    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ServerboundPickItemFromBlockPacket, ServerboundPlayerActionPacket,
+    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
     ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
     ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
@@ -73,6 +75,16 @@ pub struct PlayContext<'a> {
     pub chunk_tracker: &'a mut PlayerChunkTracker,
     /// Per-player chat rate limiter.
     pub rate_limiter: &'a mut ChatRateLimiter,
+}
+
+/// Entity type registry ID for players (`minecraft:player`).
+const PLAYER_ENTITY_TYPE_ID: i32 = 155;
+
+/// Converts a float angle (degrees) to the protocol's packed byte format.
+///
+/// The packed format maps 0–360° to 0–255.
+fn pack_angle(degrees: f32) -> u8 {
+    ((degrees / 360.0) * 256.0) as u8
 }
 
 /// Returns `true` if the packet ID is a movement packet.
@@ -219,6 +231,35 @@ pub async fn handle_play_entry(
     // Add player to the server player list (only after successful send).
     let player_arc = server_ctx.player_list.write().add(player);
 
+    // Send the joining player their own tab list entry (the login sequence
+    // was built before the player was added to the list, so it's missing).
+    {
+        let self_info = {
+            let p = player_arc.read();
+            ClientboundPlayerInfoUpdatePacket {
+                actions: PlayerInfoActions(
+                    PlayerInfoActions::ADD_PLAYER
+                        | PlayerInfoActions::INITIALIZE_CHAT
+                        | PlayerInfoActions::UPDATE_GAME_MODE
+                        | PlayerInfoActions::UPDATE_LISTED
+                        | PlayerInfoActions::UPDATE_LATENCY,
+                ),
+                entries: vec![PlayerInfoEntry {
+                    uuid,
+                    name: player_name.clone(),
+                    properties: p.profile.properties().to_vec(),
+                    game_mode: p.game_mode as i32,
+                    latency: 0,
+                    listed: true,
+                    has_display_name: false,
+                    show_hat: false,
+                    list_order: 0,
+                }],
+            }
+        };
+        conn.send_packet(&self_info).await?;
+    }
+
     // Broadcast the new player to all existing players' tab lists.
     {
         let p = player_arc.read();
@@ -247,10 +288,77 @@ pub async fn handle_play_entry(
         let broadcast = BroadcastMessage {
             packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
             data: encoded.freeze(),
-            exclude_entity: None,
+            exclude_entity: Some(entity_id),
             target_entity: None,
         };
         let _ = server_ctx.broadcast_tx.send(broadcast);
+    }
+
+    // Broadcast the new player's entity to all existing players, and send
+    // all existing players' entities to the joining player.
+    {
+        let add_entity = {
+            let p = player_arc.read();
+            ClientboundAddEntityPacket {
+                entity_id,
+                uuid,
+                entity_type: PLAYER_ENTITY_TYPE_ID,
+                x: p.pos.x,
+                y: p.pos.y,
+                z: p.pos.z,
+                vx: 0.0,
+                vy: 0.0,
+                vz: 0.0,
+                x_rot: pack_angle(p.pitch),
+                y_rot: pack_angle(p.yaw),
+                y_head_rot: pack_angle(p.yaw),
+                data: 0,
+            }
+        };
+
+        // Broadcast new player entity to existing players.
+        let encoded = add_entity.encode();
+        let broadcast = BroadcastMessage {
+            packet_id: ClientboundAddEntityPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: Some(entity_id),
+            target_entity: None,
+        };
+        let _ = server_ctx.broadcast_tx.send(broadcast);
+
+        // Collect existing players' entity packets (no locks held across await).
+        let other_entities: Vec<ClientboundAddEntityPacket> = {
+            let player_list = server_ctx.player_list.read();
+            player_list
+                .iter()
+                .filter_map(|other_arc| {
+                    let other = other_arc.read();
+                    if other.entity_id == entity_id {
+                        return None;
+                    }
+                    Some(ClientboundAddEntityPacket {
+                        entity_id: other.entity_id,
+                        uuid: other.uuid,
+                        entity_type: PLAYER_ENTITY_TYPE_ID,
+                        x: other.pos.x,
+                        y: other.pos.y,
+                        z: other.pos.z,
+                        vx: 0.0,
+                        vy: 0.0,
+                        vz: 0.0,
+                        x_rot: pack_angle(other.pitch),
+                        y_rot: pack_angle(other.yaw),
+                        y_head_rot: pack_angle(other.yaw),
+                        data: 0,
+                    })
+                })
+                .collect()
+        };
+
+        // Send existing player entities to the joining player.
+        for pkt in &other_entities {
+            conn.send_packet(pkt).await?;
+        }
     }
 
     // Track which chunks the player has loaded.
@@ -459,6 +567,9 @@ pub async fn handle_play_entry(
                             ServerboundSignUpdatePacket::PACKET_ID => {
                                 block_interaction::handle_sign_update(&mut play_ctx, pkt.data).await?;
                             },
+                            ServerboundPickItemFromBlockPacket::PACKET_ID => {
+                                block_interaction::handle_pick_item_from_block(&mut play_ctx, pkt.data).await?;
+                            },
                             unknown if !(0..=MAX_SERVERBOUND_PLAY_ID).contains(&unknown) => {
                                 warn!(
                                     peer = %addr,
@@ -499,6 +610,20 @@ pub async fn handle_play_entry(
         let encoded = remove_pkt.encode();
         let broadcast = BroadcastMessage {
             packet_id: ClientboundPlayerInfoRemovePacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: None,
+        };
+        let _ = server_ctx.broadcast_tx.send(broadcast);
+    }
+    // Broadcast entity removal so other players stop rendering this player.
+    {
+        let remove_entity = ClientboundRemoveEntitiesPacket {
+            entity_ids: vec![entity_id],
+        };
+        let encoded = remove_entity.encode();
+        let broadcast = BroadcastMessage {
+            packet_id: ClientboundRemoveEntitiesPacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
             target_entity: None,

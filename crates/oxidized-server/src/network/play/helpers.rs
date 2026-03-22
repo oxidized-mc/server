@@ -43,18 +43,22 @@ pub async fn send_initial_chunks(
 
     let mut count: i32 = 0;
     for chunk_pos in spiral_chunks(center, view_distance) {
-        let chunk = chunk_generator.generate_chunk(chunk_pos);
-        let pkt = build_chunk_packet(&chunk);
+        // Use existing chunk from storage if available (preserves block
+        // changes), otherwise generate a new one.
+        let chunk_ref = chunk_storage
+            .entry(chunk_pos)
+            .or_insert_with(|| {
+                let chunk = chunk_generator.generate_chunk(chunk_pos);
+                Arc::new(RwLock::new(chunk))
+            })
+            .clone();
+
+        let pkt = build_chunk_packet(&chunk_ref.read());
         conn.send_raw(
             ClientboundLevelChunkWithLightPacket::PACKET_ID,
             &pkt.encode(),
         )
         .await?;
-
-        // Register the chunk in shared storage for block interaction.
-        chunk_storage
-            .entry(chunk_pos)
-            .or_insert_with(|| Arc::new(RwLock::new(chunk)));
 
         count += 1;
     }
