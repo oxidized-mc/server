@@ -1952,3 +1952,37 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - `BlockStateId` is `u16` (in oxidized-world), chunk API uses `u32` — convert with `u32::from(state.0)` at boundary
 - `BroadcastMessage` is the single broadcast channel type for ALL broadcast types (chat, block updates, weather, tick state, player info)
 - Block interaction handlers do NOT hold lock guards across `.await` points — always extract data into locals first, drop guard, then await
+
+---
+
+## Phase 23 — Flat World Generation (Retrospective)
+
+**Date:** 2026-07-12
+**Scope:** ChunkGenerator trait, FlatWorldConfig, FlatChunkGenerator, server integration.
+
+### What Went Well
+
+- **Existing types sufficient:** LevelChunk, LevelChunkSection, PalettedContainer, Heightmap, and BlockStateId constants all worked directly — no need for ProtoChunk or new chunk types. The phase doc suggested ProtoChunk but it was unnecessary for flat generation.
+- **Clean integration:** Adding `chunk_generator: Arc<dyn ChunkGenerator>` to ServerContext was a minimal, clean change. Only 2 callsites needed updating (helpers.rs for initial chunks, movement.rs for chunk loading on move).
+- **Comprehensive unit tests:** 24 unit tests + 6 integration tests cover all layer configs, heightmap computation, serialization round-trips, and edge cases.
+
+### What Surprised Us
+
+- **`gen` is a reserved keyword in Rust 2024 edition** — cannot use `gen` as a variable/module name. Had to use `generator` throughout.
+- **`constants` module in `oxidized_world::registry` is private** — but re-exported via `pub use constants::*`. Use `oxidized_world::registry::{BEDROCK, DIRT, GRASS_BLOCK}` etc.
+- **`get_block_state` returns `Result<u32, ChunkError>`** not `BlockStateId` — integration tests need `.unwrap()` and `u32::from(state.0)` for comparison.
+- **movement.rs also creates chunks** — not just helpers.rs. Both callsites needed updating to use the generator.
+
+### Gotchas & Future Notes
+
+- `ServerContext` now has 5 struct fields that test constructors must supply: `chunk_generator`, `dirty_chunks`, `block_registry`, `chunks`, `broadcast_tx` etc. — always grep `ServerContext {` when adding fields.
+- `FlatWorldConfig::from_layers_string()` uses `thiserror::Error` (`FlatConfigError`), NOT `anyhow`. Library crates must never use `anyhow`.
+- `FlatChunkGenerator` only fills the bottom section (y=-64 to -49) for default config. If layers > 16 blocks, multiple sections need filling — this is handled correctly.
+- Heightmap values are relative to min_y. For 4-layer flat world: value = 4 (surface_y − min_y = −60 − (−64) = 4).
+- Chunks generated during movement ARE now stored in `server_ctx.chunks` — this was a pre-existing gap that Phase 23 fixed.
+- `FlatWorldConfig::from_layers(&[(BlockStateId, u32)])` is a convenience constructor for tests and programmatic config.
+
+### ADR Status
+
+- ADR-016 (Worldgen Pipeline) partially implemented — trait defined, flat generator done. Rayon parallelism and noise generation deferred to Phase 25.
+- No ADR changes needed — existing ADRs are adequate for this phase.

@@ -191,11 +191,16 @@ pub async fn handle_play_entry(
         conn.send_packet(&cmd_pkt).await?;
     }
 
-    // Send initial chunk batch — empty air chunks in a spiral pattern.
+    // Send initial chunk batch using the world generator.
     let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
-    let chunk_count =
-        helpers::send_initial_chunks(conn, chunk_center, player_view_distance, &server_ctx.chunks)
-            .await?;
+    let chunk_count = helpers::send_initial_chunks(
+        conn,
+        chunk_center,
+        player_view_distance,
+        &server_ctx.chunks,
+        server_ctx.chunk_generator.as_ref(),
+    )
+    .await?;
 
     // Signal the client that initial chunks have been sent.
     let chunks_load_start = ClientboundGameEventPacket {

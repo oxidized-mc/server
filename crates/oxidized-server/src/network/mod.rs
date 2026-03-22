@@ -21,6 +21,7 @@ use oxidized_game::event::EventBus;
 use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::level::tick_rate::ServerTickRateManager;
 use oxidized_game::level::weather::WeatherType;
+use oxidized_game::worldgen::ChunkGenerator;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_protocol::crypto::ServerKeyPair;
@@ -93,6 +94,8 @@ pub struct ServerContext {
     pub dirty_chunks: DashSet<ChunkPos>,
     /// Block registry — loaded once at startup, shared across all handlers.
     pub block_registry: Arc<BlockRegistry>,
+    /// Chunk generator — produces new chunks on demand for unseen positions.
+    pub chunk_generator: Arc<dyn ChunkGenerator>,
 }
 
 impl ServerHandle for ServerContext {
@@ -519,6 +522,11 @@ mod tests {
                 chunks: dashmap::DashMap::new(),
                 dirty_chunks: dashmap::DashSet::new(),
                 block_registry: Arc::new(BlockRegistry::load().unwrap()),
+                chunk_generator: Arc::new(
+                    oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                        oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                    ),
+                ),
             }),
         })
     }

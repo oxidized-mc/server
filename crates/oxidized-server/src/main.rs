@@ -17,6 +17,8 @@ use clap::Parser;
 use mimalloc::MiMalloc;
 use oxidized_game::commands::Commands;
 use oxidized_game::player::PlayerList;
+use oxidized_game::worldgen::ChunkGenerator;
+use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
 use oxidized_nbt::NbtCompound;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::constants;
@@ -139,7 +141,7 @@ fn main() -> anyhow::Result<()> {
         // Load world metadata from level.dat (or use defaults for new worlds).
         let storage = LevelStorageSource::new(&config.world.name);
         let level_dat_path = storage.level_dat_path();
-        let level_data = if level_dat_path.exists() {
+        let mut level_data = if level_dat_path.exists() {
             match PrimaryLevelData::load(&level_dat_path) {
                 Ok(data) => {
                     info!(world = %data.level_name, "Loaded level.dat");
@@ -172,6 +174,18 @@ fn main() -> anyhow::Result<()> {
                 .map_err(|e| anyhow::anyhow!("failed to load block registry: {e}"))?,
         );
 
+        // Create the chunk generator (flat world for now).
+        let chunk_generator: Arc<dyn ChunkGenerator> =
+            Arc::new(FlatChunkGenerator::new(FlatWorldConfig::default()));
+
+        // Set spawn position to the generator's recommended Y if this
+        // is a new world (spawn_y defaults to 0 from level.dat defaults).
+        let is_new_world = !level_dat_path.exists();
+        if is_new_world && level_data.spawn_y == 0 {
+            level_data.spawn_y = chunk_generator.find_spawn_y();
+            info!(spawn_y = level_data.spawn_y, "Set spawn Y from flat world generator");
+        }
+
         let server_ctx = Arc::new(ServerContext {
             player_list: parking_lot::RwLock::new(PlayerList::new(
                 config.gameplay.max_players as usize,
@@ -194,6 +208,7 @@ fn main() -> anyhow::Result<()> {
             chunks: dashmap::DashMap::new(),
             dirty_chunks: dashmap::DashSet::new(),
             block_registry,
+            chunk_generator,
         });
 
         // Build the shared login context.
