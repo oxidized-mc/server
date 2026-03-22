@@ -3,8 +3,12 @@
 //! Defines the block layers that make up a flat world. The default
 //! configuration matches vanilla: 1 bedrock + 2 dirt + 1 grass block,
 //! starting at the minimum build height (y = −64).
+//!
+//! Internally, layers are pre-flattened into a `Vec<BlockStateId>` indexed
+//! by Y offset from `OVERWORLD_MIN_Y`, giving O(1) block lookups. This
+//! mirrors Java's `FlatLevelGeneratorSettings.updateLayers()`.
 
-use oxidized_world::chunk::level_chunk::OVERWORLD_MIN_Y;
+use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
 use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
 
 /// Errors that can occur when parsing a flat world layer string.
@@ -53,7 +57,8 @@ pub struct FlatLayerInfo {
 /// Complete flat world configuration.
 ///
 /// Layers are ordered bottom-to-top. The first layer starts at
-/// [`OVERWORLD_MIN_Y`] (−64).
+/// [`OVERWORLD_MIN_Y`] (−64). A pre-flattened lookup table is built
+/// for O(1) access by Y offset.
 ///
 /// # Examples
 ///
@@ -67,12 +72,37 @@ pub struct FlatLayerInfo {
 pub struct FlatWorldConfig {
     /// Block layers, bottom to top.
     pub layers: Vec<FlatLayerInfo>,
+    /// Pre-flattened block state IDs indexed by Y offset from `OVERWORLD_MIN_Y`.
+    /// Length = `min(sum of layer heights, OVERWORLD_HEIGHT)`.
+    flattened: Vec<BlockStateId>,
     /// Biome resource key (e.g. `"minecraft:plains"`).
     pub biome: String,
     /// Whether to place structures and decorations.
     pub features: bool,
     /// Whether to generate lakes.
     pub lakes: bool,
+}
+
+/// Builds the pre-flattened layer array from layer definitions, clamped to
+/// the maximum world height.
+fn flatten_layers(layers: &[FlatLayerInfo]) -> Vec<BlockStateId> {
+    let max = OVERWORLD_HEIGHT as usize;
+    let mut flat = Vec::with_capacity(
+        layers
+            .iter()
+            .map(|l| l.height as usize)
+            .sum::<usize>()
+            .min(max),
+    );
+    for layer in layers {
+        for _ in 0..layer.height {
+            if flat.len() >= max {
+                return flat;
+            }
+            flat.push(layer.block);
+        }
+    }
+    flat
 }
 
 impl Default for FlatWorldConfig {
@@ -84,21 +114,24 @@ impl Default for FlatWorldConfig {
     /// - y = −62: dirt
     /// - y = −61: grass_block ← surface (player spawns at y = −60)
     fn default() -> Self {
+        let layers = vec![
+            FlatLayerInfo {
+                block: BEDROCK,
+                height: 1,
+            },
+            FlatLayerInfo {
+                block: DIRT,
+                height: 2,
+            },
+            FlatLayerInfo {
+                block: GRASS_BLOCK,
+                height: 1,
+            },
+        ];
+        let flattened = flatten_layers(&layers);
         Self {
-            layers: vec![
-                FlatLayerInfo {
-                    block: BEDROCK,
-                    height: 1,
-                },
-                FlatLayerInfo {
-                    block: DIRT,
-                    height: 2,
-                },
-                FlatLayerInfo {
-                    block: GRASS_BLOCK,
-                    height: 1,
-                },
-            ],
+            layers,
+            flattened,
             biome: "minecraft:plains".into(),
             features: false,
             lakes: false,
@@ -113,22 +146,32 @@ impl FlatWorldConfig {
     /// disables features / lakes. Layers with height 0 are silently skipped.
     #[must_use]
     pub fn from_layers(layers: &[(BlockStateId, u32)]) -> Self {
+        let layers: Vec<FlatLayerInfo> = layers
+            .iter()
+            .filter(|(_, height)| *height > 0)
+            .map(|&(block, height)| FlatLayerInfo { block, height })
+            .collect();
+        let flattened = flatten_layers(&layers);
         Self {
-            layers: layers
-                .iter()
-                .filter(|(_, height)| *height > 0)
-                .map(|&(block, height)| FlatLayerInfo { block, height })
-                .collect(),
+            layers,
+            flattened,
             biome: "minecraft:plains".to_owned(),
             features: false,
             lakes: false,
         }
     }
 
-    /// Total height of all layers combined.
+    /// Total height of all layers combined, clamped to the world height.
     #[must_use]
     pub fn total_height(&self) -> u32 {
-        self.layers.iter().map(|l| l.height).sum()
+        self.flattened.len() as u32
+    }
+
+    /// Returns the pre-flattened block state array (indexed by Y offset
+    /// from `OVERWORLD_MIN_Y`).
+    #[must_use]
+    pub fn flattened_layers(&self) -> &[BlockStateId] {
+        &self.flattened
     }
 
     /// Returns the block state ID at a given absolute Y coordinate.
@@ -140,14 +183,7 @@ impl FlatWorldConfig {
         if offset < 0 {
             return None;
         }
-        let mut cursor = 0u32;
-        for layer in &self.layers {
-            if (offset as u32) < cursor + layer.height {
-                return Some(layer.block);
-            }
-            cursor += layer.height;
-        }
-        None
+        self.flattened.get(offset as usize).copied()
     }
 
     /// Parses a flat world from the vanilla layer string format.
@@ -207,9 +243,13 @@ impl FlatWorldConfig {
         if layers.is_empty() {
             return Err(FlatConfigError::Empty);
         }
+        let flattened = flatten_layers(&layers);
         Ok(Self {
             layers,
-            ..Default::default()
+            flattened,
+            biome: "minecraft:plains".to_owned(),
+            features: false,
+            lakes: false,
         })
     }
 }
@@ -237,6 +277,17 @@ mod tests {
         assert_eq!(config.layers[1].height, 2);
         assert_eq!(config.layers[2].block, GRASS_BLOCK);
         assert_eq!(config.layers[2].height, 1);
+    }
+
+    #[test]
+    fn flattened_layers_match_block_at_y() {
+        let config = FlatWorldConfig::default();
+        let flat = config.flattened_layers();
+        assert_eq!(flat.len(), 4);
+        assert_eq!(flat[0], BEDROCK);
+        assert_eq!(flat[1], DIRT);
+        assert_eq!(flat[2], DIRT);
+        assert_eq!(flat[3], GRASS_BLOCK);
     }
 
     #[test]
@@ -312,6 +363,16 @@ mod tests {
                     height: 50,
                 },
             ],
+            flattened: flatten_layers(&[
+                FlatLayerInfo {
+                    block: BEDROCK,
+                    height: 5,
+                },
+                FlatLayerInfo {
+                    block: STONE,
+                    height: 50,
+                },
+            ]),
             biome: "minecraft:plains".into(),
             features: false,
             lakes: false,
@@ -336,5 +397,12 @@ mod tests {
         .unwrap();
         assert_eq!(config.layers.len(), 2);
         assert_eq!(config.total_height(), 2);
+    }
+
+    #[test]
+    fn total_height_clamped_to_world_height() {
+        let config = FlatWorldConfig::from_layers(&[(BEDROCK, 500)]);
+        // 500 > OVERWORLD_HEIGHT (384), so clamped
+        assert_eq!(config.total_height(), OVERWORLD_HEIGHT);
     }
 }
