@@ -71,7 +71,10 @@ impl DataLayer {
     /// Panics if any coordinate is >= 16.
     #[must_use]
     pub fn get(&self, x: usize, y: usize, z: usize) -> u8 {
-        debug_assert!(x < 16 && y < 16 && z < 16);
+        assert!(
+            x < 16 && y < 16 && z < 16,
+            "DataLayer::get coordinate out of bounds: ({x}, {y}, {z}), expected 0..16"
+        );
         let index = Self::section_index(x, y, z);
         let byte_pos = index >> 1;
         if index & 1 == 0 {
@@ -87,8 +90,14 @@ impl DataLayer {
     ///
     /// Panics if any coordinate is >= 16 or `value` > 15.
     pub fn set(&mut self, x: usize, y: usize, z: usize, value: u8) {
-        debug_assert!(x < 16 && y < 16 && z < 16);
-        debug_assert!(value <= 15);
+        assert!(
+            x < 16 && y < 16 && z < 16,
+            "DataLayer::set coordinate out of bounds: ({x}, {y}, {z}), expected 0..16"
+        );
+        assert!(
+            value <= 15,
+            "DataLayer::set value out of range: {value}, expected 0..=15"
+        );
         let index = Self::section_index(x, y, z);
         let byte_pos = index >> 1;
         if index & 1 == 0 {

@@ -60,10 +60,7 @@ mod tests {
         let mut limiter = ChatRateLimiter::new();
         // 9 messages × 20 = 180, still under 200
         for i in 0..9 {
-            assert!(
-                limiter.try_acquire(),
-                "message {i} should be allowed"
-            );
+            assert!(limiter.try_acquire(), "message {i} should be allowed");
         }
     }
 

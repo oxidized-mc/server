@@ -100,4 +100,7 @@ pub enum CommandError {
     /// The command was parsed but execution failed.
     #[error("{0}")]
     Execution(String),
+    /// The command exists in the tree but its logic is not yet implemented.
+    #[error("command not yet implemented: {0}")]
+    NotImplemented(String),
 }

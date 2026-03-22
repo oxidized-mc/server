@@ -4,13 +4,11 @@
 //! active effects, tick-based duration, amplifier, particle visibility).
 //! Also needs `ClientboundUpdateMobEffectPacket` / `ClientboundRemoveMobEffectPacket`.
 
-use crate::commands::argument_access::{get_entities, get_integer, get_string};
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
 
 /// Registers the `/effect` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -52,16 +50,11 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             // /effect clear [targets] [effect]
             .then(
                 literal("clear")
-                    .executes(|ctx: &CommandContext<CommandSourceStack>| {
+                    .executes(|_ctx: &CommandContext<CommandSourceStack>| {
                         // TODO: Clear all effects from command sender
-                        ctx.source.send_success(
-                            &Component::translatable(
-                                "commands.effect.clear.everything.success.single",
-                                vec![Component::text(ctx.source.display_name.clone())],
-                            ),
-                            true,
-                        );
-                        Ok(1)
+                        Err(crate::commands::CommandError::NotImplemented(
+                            "effect clear".into(),
+                        ))
                     })
                     .then(
                         argument(
@@ -72,19 +65,11 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                             },
                         )
                         .executes(
-                            |ctx: &CommandContext<CommandSourceStack>| {
-                                let targets = get_entities(ctx, "targets")?;
+                            |_ctx: &CommandContext<CommandSourceStack>| {
                                 // TODO: Clear all effects from targets
-                                for target in &targets {
-                                    ctx.source.send_success(
-                                        &Component::translatable(
-                                            "commands.effect.clear.everything.success.single",
-                                            vec![Component::text(&target.name)],
-                                        ),
-                                        true,
-                                    );
-                                }
-                                Ok(1)
+                                Err(crate::commands::CommandError::NotImplemented(
+                                    "effect clear".into(),
+                                ))
                             },
                         ),
                     ),
@@ -93,25 +78,12 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 }
 
 fn effect_give(
-    ctx: &CommandContext<CommandSourceStack>,
+    _ctx: &CommandContext<CommandSourceStack>,
 ) -> Result<i32, crate::commands::CommandError> {
-    let targets = get_entities(ctx, "targets")?;
-    let effect = get_string(ctx, "effect")?;
-    let seconds = get_integer(ctx, "seconds").unwrap_or(30);
-    // TODO: Apply status effect to targets
-    // Vanilla arg order: effect name, target name, duration in seconds
-    for target in &targets {
-        ctx.source.send_success(
-            &Component::translatable(
-                "commands.effect.give.success.single",
-                vec![
-                    Component::text(effect),
-                    Component::text(&target.name),
-                    Component::text(seconds.to_string()),
-                ],
-            ),
-            true,
-        );
-    }
-    Ok(1)
+    // TODO: Apply status effect to targets — requires a status-effect
+    // system on entities (ECS components for active effects, tick-based
+    // duration, amplifier) and ClientboundUpdateMobEffectPacket.
+    Err(crate::commands::CommandError::NotImplemented(
+        "effect give".into(),
+    ))
 }

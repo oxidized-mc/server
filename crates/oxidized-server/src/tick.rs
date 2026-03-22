@@ -22,12 +22,15 @@ use rand::RngExt;
 use rand::SeedableRng;
 use tokio::sync::broadcast;
 use tokio::time::{MissedTickBehavior, interval};
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 use crate::network::{BroadcastMessage, ServerContext};
 
-/// Overload warning threshold — if a single tick exceeds this, log a warning.
-const OVERLOAD_THRESHOLD: Duration = Duration::from_millis(2000);
+/// Warning threshold — if a single tick exceeds this, log a warning.
+const OVERLOAD_WARNING_THRESHOLD: Duration = Duration::from_millis(100);
+
+/// Critical threshold — if a single tick exceeds this, log an error.
+const OVERLOAD_CRITICAL_THRESHOLD: Duration = Duration::from_millis(500);
 
 /// Delay before rain starts (12 000–180 000 ticks = 10 min–2.5 hours).
 const RAIN_DELAY_MIN: i32 = 12_000;
@@ -66,12 +69,14 @@ pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::
     let mut tick_count: u64 = 0;
     let mut timer = interval(Duration::from_millis(50));
     timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    let mut rng = rand::rngs::SmallRng::seed_from_u64(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos() as u64,
-    );
+    let seed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or_else(|e| {
+            warn!("System clock error, using fallback RNG seed: {e}");
+            rand::random::<u64>()
+        });
+    let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
     let mut weather = WeatherLevels {
         rain_level: 0.0,
         old_rain_level: 0.0,
@@ -109,14 +114,21 @@ pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::
                 // Update interval based on snapshotted tick rate.
                 timer.reset_after(new_interval.saturating_sub(tick_start.elapsed()));
 
-                // Overload detection.
+                // Overload detection (two-tier).
                 let elapsed = tick_start.elapsed();
-                if elapsed > OVERLOAD_THRESHOLD {
+                if elapsed > OVERLOAD_CRITICAL_THRESHOLD {
+                    error!(
+                        elapsed_ms = elapsed.as_millis(),
+                        "Can't keep up! Tick took {}ms (critical threshold: {}ms)",
+                        elapsed.as_millis(),
+                        OVERLOAD_CRITICAL_THRESHOLD.as_millis(),
+                    );
+                } else if elapsed > OVERLOAD_WARNING_THRESHOLD {
                     warn!(
                         elapsed_ms = elapsed.as_millis(),
-                        "Can't keep up! Tick took {}ms (threshold: {}ms)",
+                        "Tick running behind! Took {}ms (warning threshold: {}ms)",
                         elapsed.as_millis(),
-                        OVERLOAD_THRESHOLD.as_millis(),
+                        OVERLOAD_WARNING_THRESHOLD.as_millis(),
                     );
                 }
 
@@ -329,7 +341,7 @@ fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
         exclude_entity: None,
         target_entity: None,
     };
-    let _ = ctx.broadcast_tx.send(msg);
+    ctx.broadcast(msg);
 }
 
 /// Saves level.dat to disk via `spawn_blocking` (ADR-015).

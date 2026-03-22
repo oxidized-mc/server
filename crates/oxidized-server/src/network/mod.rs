@@ -11,8 +11,9 @@ mod login;
 mod play;
 mod status;
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use dashmap::{DashMap, DashSet};
 use oxidized_game::commands::Commands;
@@ -99,6 +100,16 @@ pub struct ServerContext {
     /// Operator permission level for all players (from server config).
     /// TODO: Replace with per-player ops from `ops.json`.
     pub op_permission_level: i32,
+}
+
+impl ServerContext {
+    /// Sends a broadcast message to all connected players, logging a warning
+    /// if no receivers are active.
+    pub fn broadcast(&self, msg: BroadcastMessage) {
+        if let Err(e) = self.broadcast_tx.send(msg) {
+            warn!("Broadcast send failed: {e}");
+        }
+    }
 }
 
 impl ServerHandle for ServerContext {
@@ -201,7 +212,7 @@ impl ServerHandle for ServerContext {
             exclude_entity: None,
             target_entity: None,
         };
-        let _ = self.broadcast_tx.send(broadcast);
+        self.broadcast(broadcast);
     }
 
     fn set_day_time(&self, time: i64) {
@@ -257,7 +268,7 @@ impl ServerHandle for ServerContext {
             };
             let pkt = ClientboundGameEventPacket { event, param: 0.0 };
             let encoded = pkt.encode();
-            let _ = self.broadcast_tx.send(BroadcastMessage {
+            self.broadcast(BroadcastMessage {
                 packet_id: ClientboundGameEventPacket::PACKET_ID,
                 data: encoded.freeze(),
                 exclude_entity: None,
@@ -323,7 +334,7 @@ impl ServerHandle for ServerContext {
         };
         drop(mgr);
         let encoded = pkt.encode();
-        let _ = self.broadcast_tx.send(BroadcastMessage {
+        self.broadcast(BroadcastMessage {
             packet_id: ClientboundTickingStatePacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
@@ -370,7 +381,7 @@ impl ServerHandle for ServerContext {
             param: mode.id() as f32,
         };
         let encoded = game_event.encode();
-        let _ = self.broadcast_tx.send(BroadcastMessage {
+        self.broadcast(BroadcastMessage {
             packet_id: ClientboundGameEventPacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
@@ -385,7 +396,7 @@ impl ServerHandle for ServerContext {
             walk_speed: abilities.walk_speed,
         };
         let encoded = abilities_pkt.encode();
-        let _ = self.broadcast_tx.send(BroadcastMessage {
+        self.broadcast(BroadcastMessage {
             packet_id: ClientboundPlayerAbilitiesPacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
@@ -409,7 +420,7 @@ impl ServerHandle for ServerContext {
             }],
         };
         let encoded = info_update.encode();
-        let _ = self.broadcast_tx.send(BroadcastMessage {
+        self.broadcast(BroadcastMessage {
             packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
@@ -436,7 +447,7 @@ impl ServerHandle for ServerContext {
             overlay: false,
         };
         let encoded = pkt.encode();
-        let _ = self.broadcast_tx.send(BroadcastMessage {
+        self.broadcast(BroadcastMessage {
             packet_id: ClientboundSystemChatPacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
@@ -473,7 +484,7 @@ impl ServerHandle for ServerContext {
             block_state: state_id as i32,
         };
         let encoded = pkt.encode();
-        let _ = self.broadcast_tx.send(BroadcastMessage {
+        self.broadcast(BroadcastMessage {
             packet_id: ClientboundBlockUpdatePacket::PACKET_ID,
             data: encoded.freeze(),
             exclude_entity: None,
@@ -506,6 +517,60 @@ pub struct BroadcastMessage {
 /// There are 69 registered serverbound packets (IDs 0x00–0x44).
 const MAX_SERVERBOUND_PLAY_ID: i32 = 0x44;
 
+/// Default maximum connections per IP within the rate-limiting window.
+const DEFAULT_MAX_CONNECTIONS_PER_WINDOW: u32 = 10;
+
+/// Default rate-limiting window duration.
+const DEFAULT_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(10);
+
+/// How often to clean up stale rate limiter entries.
+const RATE_LIMIT_CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Simple per-IP connection rate limiter.
+///
+/// Tracks connection attempts within a sliding time window and rejects
+/// excess connections. Stale entries are cleaned up periodically.
+struct ConnectionRateLimiter {
+    attempts: DashMap<IpAddr, (u32, Instant)>,
+    max_per_window: u32,
+    window: Duration,
+}
+
+impl ConnectionRateLimiter {
+    fn new(max_per_window: u32, window: Duration) -> Self {
+        Self {
+            attempts: DashMap::new(),
+            max_per_window,
+            window,
+        }
+    }
+
+    /// Returns `true` if the connection is allowed, `false` if rate-limited.
+    fn check(&self, ip: IpAddr) -> bool {
+        let now = Instant::now();
+        let mut entry = self.attempts.entry(ip).or_insert((0, now));
+        let (count, window_start) = entry.value_mut();
+
+        if now.duration_since(*window_start) > self.window {
+            *count = 1;
+            *window_start = now;
+            true
+        } else if *count < self.max_per_window {
+            *count += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Removes entries older than the time window.
+    fn cleanup(&self) {
+        let now = Instant::now();
+        self.attempts
+            .retain(|_, (_, window_start)| now.duration_since(*window_start) <= self.window);
+    }
+}
+
 /// Starts the TCP listener and accepts connections until a shutdown signal
 /// is received.
 ///
@@ -518,6 +583,11 @@ pub async fn listen(
     mut shutdown_rx: broadcast::Receiver<()>,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
+    let rate_limiter = ConnectionRateLimiter::new(
+        DEFAULT_MAX_CONNECTIONS_PER_WINDOW,
+        DEFAULT_RATE_LIMIT_WINDOW,
+    );
+    let mut last_cleanup = Instant::now();
     info!(address = %addr, "Listening for connections");
 
     loop {
@@ -532,6 +602,21 @@ pub async fn listen(
             result = listener.accept() => {
                 match result {
                     Ok((stream, peer_addr)) => {
+                        // Periodic cleanup of stale rate limiter entries.
+                        if last_cleanup.elapsed() > RATE_LIMIT_CLEANUP_INTERVAL {
+                            rate_limiter.cleanup();
+                            last_cleanup = Instant::now();
+                        }
+
+                        if !rate_limiter.check(peer_addr.ip()) {
+                            warn!(
+                                peer = %peer_addr,
+                                "Connection rate limited — rejecting"
+                            );
+                            drop(stream);
+                            continue;
+                        }
+
                         info!(peer = %peer_addr, "New connection");
                         let ctx = Arc::clone(&ctx);
                         tokio::spawn(async move {

@@ -41,14 +41,13 @@ use oxidized_protocol::packets::play::{
     ClientboundRemoveEntitiesPacket, ClientboundSetTimePacket, ClockNetworkState, ClockUpdate,
     GameEventType, PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry,
     ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
-    ServerboundChatCommandSignedPacket, ServerboundChatPacket,
-    ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
-    ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
-    ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
-    ServerboundPickItemFromBlockPacket, ServerboundPlayerActionPacket,
-    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket, ServerboundSetCarriedItemPacket,
-    ServerboundSetCreativeModeSlotPacket, ServerboundSignUpdatePacket, ServerboundUseItemOnPacket,
-    ServerboundUseItemPacket,
+    ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
+    ServerboundCommandSuggestionPacket, ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket,
+    ServerboundMovePlayerPosRotPacket, ServerboundMovePlayerRotPacket,
+    ServerboundMovePlayerStatusOnlyPacket, ServerboundPickItemFromBlockPacket,
+    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
+    ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -376,7 +375,7 @@ pub async fn handle_play_entry(
             exclude_entity: Some(entity_id),
             target_entity: None,
         };
-        let _ = server_ctx.broadcast_tx.send(broadcast);
+        server_ctx.broadcast(broadcast);
     }
 
     // Broadcast the new player's entity to all existing players, and send
@@ -409,7 +408,7 @@ pub async fn handle_play_entry(
             exclude_entity: Some(entity_id),
             target_entity: None,
         };
-        let _ = server_ctx.broadcast_tx.send(broadcast);
+        server_ctx.broadcast(broadcast);
 
         // Collect existing players' entity packets (no locks held across await).
         let other_entities: Vec<ClientboundAddEntityPacket> = {
@@ -575,7 +574,7 @@ pub async fn handle_play_entry(
                                         }],
                                     };
                                     let encoded = latency_update.encode();
-                                    let _ = server_ctx.broadcast_tx.send(BroadcastMessage {
+                                    server_ctx.broadcast(BroadcastMessage {
                                         packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
                                         data: encoded.into(),
                                         exclude_entity: None,
@@ -727,7 +726,7 @@ pub async fn handle_play_entry(
             exclude_entity: None,
             target_entity: None,
         };
-        let _ = server_ctx.broadcast_tx.send(broadcast);
+        server_ctx.broadcast(broadcast);
     }
     // Broadcast entity removal so other players stop rendering this player.
     {
@@ -741,7 +740,7 @@ pub async fn handle_play_entry(
             exclude_entity: None,
             target_entity: None,
         };
-        let _ = server_ctx.broadcast_tx.send(broadcast);
+        server_ctx.broadcast(broadcast);
     }
     info!(peer = %addr, uuid = %uuid, name = %player_name, "Player removed from player list");
 

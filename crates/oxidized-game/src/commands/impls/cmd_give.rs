@@ -4,13 +4,11 @@
 //! item stack creation from registry ID, and `ClientboundContainerSetSlotPacket`
 //! to sync the slot to the client.
 
-use crate::commands::argument_access::{get_entities, get_integer, get_string};
 use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
 
 /// Registers the `/give` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -47,24 +45,10 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 }
 
 fn give_exec(
-    ctx: &CommandContext<CommandSourceStack>,
+    _ctx: &CommandContext<CommandSourceStack>,
 ) -> Result<i32, crate::commands::CommandError> {
-    let targets = get_entities(ctx, "targets")?;
-    let item = get_string(ctx, "item")?;
-    let count = get_integer(ctx, "count").unwrap_or(1);
-    // TODO: Actually give items to target players
-    for target in &targets {
-        ctx.source.send_success(
-            &Component::translatable(
-                "commands.give.success.single",
-                vec![
-                    Component::text(count.to_string()),
-                    Component::text(format!("[{item}]")),
-                    Component::text(&target.name),
-                ],
-            ),
-            true,
-        );
-    }
-    Ok(count)
+    // TODO: Actually give items to target players — requires inventory
+    // system (player inventory component in ECS), item stack creation
+    // from registry ID, and ClientboundContainerSetSlotPacket.
+    Err(crate::commands::CommandError::NotImplemented("give".into()))
 }

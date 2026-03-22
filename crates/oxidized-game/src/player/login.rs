@@ -16,11 +16,11 @@ use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
 use oxidized_protocol::packets::play::{
     ClientboundChangeDifficultyPacket, ClientboundContainerSetContentPacket,
-    ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
-    ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
-    ClientboundSetChunkCacheCenterPacket, ClientboundSetDefaultSpawnPositionPacket,
-    ClientboundSetHeldSlotPacket, ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo,
-    PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
+    ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket, ClientboundPlayerInfoUpdatePacket,
+    ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket,
+    ClientboundSetDefaultSpawnPositionPacket, ClientboundSetHeldSlotPacket,
+    ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo, PlayerInfoActions,
+    PlayerInfoEntry, RelativeFlags,
 };
 use oxidized_protocol::types::ResourceLocation;
 use oxidized_protocol::types::block_pos::BlockPos;
@@ -491,8 +491,7 @@ mod tests {
         let level_data = make_level_data();
 
         let pkt = build_spawn_position_packet(&player, &level_data);
-        let spawn =
-            ClientboundSetDefaultSpawnPositionPacket::decode(pkt.body.freeze()).unwrap();
+        let spawn = ClientboundSetDefaultSpawnPositionPacket::decode(pkt.body.freeze()).unwrap();
 
         let pos = BlockPos::from_long(spawn.pos);
         assert_eq!(pos.x, 100);
