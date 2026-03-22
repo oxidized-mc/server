@@ -6,10 +6,11 @@
 
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
+use oxidized_protocol::constants::VERSION_NAME;
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
 use tracing::{debug, warn};
 
-use super::helpers::decode_packet;
+use super::helpers::{decode_packet, disconnect_err};
 
 /// Processes the handshake packet and transitions to the requested state.
 pub async fn handle_handshake(
@@ -42,14 +43,24 @@ pub async fn handle_handshake(
             server_version = oxidized_protocol::constants::PROTOCOL_VERSION,
             "Protocol version mismatch — disconnecting",
         );
-        return Err(ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+
+        // Transition to Login state so we can send the disconnect packet
+        // (vanilla: `this.connection.setupOutboundProtocol(LoginProtocols.CLIENTBOUND)`).
+        conn.state = ConnectionState::Login;
+
+        // Vanilla uses "outdated_client" for very old protocols (< 754) and
+        // "incompatible" for everything else.
+        let reason = if intention.protocol_version < 754 {
             format!(
-                "Protocol version mismatch: client={}, server={}",
-                intention.protocol_version,
-                oxidized_protocol::constants::PROTOCOL_VERSION,
-            ),
-        )));
+                r#"{{"translate":"multiplayer.disconnect.outdated_client","with":["{VERSION_NAME}"]}}"#
+            )
+        } else {
+            format!(
+                r#"{{"translate":"multiplayer.disconnect.incompatible","with":["{VERSION_NAME}"]}}"#
+            )
+        };
+
+        return Err(disconnect_err(conn, &reason).await);
     }
 
     debug!(

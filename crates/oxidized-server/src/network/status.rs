@@ -19,14 +19,29 @@ use super::helpers::decode_packet;
 ///
 /// Returns `true` when the exchange is complete (after sending the pong),
 /// signaling the connection should close.
+///
+/// `has_requested_status` tracks whether a status request has already been
+/// received on this connection. Vanilla disconnects on a duplicate request.
 pub async fn handle_status(
     conn: &mut Connection,
     pkt: RawPacket,
     ctx: &LoginContext,
+    has_requested_status: &mut bool,
 ) -> Result<bool, ConnectionError> {
     match pkt.id {
         ServerboundStatusRequestPacket::PACKET_ID => {
             let _request = ServerboundStatusRequestPacket::decode(pkt.data);
+
+            if *has_requested_status {
+                debug!(
+                    peer = %conn.remote_addr(),
+                    "Duplicate status request — disconnecting",
+                );
+                return Err(ConnectionError::Io(std::io::Error::other(
+                    "duplicate status request",
+                )));
+            }
+            *has_requested_status = true;
 
             // Build the status dynamically from live server state so
             // player count and sample are always up to date.

@@ -5,6 +5,8 @@
 //! UUID generation, optionally enables compression, and transitions
 //! to [`ConnectionState::Configuration`].
 
+use std::time::Duration;
+
 use oxidized_protocol::auth;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
@@ -14,7 +16,11 @@ use oxidized_protocol::packets::login::{
     ClientboundHelloPacket, ClientboundLoginCompressionPacket, ClientboundLoginFinishedPacket,
     ServerboundHelloPacket, ServerboundKeyPacket, ServerboundLoginAcknowledgedPacket,
 };
+use tokio::time::timeout;
 use tracing::{debug, info, warn};
+
+/// Vanilla login timeout: 600 ticks at 20 TPS = 30 seconds.
+const LOGIN_TIMEOUT: Duration = Duration::from_secs(30);
 
 use super::LoginContext;
 use super::helpers::{decode_packet, disconnect, disconnect_err};
@@ -55,6 +61,17 @@ pub async fn handle_login(
     // 2. Validate player name length (1–16 characters).
     if hello.name.is_empty() || hello.name.len() > 16 {
         warn!(peer = %addr, name = %hello.name, "Invalid player name length");
+        return Err(disconnect_err(conn, "Invalid player name").await);
+    }
+
+    // Validate characters: only alphanumeric and underscore
+    // (vanilla StringUtil.isValidPlayerName).
+    if !hello
+        .name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        warn!(peer = %addr, name = %hello.name, "Invalid characters in player name");
         return Err(disconnect_err(conn, "Invalid player name").await);
     }
 
@@ -108,7 +125,14 @@ pub async fn handle_login(
     debug!(peer = %addr, uuid = %uuid, name = %username, "Login finished sent");
 
     // 6. Wait for LoginAcknowledged.
-    let ack_pkt = conn.read_raw_packet().await?;
+    let ack_pkt = timeout(LOGIN_TIMEOUT, conn.read_raw_packet())
+        .await
+        .map_err(|_| {
+            ConnectionError::Io(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "Login timed out",
+            ))
+        })??;
     if ack_pkt.id != ServerboundLoginAcknowledgedPacket::PACKET_ID {
         warn!(peer = %addr, packet_id = ack_pkt.id, "Expected login acknowledged (0x03)");
         return Err(disconnect_err(conn, "Unexpected packet — expected login acknowledged").await);
@@ -153,7 +177,14 @@ async fn authenticate_online(
     debug!(peer = %addr, "Encryption request sent");
 
     // c. Read ServerboundKeyPacket.
-    let key_pkt = conn.read_raw_packet().await?;
+    let key_pkt = timeout(LOGIN_TIMEOUT, conn.read_raw_packet())
+        .await
+        .map_err(|_| {
+            ConnectionError::Io(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "Login timed out",
+            ))
+        })??;
     if key_pkt.id != ServerboundKeyPacket::PACKET_ID {
         warn!(peer = %addr, packet_id = key_pkt.id, "Expected key response (0x01)");
         return Err(disconnect_err(conn, "Unexpected packet — expected encryption response").await);
