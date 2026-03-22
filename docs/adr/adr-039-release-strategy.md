@@ -100,6 +100,25 @@ Release. A downstream workflow builds and attaches binaries.
 | `x86_64-apple-darwin` | macOS Intel | `.tar.gz` |
 | `aarch64-apple-darwin` | macOS Apple Silicon | `.tar.gz` |
 
+### Docker Images
+
+Container images are published to GitHub Container Registry (GHCR) at
+`ghcr.io/dodoflix/oxidized`.
+
+**Nightly images** — built after every successful CI run on `main`. Tagged as
+`:nightly` (rolling) and `:sha-<7chars>` (pinnable).
+
+**Stable images** — built when a GitHub Release is published. Tagged with full
+version (`:0.2.0`), minor (`:0.2`), major (`:0`), and `:latest`.
+
+The Dockerfile uses a multi-stage build:
+1. **Build stage:** `rust:1-bookworm` — compiles the server binary
+2. **Runtime stage:** `debian:bookworm-slim` — minimal image with just the
+   binary, `ca-certificates`, and a non-root `oxidized` user
+
+The container exposes port `25565/tcp` and uses `/data` as the working
+directory volume for persistent world data.
+
 ### Tools
 
 | Tool | Version | Purpose |
@@ -107,12 +126,14 @@ Release. A downstream workflow builds and attaches binaries.
 | git-cliff | latest | Changelog generation from conventional commits |
 | release-please | v4 | Release PR management, version bumping, tag creation |
 | commitlint | latest | Conventional commit enforcement in CI |
+| Docker (buildx) | v6 | Multi-stage container image builds |
 
 ## Consequences
 
 ### Positive
 
 - Every push to `main` produces downloadable dev binaries (fast feedback for testers)
+- Docker images provide a zero-install deployment option
 - Stable releases are deliberate (maintainer reviews the release PR)
 - Changelog is always up-to-date and consistent
 - Version bumps are deterministic from commit messages
@@ -140,6 +161,7 @@ Release. A downstream workflow builds and attaches binaries.
 - [ ] `.github/workflows/release-please.yml` runs on push to main
 - [ ] `.github/workflows/dev-release.yml` produces nightly pre-releases
 - [ ] `.github/workflows/release-binaries.yml` builds 5 targets on stable release
+- [ ] `.github/workflows/docker.yml` builds and pushes images to GHCR
 - [ ] `.github/workflows/commit-lint.yml` validates PR commit messages
 - [ ] All version bumps are deterministic from conventional commit prefixes
 
