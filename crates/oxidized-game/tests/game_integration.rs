@@ -20,10 +20,9 @@ use oxidized_nbt::NbtCompound;
 use oxidized_protocol::auth::GameProfile;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
-    ClientboundChangeDifficultyPacket, ClientboundContainerSetContentPacket,
-    ClientboundGameEventPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
+    ClientboundChangeDifficultyPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
     ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
-    ClientboundSetChunkCacheCenterPacket, ClientboundSetDefaultSpawnPositionPacket,
+    ClientboundSetChunkCacheCenterPacket,
     ClientboundSetHeldSlotPacket, ClientboundSetSimulationDistancePacket,
 };
 use oxidized_protocol::types::ResourceLocation;
@@ -200,36 +199,29 @@ fn test_build_login_sequence() {
         &dimensions,
         0,
         &GameRules::default(),
+        false,
     );
 
-    // Exactly 11 packets (Login + Difficulty + Abilities + SpawnPos + GameMode +
-    // PlayerInfo + Inventory + HeldSlot + ChunkCenter + SimDistance + Position)
-    assert_eq!(packets.len(), 11);
+    // 8 packets: Login + Difficulty + Abilities + HeldSlot +
+    // PlayerInfo + ChunkCenter + SimDistance + Position
+    // (SpawnPos, Inventory, and GameMode event are now sent separately)
+    assert_eq!(packets.len(), 8);
 
     // Verify packet IDs in the correct order
     assert_eq!(packets[0].id, ClientboundLoginPacket::PACKET_ID);
     assert_eq!(packets[1].id, ClientboundChangeDifficultyPacket::PACKET_ID);
     assert_eq!(packets[2].id, ClientboundPlayerAbilitiesPacket::PACKET_ID);
+    assert_eq!(packets[3].id, ClientboundSetHeldSlotPacket::PACKET_ID);
+    assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
     assert_eq!(
-        packets[3].id,
-        ClientboundSetDefaultSpawnPositionPacket::PACKET_ID
-    );
-    assert_eq!(packets[4].id, ClientboundGameEventPacket::PACKET_ID);
-    assert_eq!(packets[5].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
-    assert_eq!(
-        packets[6].id,
-        ClientboundContainerSetContentPacket::PACKET_ID
-    );
-    assert_eq!(packets[7].id, ClientboundSetHeldSlotPacket::PACKET_ID);
-    assert_eq!(
-        packets[8].id,
+        packets[5].id,
         ClientboundSetChunkCacheCenterPacket::PACKET_ID
     );
     assert_eq!(
-        packets[9].id,
+        packets[6].id,
         ClientboundSetSimulationDistancePacket::PACKET_ID
     );
-    assert_eq!(packets[10].id, ClientboundPlayerPositionPacket::PACKET_ID);
+    assert_eq!(packets[7].id, ClientboundPlayerPositionPacket::PACKET_ID);
 }
 
 // ---------------------------------------------------------------------------
