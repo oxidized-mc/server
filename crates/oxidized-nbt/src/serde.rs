@@ -41,8 +41,7 @@ use crate::tag::NbtTag;
 /// Returns [`NbtError::SerdeError`] if the compound structure does not
 /// match the target type.
 pub fn from_compound<T: de::DeserializeOwned>(compound: &NbtCompound) -> Result<T, NbtError> {
-    let tag = NbtTag::Compound(compound.clone());
-    let deserializer = NbtDeserializer(&tag);
+    let deserializer = CompoundDeserializer(compound);
     T::deserialize(deserializer).map_err(|e| NbtError::SerdeError(e.to_string()))
 }
 
@@ -440,6 +439,66 @@ impl ser::SerializeStructVariant for NbtStructSerializer {
 // ═══════════════════════════════════════════════════════════════════════
 //  Deserializer
 // ═══════════════════════════════════════════════════════════════════════
+
+/// Serde [`Deserializer`] that borrows an [`NbtCompound`] directly,
+/// avoiding the clone that would be needed to wrap it in [`NbtTag::Compound`].
+///
+/// Used by [`from_compound`] as the entry-point deserializer.
+struct CompoundDeserializer<'a>(&'a NbtCompound);
+
+impl<'de, 'a> de::Deserializer<'de> for CompoundDeserializer<'a> {
+    type Error = Error;
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_map(NbtMapAccess::new(self.0))
+    }
+
+    fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_map(NbtMapAccess::new(self.0))
+    }
+
+    fn deserialize_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        self.deserialize_map(visitor)
+    }
+
+    fn deserialize_enum<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        if let Some((key, value)) = self.0.iter().next() {
+            visitor.visit_enum(NbtEnumAccess {
+                variant: key.clone(),
+                value,
+            })
+        } else {
+            Err(Error("expected non-empty compound for enum".to_owned()))
+        }
+    }
+
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        visitor.visit_newtype_struct(self)
+    }
+
+    fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_unit()
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes
+        byte_buf option unit unit_struct seq tuple tuple_struct identifier
+    }
+}
 
 /// Serde [`Deserializer`] wrapping a reference to an [`NbtTag`].
 struct NbtDeserializer<'a>(&'a NbtTag);
