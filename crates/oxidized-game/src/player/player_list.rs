@@ -84,15 +84,23 @@ impl PlayerList {
     /// Adds a player to the list and returns a shared reference.
     ///
     /// If a player with the same UUID already exists, the old entry is
-    /// replaced (matching vanilla duplicate-login behavior).
-    pub fn add(&mut self, player: ServerPlayer) -> Arc<RwLock<ServerPlayer>> {
+    /// replaced and returned so the caller can disconnect it.
+    pub fn add(
+        &mut self,
+        player: ServerPlayer,
+    ) -> (Arc<RwLock<ServerPlayer>>, Option<Arc<RwLock<ServerPlayer>>>) {
         let uuid = player.uuid;
         let arc = Arc::new(RwLock::new(player));
-        self.players.insert(uuid, Arc::clone(&arc));
+        let old = self.players.insert(uuid, Arc::clone(&arc));
         if !self.join_order.contains(&uuid) {
             self.join_order.push(uuid);
         }
-        arc
+        (arc, old)
+    }
+
+    /// Returns `true` if a player with the given UUID is currently connected.
+    pub fn contains(&self, uuid: &Uuid) -> bool {
+        self.players.contains_key(uuid)
     }
 
     /// Removes a player by UUID. Returns the player if found.
@@ -158,7 +166,8 @@ mod tests {
             GameMode::Survival,
         );
 
-        let arc = list.add(player);
+        let (arc, old) = list.add(player);
+        assert!(old.is_none());
         assert_eq!(list.player_count(), 1);
         assert_eq!(arc.read().name, "Steve");
 
@@ -173,9 +182,11 @@ mod tests {
         let p2 = make_player_with_id(&list, "Bob");
 
         assert!(!list.is_full());
-        list.add(p1);
+        let (_, old1) = list.add(p1);
+        assert!(old1.is_none());
         assert!(!list.is_full());
-        list.add(p2);
+        let (_, old2) = list.add(p2);
+        assert!(old2.is_none());
         assert!(list.is_full());
     }
 
@@ -191,7 +202,8 @@ mod tests {
             GameMode::Survival,
         );
 
-        list.add(player);
+        let (_, old) = list.add(player);
+        assert!(old.is_none());
         let removed = list.remove(&uuid);
         assert!(removed.is_some());
         assert_eq!(list.player_count(), 0);
@@ -211,9 +223,9 @@ mod tests {
         let p2 = make_player("Bob");
         let p3 = make_player("Charlie");
 
-        list.add(p1);
-        list.add(p2);
-        list.add(p3);
+        let (_, _) = list.add(p1);
+        let (_, _) = list.add(p2);
+        let (_, _) = list.add(p3);
 
         let names: Vec<String> = list.iter().map(|p| p.read().name.clone()).collect();
         assert_eq!(names, vec!["Alice", "Bob", "Charlie"]);
@@ -233,14 +245,64 @@ mod tests {
         );
         let p3 = make_player("Charlie");
 
-        list.add(p1);
-        list.add(p2);
-        list.add(p3);
+        let (_, _) = list.add(p1);
+        let (_, _) = list.add(p2);
+        let (_, _) = list.add(p3);
 
         list.remove(&uuid2);
 
         let names: Vec<String> = list.iter().map(|p| p.read().name.clone()).collect();
         assert_eq!(names, vec!["Alice", "Charlie"]);
+    }
+
+    #[test]
+    fn test_contains() {
+        let mut list = PlayerList::new(20);
+        let uuid = Uuid::new_v4();
+        let profile = GameProfile::new(uuid, "Steve".into());
+        let player = ServerPlayer::new(
+            list.next_entity_id(),
+            profile,
+            ResourceLocation::minecraft("overworld"),
+            GameMode::Survival,
+        );
+
+        assert!(!list.contains(&uuid));
+        let (_, _) = list.add(player);
+        assert!(list.contains(&uuid));
+        list.remove(&uuid);
+        assert!(!list.contains(&uuid));
+    }
+
+    #[test]
+    fn test_add_duplicate_returns_old() {
+        let mut list = PlayerList::new(20);
+        let uuid = Uuid::new_v4();
+        let profile1 = GameProfile::new(uuid, "Steve".into());
+        let p1 = ServerPlayer::new(
+            list.next_entity_id(),
+            profile1,
+            ResourceLocation::minecraft("overworld"),
+            GameMode::Survival,
+        );
+        let profile2 = GameProfile::new(uuid, "Steve2".into());
+        let p2 = ServerPlayer::new(
+            list.next_entity_id(),
+            profile2,
+            ResourceLocation::minecraft("overworld"),
+            GameMode::Survival,
+        );
+
+        let (first, old1) = list.add(p1);
+        assert!(old1.is_none());
+        assert_eq!(first.read().name, "Steve");
+
+        let (second, old2) = list.add(p2);
+        assert!(old2.is_some());
+        let old_player = old2.unwrap();
+        assert_eq!(old_player.read().name, "Steve");
+        assert_eq!(second.read().name, "Steve2");
+        assert_eq!(list.player_count(), 1);
     }
 
     #[test]
@@ -271,8 +333,8 @@ mod tests {
         assert_eq!(list.player_count(), 0);
         assert_eq!(list.max_players(), 2);
 
-        list.add(make_player("Alice"));
-        list.add(make_player("Bob"));
+        let (_, _) = list.add(make_player("Alice"));
+        let (_, _) = list.add(make_player("Bob"));
         assert_eq!(list.player_count(), 2);
         assert!(list.is_full());
     }
