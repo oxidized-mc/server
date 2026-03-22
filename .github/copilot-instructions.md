@@ -67,7 +67,7 @@ oxidized/
 ├── Cargo.toml               # Workspace manifest + shared dependency versions
 ├── rustfmt.toml             # Formatting rules (max_width=100)
 ├── deny.toml                # cargo-deny: licences + advisory config
-└── rust-toolchain.toml      # Pinned to stable 1.94.0
+└── rust-toolchain.toml      # Pinned to stable (CI enforces MSRV 1.85)
 ```
 
 ### Crate dependency rules (enforce strictly)
