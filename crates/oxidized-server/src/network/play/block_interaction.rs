@@ -230,13 +230,21 @@ pub async fn handle_use_item_on(
         let stack = player.inventory.get_mut(slot);
         stack.count -= 1;
         if stack.count <= 0 {
-            player.inventory.set(slot, oxidized_game::inventory::item_stack::ItemStack::empty());
+            player.inventory.set(
+                slot,
+                oxidized_game::inventory::item_stack::ItemStack::empty(),
+            );
         }
     }
 
     // Broadcast block change to all players except the acting player.
     let entity_id = play_ctx.player.read().entity_id;
-    broadcast_block_update(play_ctx.server_ctx, place_pos, block_state_id as i32, Some(entity_id));
+    broadcast_block_update(
+        play_ctx.server_ctx,
+        place_pos,
+        block_state_id as i32,
+        Some(entity_id),
+    );
 
     // Acknowledge the sequence.
     send_ack(play_ctx, pkt.sequence).await?;
@@ -343,7 +351,12 @@ async fn do_block_break(
 
     // Broadcast the block change to all players except the breaker.
     let entity_id = play_ctx.player.read().entity_id;
-    broadcast_block_update(play_ctx.server_ctx, pos, u32::from(AIR.0) as i32, Some(entity_id));
+    broadcast_block_update(
+        play_ctx.server_ctx,
+        pos,
+        u32::from(AIR.0) as i32,
+        Some(entity_id),
+    );
 
     // Acknowledge the sequence.
     send_ack(play_ctx, sequence).await?;
