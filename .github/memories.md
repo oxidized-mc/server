@@ -1982,6 +1982,15 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - Chunks generated during movement ARE now stored in `server_ctx.chunks` — this was a pre-existing gap that Phase 23 fixed.
 - `FlatWorldConfig::from_layers(&[(BlockStateId, u32)])` is a convenience constructor for tests and programmatic config.
 
+### 2026-03-22 — PalettedContainer VarInt length prefix bug (critical)
+
+**Context:** Phase 23 — flat world generation caused client crashes (IndexOutOfBoundsException in `LevelChunkSection.read()`).
+**Root cause:** `write_longs()` in `palette_codec.rs` incorrectly wrote a VarInt length prefix before the long array. Java's `writeFixedSizeLongArray`/`readFixedSizeLongArray` does NOT include a length prefix — the array size is computed from `bits_per_entry` and entry count.
+**Why it was masked:** Air-only chunks are all 0x00 bytes. The extra VarInt(0) = 0x00 shifted alignment, but the client read 0x00 everywhere, which parsed as valid zero values. With actual blocks (flat world), the extra bytes caused cascading parse failures.
+**Fix:** Remove VarInt prefix from `write_longs`, compute `num_longs` in `read_bit_storage` using `values_per_long = 64/bits; num_longs = ceil(size/values_per_long)` (same formula as `BitStorage::new()`). Also removed VarInt(0) from Single palette variant.
+**Key lesson:** Entries in Minecraft's `BitStorage` do NOT span long boundaries. The formula `(size * bits + 63) / 64` gives wrong results — must use `ceil(size / floor(64/bits))`.
+**Applies to:** Any PalettedContainer serialization, chunk data, heightmaps, or anything using BitStorage on the wire.
+
 ### ADR Status
 
 - ADR-016 (Worldgen Pipeline) partially implemented — trait defined, flat generator done. Rayon parallelism and noise generation deferred to Phase 25.
