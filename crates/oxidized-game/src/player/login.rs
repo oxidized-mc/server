@@ -31,6 +31,7 @@ use super::player_list::PlayerList;
 use super::server_player::ServerPlayer;
 use crate::inventory::ItemStack;
 use crate::inventory::item_ids::item_name_to_id;
+use crate::level::game_rules::{GameRuleKey, GameRules};
 use crate::player::PlayerInventory;
 use crate::player::inventory::PROTOCOL_SLOT_COUNT;
 
@@ -82,6 +83,7 @@ pub fn build_login_sequence(
     all_players: &PlayerList,
     dimensions: &[ResourceLocation],
     dimension_type_id: i32,
+    game_rules: &GameRules,
 ) -> Vec<EncodedPacket> {
     let packets = vec![
         build_login_packet(
@@ -90,6 +92,7 @@ pub fn build_login_sequence(
             all_players,
             dimensions,
             dimension_type_id,
+            game_rules,
         ),
         build_abilities_packet(player),
         build_spawn_position_packet(player, level_data),
@@ -110,6 +113,7 @@ fn build_login_packet(
     all_players: &PlayerList,
     dimensions: &[ResourceLocation],
     dimension_type_id: i32,
+    game_rules: &GameRules,
 ) -> EncodedPacket {
     let login = ClientboundLoginPacket {
         player_id: player.entity_id,
@@ -118,9 +122,9 @@ fn build_login_packet(
         max_players: all_players.max_players() as i32,
         chunk_radius: player.view_distance,
         simulation_distance: player.simulation_distance,
-        reduced_debug_info: false,
-        show_death_screen: true,
-        do_limited_crafting: false,
+        reduced_debug_info: game_rules.get_bool(GameRuleKey::ReducedDebugInfo),
+        show_death_screen: !game_rules.get_bool(GameRuleKey::ImmediateRespawn),
+        do_limited_crafting: game_rules.get_bool(GameRuleKey::LimitedCrafting),
         common_spawn_info: CommonPlayerSpawnInfo {
             dimension_type_id,
             dimension: player.dimension.clone(),
@@ -369,7 +373,15 @@ mod tests {
             ResourceLocation::minecraft("the_end"),
         ];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         assert_eq!(packets.len(), 10);
     }
 
@@ -380,7 +392,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
 
         assert_eq!(packets[0].id, ClientboundLoginPacket::PACKET_ID);
         assert_eq!(packets[1].id, ClientboundPlayerAbilitiesPacket::PACKET_ID);
@@ -413,7 +433,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
         assert_eq!(login.player_id, 42);
@@ -440,7 +468,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let abilities =
             ClientboundPlayerAbilitiesPacket::decode(packets[1].body.clone().freeze()).unwrap();
 
@@ -457,7 +493,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let spawn =
             ClientboundSetDefaultSpawnPositionPacket::decode(packets[2].body.clone().freeze())
                 .unwrap();
@@ -476,7 +520,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let event = ClientboundGameEventPacket::decode(packets[3].body.clone().freeze()).unwrap();
 
         assert_eq!(event.event, GameEventType::ChangeGameMode);
@@ -492,7 +544,15 @@ mod tests {
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
         let joining = make_player(3, "Charlie");
-        let packets = build_login_sequence(&joining, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &joining,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let info =
             ClientboundPlayerInfoUpdatePacket::decode(packets[4].body.clone().freeze()).unwrap();
 
@@ -512,7 +572,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let center =
             ClientboundSetChunkCacheCenterPacket::decode(packets[7].body.clone().freeze()).unwrap();
 
@@ -531,7 +599,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 42, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            42,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let pos =
             ClientboundPlayerPositionPacket::decode(packets[9].body.clone().freeze()).unwrap();
 
@@ -591,7 +667,15 @@ mod tests {
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(&player, 1, &level_data, &player_list, &dimensions, 0);
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+        );
         let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
         assert!(login.hardcore);

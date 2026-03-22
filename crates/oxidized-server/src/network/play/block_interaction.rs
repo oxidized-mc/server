@@ -399,8 +399,7 @@ async fn resync_block(
     // Also resync the adjacent face block (vanilla sends both).
     if let Some(dir) = direction {
         let adjacent = pos.relative(dir);
-        let adj_state =
-            get_block(play_ctx.server_ctx, adjacent).unwrap_or(u32::from(AIR.0)) as i32;
+        let adj_state = get_block(play_ctx.server_ctx, adjacent).unwrap_or(u32::from(AIR.0)) as i32;
         let adj_pkt = ClientboundBlockUpdatePacket {
             pos: adjacent,
             block_state: adj_state,

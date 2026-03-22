@@ -12,8 +12,13 @@ use oxidized_protocol::types::Vec3;
 /// uses 100 m for normal movement and 300 m during elytra flight.
 pub const MAX_MOVEMENT_PER_TICK: f64 = 100.0;
 
-/// Maximum valid coordinate value (±30 million blocks).
+/// Maximum valid horizontal coordinate value (±30 million blocks).
 pub const MAX_COORDINATE: f64 = 3.0e7;
+
+/// Maximum valid vertical coordinate value (±20 million blocks).
+///
+/// Vanilla clamps Y separately from X/Z using a smaller limit.
+pub const MAX_VERTICAL_COORDINATE: f64 = 2.0e7;
 
 /// Result of validating a movement packet.
 #[derive(Debug, Clone)]
@@ -38,7 +43,7 @@ pub struct MovementResult {
 /// # Validation Rules
 ///
 /// 1. Coordinates must be finite (not NaN or infinite)
-/// 2. Coordinates must be within ±30 million blocks horizontally
+/// 2. Coordinates must be within ±30 million blocks horizontally and ±20 million vertically
 /// 3. Movement distance must not exceed [`MAX_MOVEMENT_PER_TICK`]
 /// 4. Pitch is clamped to ±90°
 ///
@@ -76,13 +81,32 @@ pub fn validate_movement(
     let resolved_y = new_y.unwrap_or(current_pos.y);
     let resolved_z = new_z.unwrap_or(current_pos.z);
     let resolved_yaw = new_yaw.unwrap_or(current_yaw);
-    let resolved_pitch = new_pitch.unwrap_or(current_pitch).clamp(-90.0, 90.0);
+    let raw_pitch = new_pitch.unwrap_or(current_pitch);
 
-    // Clamp horizontal coordinates to world bounds (±30M).
+    // Reject NaN/Infinity values (vanilla containsInvalidValues check).
+    let has_invalid = [resolved_x, resolved_y, resolved_z]
+        .iter()
+        .any(|v| !v.is_finite())
+        || [resolved_yaw, raw_pitch].iter().any(|v| !v.is_finite());
+
+    if has_invalid {
+        return MovementResult {
+            accepted: false,
+            needs_correction: true,
+            new_pos: current_pos,
+            new_yaw: current_yaw % 360.0,
+            new_pitch: current_pitch.clamp(-90.0, 90.0),
+        };
+    }
+
+    let resolved_pitch = raw_pitch.clamp(-90.0, 90.0);
+
+    // Clamp coordinates to world bounds (X/Z ±30M, Y ±20M).
     let clamped_x = resolved_x.clamp(-MAX_COORDINATE, MAX_COORDINATE);
+    let clamped_y = resolved_y.clamp(-MAX_VERTICAL_COORDINATE, MAX_VERTICAL_COORDINATE);
     let clamped_z = resolved_z.clamp(-MAX_COORDINATE, MAX_COORDINATE);
 
-    let new_pos = Vec3::new(clamped_x, resolved_y, clamped_z);
+    let new_pos = Vec3::new(clamped_x, clamped_y, clamped_z);
 
     // Calculate squared distance from current position.
     let dx = new_pos.x - current_pos.x;
@@ -284,5 +308,130 @@ mod tests {
             None,
         );
         assert!(!result.accepted);
+    }
+
+    #[test]
+    fn test_y_coordinate_clamped() {
+        let result = validate_movement(
+            Vec3::new(0.0, 1.9e7, 0.0),
+            0.0,
+            0.0,
+            Some(0.0),
+            Some(3.0e7), // beyond ±20M vertical limit
+            Some(0.0),
+            None,
+            None,
+        );
+        // Y should be clamped to 2.0e7
+        assert!((result.new_pos.y - 2.0e7).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_y_coordinate_clamped_negative() {
+        let result = validate_movement(
+            Vec3::new(0.0, -1.9e7, 0.0),
+            0.0,
+            0.0,
+            Some(0.0),
+            Some(-3.0e7), // beyond -20M vertical limit
+            Some(0.0),
+            None,
+            None,
+        );
+        assert!((result.new_pos.y - (-2.0e7)).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_nan_position_rejected() {
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(f64::NAN),
+            Some(0.0),
+            Some(0.0),
+            None,
+            None,
+        );
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
+        // Should return current position
+        assert!((result.new_pos.x).abs() < f64::EPSILON);
+
+        // NaN in Y
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(0.0),
+            Some(f64::NAN),
+            Some(0.0),
+            None,
+            None,
+        );
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
+
+        // NaN in Z
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(0.0),
+            Some(0.0),
+            Some(f64::NAN),
+            None,
+            None,
+        );
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
+    }
+
+    #[test]
+    fn test_infinity_rotation_rejected() {
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(0.0),
+            Some(0.0),
+            Some(0.0),
+            Some(f32::INFINITY),
+            None,
+        );
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
+
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(0.0),
+            Some(0.0),
+            Some(0.0),
+            None,
+            Some(f32::NEG_INFINITY),
+        );
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
+    }
+
+    #[test]
+    fn test_nan_partial_rejected() {
+        // Only yaw is NaN, position is fine
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(1.0),
+            Some(2.0),
+            Some(3.0),
+            Some(f32::NAN),
+            Some(10.0),
+        );
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
+        // Should return current (zero) position, not the proposed one
+        assert!((result.new_pos.x).abs() < f64::EPSILON);
     }
 }

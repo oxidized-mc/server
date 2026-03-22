@@ -41,10 +41,8 @@ fn setblock_exec(
     };
 
     if !ctx.source.server.set_block(x, y, z, &block_name) {
-        ctx.source.send_failure(&Component::translatable(
-            "commands.setblock.failed",
-            vec![],
-        ));
+        ctx.source
+            .send_failure(&Component::translatable("commands.setblock.failed", vec![]));
         return Ok(0);
     }
 

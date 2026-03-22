@@ -34,7 +34,8 @@ use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundAddEntityPacket, ClientboundGameEventPacket, ClientboundKeepAlivePacket,
+    ClientboundAddEntityPacket, ClientboundChangeDifficultyPacket, ClientboundGameEventPacket,
+    ClientboundInitializeBorderPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
     ClientboundRemoveEntitiesPacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
     PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, ServerboundAcceptTeleportationPacket,
@@ -98,7 +99,7 @@ fn is_movement_packet(id: i32) -> bool {
 /// Handles the PLAY-state login sequence for a newly joined player.
 ///
 /// Creates a [`ServerPlayer`], loads saved player data (if available),
-/// builds the 8-packet login sequence via [`build_login_sequence`], and
+/// builds the 10-packet login sequence via [`build_login_sequence`], and
 /// sends them to the client. Then enters the main play loop to process
 /// incoming PLAY packets.
 ///
@@ -167,11 +168,12 @@ pub async fn handle_play_entry(
     let player_chunk_x = player.pos.x.floor() as i32;
     let player_chunk_z = player.pos.z.floor() as i32;
 
-    // Build the 8-packet login sequence.
+    // Build the 10-packet login sequence.
     let dimension_type_id = 0; // overworld = 0 in registry order
     let packets = {
         let level_data = server_ctx.level_data.read();
         let player_list = server_ctx.player_list.read();
+        let game_rules = server_ctx.game_rules.read();
         build_login_sequence(
             &player,
             teleport_id,
@@ -179,6 +181,7 @@ pub async fn handle_play_entry(
             &player_list,
             &server_ctx.dimensions,
             dimension_type_id,
+            &game_rules,
         )
     };
 
@@ -188,6 +191,54 @@ pub async fn handle_play_entry(
         conn.send_raw(pkt.id, &pkt.body).await?;
     }
     conn.flush().await?;
+
+    // Send difficulty to the client.
+    let difficulty_pkt = {
+        let ld = server_ctx.level_data.read();
+        ClientboundChangeDifficultyPacket {
+            difficulty: ld.difficulty.clamp(0, 3) as u8,
+            locked: false,
+        }
+    };
+    conn.send_packet(&difficulty_pkt).await?;
+
+    // Send weather state if it is currently raining.
+    let (is_raining, is_thundering) = {
+        let ld = server_ctx.level_data.read();
+        (ld.is_raining, ld.is_thundering)
+    };
+    if is_raining {
+        conn.send_packet(&ClientboundGameEventPacket {
+            event: GameEventType::StartRaining,
+            param: 0.0,
+        })
+        .await?;
+        conn.send_packet(&ClientboundGameEventPacket {
+            event: GameEventType::RainLevelChange,
+            param: 1.0,
+        })
+        .await?;
+        if is_thundering {
+            conn.send_packet(&ClientboundGameEventPacket {
+                event: GameEventType::ThunderLevelChange,
+                param: 1.0,
+            })
+            .await?;
+        }
+    }
+
+    // Send default world border state.
+    conn.send_packet(&ClientboundInitializeBorderPacket {
+        new_center_x: 0.0,
+        new_center_z: 0.0,
+        old_size: 59_999_968.0,
+        new_size: 59_999_968.0,
+        lerp_time: 0,
+        new_absolute_max_size: 29_999_984,
+        warning_blocks: 5,
+        warning_time: 15,
+    })
+    .await?;
 
     // Send chunk cache radius to the client.
     let cache_radius = ClientboundSetChunkCacheRadiusPacket {
@@ -203,6 +254,14 @@ pub async fn handle_play_entry(
         conn.send_packet(&cmd_pkt).await?;
     }
 
+    // Signal the client that chunk loading is about to begin (must be
+    // BEFORE chunks are sent — vanilla ordering requirement).
+    conn.send_packet(&ClientboundGameEventPacket {
+        event: GameEventType::LevelChunksLoadStart,
+        param: 0.0,
+    })
+    .await?;
+
     // Send initial chunk batch using the world generator.
     let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
     let chunk_count = helpers::send_initial_chunks(
@@ -213,13 +272,6 @@ pub async fn handle_play_entry(
         server_ctx.chunk_generator.as_ref(),
     )
     .await?;
-
-    // Signal the client that initial chunks have been sent.
-    let chunks_load_start = ClientboundGameEventPacket {
-        event: GameEventType::LevelChunksLoadStart,
-        param: 0.0,
-    };
-    conn.send_packet(&chunks_load_start).await?;
 
     info!(
         peer = %addr,
