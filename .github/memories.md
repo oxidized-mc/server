@@ -147,6 +147,19 @@ requires waiting for **all** CI jobs to complete and verifying green, including 
 audit. Added CI Repair loop to the lifecycle.
 **Applies to:** Every integration — wait for all workflows, not just the main CI.
 
+### 2026-03-22 — Release automation: release-please + git-cliff + cross-platform binaries
+**Context:** ADR-039 — adding automated versioning, changelog generation, and binary distribution.
+**Learning:** Toolchain chosen: **release-please** (GitHub Action, v4) for automated release PR
+management and version bumping from conventional commits; **git-cliff** (Rust-native) for
+configurable changelog generation; **commitlint** (GitHub Action) for PR-time conventional commit
+enforcement. Two release flows: (1) dev/nightly — every push to `main` builds cross-platform
+binaries and updates a rolling `nightly` pre-release; (2) stable — release-please accumulates
+a Release PR, maintainer merges, tag + GitHub Release created, binary build workflow attaches
+5 targets (linux-gnu, linux-musl, windows-msvc, macos-x86_64, macos-aarch64). Pre-1.0 rule:
+breaking changes bump minor (0.1→0.2), not major. Config files: `cliff.toml`,
+`release-please-config.json`, `.release-please-manifest.json`, `.commitlintrc.yml`.
+**Applies to:** All release and CI/CD processes. See ADR-039 for full rationale.
+
 ---
 
 ## Codebase Conventions

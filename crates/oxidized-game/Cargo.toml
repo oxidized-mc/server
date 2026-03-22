@@ -7,6 +7,8 @@ authors.workspace     = true
 license.workspace     = true
 repository.workspace  = true
 rust-version.workspace = true
+keywords    = ["minecraft", "game-logic", "ecs", "entities", "combat"]
+categories  = ["game-development", "games"]
 
 [dependencies]
 oxidized-nbt      = { workspace = true }
