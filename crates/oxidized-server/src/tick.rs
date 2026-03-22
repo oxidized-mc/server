@@ -392,6 +392,7 @@ mod tests {
             game_rules: RwLock::new(GameRules::default()),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
             storage: LevelStorageSource::new(""),
+            chunks: dashmap::DashMap::new(),
         })
     }
 
