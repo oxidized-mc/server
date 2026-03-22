@@ -16,11 +16,11 @@ use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
 use oxidized_protocol::packets::play::{
     ClientboundChangeDifficultyPacket, ClientboundContainerSetContentPacket,
-    ClientboundGameEventPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
+    ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
     ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
     ClientboundSetChunkCacheCenterPacket, ClientboundSetDefaultSpawnPositionPacket,
     ClientboundSetHeldSlotPacket, ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo,
-    GameEventType, PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
+    PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
 };
 use oxidized_protocol::types::ResourceLocation;
 use oxidized_protocol::types::block_pos::BlockPos;
@@ -55,16 +55,23 @@ pub struct EncodedPacket {
 /// 1. `ClientboundLoginPacket` — world metadata + entity ID
 /// 2. `ClientboundChangeDifficultyPacket` — world difficulty
 /// 3. `ClientboundPlayerAbilitiesPacket` — ability flags + speeds
-/// 4. `ClientboundSetDefaultSpawnPositionPacket` — compass target
-/// 5. `ClientboundGameEventPacket` — game mode change event
-/// 6. `ClientboundPlayerInfoUpdatePacket` — all online players for tab list
-/// 7. `ClientboundContainerSetContentPacket` — full inventory sync
-/// 8. `ClientboundSetHeldSlotPacket` — selected hotbar slot
-/// 9. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
-/// 10. `ClientboundSetSimulationDistancePacket` — simulation distance
-/// 11. `ClientboundPlayerPositionPacket` — initial position + teleport ID
+/// 4. `ClientboundSetHeldSlotPacket` — selected hotbar slot
+/// 5. `ClientboundPlayerInfoUpdatePacket` — all online players for tab list
+/// 6. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
+/// 7. `ClientboundSetSimulationDistancePacket` — simulation distance
+/// 8. `ClientboundPlayerPositionPacket` — initial position + teleport ID
 ///
-/// Chunk data is handled separately by the chunk streaming subsystem.
+/// The following packets are sent separately by the server crate at the
+/// correct point in the join sequence:
+/// - `ClientboundEntityEventPacket` — permission level (after this batch)
+/// - `ClientboundCommandsPacket` — command tree
+/// - `ClientboundInitializeBorderPacket` — world border
+/// - `ClientboundSetTimePacket` — clock sync
+/// - `ClientboundSetDefaultSpawnPositionPacket` — compass target
+/// - Weather events (if raining)
+/// - `ClientboundGameEventPacket(LevelChunksLoadStart)` — before chunks
+/// - Chunk data
+/// - `ClientboundContainerSetContentPacket` — inventory (sent last)
 pub fn build_login_sequence(
     player: &ServerPlayer,
     teleport_id: i32,
@@ -73,6 +80,7 @@ pub fn build_login_sequence(
     dimensions: &[ResourceLocation],
     dimension_type_id: i32,
     game_rules: &GameRules,
+    is_flat: bool,
 ) -> Vec<EncodedPacket> {
     vec![
         build_login_packet(
@@ -82,14 +90,12 @@ pub fn build_login_sequence(
             dimensions,
             dimension_type_id,
             game_rules,
+            is_flat,
         ),
         build_difficulty_packet(level_data),
         build_abilities_packet(player),
-        build_spawn_position_packet(player, level_data),
-        build_game_mode_event_packet(player),
-        build_player_info_packet(all_players),
-        build_container_set_content_packet(player),
         build_held_slot_packet(player),
+        build_player_info_packet(all_players),
         build_chunk_center_packet(player),
         build_simulation_distance_packet(player),
         build_position_packet(player, teleport_id),
@@ -103,6 +109,7 @@ fn build_login_packet(
     dimensions: &[ResourceLocation],
     dimension_type_id: i32,
     game_rules: &GameRules,
+    is_flat: bool,
 ) -> EncodedPacket {
     let login = ClientboundLoginPacket {
         player_id: player.entity_id,
@@ -121,7 +128,7 @@ fn build_login_packet(
             game_mode: player.game_mode.id() as u8,
             previous_game_mode: GameMode::nullable_id(player.previous_game_mode),
             is_debug: false,
-            is_flat: false,
+            is_flat,
             last_death_location: None,
             portal_cooldown: 0,
             sea_level: level_data.sea_level,
@@ -157,7 +164,10 @@ fn build_abilities_packet(player: &ServerPlayer) -> EncodedPacket {
     }
 }
 
-fn build_spawn_position_packet(
+/// Builds the spawn position packet for the join sequence.
+///
+/// Sent after the world border and time sync during login.
+pub fn build_spawn_position_packet(
     player: &ServerPlayer,
     level_data: &PrimaryLevelData,
 ) -> EncodedPacket {
@@ -172,17 +182,6 @@ fn build_spawn_position_packet(
     EncodedPacket {
         id: ClientboundSetDefaultSpawnPositionPacket::PACKET_ID,
         body: spawn_pos.encode(),
-    }
-}
-
-fn build_game_mode_event_packet(player: &ServerPlayer) -> EncodedPacket {
-    let game_event = ClientboundGameEventPacket {
-        event: GameEventType::ChangeGameMode,
-        param: player.game_mode.id() as f32,
-    };
-    EncodedPacket {
-        id: ClientboundGameEventPacket::PACKET_ID,
-        body: game_event.encode(),
     }
 }
 
@@ -220,7 +219,10 @@ fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
     }
 }
 
-fn build_container_set_content_packet(player: &ServerPlayer) -> EncodedPacket {
+/// Builds the inventory sync packet for the join sequence.
+///
+/// Sent after chunks have been delivered (last packet in vanilla join).
+pub fn build_container_set_content_packet(player: &ServerPlayer) -> EncodedPacket {
     let items: Vec<Option<SlotData>> = (0..PROTOCOL_SLOT_COUNT as i16)
         .map(|proto_slot| {
             PlayerInventory::from_protocol_slot(proto_slot).and_then(|internal| {
@@ -362,7 +364,7 @@ mod tests {
     }
 
     #[test]
-    fn login_sequence_produces_ten_packets() {
+    fn login_sequence_produces_eight_packets() {
         let player = make_player(42, "Steve");
         let level_data = make_level_data();
         let mut player_list = PlayerList::new(20);
@@ -381,8 +383,9 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
-        assert_eq!(packets.len(), 11);
+        assert_eq!(packets.len(), 8);
     }
 
     #[test]
@@ -400,31 +403,23 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
 
         assert_eq!(packets[0].id, ClientboundLoginPacket::PACKET_ID);
         assert_eq!(packets[1].id, ClientboundChangeDifficultyPacket::PACKET_ID);
         assert_eq!(packets[2].id, ClientboundPlayerAbilitiesPacket::PACKET_ID);
+        assert_eq!(packets[3].id, ClientboundSetHeldSlotPacket::PACKET_ID);
+        assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
         assert_eq!(
-            packets[3].id,
-            ClientboundSetDefaultSpawnPositionPacket::PACKET_ID
-        );
-        assert_eq!(packets[4].id, ClientboundGameEventPacket::PACKET_ID);
-        assert_eq!(packets[5].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
-        assert_eq!(
-            packets[6].id,
-            ClientboundContainerSetContentPacket::PACKET_ID
-        );
-        assert_eq!(packets[7].id, ClientboundSetHeldSlotPacket::PACKET_ID);
-        assert_eq!(
-            packets[8].id,
+            packets[5].id,
             ClientboundSetChunkCacheCenterPacket::PACKET_ID
         );
         assert_eq!(
-            packets[9].id,
+            packets[6].id,
             ClientboundSetSimulationDistancePacket::PACKET_ID
         );
-        assert_eq!(packets[10].id, ClientboundPlayerPositionPacket::PACKET_ID);
+        assert_eq!(packets[7].id, ClientboundPlayerPositionPacket::PACKET_ID);
     }
 
     #[test]
@@ -442,6 +437,7 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
         let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
@@ -454,6 +450,7 @@ mod tests {
         assert_eq!(login.common_spawn_info.game_mode, 0);
         assert_eq!(login.common_spawn_info.previous_game_mode, -1);
         assert_eq!(login.common_spawn_info.sea_level, 63);
+        assert!(!login.common_spawn_info.is_flat);
     }
 
     #[test]
@@ -477,6 +474,7 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
         let abilities =
             ClientboundPlayerAbilitiesPacket::decode(packets[2].body.clone().freeze()).unwrap();
@@ -488,24 +486,13 @@ mod tests {
     }
 
     #[test]
-    fn spawn_position_uses_level_data() {
+    fn spawn_position_packet_uses_level_data() {
         let player = make_player(1, "Test");
         let level_data = make_level_data();
-        let player_list = PlayerList::new(20);
-        let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
-        let packets = build_login_sequence(
-            &player,
-            1,
-            &level_data,
-            &player_list,
-            &dimensions,
-            0,
-            &GameRules::default(),
-        );
+        let pkt = build_spawn_position_packet(&player, &level_data);
         let spawn =
-            ClientboundSetDefaultSpawnPositionPacket::decode(packets[3].body.clone().freeze())
-                .unwrap();
+            ClientboundSetDefaultSpawnPositionPacket::decode(pkt.body.freeze()).unwrap();
 
         let pos = BlockPos::from_long(spawn.pos);
         assert_eq!(pos.x, 100);
@@ -515,7 +502,7 @@ mod tests {
     }
 
     #[test]
-    fn game_event_sends_game_mode() {
+    fn is_flat_flag_propagated_to_login_packet() {
         let player = make_player(1, "Test");
         let level_data = make_level_data();
         let player_list = PlayerList::new(20);
@@ -529,11 +516,10 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            true,
         );
-        let event = ClientboundGameEventPacket::decode(packets[4].body.clone().freeze()).unwrap();
-
-        assert_eq!(event.event, GameEventType::ChangeGameMode);
-        assert!((event.param - 0.0).abs() < f32::EPSILON); // Survival = 0
+        let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
+        assert!(login.common_spawn_info.is_flat);
     }
 
     #[test]
@@ -553,9 +539,10 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
         let info =
-            ClientboundPlayerInfoUpdatePacket::decode(packets[5].body.clone().freeze()).unwrap();
+            ClientboundPlayerInfoUpdatePacket::decode(packets[4].body.clone().freeze()).unwrap();
 
         // Should contain Alice and Bob (the players in the list).
         assert_eq!(info.entries.len(), 2);
@@ -581,9 +568,10 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
         let center =
-            ClientboundSetChunkCacheCenterPacket::decode(packets[8].body.clone().freeze()).unwrap();
+            ClientboundSetChunkCacheCenterPacket::decode(packets[5].body.clone().freeze()).unwrap();
 
         assert_eq!(center.chunk_x, 6); // 100 >> 4 = 6
         assert_eq!(center.chunk_z, -13); // -200 >> 4 = -13
@@ -608,9 +596,10 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
         let pos =
-            ClientboundPlayerPositionPacket::decode(packets[10].body.clone().freeze()).unwrap();
+            ClientboundPlayerPositionPacket::decode(packets[7].body.clone().freeze()).unwrap();
 
         assert_eq!(pos.teleport_id, 42);
         assert!((pos.x - 50.5).abs() < 0.001);
@@ -676,6 +665,7 @@ mod tests {
             &dimensions,
             0,
             &GameRules::default(),
+            false,
         );
         let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 

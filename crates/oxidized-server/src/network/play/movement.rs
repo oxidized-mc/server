@@ -1,7 +1,8 @@
 //! Movement packet handling and chunk boundary tracking.
 //!
 //! Processes position/rotation updates from the client, validates them,
-//! and sends/forgets chunks when the player crosses chunk boundaries.
+//! broadcasts position changes to other players, and sends/forgets chunks
+//! when the player crosses chunk boundaries.
 
 use std::sync::Arc;
 
@@ -11,7 +12,9 @@ use oxidized_protocol::connection::ConnectionError;
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
     ClientboundForgetLevelChunkPacket, ClientboundLevelChunkWithLightPacket,
-    ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket, RelativeFlags,
+    ClientboundMoveEntityPosPacket, ClientboundMoveEntityPosRotPacket,
+    ClientboundMoveEntityRotPacket, ClientboundPlayerPositionPacket,
+    ClientboundRotateHeadPacket, ClientboundSetChunkCacheCenterPacket, RelativeFlags,
     ServerboundMovePlayerPacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
@@ -20,8 +23,10 @@ use parking_lot::RwLock;
 use tracing::{debug, trace};
 
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
+use oxidized_game::net::entity_movement::{classify_move, pack_degrees, EntityMoveKind};
 
 use super::PlayContext;
+use crate::network::BroadcastMessage;
 
 /// Handles a movement packet (position, rotation, or both).
 pub async fn handle_movement(
@@ -60,12 +65,16 @@ pub async fn handle_movement(
         return Ok(());
     }
 
-    let result = {
+    let (old_pos, old_yaw, old_pitch, entity_id) = {
         let p = ctx.player.read();
+        (p.pos, p.yaw, p.pitch, p.entity_id)
+    };
+
+    let result = {
         validate_movement(
-            p.pos,
-            p.yaw,
-            p.pitch,
+            old_pos,
+            old_yaw,
+            old_pitch,
             move_pkt.x,
             move_pkt.y,
             move_pkt.z,
@@ -113,8 +122,17 @@ pub async fn handle_movement(
             "Position updated",
         );
 
+        // Broadcast movement to other players.
+        let has_pos = move_pkt.has_pos();
+        let has_rot = move_pkt.has_rot();
+        broadcast_movement(
+            ctx, entity_id, old_pos, result.new_pos, old_yaw, old_pitch,
+            result.new_yaw, result.new_pitch, move_pkt.on_ground,
+            has_pos, has_rot,
+        );
+
         // Check if player crossed a chunk boundary.
-        if move_pkt.has_pos() {
+        if has_pos {
             let new_chunk = ChunkPos::from_block_coords(
                 result.new_pos.x.floor() as i32,
                 result.new_pos.z.floor() as i32,
@@ -128,6 +146,151 @@ pub async fn handle_movement(
     }
 
     Ok(())
+}
+
+/// Broadcasts a player's movement to all other players.
+///
+/// Uses delta-encoded movement packets when the delta fits in `i16`
+/// (~8 blocks). For larger movements, falls back to a full entity
+/// position sync. Head rotation is always sent when yaw changes.
+#[allow(clippy::too_many_arguments)]
+fn broadcast_movement(
+    ctx: &PlayContext<'_>,
+    entity_id: i32,
+    old_pos: oxidized_protocol::types::Vec3,
+    new_pos: oxidized_protocol::types::Vec3,
+    _old_yaw: f32,
+    _old_pitch: f32,
+    new_yaw: f32,
+    new_pitch: f32,
+    on_ground: bool,
+    has_pos: bool,
+    has_rot: bool,
+) {
+    let pos_changed = has_pos
+        && (old_pos.x != new_pos.x || old_pos.y != new_pos.y || old_pos.z != new_pos.z);
+    let rot_changed = has_rot;
+
+    if !pos_changed && !rot_changed {
+        return;
+    }
+
+    let packed_yaw = pack_degrees(new_yaw);
+    let packed_pitch = pack_degrees(new_pitch);
+
+    if pos_changed && rot_changed {
+        let move_kind =
+            classify_move(old_pos.x, old_pos.y, old_pos.z, new_pos.x, new_pos.y, new_pos.z);
+        match move_kind {
+            EntityMoveKind::Delta { dx, dy, dz } => {
+                let pkt = ClientboundMoveEntityPosRotPacket {
+                    entity_id,
+                    dx,
+                    dy,
+                    dz,
+                    yaw: packed_yaw,
+                    pitch: packed_pitch,
+                    on_ground,
+                };
+                let _ = ctx.server_ctx.broadcast_tx.send(BroadcastMessage {
+                    packet_id: ClientboundMoveEntityPosRotPacket::PACKET_ID,
+                    data: pkt.encode().freeze(),
+                    exclude_entity: Some(entity_id),
+                    target_entity: None,
+                });
+            },
+            EntityMoveKind::Sync { x, y, z } => {
+                // Delta too large — send full position sync instead.
+                let pkt =
+                    oxidized_protocol::packets::play::ClientboundEntityPositionSyncPacket {
+                        entity_id,
+                        x,
+                        y,
+                        z,
+                        vx: 0.0,
+                        vy: 0.0,
+                        vz: 0.0,
+                        yaw: new_yaw,
+                        pitch: new_pitch,
+                        on_ground,
+                    };
+                let _ = ctx.server_ctx.broadcast_tx.send(BroadcastMessage {
+                    packet_id: oxidized_protocol::packets::play::ClientboundEntityPositionSyncPacket::PACKET_ID,
+                    data: pkt.encode().freeze(),
+                    exclude_entity: Some(entity_id),
+                    target_entity: None,
+                });
+            },
+        }
+    } else if pos_changed {
+        let move_kind =
+            classify_move(old_pos.x, old_pos.y, old_pos.z, new_pos.x, new_pos.y, new_pos.z);
+        match move_kind {
+            EntityMoveKind::Delta { dx, dy, dz } => {
+                let pkt = ClientboundMoveEntityPosPacket {
+                    entity_id,
+                    dx,
+                    dy,
+                    dz,
+                    on_ground,
+                };
+                let _ = ctx.server_ctx.broadcast_tx.send(BroadcastMessage {
+                    packet_id: ClientboundMoveEntityPosPacket::PACKET_ID,
+                    data: pkt.encode().freeze(),
+                    exclude_entity: Some(entity_id),
+                    target_entity: None,
+                });
+            },
+            EntityMoveKind::Sync { x, y, z } => {
+                let pkt =
+                    oxidized_protocol::packets::play::ClientboundEntityPositionSyncPacket {
+                        entity_id,
+                        x,
+                        y,
+                        z,
+                        vx: 0.0,
+                        vy: 0.0,
+                        vz: 0.0,
+                        yaw: new_yaw,
+                        pitch: new_pitch,
+                        on_ground,
+                    };
+                let _ = ctx.server_ctx.broadcast_tx.send(BroadcastMessage {
+                    packet_id: oxidized_protocol::packets::play::ClientboundEntityPositionSyncPacket::PACKET_ID,
+                    data: pkt.encode().freeze(),
+                    exclude_entity: Some(entity_id),
+                    target_entity: None,
+                });
+            },
+        }
+    } else {
+        let pkt = ClientboundMoveEntityRotPacket {
+            entity_id,
+            yaw: packed_yaw,
+            pitch: packed_pitch,
+            on_ground,
+        };
+        let _ = ctx.server_ctx.broadcast_tx.send(BroadcastMessage {
+            packet_id: ClientboundMoveEntityRotPacket::PACKET_ID,
+            data: pkt.encode().freeze(),
+            exclude_entity: Some(entity_id),
+            target_entity: None,
+        });
+    }
+
+    // Head rotation is always sent when yaw changes (for head tracking).
+    if rot_changed {
+        let head_pkt = ClientboundRotateHeadPacket {
+            entity_id,
+            head_yaw: packed_yaw,
+        };
+        let _ = ctx.server_ctx.broadcast_tx.send(BroadcastMessage {
+            packet_id: ClientboundRotateHeadPacket::PACKET_ID,
+            data: head_pkt.encode().freeze(),
+            exclude_entity: Some(entity_id),
+            target_entity: None,
+        });
+    }
 }
 
 /// Sends chunk load/unload packets when a player crosses a chunk boundary.

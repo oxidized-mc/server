@@ -27,19 +27,21 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::player::{
-    GameMode, ServerPlayer, build_login_sequence, handle_accept_teleportation,
+    GameMode, ServerPlayer, build_container_set_content_packet, build_login_sequence,
+    build_spawn_position_packet, handle_accept_teleportation,
 };
 use oxidized_protocol::auth;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundAddEntityPacket, ClientboundGameEventPacket,
+    ClientboundAddEntityPacket, ClientboundEntityEventPacket, ClientboundGameEventPacket,
     ClientboundInitializeBorderPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundRemoveEntitiesPacket, ClientboundSetChunkCacheRadiusPacket, GameEventType,
-    PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, ServerboundAcceptTeleportationPacket,
-    ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket, ServerboundChatPacket,
+    ClientboundRemoveEntitiesPacket, ClientboundSetTimePacket, ClockNetworkState, ClockUpdate,
+    GameEventType, PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry,
+    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
+    ServerboundChatCommandSignedPacket, ServerboundChatPacket,
     ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
@@ -83,9 +85,10 @@ const PLAYER_ENTITY_TYPE_ID: i32 = 155;
 
 /// Converts a float angle (degrees) to the protocol's packed byte format.
 ///
-/// The packed format maps 0–360° to 0–255.
-fn pack_angle(degrees: f32) -> u8 {
-    ((degrees / 360.0) * 256.0) as u8
+/// The packed format maps 0–360° to 0–255, with proper wrapping for
+/// negative angles and values above 360°.
+pub(crate) fn pack_angle(degrees: f32) -> u8 {
+    oxidized_game::net::entity_movement::pack_degrees(degrees)
 }
 
 /// Returns `true` if the packet ID is a movement packet.
@@ -136,8 +139,7 @@ pub async fn handle_play_entry(
 
     // Apply client preferences, capped to server maximums.
     player.view_distance = i32::from(client_info.view_distance).min(server_ctx.max_view_distance);
-    player.simulation_distance =
-        i32::from(client_info.view_distance).min(server_ctx.max_simulation_distance);
+    player.simulation_distance = server_ctx.max_simulation_distance;
 
     // Try to load saved player data from playerdata/<uuid>.dat.
     let playerdata_path = format!("world/playerdata/{uuid}.dat");
@@ -168,8 +170,9 @@ pub async fn handle_play_entry(
     let player_chunk_x = player.pos.x.floor() as i32;
     let player_chunk_z = player.pos.z.floor() as i32;
 
-    // Build the 10-packet login sequence.
+    // Build the login sequence.
     let dimension_type_id = 0; // overworld = 0 in registry order
+    let is_flat = server_ctx.chunk_generator.generator_type() == "minecraft:flat";
     let packets = {
         let level_data = server_ctx.level_data.read();
         let player_list = server_ctx.player_list.read();
@@ -182,6 +185,7 @@ pub async fn handle_play_entry(
             &server_ctx.dimensions,
             dimension_type_id,
             &game_rules,
+            is_flat,
         )
     };
 
@@ -192,7 +196,67 @@ pub async fn handle_play_entry(
     }
     conn.flush().await?;
 
-    // Send weather state if it is currently raining.
+    // Send EntityEvent with the player's permission level (vanilla sends
+    // this via sendPlayerPermissionLevel — event IDs 24–28).
+    {
+        let perm_level = server_ctx.op_permission_level.clamp(0, 4) as u8;
+        conn.send_packet(&ClientboundEntityEventPacket {
+            entity_id,
+            event_id: ClientboundEntityEventPacket::PERMISSION_LEVEL_BASE + perm_level,
+        })
+        .await?;
+    }
+
+    // Send the command tree so the client can offer tab-completion.
+    {
+        let cmd_source = commands::make_command_source(&player_name, uuid, &player, server_ctx);
+        let tree = server_ctx.commands.serialize_tree(&cmd_source);
+        let cmd_pkt = commands::commands_packet_from_tree(&tree);
+        conn.send_packet(&cmd_pkt).await?;
+    }
+
+    // Send default world border state (vanilla: sendLevelInfo).
+    conn.send_packet(&ClientboundInitializeBorderPacket {
+        new_center_x: 0.0,
+        new_center_z: 0.0,
+        old_size: 59_999_968.0,
+        new_size: 59_999_968.0,
+        lerp_time: 0,
+        new_absolute_max_size: 29_999_984,
+        warning_blocks: 5,
+        warning_time: 15,
+    })
+    .await?;
+
+    // Send time sync with overworld clock data (vanilla: sendLevelInfo).
+    {
+        let time_pkt = {
+            let ld = server_ctx.level_data.read();
+            ClientboundSetTimePacket {
+                game_time: ld.time,
+                clock_updates: vec![ClockUpdate {
+                    clock_id: ClientboundSetTimePacket::OVERWORLD_CLOCK_ID,
+                    state: ClockNetworkState {
+                        total_ticks: ld.day_time,
+                        partial_tick: 0.0,
+                        rate: 1.0,
+                    },
+                }],
+            }
+        };
+        conn.send_packet(&time_pkt).await?;
+    }
+
+    // Send spawn position (vanilla: sendLevelInfo → respawnData).
+    {
+        let spawn_pkt = {
+            let ld = server_ctx.level_data.read();
+            build_spawn_position_packet(&player, &ld)
+        };
+        conn.send_raw(spawn_pkt.id, &spawn_pkt.body).await?;
+    }
+
+    // Send weather state if it is currently raining (vanilla: sendLevelInfo).
     let (is_raining, is_thundering) = {
         let ld = server_ctx.level_data.read();
         (ld.is_raining, ld.is_thundering)
@@ -217,33 +281,6 @@ pub async fn handle_play_entry(
         }
     }
 
-    // Send default world border state.
-    conn.send_packet(&ClientboundInitializeBorderPacket {
-        new_center_x: 0.0,
-        new_center_z: 0.0,
-        old_size: 59_999_968.0,
-        new_size: 59_999_968.0,
-        lerp_time: 0,
-        new_absolute_max_size: 29_999_984,
-        warning_blocks: 5,
-        warning_time: 15,
-    })
-    .await?;
-
-    // Send chunk cache radius to the client.
-    let cache_radius = ClientboundSetChunkCacheRadiusPacket {
-        radius: player_view_distance,
-    };
-    conn.send_packet(&cache_radius).await?;
-
-    // Send the command tree so the client can offer tab-completion.
-    {
-        let cmd_source = commands::make_command_source(&player_name, uuid, &player, server_ctx);
-        let tree = server_ctx.commands.serialize_tree(&cmd_source);
-        let cmd_pkt = commands::commands_packet_from_tree(&tree);
-        conn.send_packet(&cmd_pkt).await?;
-    }
-
     // Signal the client that chunk loading is about to begin (must be
     // BEFORE chunks are sent — vanilla ordering requirement).
     conn.send_packet(&ClientboundGameEventPacket {
@@ -262,6 +299,12 @@ pub async fn handle_play_entry(
         server_ctx.chunk_generator.as_ref(),
     )
     .await?;
+
+    // Send inventory last, after chunks (vanilla: initInventoryMenu).
+    {
+        let inv_pkt = build_container_set_content_packet(&player);
+        conn.send_raw(inv_pkt.id, &inv_pkt.body).await?;
+    }
 
     info!(
         peer = %addr,

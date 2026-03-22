@@ -15,6 +15,9 @@ pub mod server_player;
 pub use abilities::PlayerAbilities;
 pub use game_mode::GameMode;
 pub use inventory::PlayerInventory;
-pub use login::{EncodedPacket, build_login_sequence, handle_accept_teleportation};
+pub use login::{
+    EncodedPacket, build_container_set_content_packet, build_login_sequence,
+    build_spawn_position_packet, handle_accept_teleportation,
+};
 pub use player_list::PlayerList;
 pub use server_player::ServerPlayer;
