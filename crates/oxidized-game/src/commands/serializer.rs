@@ -6,6 +6,7 @@
 use crate::commands::arguments::ArgumentType;
 use crate::commands::nodes::{CommandNode, RootCommandNode};
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 /// Node type flags used in the wire format.
 const TYPE_ROOT: u8 = 0;
@@ -56,6 +57,10 @@ pub struct ArgumentParser {
 pub fn serialize_tree<S>(root: &RootCommandNode<S>, source: &S) -> CommandTreeData {
     let mut result_nodes: Vec<CommandNodeData> = Vec::new();
     let mut queue: VecDeque<(&CommandNode<S>, usize)> = VecDeque::new();
+    // Map from Arc pointer identity to node index for redirect resolution.
+    let mut ptr_to_idx: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+    // Deferred redirect fixups: (source_node_index, target_arc_ptr).
+    let mut redirect_fixups: Vec<(usize, usize)> = Vec::new();
 
     // Root is always index 0.
     let root_cmd_node = CommandNode::Root(root.clone());
@@ -85,6 +90,10 @@ pub fn serialize_tree<S>(root: &RootCommandNode<S>, source: &S) -> CommandTreeDa
             next_idx += 1;
             child_indices.push(child_idx as i32);
 
+            // Register this node's Arc pointer for redirect resolution.
+            let child_ptr = std::ptr::from_ref(*child) as usize;
+            ptr_to_idx.insert(child_ptr, child_idx);
+
             let mut flags = match child {
                 CommandNode::Root(_) => TYPE_ROOT,
                 CommandNode::Literal(_) => TYPE_LITERAL,
@@ -94,7 +103,16 @@ pub fn serialize_tree<S>(root: &RootCommandNode<S>, source: &S) -> CommandTreeDa
             if child.command().is_some() {
                 flags |= FLAG_EXECUTABLE;
             }
-            if child.redirect().is_some() {
+
+            // Check for redirect and record a fixup.
+            let has_redirect = if let Some(redirect_target) = child.redirect() {
+                let target_ptr = Arc::as_ptr(redirect_target) as usize;
+                redirect_fixups.push((child_idx, target_ptr));
+                true
+            } else {
+                false
+            };
+            if has_redirect {
                 flags |= FLAG_REDIRECT;
             }
 
@@ -147,6 +165,17 @@ pub fn serialize_tree<S>(root: &RootCommandNode<S>, source: &S) -> CommandTreeDa
         }
 
         result_nodes[parent_idx].children = child_indices;
+    }
+
+    // Resolve redirect fixups: map Arc pointer → node index.
+    for (node_idx, target_ptr) in redirect_fixups {
+        if let Some(&target_idx) = ptr_to_idx.get(&target_ptr) {
+            result_nodes[node_idx].redirect_node = Some(target_idx as i32);
+        } else {
+            // Redirect target not found in the visible tree — point to root (0)
+            // as a safe fallback so the client doesn't receive an invalid index.
+            result_nodes[node_idx].redirect_node = Some(0);
+        }
     }
 
     CommandTreeData {

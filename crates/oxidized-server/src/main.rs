@@ -212,6 +212,7 @@ fn main() -> anyhow::Result<()> {
             dirty_chunks: dashmap::DashSet::new(),
             block_registry,
             chunk_generator,
+            op_permission_level: config.admin.op_permission_level,
         });
 
         // Build the shared login context.

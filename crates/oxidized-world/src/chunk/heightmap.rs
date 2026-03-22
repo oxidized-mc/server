@@ -42,6 +42,12 @@ impl HeightmapType {
         HeightmapType::WorldSurface,
         HeightmapType::MotionBlockingNoLeaves,
     ];
+
+    /// The types used during world generation (`Usage.WORLDGEN` in Java).
+    pub const WORLDGEN_TYPES: &[HeightmapType] = &[
+        HeightmapType::OceanFloorWg,
+        HeightmapType::WorldSurfaceWg,
+    ];
 }
 
 /// Heightmap storing the highest Y for each (x, z) column in a chunk.

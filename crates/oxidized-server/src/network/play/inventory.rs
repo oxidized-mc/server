@@ -206,7 +206,7 @@ fn build_inventory_slot_list(inventory: &PlayerInventory) -> Vec<Option<SlotData
 /// Uses the shared placeholder item ID mapping from
 /// [`oxidized_game::inventory::item_ids`] until a proper item registry
 /// is built (Phase 22+).
-fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
+pub(crate) fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
     SlotData {
         count: stack.count,
         item_id: item_name_to_id(&stack.item.0),

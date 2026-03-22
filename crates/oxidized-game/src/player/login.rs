@@ -15,12 +15,12 @@ use bytes::BytesMut;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
 use oxidized_protocol::packets::play::{
-    ClientboundContainerSetContentPacket, ClientboundGameEventPacket, ClientboundLoginPacket,
-    ClientboundPlayerAbilitiesPacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundPlayerPositionPacket, ClientboundSetChunkCacheCenterPacket,
-    ClientboundSetDefaultSpawnPositionPacket, ClientboundSetHeldSlotPacket,
-    ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo, GameEventType,
-    PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
+    ClientboundChangeDifficultyPacket, ClientboundContainerSetContentPacket,
+    ClientboundGameEventPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
+    ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
+    ClientboundSetChunkCacheCenterPacket, ClientboundSetDefaultSpawnPositionPacket,
+    ClientboundSetHeldSlotPacket, ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo,
+    GameEventType, PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
 };
 use oxidized_protocol::types::ResourceLocation;
 use oxidized_protocol::types::block_pos::BlockPos;
@@ -49,33 +49,22 @@ pub struct EncodedPacket {
 
 /// Builds the complete PLAY-state login packet sequence.
 ///
-/// Returns the packets in the exact order mandated by
-/// `ServerGamePacketListenerImpl.handleLogin`:
+/// Returns the packets in the order mandated by
+/// `PlayerList.placeNewPlayer` in vanilla:
 ///
 /// 1. `ClientboundLoginPacket` — world metadata + entity ID
-/// 2. `ClientboundPlayerAbilitiesPacket` — ability flags + speeds
-/// 3. `ClientboundSetDefaultSpawnPositionPacket` — compass target
-/// 4. `ClientboundGameEventPacket` — game mode change event
-/// 5. `ClientboundPlayerInfoUpdatePacket` — all online players for tab list
-/// 6. `ClientboundContainerSetContentPacket` — full inventory sync
-/// 7. `ClientboundSetHeldSlotPacket` — selected hotbar slot
-/// 8. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
-/// 9. `ClientboundSetSimulationDistancePacket` — simulation distance
-/// 10. `ClientboundPlayerPositionPacket` — initial position + teleport ID
+/// 2. `ClientboundChangeDifficultyPacket` — world difficulty
+/// 3. `ClientboundPlayerAbilitiesPacket` — ability flags + speeds
+/// 4. `ClientboundSetDefaultSpawnPositionPacket` — compass target
+/// 5. `ClientboundGameEventPacket` — game mode change event
+/// 6. `ClientboundPlayerInfoUpdatePacket` — all online players for tab list
+/// 7. `ClientboundContainerSetContentPacket` — full inventory sync
+/// 8. `ClientboundSetHeldSlotPacket` — selected hotbar slot
+/// 9. `ClientboundSetChunkCacheCenterPacket` — chunk loading center
+/// 10. `ClientboundSetSimulationDistancePacket` — simulation distance
+/// 11. `ClientboundPlayerPositionPacket` — initial position + teleport ID
 ///
-/// Chunk data (step 8 in vanilla) is handled separately by the chunk
-/// streaming subsystem (Phase 13).
-///
-/// # Arguments
-///
-/// * `player` - The joining player (must have a teleport ID assigned via
-///   [`ServerPlayer::next_teleport_id`] before calling).
-/// * `teleport_id` - The teleport ID for the initial position packet.
-/// * `level_data` - World metadata from `level.dat`.
-/// * `all_players` - The server's player list (for the tab list packet).
-/// * `dimensions` - All registered dimension identifiers.
-/// * `dimension_type_id` - The protocol registry ID for the player's
-///   current dimension type (e.g., 0 for overworld).
+/// Chunk data is handled separately by the chunk streaming subsystem.
 pub fn build_login_sequence(
     player: &ServerPlayer,
     teleport_id: i32,
@@ -85,7 +74,7 @@ pub fn build_login_sequence(
     dimension_type_id: i32,
     game_rules: &GameRules,
 ) -> Vec<EncodedPacket> {
-    let packets = vec![
+    vec![
         build_login_packet(
             player,
             level_data,
@@ -94,6 +83,7 @@ pub fn build_login_sequence(
             dimension_type_id,
             game_rules,
         ),
+        build_difficulty_packet(level_data),
         build_abilities_packet(player),
         build_spawn_position_packet(player, level_data),
         build_game_mode_event_packet(player),
@@ -103,8 +93,7 @@ pub fn build_login_sequence(
         build_chunk_center_packet(player),
         build_simulation_distance_packet(player),
         build_position_packet(player, teleport_id),
-    ];
-    packets
+    ]
 }
 
 fn build_login_packet(
@@ -142,6 +131,17 @@ fn build_login_packet(
     EncodedPacket {
         id: ClientboundLoginPacket::PACKET_ID,
         body: login.encode(),
+    }
+}
+
+fn build_difficulty_packet(level_data: &PrimaryLevelData) -> EncodedPacket {
+    let pkt = ClientboundChangeDifficultyPacket {
+        difficulty: level_data.difficulty.clamp(0, 3) as u8,
+        locked: false,
+    };
+    EncodedPacket {
+        id: ClientboundChangeDifficultyPacket::PACKET_ID,
+        body: pkt.encode(),
     }
 }
 
@@ -382,7 +382,7 @@ mod tests {
             0,
             &GameRules::default(),
         );
-        assert_eq!(packets.len(), 10);
+        assert_eq!(packets.len(), 11);
     }
 
     #[test]
@@ -403,27 +403,28 @@ mod tests {
         );
 
         assert_eq!(packets[0].id, ClientboundLoginPacket::PACKET_ID);
-        assert_eq!(packets[1].id, ClientboundPlayerAbilitiesPacket::PACKET_ID);
+        assert_eq!(packets[1].id, ClientboundChangeDifficultyPacket::PACKET_ID);
+        assert_eq!(packets[2].id, ClientboundPlayerAbilitiesPacket::PACKET_ID);
         assert_eq!(
-            packets[2].id,
+            packets[3].id,
             ClientboundSetDefaultSpawnPositionPacket::PACKET_ID
         );
-        assert_eq!(packets[3].id, ClientboundGameEventPacket::PACKET_ID);
-        assert_eq!(packets[4].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
+        assert_eq!(packets[4].id, ClientboundGameEventPacket::PACKET_ID);
+        assert_eq!(packets[5].id, ClientboundPlayerInfoUpdatePacket::PACKET_ID);
         assert_eq!(
-            packets[5].id,
+            packets[6].id,
             ClientboundContainerSetContentPacket::PACKET_ID
         );
-        assert_eq!(packets[6].id, ClientboundSetHeldSlotPacket::PACKET_ID);
+        assert_eq!(packets[7].id, ClientboundSetHeldSlotPacket::PACKET_ID);
         assert_eq!(
-            packets[7].id,
+            packets[8].id,
             ClientboundSetChunkCacheCenterPacket::PACKET_ID
         );
         assert_eq!(
-            packets[8].id,
+            packets[9].id,
             ClientboundSetSimulationDistancePacket::PACKET_ID
         );
-        assert_eq!(packets[9].id, ClientboundPlayerPositionPacket::PACKET_ID);
+        assert_eq!(packets[10].id, ClientboundPlayerPositionPacket::PACKET_ID);
     }
 
     #[test]
@@ -478,7 +479,7 @@ mod tests {
             &GameRules::default(),
         );
         let abilities =
-            ClientboundPlayerAbilitiesPacket::decode(packets[1].body.clone().freeze()).unwrap();
+            ClientboundPlayerAbilitiesPacket::decode(packets[2].body.clone().freeze()).unwrap();
 
         // Creative: invulnerable(0x01) | can_fly(0x04) | instabuild(0x08) = 0x0D
         assert_eq!(abilities.flags, 0x0D);
@@ -503,7 +504,7 @@ mod tests {
             &GameRules::default(),
         );
         let spawn =
-            ClientboundSetDefaultSpawnPositionPacket::decode(packets[2].body.clone().freeze())
+            ClientboundSetDefaultSpawnPositionPacket::decode(packets[3].body.clone().freeze())
                 .unwrap();
 
         let pos = BlockPos::from_long(spawn.pos);
@@ -529,7 +530,7 @@ mod tests {
             0,
             &GameRules::default(),
         );
-        let event = ClientboundGameEventPacket::decode(packets[3].body.clone().freeze()).unwrap();
+        let event = ClientboundGameEventPacket::decode(packets[4].body.clone().freeze()).unwrap();
 
         assert_eq!(event.event, GameEventType::ChangeGameMode);
         assert!((event.param - 0.0).abs() < f32::EPSILON); // Survival = 0
@@ -554,7 +555,7 @@ mod tests {
             &GameRules::default(),
         );
         let info =
-            ClientboundPlayerInfoUpdatePacket::decode(packets[4].body.clone().freeze()).unwrap();
+            ClientboundPlayerInfoUpdatePacket::decode(packets[5].body.clone().freeze()).unwrap();
 
         // Should contain Alice and Bob (the players in the list).
         assert_eq!(info.entries.len(), 2);
@@ -582,7 +583,7 @@ mod tests {
             &GameRules::default(),
         );
         let center =
-            ClientboundSetChunkCacheCenterPacket::decode(packets[7].body.clone().freeze()).unwrap();
+            ClientboundSetChunkCacheCenterPacket::decode(packets[8].body.clone().freeze()).unwrap();
 
         assert_eq!(center.chunk_x, 6); // 100 >> 4 = 6
         assert_eq!(center.chunk_z, -13); // -200 >> 4 = -13
@@ -609,7 +610,7 @@ mod tests {
             &GameRules::default(),
         );
         let pos =
-            ClientboundPlayerPositionPacket::decode(packets[9].body.clone().freeze()).unwrap();
+            ClientboundPlayerPositionPacket::decode(packets[10].body.clone().freeze()).unwrap();
 
         assert_eq!(pos.teleport_id, 42);
         assert!((pos.x - 50.5).abs() < 0.001);

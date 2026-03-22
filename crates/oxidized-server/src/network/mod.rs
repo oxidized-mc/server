@@ -96,6 +96,9 @@ pub struct ServerContext {
     pub block_registry: Arc<BlockRegistry>,
     /// Chunk generator — produces new chunks on demand for unseen positions.
     pub chunk_generator: Arc<dyn ChunkGenerator>,
+    /// Operator permission level for all players (from server config).
+    /// TODO: Replace with per-player ops from `ops.json`.
+    pub op_permission_level: i32,
 }
 
 impl ServerHandle for ServerContext {
@@ -683,6 +686,7 @@ mod tests {
                 chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
                     oxidized_game::worldgen::flat::FlatWorldConfig::default(),
                 )),
+                op_permission_level: 4,
             }),
         })
     }

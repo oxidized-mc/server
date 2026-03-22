@@ -42,7 +42,7 @@ impl PlayerInfoActions {
 }
 
 /// A single player entry in the info update packet.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct PlayerInfoEntry {
     /// Player UUID.
     pub uuid: uuid::Uuid,
