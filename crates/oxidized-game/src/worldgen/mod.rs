@@ -74,7 +74,7 @@ impl ChunkStatus {
 /// Implementations produce fully populated [`LevelChunk`] instances from
 /// chunk coordinates. The generator owns its configuration (seed, layers,
 /// biome source, etc.) and must be safe to share across threads.
-pub trait ChunkGenerator: Send + Sync {
+pub trait ChunkGenerator: Send + Sync + std::fmt::Debug {
     /// Generates a complete chunk at the given position.
     ///
     /// The returned chunk must have status [`ChunkStatus::Full`] with
@@ -89,6 +89,17 @@ pub trait ChunkGenerator: Send + Sync {
 
     /// Returns the generator type identifier (e.g. `"minecraft:flat"`).
     fn generator_type(&self) -> &'static str;
+
+    /// Returns the sea level for this generator's dimension.
+    ///
+    /// Flat worlds return −63, noise-based overworld returns 63.
+    fn sea_level(&self) -> i32;
+
+    /// Returns the minimum Y coordinate for the generated dimension.
+    fn min_y(&self) -> i32;
+
+    /// Returns the total world height in blocks.
+    fn world_height(&self) -> u32;
 }
 
 #[cfg(test)]
