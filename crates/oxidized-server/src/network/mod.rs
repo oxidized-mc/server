@@ -493,6 +493,16 @@ impl ServerHandle for ServerContext {
 
         true
     }
+
+    fn get_block(&self, x: i32, y: i32, z: i32) -> Option<String> {
+        let chunk_pos = ChunkPos::from_block_coords(x, z);
+        let chunk_ref = self.chunks.get(&chunk_pos)?;
+        let chunk = chunk_ref.read();
+        let state_id = chunk.get_block_state(x, y, z).ok()?;
+        self.block_registry
+            .block_name_from_state_id(state_id)
+            .map(String::from)
+    }
 }
 
 /// A packet broadcast to all connected players (or a targeted subset).
