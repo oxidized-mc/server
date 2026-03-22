@@ -1,0 +1,36 @@
+# Build artifacts
+target/
+dist/
+
+# Git
+.git/
+.github/
+
+# Reference files
+mc-server-ref/
+
+# World data
+world/
+worlds/
+run/
+*.mca
+*.mcworld
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Environment / secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Profiling
+*.svg
+perf.data
