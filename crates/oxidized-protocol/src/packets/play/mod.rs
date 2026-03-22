@@ -4,6 +4,7 @@
 //! configuration is complete.
 
 pub mod clientbound_add_entity;
+pub mod clientbound_animate;
 pub mod clientbound_block_changed_ack;
 pub mod clientbound_block_destruction;
 pub mod clientbound_block_event;
@@ -49,6 +50,7 @@ pub mod clientbound_ticking_state;
 pub mod clientbound_ticking_step;
 pub mod serverbound_accept_teleportation;
 pub mod serverbound_chat;
+pub mod serverbound_client_information;
 pub mod serverbound_chat_ack;
 pub mod serverbound_chat_command;
 pub mod serverbound_chat_command_signed;
@@ -57,16 +59,22 @@ pub mod serverbound_command_suggestion;
 pub mod serverbound_keep_alive;
 pub mod serverbound_move_player;
 pub mod serverbound_pick_item_from_block;
+pub mod serverbound_player_abilities;
 pub mod serverbound_player_action;
 pub mod serverbound_player_command;
 pub mod serverbound_player_input;
 pub mod serverbound_set_carried_item;
 pub mod serverbound_set_creative_mode_slot;
 pub mod serverbound_sign_update;
+pub mod serverbound_swing;
 pub mod serverbound_use_item;
 pub mod serverbound_use_item_on;
 
 pub use clientbound_add_entity::ClientboundAddEntityPacket;
+pub use clientbound_animate::{
+    ClientboundAnimatePacket, CRITICAL_HIT, MAGIC_CRITICAL_HIT, SWING_MAIN_HAND, SWING_OFF_HAND,
+    WAKE_UP,
+};
 pub use clientbound_block_changed_ack::ClientboundBlockChangedAckPacket;
 pub use clientbound_block_destruction::ClientboundBlockDestructionPacket;
 pub use clientbound_block_event::ClientboundBlockEventPacket;
@@ -129,6 +137,7 @@ pub use serverbound_chat_ack::ServerboundChatAckPacket;
 pub use serverbound_chat_command::ServerboundChatCommandPacket;
 pub use serverbound_chat_command_signed::ServerboundChatCommandSignedPacket;
 pub use serverbound_chunk_batch_received::ServerboundChunkBatchReceivedPacket;
+pub use serverbound_client_information::ServerboundClientInformationPlayPacket;
 pub use serverbound_command_suggestion::ServerboundCommandSuggestionPacket;
 pub use serverbound_keep_alive::ServerboundKeepAlivePacket;
 pub use serverbound_move_player::{
@@ -136,11 +145,13 @@ pub use serverbound_move_player::{
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
 pub use serverbound_pick_item_from_block::ServerboundPickItemFromBlockPacket;
+pub use serverbound_player_abilities::ServerboundPlayerAbilitiesPacket;
 pub use serverbound_player_action::{PlayerAction, ServerboundPlayerActionPacket};
 pub use serverbound_player_command::{PlayerCommandAction, ServerboundPlayerCommandPacket};
 pub use serverbound_player_input::{PlayerInput, ServerboundPlayerInputPacket};
 pub use serverbound_set_carried_item::ServerboundSetCarriedItemPacket;
 pub use serverbound_set_creative_mode_slot::ServerboundSetCreativeModeSlotPacket;
 pub use serverbound_sign_update::ServerboundSignUpdatePacket;
+pub use serverbound_swing::ServerboundSwingPacket;
 pub use serverbound_use_item::ServerboundUseItemPacket;
 pub use serverbound_use_item_on::{BlockHitResult, InteractionHand, ServerboundUseItemOnPacket};
