@@ -30,6 +30,26 @@ pub async fn handle_handshake(
 
     conn.protocol_version = intention.protocol_version;
 
+    // Validate protocol version for login connections (not status pings).
+    if matches!(intention.next_state, ClientIntent::Login | ClientIntent::Transfer)
+        && intention.protocol_version != oxidized_protocol::constants::PROTOCOL_VERSION
+    {
+        warn!(
+            peer = %conn.remote_addr(),
+            client_version = intention.protocol_version,
+            server_version = oxidized_protocol::constants::PROTOCOL_VERSION,
+            "Protocol version mismatch — disconnecting",
+        );
+        return Err(ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "Protocol version mismatch: client={}, server={}",
+                intention.protocol_version,
+                oxidized_protocol::constants::PROTOCOL_VERSION,
+            ),
+        )));
+    }
+
     debug!(
         peer = %conn.remote_addr(),
         protocol_version = intention.protocol_version,

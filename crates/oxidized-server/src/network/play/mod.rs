@@ -326,7 +326,10 @@ pub async fn handle_play_entry(
                         | PlayerInfoActions::INITIALIZE_CHAT
                         | PlayerInfoActions::UPDATE_GAME_MODE
                         | PlayerInfoActions::UPDATE_LISTED
-                        | PlayerInfoActions::UPDATE_LATENCY,
+                        | PlayerInfoActions::UPDATE_LATENCY
+                        | PlayerInfoActions::UPDATE_DISPLAY_NAME
+                        | PlayerInfoActions::UPDATE_LIST_ORDER
+                        | PlayerInfoActions::UPDATE_HAT,
                 ),
                 entries: vec![PlayerInfoEntry {
                     uuid,
@@ -353,7 +356,10 @@ pub async fn handle_play_entry(
                     | PlayerInfoActions::INITIALIZE_CHAT
                     | PlayerInfoActions::UPDATE_GAME_MODE
                     | PlayerInfoActions::UPDATE_LISTED
-                    | PlayerInfoActions::UPDATE_LATENCY,
+                    | PlayerInfoActions::UPDATE_LATENCY
+                    | PlayerInfoActions::UPDATE_DISPLAY_NAME
+                    | PlayerInfoActions::UPDATE_LIST_ORDER
+                    | PlayerInfoActions::UPDATE_HAT,
             ),
             entries: vec![PlayerInfoEntry {
                 uuid,

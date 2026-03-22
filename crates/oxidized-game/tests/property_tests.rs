@@ -264,6 +264,7 @@ proptest! {
             origin, 0.0, 0.0,
             Some(dx), Some(64.0 + dy), Some(dz),
             None, None,
+            false,
         );
         let dist_sq = dx * dx + dy * dy + dz * dz;
         let expected_correction = dist_sq > MAX_MOVEMENT_PER_TICK * MAX_MOVEMENT_PER_TICK;
@@ -279,6 +280,7 @@ proptest! {
         let result = validate_movement(
             Vec3::ZERO, 0.0, 0.0,
             None, None, None, None, Some(pitch),
+            false,
         );
         prop_assert!(result.new_pitch >= -90.0 && result.new_pitch <= 90.0,
             "pitch {pitch} should be clamped to ±90, got {}", result.new_pitch);
@@ -294,6 +296,7 @@ proptest! {
             Vec3::ZERO, 0.0, 0.0,
             Some(x), Some(0.0), Some(z),
             None, None,
+            false,
         );
         prop_assert!(result.new_pos.x >= -MAX_COORDINATE && result.new_pos.x <= MAX_COORDINATE,
             "x={} not clamped to ±{}", result.new_pos.x, MAX_COORDINATE);

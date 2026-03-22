@@ -178,14 +178,13 @@ fn main() -> anyhow::Result<()> {
         let chunk_generator: Arc<dyn ChunkGenerator> =
             Arc::new(FlatChunkGenerator::new(FlatWorldConfig::default()));
 
-        // Set spawn position to the generator's recommended Y if this
-        // is a new world (spawn_y defaults to 0 from level.dat defaults).
+        // Set spawn position to the generator's recommended Y for new worlds.
         let is_new_world = !level_dat_path.exists();
-        if is_new_world && level_data.spawn_y == 0 {
+        if is_new_world {
             level_data.spawn_y = chunk_generator.find_spawn_y();
             info!(
                 spawn_y = level_data.spawn_y,
-                "Set spawn Y from flat world generator"
+                "Set spawn Y from chunk generator"
             );
         }
 
