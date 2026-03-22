@@ -126,6 +126,14 @@ pub trait ServerHandle: Send + Sync {
         false
     }
 
+    /// Sets a block at the given position and broadcasts the change.
+    ///
+    /// Returns `true` if the block was successfully set, `false` if the chunk
+    /// is not loaded or the position is out of bounds.
+    fn set_block(&self, _x: i32, _y: i32, _z: i32, _block_name: &str) -> bool {
+        false
+    }
+
     /// Sends a system chat message to a specific player by UUID.
     fn send_system_message_to_player(&self, _uuid: uuid::Uuid, _message: &Component) {}
 }

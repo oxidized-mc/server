@@ -19,7 +19,7 @@ use oxidized_protocol::packets::play::{
     ServerboundPickItemFromBlockPacket, ServerboundPlayerActionPacket, ServerboundSignUpdatePacket,
     ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
-use oxidized_protocol::types::{BlockPos, Vec3};
+use oxidized_protocol::types::{BlockPos, Direction, Vec3};
 use oxidized_world::chunk::ChunkPos;
 use oxidized_world::registry::{AIR, BlockRegistry};
 
@@ -80,7 +80,7 @@ pub async fn handle_player_action(
             "Block action rejected: out of reach"
         );
         // Re-sync the client's view of the block.
-        resync_block(play_ctx, pkt.pos).await?;
+        resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
     }
@@ -115,7 +115,7 @@ pub async fn handle_player_action(
                         mining_pos = ?mining_pos,
                         "StopDestroyBlock rejected: position mismatch"
                     );
-                    resync_block(play_ctx, pkt.pos).await?;
+                    resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
                     send_ack(play_ctx, pkt.sequence).await?;
                     return Ok(());
                 }
@@ -383,15 +383,31 @@ async fn send_ack(play_ctx: &mut PlayContext<'_>, sequence: i32) -> Result<(), C
     Ok(())
 }
 
-/// Re-syncs the client's view of a block by sending the current server-side
-/// state. Used when rejecting a block action (e.g., out of reach).
+/// Re-syncs the client's view of a block (and optionally its adjacent face
+/// block) by sending the current server-side state. Used when rejecting a
+/// block action (e.g., out of reach). Vanilla sends both the target and the
+/// adjacent block so the client's prediction is fully corrected.
 async fn resync_block(
     play_ctx: &mut PlayContext<'_>,
     pos: BlockPos,
+    direction: Option<Direction>,
 ) -> Result<(), ConnectionError> {
     let block_state = get_block(play_ctx.server_ctx, pos).unwrap_or(u32::from(AIR.0)) as i32;
     let pkt = ClientboundBlockUpdatePacket { pos, block_state };
     play_ctx.conn.send_packet(&pkt).await?;
+
+    // Also resync the adjacent face block (vanilla sends both).
+    if let Some(dir) = direction {
+        let adjacent = pos.relative(dir);
+        let adj_state =
+            get_block(play_ctx.server_ctx, adjacent).unwrap_or(u32::from(AIR.0)) as i32;
+        let adj_pkt = ClientboundBlockUpdatePacket {
+            pos: adjacent,
+            block_state: adj_state,
+        };
+        play_ctx.conn.send_packet(&adj_pkt).await?;
+    }
+
     Ok(())
 }
 

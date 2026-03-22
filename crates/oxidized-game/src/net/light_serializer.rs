@@ -15,8 +15,9 @@ use oxidized_world::chunk::DataLayer;
 /// Light encoding rules (matching vanilla `ClientboundLightUpdatePacketData`):
 /// - A section with non-empty data (at least one non-zero nibble) → set bit in
 ///   `sky_y_mask` / `block_y_mask` and include the 2048-byte array.
-/// - A section with empty data (all zeros) or `None` → set bit in
+/// - A section with empty data (all zeros) → set bit in
 ///   `empty_sky_y_mask` / `empty_block_y_mask`.
+/// - A section with no data (`None`) → not included in any mask.
 /// - Masks use Java's `BitSet.toLongArray()` format: `VarInt(count) i64[]`.
 pub fn build_light_data(
     sky_light: &[Option<DataLayer>],
@@ -36,8 +37,12 @@ pub fn build_light_data(
                 sky_mask |= 1u64 << i;
                 sky_updates.push(layer.as_bytes().to_vec());
             },
-            _ => {
+            Some(_) => {
+                // All-zero layer → mark as empty.
                 empty_sky |= 1u64 << i;
+            },
+            None => {
+                // No data for this section → don't set any mask bit.
             },
         }
 
@@ -47,13 +52,16 @@ pub fn build_light_data(
                     block_mask |= 1u64 << i;
                     block_updates.push(layer.as_bytes().to_vec());
                 },
-                _ => {
+                Some(_) => {
+                    // All-zero layer → mark as empty.
                     empty_block |= 1u64 << i;
                 },
+                None => {
+                    // No data for this section → don't set any mask bit.
+                },
             }
-        } else {
-            empty_block |= 1u64 << i;
         }
+        // If block_light has fewer entries, treat missing as None (no mask bit).
     }
 
     LightUpdateData {
@@ -92,9 +100,9 @@ mod tests {
         assert!(data.block_y_mask.is_empty());
         assert!(data.sky_updates.is_empty());
         assert!(data.block_updates.is_empty());
-        // All sections should be empty
-        assert!(!data.empty_sky_y_mask.is_empty());
-        assert!(!data.empty_block_y_mask.is_empty());
+        // All sections are None → no bits set in any mask.
+        assert!(data.empty_sky_y_mask.is_empty());
+        assert!(data.empty_block_y_mask.is_empty());
     }
 
     #[test]
