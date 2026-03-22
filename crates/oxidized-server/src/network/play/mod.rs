@@ -18,6 +18,7 @@ pub mod commands;
 pub mod helpers;
 pub mod inventory;
 pub mod movement;
+pub mod block_interaction;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -40,8 +41,9 @@ use oxidized_protocol::packets::play::{
     ServerboundChunkBatchReceivedPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
-    ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket, ServerboundSetCarriedItemPacket,
-    ServerboundSetCreativeModeSlotPacket,
+    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
+    ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -192,7 +194,7 @@ pub async fn handle_play_entry(
     // Send initial chunk batch — empty air chunks in a spiral pattern.
     let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
     let chunk_count =
-        helpers::send_initial_chunks(conn, chunk_center, player_view_distance).await?;
+        helpers::send_initial_chunks(conn, chunk_center, player_view_distance, &server_ctx.chunks).await?;
 
     // Signal the client that initial chunks have been sent.
     let chunks_load_start = ClientboundGameEventPacket {
@@ -423,6 +425,18 @@ pub async fn handle_play_entry(
                             },
                             ServerboundSetCreativeModeSlotPacket::PACKET_ID => {
                                 inventory::handle_set_creative_mode_slot(&mut play_ctx, pkt.data).await?;
+                            },
+                            ServerboundPlayerActionPacket::PACKET_ID => {
+                                block_interaction::handle_player_action(&mut play_ctx, pkt.data).await?;
+                            },
+                            ServerboundUseItemOnPacket::PACKET_ID => {
+                                block_interaction::handle_use_item_on(&mut play_ctx, pkt.data).await?;
+                            },
+                            ServerboundUseItemPacket::PACKET_ID => {
+                                block_interaction::handle_use_item(&mut play_ctx, pkt.data).await?;
+                            },
+                            ServerboundSignUpdatePacket::PACKET_ID => {
+                                block_interaction::handle_sign_update(&mut play_ctx, pkt.data).await?;
                             },
                             unknown if !(0..=MAX_SERVERBOUND_PLAY_ID).contains(&unknown) => {
                                 warn!(

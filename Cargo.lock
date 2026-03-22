@@ -1781,6 +1781,7 @@ dependencies = [
  "anyhow",
  "bytes",
  "clap",
+ "dashmap",
  "insta",
  "mimalloc",
  "oxidized-game",

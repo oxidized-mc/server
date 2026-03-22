@@ -4,6 +4,10 @@
 //! configuration is complete.
 
 pub mod clientbound_add_entity;
+pub mod clientbound_block_changed_ack;
+pub mod clientbound_block_destruction;
+pub mod clientbound_block_event;
+pub mod clientbound_block_update;
 pub mod clientbound_chunk_batch_finished;
 pub mod clientbound_chunk_batch_start;
 pub mod clientbound_command_suggestions;
@@ -26,6 +30,7 @@ pub mod clientbound_player_info_update;
 pub mod clientbound_player_position;
 pub mod clientbound_remove_entities;
 pub mod clientbound_rotate_head;
+pub mod clientbound_section_blocks_update;
 pub mod clientbound_set_chunk_cache_center;
 pub mod clientbound_set_chunk_cache_radius;
 pub mod clientbound_set_default_spawn_position;
@@ -47,12 +52,20 @@ pub mod serverbound_chunk_batch_received;
 pub mod serverbound_command_suggestion;
 pub mod serverbound_keep_alive;
 pub mod serverbound_move_player;
+pub mod serverbound_player_action;
 pub mod serverbound_player_command;
 pub mod serverbound_player_input;
 pub mod serverbound_set_carried_item;
 pub mod serverbound_set_creative_mode_slot;
+pub mod serverbound_sign_update;
+pub mod serverbound_use_item;
+pub mod serverbound_use_item_on;
 
 pub use clientbound_add_entity::ClientboundAddEntityPacket;
+pub use clientbound_block_changed_ack::ClientboundBlockChangedAckPacket;
+pub use clientbound_block_destruction::ClientboundBlockDestructionPacket;
+pub use clientbound_block_event::ClientboundBlockEventPacket;
+pub use clientbound_block_update::ClientboundBlockUpdatePacket;
 pub use clientbound_chunk_batch_finished::ClientboundChunkBatchFinishedPacket;
 pub use clientbound_chunk_batch_start::ClientboundChunkBatchStartPacket;
 pub use clientbound_command_suggestions::{ClientboundCommandSuggestionsPacket, SuggestionEntry};
@@ -84,6 +97,9 @@ pub use clientbound_player_info_update::{
 pub use clientbound_player_position::{ClientboundPlayerPositionPacket, RelativeFlags};
 pub use clientbound_remove_entities::ClientboundRemoveEntitiesPacket;
 pub use clientbound_rotate_head::ClientboundRotateHeadPacket;
+pub use clientbound_section_blocks_update::{
+    ClientboundSectionBlocksUpdatePacket, SectionBlockUpdate,
+};
 pub use clientbound_set_chunk_cache_center::ClientboundSetChunkCacheCenterPacket;
 pub use clientbound_set_chunk_cache_radius::ClientboundSetChunkCacheRadiusPacket;
 pub use clientbound_set_default_spawn_position::ClientboundSetDefaultSpawnPositionPacket;
@@ -111,6 +127,10 @@ pub use serverbound_move_player::{
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
 pub use serverbound_player_command::{PlayerCommandAction, ServerboundPlayerCommandPacket};
+pub use serverbound_player_action::{PlayerAction, ServerboundPlayerActionPacket};
 pub use serverbound_player_input::{PlayerInput, ServerboundPlayerInputPacket};
 pub use serverbound_set_carried_item::ServerboundSetCarriedItemPacket;
 pub use serverbound_set_creative_mode_slot::ServerboundSetCreativeModeSlotPacket;
+pub use serverbound_sign_update::ServerboundSignUpdatePacket;
+pub use serverbound_use_item::ServerboundUseItemPacket;
+pub use serverbound_use_item_on::{BlockHitResult, InteractionHand, ServerboundUseItemOnPacket};

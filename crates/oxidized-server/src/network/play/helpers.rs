@@ -2,6 +2,9 @@
 //!
 //! Provides [`send_initial_chunks`] for the player join sequence.
 
+use std::sync::Arc;
+
+use dashmap::DashMap;
 use oxidized_game::chunk::view_distance::spiral_chunks;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_protocol::codec::Packet;
@@ -11,11 +14,15 @@ use oxidized_protocol::packets::play::{
     ClientboundLevelChunkWithLightPacket,
 };
 use oxidized_world::chunk::{ChunkPos, LevelChunk};
+use parking_lot::RwLock;
 
 /// Sends the initial chunk batch for a player joining the world.
 ///
 /// Creates empty air chunks in a spiral pattern around the player and sends
 /// them wrapped in `ChunkBatchStart` / `ChunkBatchFinished` framing.
+///
+/// Each chunk is also registered in the shared `chunk_storage` map so that
+/// play-state handlers (block breaking/placing) can read and modify blocks.
 ///
 /// Real chunk loading from disk or worldgen is not yet implemented — this
 /// sends purely air so the client has valid chunk data and renders the world.
@@ -25,6 +32,7 @@ pub async fn send_initial_chunks(
     conn: &mut Connection,
     center: ChunkPos,
     view_distance: i32,
+    chunk_storage: &DashMap<ChunkPos, Arc<RwLock<LevelChunk>>>,
 ) -> Result<i32, ConnectionError> {
     // Start the chunk batch.
     conn.send_raw(
@@ -42,6 +50,12 @@ pub async fn send_initial_chunks(
             &pkt.encode(),
         )
         .await?;
+
+        // Register the chunk in shared storage for block interaction.
+        chunk_storage
+            .entry(chunk_pos)
+            .or_insert_with(|| Arc::new(RwLock::new(chunk)));
+
         count += 1;
     }
 

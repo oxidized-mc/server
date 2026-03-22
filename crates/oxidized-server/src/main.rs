@@ -185,6 +185,7 @@ fn main() -> anyhow::Result<()> {
                 oxidized_game::level::ServerTickRateManager::default(),
             ),
             storage,
+            chunks: dashmap::DashMap::new(),
         });
 
         // Build the shared login context.

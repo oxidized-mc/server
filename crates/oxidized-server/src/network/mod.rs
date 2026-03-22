@@ -25,7 +25,9 @@ use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState
 use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::ServerStatus;
 use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::chunk::{ChunkPos, LevelChunk};
 use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
+use dashmap::DashMap;
 use parking_lot::RwLock;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
@@ -84,6 +86,8 @@ pub struct ServerContext {
     pub tick_rate_manager: RwLock<ServerTickRateManager>,
     /// World storage source — resolves paths to level.dat, region dirs, etc.
     pub storage: LevelStorageSource,
+    /// Loaded chunk columns keyed by position. Thread-safe via `DashMap`.
+    pub chunks: DashMap<ChunkPos, Arc<RwLock<LevelChunk>>>,
 }
 
 impl ServerHandle for ServerContext {
@@ -321,8 +325,8 @@ pub struct ChatBroadcastMessage {
 }
 
 /// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.
-/// There are 58 registered serverbound packets (IDs 0x00–0x39).
-const MAX_SERVERBOUND_PLAY_ID: i32 = 0x39;
+/// There are 69 registered serverbound packets (IDs 0x00–0x44).
+const MAX_SERVERBOUND_PLAY_ID: i32 = 0x44;
 
 /// Starts the TCP listener and accepts connections until a shutdown signal
 /// is received.
@@ -498,6 +502,7 @@ mod tests {
                     oxidized_game::level::ServerTickRateManager::default(),
                 ),
                 storage: LevelStorageSource::new(""),
+                chunks: dashmap::DashMap::new(),
             }),
         })
     }
