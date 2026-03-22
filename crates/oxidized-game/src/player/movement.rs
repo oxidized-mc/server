@@ -503,8 +503,17 @@ mod tests {
 
     #[test]
     fn test_negative_yaw_normalized() {
-        let result =
-            validate_movement(Vec3::ZERO, 0.0, 0.0, None, None, None, Some(-10.0), None, false);
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            None,
+            None,
+            None,
+            Some(-10.0),
+            None,
+            false,
+        );
         assert!(result.accepted);
         assert!((result.new_yaw - (-10.0)).abs() < f32::EPSILON);
     }
