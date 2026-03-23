@@ -324,11 +324,16 @@ fn build_position_packet(player: &ServerPlayer, teleport_id: i32) -> EncodedPack
 /// `true` if the teleport ID matched and was removed, `false` otherwise
 /// (unexpected or duplicate confirmation).
 pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) -> bool {
-    if let Some(&(front_id, _)) = player.pending_teleports.front() {
-        if front_id == teleport_id {
+    if let Some(idx) = player
+        .pending_teleports
+        .iter()
+        .position(|&(id, _)| id == teleport_id)
+    {
+        // Remove this entry and all entries before it (they're implicitly confirmed).
+        for _ in 0..=idx {
             player.pending_teleports.pop_front();
-            return true;
         }
+        return true;
     }
     false
 }

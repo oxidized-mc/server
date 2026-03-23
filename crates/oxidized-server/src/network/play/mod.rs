@@ -140,7 +140,7 @@ pub async fn handle_play_entry(
     let mut player = ServerPlayer::new(entity_id, profile, dimension, game_mode);
 
     // Apply client preferences, capped to server maximums.
-    player.view_distance = i32::from(client_info.view_distance).min(server_ctx.max_view_distance);
+    player.view_distance = i32::from(client_info.view_distance).clamp(2, server_ctx.max_view_distance);
     player.simulation_distance = server_ctx.max_simulation_distance;
 
     // Try to load saved player data from playerdata/<uuid>.dat.
@@ -771,7 +771,7 @@ pub async fn handle_play_entry(
                                 ) {
                                     let new_view_distance =
                                         i32::from(info_pkt.information.view_distance)
-                                            .min(server_ctx.max_view_distance);
+                                            .clamp(2, server_ctx.max_view_distance);
                                     let mut p = play_ctx.player.write();
                                     let old_view_distance = p.view_distance;
                                     p.view_distance = new_view_distance;
@@ -955,7 +955,10 @@ fn handle_chunk_batch_ack(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     }
 }
 
-/// Handles player command packets (sprint, sneak, etc.).
+/// Handles player command packets (sprint, elytra, sleep, riding, etc.).
+///
+/// Note: sneaking is NOT handled here — in 26.1 it is sent via
+/// `ServerboundPlayerInputPacket` bit flags (see `handle_player_input`).
 fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     if let Ok(cmd) = decode_packet::<ServerboundPlayerCommandPacket>(
         data,
@@ -971,6 +974,10 @@ fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
             PlayerCommandAction::StopSprinting => {
                 ctx.player.write().sprinting = false;
                 debug!(peer = %ctx.addr, name = %ctx.player_name, "Player stopped sprinting");
+            },
+            PlayerCommandAction::StartFallFlying => {
+                ctx.player.write().is_fall_flying = true;
+                debug!(peer = %ctx.addr, name = %ctx.player_name, "Player started elytra flight");
             },
             _ => {
                 debug!(
