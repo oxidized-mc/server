@@ -12,13 +12,15 @@ use tracing::{debug, warn};
 use oxidized_game::inventory::item_ids::item_name_to_id;
 use oxidized_game::inventory::item_stack::ItemStack;
 use oxidized_game::player::GameMode;
+use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
 use oxidized_protocol::packets::play::{
     ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket,
     ClientboundOpenSignEditorPacket, ClientboundSetPlayerInventoryPacket,
-    ServerboundPickItemFromBlockPacket, ServerboundPlayerActionPacket, ServerboundSignUpdatePacket,
-    ServerboundUseItemOnPacket, ServerboundUseItemPacket,
+    ClientboundSystemChatPacket, ServerboundPickItemFromBlockPacket,
+    ServerboundPlayerActionPacket, ServerboundSignUpdatePacket, ServerboundUseItemOnPacket,
+    ServerboundUseItemPacket,
 };
 use oxidized_protocol::types::{BlockPos, Direction, Vec3};
 use oxidized_world::chunk::ChunkPos;
@@ -161,6 +163,12 @@ pub async fn handle_player_action(
             pos = ?pkt.pos,
             "Block action rejected: spawn protection"
         );
+        // Vanilla sends "Spawn point is protected" on the actionbar.
+        send_actionbar(
+            play_ctx,
+            Component::translatable("build.spawn_protection".to_owned(), vec![]),
+        )
+        .await?;
         resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
@@ -266,15 +274,47 @@ pub async fn handle_player_action(
             );
             send_ack(play_ctx, pkt.sequence).await?;
         },
-        PlayerAction::DropAllItems
-        | PlayerAction::DropItem
-        | PlayerAction::ReleaseUseItem
-        | PlayerAction::SwapItemWithOffhand => {
+        PlayerAction::SwapItemWithOffhand => {
+            // Vanilla: swap selected hotbar slot ↔ offhand, then sync both.
+            let (sel_slot, off_slot) = {
+                let mut p = play_ctx.player.write();
+                p.inventory.swap_offhand()
+            };
+            sync_inventory_slot(play_ctx, sel_slot).await?;
+            sync_inventory_slot(play_ctx, off_slot).await?;
             debug!(
                 peer = %play_ctx.addr,
                 name = %play_ctx.player_name,
-                action = ?pkt.action,
-                "PlayerAction: not yet implemented"
+                "Swapped main hand ↔ offhand"
+            );
+        },
+        PlayerAction::DropItem => {
+            // Vanilla: drop one item from the selected hotbar slot.
+            let _dropped = play_ctx.player.write().inventory.drop_item();
+            let sel = play_ctx.player.read().inventory.selected_slot as usize;
+            sync_inventory_slot(play_ctx, sel).await?;
+            debug!(
+                peer = %play_ctx.addr,
+                name = %play_ctx.player_name,
+                "Dropped 1 item from selected slot"
+            );
+        },
+        PlayerAction::DropAllItems => {
+            // Vanilla: drop entire stack from the selected hotbar slot.
+            let _dropped = play_ctx.player.write().inventory.drop_all_items();
+            let sel = play_ctx.player.read().inventory.selected_slot as usize;
+            sync_inventory_slot(play_ctx, sel).await?;
+            debug!(
+                peer = %play_ctx.addr,
+                name = %play_ctx.player_name,
+                "Dropped all items from selected slot"
+            );
+        },
+        PlayerAction::ReleaseUseItem => {
+            debug!(
+                peer = %play_ctx.addr,
+                name = %play_ctx.player_name,
+                "ReleaseUseItem: not yet implemented"
             );
         },
     }
@@ -303,13 +343,22 @@ pub async fn handle_use_item_on(
         return Ok(());
     }
 
-    // Validate cursor position — vanilla clamps to [-1, 2] per axis.
+    // Validate cursor position — vanilla clamps each axis to [0, 1] with
+    // a small epsilon for floating-point tolerance. Values outside indicate
+    // a modified client.
     let (cx, cy, cz) = (
         pkt.hit_result.cursor_x,
         pkt.hit_result.cursor_y,
         pkt.hit_result.cursor_z,
     );
-    if !((-1.0..=2.0).contains(&cx) && (-1.0..=2.0).contains(&cy) && (-1.0..=2.0).contains(&cz)) {
+    const CURSOR_EPSILON: f32 = 0.0000001;
+    if cx < -CURSOR_EPSILON
+        || cx > 1.0 + CURSOR_EPSILON
+        || cy < -CURSOR_EPSILON
+        || cy > 1.0 + CURSOR_EPSILON
+        || cz < -CURSOR_EPSILON
+        || cz > 1.0 + CURSOR_EPSILON
+    {
         debug!(
             peer = %play_ctx.addr,
             name = %play_ctx.player_name,
@@ -345,6 +394,26 @@ pub async fn handle_use_item_on(
             pos = ?place_pos,
             "Block place rejected: outside build height"
         );
+        // Vanilla sends "Height limit for building is %s" on the actionbar.
+        if place_pos.y > MAX_BUILD_HEIGHT {
+            send_actionbar(
+                play_ctx,
+                Component::translatable(
+                    "build.tooHigh".to_owned(),
+                    vec![Component::text(OVERWORLD_MAX_Y.to_string())],
+                ),
+            )
+            .await?;
+        } else {
+            send_actionbar(
+                play_ctx,
+                Component::translatable(
+                    "build.tooLow".to_owned(),
+                    vec![Component::text(MIN_BUILD_HEIGHT.to_string())],
+                ),
+            )
+            .await?;
+        }
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
     }
@@ -357,6 +426,11 @@ pub async fn handle_use_item_on(
             pos = ?place_pos,
             "Block place rejected: spawn protection"
         );
+        send_actionbar(
+            play_ctx,
+            Component::translatable("build.spawn_protection".to_owned(), vec![]),
+        )
+        .await?;
         resync_block(play_ctx, place_pos, None).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
@@ -389,9 +463,13 @@ pub async fn handle_use_item_on(
             },
         };
 
-    // Only allow placement if the target position is air (not occupied).
+    // Allow placement if target is air or a replaceable block (tall grass, water, etc.)
     let existing = get_block(play_ctx.server_ctx, place_pos);
-    if existing != Some(u32::from(AIR.0)) {
+    let is_replaceable = match existing {
+        Some(state) => is_replaceable_block(play_ctx.server_ctx, state),
+        None => false,
+    };
+    if !is_replaceable {
         debug!(
             peer = %play_ctx.addr,
             name = %play_ctx.player_name,
@@ -627,6 +705,52 @@ async fn resync_block(
     Ok(())
 }
 
+/// Sends an overlay (actionbar) message to the player.
+async fn send_actionbar(
+    play_ctx: &mut PlayContext<'_>,
+    message: Component,
+) -> Result<(), ConnectionError> {
+    let pkt = ClientboundSystemChatPacket {
+        content: message,
+        overlay: true,
+    };
+    play_ctx
+        .conn
+        .send_raw(ClientboundSystemChatPacket::PACKET_ID, &pkt.encode())
+        .await?;
+    Ok(())
+}
+
+/// Sends a single inventory slot update to the client.
+///
+/// Reads the item from the player's inventory at `internal_slot`, converts
+/// it to protocol format, and sends a `ClientboundSetPlayerInventoryPacket`.
+async fn sync_inventory_slot(
+    play_ctx: &mut PlayContext<'_>,
+    internal_slot: usize,
+) -> Result<(), ConnectionError> {
+    use oxidized_game::player::inventory::PlayerInventory;
+
+    let (proto_slot, contents) = {
+        let player = play_ctx.player.read();
+        let stack = player.inventory.get(internal_slot);
+        let ps = PlayerInventory::to_protocol_slot(internal_slot);
+        let c = if stack.is_empty() {
+            None
+        } else {
+            Some(super::inventory::item_stack_to_slot_data(stack))
+        };
+        (ps, c)
+    };
+
+    let pkt = ClientboundSetPlayerInventoryPacket {
+        slot: i32::from(proto_slot),
+        contents,
+    };
+    play_ctx.conn.send_packet(&pkt).await?;
+    Ok(())
+}
+
 /// Gets the block state at a position from shared chunk storage.
 ///
 /// Returns `None` if the chunk is not loaded.
@@ -675,6 +799,57 @@ fn broadcast_block_update(
         exclude_entity,
         target_entity: None,
     });
+}
+
+/// Returns `true` if a block state is air or a vanilla-replaceable block.
+///
+/// Replaceable blocks can be overwritten by block placement without the player
+/// needing to break them first (e.g., tall grass, water, snow layer, fire).
+/// Since our registry doesn't store this flag, we use the block name.
+fn is_replaceable_block(ctx: &Arc<ServerContext>, state_id: u32) -> bool {
+    if state_id == u32::from(AIR.0) {
+        return true;
+    }
+
+    let block_name = match ctx
+        .block_registry
+        .get_state(oxidized_world::registry::BlockStateId(state_id as u16))
+    {
+        Some(state) => {
+            match ctx.block_registry.get_block_by_index(state.block_index) {
+                Some(block) => &block.name,
+                None => return false,
+            }
+        },
+        None => return false,
+    };
+
+    matches!(
+        block_name.as_str(),
+        "minecraft:air"
+            | "minecraft:cave_air"
+            | "minecraft:void_air"
+            | "minecraft:water"
+            | "minecraft:lava"
+            | "minecraft:short_grass"
+            | "minecraft:tall_grass"
+            | "minecraft:seagrass"
+            | "minecraft:tall_seagrass"
+            | "minecraft:fire"
+            | "minecraft:soul_fire"
+            | "minecraft:snow"
+            | "minecraft:vine"
+            | "minecraft:dead_bush"
+            | "minecraft:fern"
+            | "minecraft:large_fern"
+            | "minecraft:structure_void"
+            | "minecraft:light"
+            | "minecraft:crimson_roots"
+            | "minecraft:warped_roots"
+            | "minecraft:nether_sprouts"
+            | "minecraft:hanging_roots"
+            | "minecraft:glow_lichen"
+    )
 }
 
 /// Maps a held item name to a block state ID for placement.

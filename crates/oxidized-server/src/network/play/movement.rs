@@ -22,7 +22,7 @@ use oxidized_protocol::packets::play::{
 };
 use oxidized_world::chunk::ChunkPos;
 use parking_lot::RwLock;
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_game::net::entity_movement::{EntityMoveKind, classify_move, pack_degrees};
@@ -79,9 +79,13 @@ pub async fn handle_movement(
         },
     };
 
+    // Vanilla disconnects on NaN/Infinity — never silently drop.
     if move_pkt.contains_invalid_values() {
-        debug!(peer = %ctx.addr, name = %ctx.player_name, "Movement packet contains invalid values");
-        return Ok(());
+        warn!(peer = %ctx.addr, name = %ctx.player_name, "Movement packet contains NaN/Infinity — disconnecting");
+        return Err(ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "Invalid player movement",
+        )));
     }
 
     // Rate-limit movement packets: max 120/second (6 per tick × 20 ticks).
@@ -370,7 +374,7 @@ fn broadcast_movement(
 }
 
 /// Sends chunk load/unload packets when a player crosses a chunk boundary.
-async fn send_chunk_updates(
+pub(super) async fn send_chunk_updates(
     ctx: &mut PlayContext<'_>,
     new_center: ChunkPos,
     to_load: &[ChunkPos],

@@ -93,6 +93,59 @@ impl PlayerChunkTracker {
     pub fn loaded_count(&self) -> usize {
         self.loaded.len()
     }
+
+    /// Updates the view distance and returns chunks to load/unload.
+    ///
+    /// If the new view distance is larger, newly visible chunks are returned
+    /// in `to_load`. If smaller, chunks now outside range are returned in
+    /// `to_unload`. If unchanged, returns empty vectors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
+    /// use oxidized_world::chunk::ChunkPos;
+    ///
+    /// let mut tracker = PlayerChunkTracker::new(ChunkPos::new(0, 0), 2);
+    /// assert_eq!(tracker.loaded_count(), 25);
+    /// let (to_load, to_unload) = tracker.update_view_distance(3);
+    /// assert!(!to_load.is_empty());
+    /// assert!(to_unload.is_empty());
+    /// assert_eq!(tracker.loaded_count(), 49); // (2*3+1)²
+    /// ```
+    pub fn update_view_distance(
+        &mut self,
+        new_view_distance: i32,
+    ) -> (Vec<ChunkPos>, Vec<ChunkPos>) {
+        if new_view_distance == self.view_distance {
+            return (vec![], vec![]);
+        }
+
+        let old_vd = self.view_distance;
+        self.view_distance = new_view_distance;
+
+        if new_view_distance > old_vd {
+            // Expanding: find chunks in new range but not in old.
+            let mut to_load = Vec::new();
+            for chunk in spiral_chunks(self.center, new_view_distance) {
+                if !self.loaded.contains(&chunk) {
+                    self.loaded.insert(chunk);
+                    to_load.push(chunk);
+                }
+            }
+            (to_load, vec![])
+        } else {
+            // Shrinking: find chunks outside new range.
+            let new_set: HashSet<ChunkPos> =
+                spiral_chunks(self.center, new_view_distance).collect();
+            let to_unload: Vec<ChunkPos> =
+                self.loaded.difference(&new_set).copied().collect();
+            for p in &to_unload {
+                self.loaded.remove(p);
+            }
+            (vec![], to_unload)
+        }
+    }
 }
 
 #[cfg(test)]

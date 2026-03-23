@@ -128,6 +128,16 @@ pub async fn handle_play_entry(
         ))
     })?;
 
+    // Vanilla: canPlayerLogin — reject if server is full (and this isn't a reconnect).
+    let is_server_full = {
+        let player_list = server_ctx.player_list.read();
+        player_list.is_full() && !player_list.contains(&uuid)
+    };
+    if is_server_full {
+        warn!(peer = %addr, uuid = %uuid, "Server full — rejecting login");
+        return Err(crate::network::helpers::disconnect_err(conn, "Server is full!").await);
+    }
+
     // Create ServerPlayer with entity ID from the player list.
     let entity_id = server_ctx.player_list.read().next_entity_id();
     let game_mode = GameMode::from_id(server_ctx.level_data.read().game_type);
@@ -655,27 +665,35 @@ pub async fn handle_play_entry(
                     Ok(pkt) => {
                         match pkt.id {
                             ServerboundKeepAlivePacket::PACKET_ID => {
-                                if let Some((ka_uuid, ka_latency)) = handle_keepalive(
+                                match handle_keepalive(
                                     pkt.data, addr, &player_name,
                                     &mut keepalive_pending, keepalive_challenge, &keepalive_sent_at,
                                     &player_arc,
                                 ) {
-                                    // Broadcast latency update to all players' tab lists.
-                                    let latency_update = ClientboundPlayerInfoUpdatePacket {
-                                        actions: PlayerInfoActions(PlayerInfoActions::UPDATE_LATENCY),
-                                        entries: vec![PlayerInfoEntry {
-                                            uuid: ka_uuid,
-                                            latency: ka_latency,
-                                            ..Default::default()
-                                        }],
-                                    };
-                                    let encoded = latency_update.encode();
-                                    server_ctx.broadcast(BroadcastMessage {
-                                        packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
-                                        data: encoded.into(),
-                                        exclude_entity: None,
-                                        target_entity: None,
-                                    });
+                                    KeepaliveResult::Ok(ka_uuid, ka_latency) => {
+                                        // Broadcast latency update to all players' tab lists.
+                                        let latency_update = ClientboundPlayerInfoUpdatePacket {
+                                            actions: PlayerInfoActions(PlayerInfoActions::UPDATE_LATENCY),
+                                            entries: vec![PlayerInfoEntry {
+                                                uuid: ka_uuid,
+                                                latency: ka_latency,
+                                                ..Default::default()
+                                            }],
+                                        };
+                                        let encoded = latency_update.encode();
+                                        server_ctx.broadcast(BroadcastMessage {
+                                            packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
+                                            data: encoded.into(),
+                                            exclude_entity: None,
+                                            target_entity: None,
+                                        });
+                                    },
+                                    KeepaliveResult::Mismatch => {
+                                        // Vanilla disconnects on wrong keepalive ID.
+                                        info!(peer = %addr, name = %player_name, "Keepalive mismatch — disconnecting");
+                                        break;
+                                    },
+                                    KeepaliveResult::DecodeError => {},
                                 }
                             },
                             id if is_movement_packet(id) => {
@@ -816,16 +834,43 @@ pub async fn handle_play_entry(
                                     let new_view_distance =
                                         i32::from(info_pkt.information.view_distance)
                                             .clamp(2, server_ctx.max_view_distance);
-                                    let mut p = play_ctx.player.write();
-                                    let old_view_distance = p.view_distance;
-                                    p.view_distance = new_view_distance;
-                                    drop(p);
+                                    let old_view_distance = {
+                                        let mut p = play_ctx.player.write();
+                                        let old = p.view_distance;
+                                        p.view_distance = new_view_distance;
+                                        old
+                                    };
                                     if new_view_distance != old_view_distance {
+                                        // Update the chunk tracker and send/forget chunks.
+                                        let (to_load, to_unload) = play_ctx
+                                            .chunk_tracker
+                                            .update_view_distance(new_view_distance);
+                                        let center = play_ctx.chunk_tracker.center;
+                                        if !to_load.is_empty() || !to_unload.is_empty() {
+                                            if let Err(e) = movement::send_chunk_updates(
+                                                &mut play_ctx,
+                                                center,
+                                                &to_load,
+                                                &to_unload,
+                                            )
+                                            .await
+                                            {
+                                                debug!(
+                                                    peer = %addr,
+                                                    name = %player_name,
+                                                    error = %e,
+                                                    "Failed to send view distance chunk updates",
+                                                );
+                                                break;
+                                            }
+                                        }
                                         debug!(
                                             peer = %addr,
                                             name = %player_name,
                                             old = old_view_distance,
                                             new = new_view_distance,
+                                            loaded = to_load.len(),
+                                            unloaded = to_unload.len(),
                                             "View distance changed",
                                         );
                                     }
@@ -914,13 +959,23 @@ pub async fn handle_play_entry(
     Ok(())
 }
 
+/// Result of processing a keepalive response.
+enum KeepaliveResult {
+    /// Valid response — contains (uuid, latency) for broadcast.
+    Ok(uuid::Uuid, i32),
+    /// Decode error — ignore silently.
+    DecodeError,
+    /// Wrong challenge ID or not pending — vanilla disconnects.
+    Mismatch,
+}
+
 /// Handles a keepalive response from the client.
 ///
 /// Computes latency as an exponential moving average:
 /// `latency = (old * 3 + sample) / 4` (matching vanilla).
 ///
-/// Returns `Some((uuid, latency))` when the response is valid so the caller can
-/// broadcast a latency update to all players.
+/// Returns [`KeepaliveResult`] so the caller can broadcast latency updates
+/// or disconnect on mismatch (matching vanilla behavior).
 fn handle_keepalive(
     data: bytes::Bytes,
     addr: SocketAddr,
@@ -929,9 +984,12 @@ fn handle_keepalive(
     keepalive_challenge: i64,
     keepalive_sent_at: &Instant,
     player: &Arc<RwLock<ServerPlayer>>,
-) -> Option<(uuid::Uuid, i32)> {
-    let ka =
-        decode_packet::<ServerboundKeepAlivePacket>(data, addr, player_name, "KeepAlive").ok()?;
+) -> KeepaliveResult {
+    let ka = match decode_packet::<ServerboundKeepAlivePacket>(data, addr, player_name, "KeepAlive")
+    {
+        Ok(pkt) => pkt,
+        Err(_) => return KeepaliveResult::DecodeError,
+    };
 
     if *keepalive_pending && ka.id == keepalive_challenge {
         *keepalive_pending = false;
@@ -941,17 +999,17 @@ fn handle_keepalive(
         let latency = p.latency;
         let uuid = p.uuid;
         debug!(peer = %addr, name = %player_name, latency_ms = latency, "Keepalive response");
-        Some((uuid, latency))
+        KeepaliveResult::Ok(uuid, latency)
     } else {
-        debug!(
+        warn!(
             peer = %addr,
             name = %player_name,
             expected = keepalive_challenge,
             got = ka.id,
             pending = *keepalive_pending,
-            "Unexpected keepalive response",
+            "Keepalive mismatch — disconnecting",
         );
-        None
+        KeepaliveResult::Mismatch
     }
 }
 

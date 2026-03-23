@@ -115,6 +115,57 @@ impl PlayerInventory {
         &self.slots[Self::OFFHAND_SLOT]
     }
 
+    /// Swaps the currently selected hotbar item with the offhand slot.
+    ///
+    /// Returns `(selected_slot_index, offhand_slot_index)` for inventory sync.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxidized_game::player::inventory::PlayerInventory;
+    /// use oxidized_game::inventory::item_stack::ItemStack;
+    ///
+    /// let mut inv = PlayerInventory::new();
+    /// inv.set(0, ItemStack::new("minecraft:diamond_sword", 1));
+    /// inv.swap_offhand();
+    /// assert!(inv.get_selected().is_empty());
+    /// assert_eq!(inv.get_offhand().item.0, "minecraft:diamond_sword");
+    /// ```
+    pub fn swap_offhand(&mut self) -> (usize, usize) {
+        let sel = self.selected_slot as usize;
+        self.slots.swap(sel, Self::OFFHAND_SLOT);
+        (sel, Self::OFFHAND_SLOT)
+    }
+
+    /// Drops a single item from the selected hotbar slot.
+    ///
+    /// Returns the dropped `ItemStack` (count 1) or `None` if the slot is empty.
+    pub fn drop_item(&mut self) -> Option<ItemStack> {
+        let sel = self.selected_slot as usize;
+        if self.slots[sel].is_empty() {
+            return None;
+        }
+        let mut dropped = self.slots[sel].clone();
+        dropped.count = 1;
+        self.slots[sel].count -= 1;
+        if self.slots[sel].count <= 0 {
+            self.slots[sel] = ItemStack::empty();
+        }
+        Some(dropped)
+    }
+
+    /// Drops the entire stack from the selected hotbar slot.
+    ///
+    /// Returns the dropped `ItemStack` or `None` if the slot is empty.
+    pub fn drop_all_items(&mut self) -> Option<ItemStack> {
+        let sel = self.selected_slot as usize;
+        if self.slots[sel].is_empty() {
+            return None;
+        }
+        let dropped = std::mem::replace(&mut self.slots[sel], ItemStack::empty());
+        Some(dropped)
+    }
+
     /// Iterates over all slots as `(internal_index, &ItemStack)`.
     pub fn all_slots(&self) -> impl Iterator<Item = (usize, &ItemStack)> {
         self.slots.iter().enumerate()
