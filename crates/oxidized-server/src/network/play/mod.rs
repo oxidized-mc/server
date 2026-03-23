@@ -90,7 +90,10 @@ pub struct PlayContext<'a> {
 const PLAYER_ENTITY_TYPE_ID: i32 = 155;
 
 /// Entity metadata slot for displayed skin parts (cape, jacket, sleeves, etc.).
-const DATA_PLAYER_MODE_CUSTOMISATION: u8 = 21;
+///
+/// Vanilla hierarchy: Entity(0–7), LivingEntity(8–14), Avatar(15–16), Player(17–20).
+/// `DATA_PLAYER_MODE_CUSTOMISATION` is Avatar index 16.
+const DATA_PLAYER_MODE_CUSTOMISATION: u8 = 16;
 
 /// Converts a float angle (degrees) to the protocol's packed byte format.
 ///
@@ -200,10 +203,13 @@ pub async fn handle_play_entry(
             },
         }
     } else {
-        // New player — spawn at world spawn.
+        // New player — spawn at world spawn, centered on the block (vanilla: +0.5 on X/Z).
         let (sx, sy, sz) = server_ctx.level_data.read().spawn_pos();
-        player.pos =
-            oxidized_protocol::types::Vec3::new(f64::from(sx), f64::from(sy), f64::from(sz));
+        player.pos = oxidized_protocol::types::Vec3::new(
+            f64::from(sx) + 0.5,
+            f64::from(sy),
+            f64::from(sz) + 0.5,
+        );
         debug!(peer = %addr, uuid = %uuid, "New player — spawning at world spawn");
     }
 
