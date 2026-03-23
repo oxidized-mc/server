@@ -27,15 +27,16 @@ use super::PlayContext;
 use crate::network::helpers::decode_packet;
 use crate::network::{BroadcastMessage, ConnectionError, ServerContext};
 
-/// Maximum block interaction reach (squared).
+/// Survival block interaction reach (squared).
 ///
-/// Vanilla calculates: `getBlockInteractionRange() + additionalRange + 0.5`
-/// - Survival: 4.5 + 1.0 + 0.5 = 6.0 blocks → 36.0 sq
-/// - Creative: 5.0 + 1.0 + 0.5 = 6.5 blocks → 42.25 sq
+/// Vanilla: `getBlockInteractionRange() + additionalRange + 0.5`
+/// = 4.5 + 1.0 + 0.5 = 6.0 blocks → 36.0 sq
+const SURVIVAL_REACH_DISTANCE_SQ: f64 = 6.0 * 6.0;
+
+/// Creative block interaction reach (squared).
 ///
-/// We use the creative range (6.5²) as the server-side ceiling since the
-/// game mode check is applied separately.
-const MAX_REACH_DISTANCE_SQ: f64 = 6.5 * 6.5;
+/// Vanilla: 5.0 + 1.0 + 0.5 = 6.5 blocks → 42.25 sq
+const CREATIVE_REACH_DISTANCE_SQ: f64 = 6.5 * 6.5;
 
 /// Maximum distance from a sign the player can edit (squared).
 const MAX_SIGN_EDIT_DISTANCE_SQ: f64 = 8.0 * 8.0;
@@ -44,15 +45,22 @@ const MAX_SIGN_EDIT_DISTANCE_SQ: f64 = 8.0 * 8.0;
 /// of the given block.
 fn player_distance_to_block_sq(play_ctx: &PlayContext<'_>, pos: BlockPos) -> f64 {
     let player = play_ctx.player.read();
-    // Eye position is pos + 1.62 (standing eye height).
-    let eye = Vec3::new(player.pos.x, player.pos.y + 1.62, player.pos.z);
+    let eye_height = if player.sneaking { 1.27 } else { 1.62 };
+    let eye = Vec3::new(player.pos.x, player.pos.y + eye_height, player.pos.z);
     let block_center = Vec3::new(pos.x as f64 + 0.5, pos.y as f64 + 0.5, pos.z as f64 + 0.5);
     eye.distance_to_sqr(block_center)
 }
 
 /// Returns `true` if the player is within block interaction range.
+///
+/// Creative mode players have a longer reach (6.5 blocks) than survival/adventure (6.0).
 fn is_within_reach(play_ctx: &PlayContext<'_>, pos: BlockPos) -> bool {
-    player_distance_to_block_sq(play_ctx, pos) <= MAX_REACH_DISTANCE_SQ
+    let limit = if play_ctx.player.read().game_mode == GameMode::Creative {
+        CREATIVE_REACH_DISTANCE_SQ
+    } else {
+        SURVIVAL_REACH_DISTANCE_SQ
+    };
+    player_distance_to_block_sq(play_ctx, pos) <= limit
 }
 
 /// Handles `ServerboundPlayerActionPacket` (0x29) — block digging actions.
@@ -105,7 +113,7 @@ pub async fn handle_player_action(
                 do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
             } else {
                 // Record mining start position for StopDestroyBlock validation.
-                play_ctx.player.write().spawn_pos = pkt.pos;
+                play_ctx.player.write().mining_start_pos = Some(pkt.pos);
                 debug!(
                     peer = %play_ctx.addr,
                     name = %play_ctx.player_name,
@@ -119,8 +127,8 @@ pub async fn handle_player_action(
             let game_mode = play_ctx.player.read().game_mode;
             if game_mode != GameMode::Creative {
                 // Validate that the player started mining this block.
-                let mining_pos = play_ctx.player.read().spawn_pos;
-                if mining_pos != pkt.pos {
+                let mining_pos = play_ctx.player.read().mining_start_pos;
+                if mining_pos != Some(pkt.pos) {
                     debug!(
                         peer = %play_ctx.addr,
                         name = %play_ctx.player_name,
@@ -133,11 +141,13 @@ pub async fn handle_player_action(
                     return Ok(());
                 }
                 do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
+                play_ctx.player.write().mining_start_pos = None;
             } else {
                 send_ack(play_ctx, pkt.sequence).await?;
             }
         },
         PlayerAction::AbortDestroyBlock => {
+            play_ctx.player.write().mining_start_pos = None;
             debug!(
                 peer = %play_ctx.addr,
                 name = %play_ctx.player_name,
