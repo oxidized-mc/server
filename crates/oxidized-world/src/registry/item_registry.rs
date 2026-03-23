@@ -77,8 +77,8 @@ impl ItemRegistry {
 
     /// Returns the protocol numeric ID for an item name, or `None` if unknown.
     ///
-    /// The ID is the item's index in the vanilla registration-order list
-    /// (alphabetical). Empty strings return `None`.
+    /// The ID is the item's index in the vanilla registration-order list.
+    /// Empty strings return `None`.
     pub fn name_to_id(&self, name: &str) -> Option<i32> {
         self.by_name.get(name).map(|&idx| idx as i32)
     }
@@ -156,10 +156,12 @@ mod tests {
     }
 
     #[test]
-    fn test_name_to_id_alphabetical_order() {
+    fn test_name_to_id_registration_order() {
         let reg = registry();
-        // Items are in alphabetical order; acacia_boat should be first (index 0).
-        assert_eq!(reg.name_to_id("minecraft:acacia_boat"), Some(0));
+        // Items are in vanilla registration order; air should be first (index 0).
+        assert_eq!(reg.name_to_id("minecraft:air"), Some(0));
+        assert_eq!(reg.name_to_id("minecraft:stone"), Some(1));
+        assert_eq!(reg.name_to_id("minecraft:grass_block"), Some(27));
     }
 
     #[test]
