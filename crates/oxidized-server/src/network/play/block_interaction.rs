@@ -4,6 +4,7 @@
 //! and the sequence acknowledgement protocol. Sign updates are stubbed.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use tracing::{debug, warn};
@@ -37,6 +38,14 @@ const SURVIVAL_REACH_DISTANCE_SQ: f64 = 6.0 * 6.0;
 ///
 /// Vanilla: 5.0 + 1.0 + 0.5 = 6.5 blocks → 42.25 sq
 const CREATIVE_REACH_DISTANCE_SQ: f64 = 6.5 * 6.5;
+
+/// Minimum survival mining duration.
+///
+/// Even the fastest tool/block combo takes at least 1 game tick (50 ms).
+/// Blocks with hardness 0 (tall grass, etc.) are instant-break in creative
+/// only; survival always requires at least 1 tick. This is a conservative
+/// lower bound — per-block hardness will tighten it later.
+const MIN_MINING_DURATION: Duration = Duration::from_millis(50);
 
 /// Maximum distance from a sign the player can edit (squared).
 const MAX_SIGN_EDIT_DISTANCE_SQ: f64 = 8.0 * 8.0;
@@ -112,8 +121,12 @@ pub async fn handle_player_action(
             if game_mode == GameMode::Creative {
                 do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
             } else {
-                // Record mining start position for StopDestroyBlock validation.
-                play_ctx.player.write().mining_start_pos = Some(pkt.pos);
+                // Record mining start position and time for StopDestroyBlock validation.
+                {
+                    let mut player = play_ctx.player.write();
+                    player.mining_start_pos = Some(pkt.pos);
+                    player.mining_start_time = Some(Instant::now());
+                }
                 debug!(
                     peer = %play_ctx.addr,
                     name = %play_ctx.player_name,
@@ -127,7 +140,10 @@ pub async fn handle_player_action(
             let game_mode = play_ctx.player.read().game_mode;
             if game_mode != GameMode::Creative {
                 // Validate that the player started mining this block.
-                let mining_pos = play_ctx.player.read().mining_start_pos;
+                let (mining_pos, mining_time) = {
+                    let player = play_ctx.player.read();
+                    (player.mining_start_pos, player.mining_start_time)
+                };
                 if mining_pos != Some(pkt.pos) {
                     debug!(
                         peer = %play_ctx.addr,
@@ -140,14 +156,37 @@ pub async fn handle_player_action(
                     send_ack(play_ctx, pkt.sequence).await?;
                     return Ok(());
                 }
+                // Validate mining duration — even the fastest break takes ≥1 tick.
+                if let Some(start) = mining_time {
+                    if start.elapsed() < MIN_MINING_DURATION {
+                        debug!(
+                            peer = %play_ctx.addr,
+                            name = %play_ctx.player_name,
+                            pos = ?pkt.pos,
+                            elapsed = ?start.elapsed(),
+                            "StopDestroyBlock rejected: too fast (possible exploit)"
+                        );
+                        resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
+                        send_ack(play_ctx, pkt.sequence).await?;
+                        return Ok(());
+                    }
+                }
                 do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
-                play_ctx.player.write().mining_start_pos = None;
+                {
+                    let mut player = play_ctx.player.write();
+                    player.mining_start_pos = None;
+                    player.mining_start_time = None;
+                }
             } else {
                 send_ack(play_ctx, pkt.sequence).await?;
             }
         },
         PlayerAction::AbortDestroyBlock => {
-            play_ctx.player.write().mining_start_pos = None;
+            {
+                let mut player = play_ctx.player.write();
+                player.mining_start_pos = None;
+                player.mining_start_time = None;
+            }
             debug!(
                 peer = %play_ctx.addr,
                 name = %play_ctx.player_name,
@@ -693,6 +732,64 @@ mod tests {
         let ctx = test_server_ctx();
         let pos = BlockPos::new(1000, 64, 1000);
         assert!(!set_block(&ctx, pos, 1));
+    }
+
+    #[test]
+    fn test_mining_start_sets_time() {
+        use oxidized_game::player::{GameMode, ServerPlayer};
+        use oxidized_protocol::auth::GameProfile;
+        use oxidized_protocol::types::resource_location::ResourceLocation;
+
+        let profile = GameProfile::new(uuid::Uuid::nil(), "Steve".into());
+        let mut player = ServerPlayer::new(
+            1,
+            profile,
+            ResourceLocation::minecraft("overworld"),
+            GameMode::Survival,
+        );
+
+        // Initially both mining fields are None.
+        assert!(player.mining_start_pos.is_none());
+        assert!(player.mining_start_time.is_none());
+
+        // Simulate StartDestroyBlock.
+        let pos = BlockPos::new(10, 64, 10);
+        player.mining_start_pos = Some(pos);
+        player.mining_start_time = Some(std::time::Instant::now());
+
+        assert_eq!(player.mining_start_pos, Some(pos));
+        assert!(player.mining_start_time.is_some());
+    }
+
+    #[test]
+    fn test_mining_abort_clears_time() {
+        use oxidized_game::player::{GameMode, ServerPlayer};
+        use oxidized_protocol::auth::GameProfile;
+        use oxidized_protocol::types::resource_location::ResourceLocation;
+
+        let profile = GameProfile::new(uuid::Uuid::nil(), "Steve".into());
+        let mut player = ServerPlayer::new(
+            1,
+            profile,
+            ResourceLocation::minecraft("overworld"),
+            GameMode::Survival,
+        );
+
+        // Simulate StartDestroyBlock then AbortDestroyBlock.
+        player.mining_start_pos = Some(BlockPos::new(5, 60, 5));
+        player.mining_start_time = Some(std::time::Instant::now());
+
+        // Abort clears both fields.
+        player.mining_start_pos = None;
+        player.mining_start_time = None;
+
+        assert!(player.mining_start_pos.is_none());
+        assert!(player.mining_start_time.is_none());
+    }
+
+    #[test]
+    fn test_min_mining_duration_is_one_tick() {
+        assert_eq!(MIN_MINING_DURATION, Duration::from_millis(50));
     }
 
     fn test_server_ctx() -> Arc<ServerContext> {

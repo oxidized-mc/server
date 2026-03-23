@@ -108,6 +108,12 @@ pub struct ServerPlayer {
     /// Spawn yaw angle.
     pub spawn_angle: f32,
 
+    // -- Mining state --
+    /// Position where survival block mining started (for `StopDestroyBlock` validation).
+    pub mining_start_pos: Option<BlockPos>,
+    /// Instant when survival block mining started (for timing validation).
+    pub mining_start_time: Option<std::time::Instant>,
+
     // -- Network state --
     /// Smoothed round-trip latency in milliseconds (exponential moving average).
     pub latency: i32,
@@ -162,6 +168,8 @@ impl ServerPlayer {
             dimension,
             spawn_pos: BlockPos::new(0, 64, 0),
             spawn_angle: 0.0,
+            mining_start_pos: None,
+            mining_start_time: None,
             latency: 0,
             movement_rate: (0, std::time::Instant::now()),
         }
@@ -218,13 +226,13 @@ impl ServerPlayer {
 
         // Health / food
         if let Some(v) = nbt.get_float("Health") {
-            self.health = v;
+            self.health = v.clamp(0.0, self.max_health);
         }
         if let Some(v) = nbt.get_int("foodLevel") {
-            self.food_level = v;
+            self.food_level = v.clamp(0, 20);
         }
         if let Some(v) = nbt.get_float("foodSaturationLevel") {
-            self.food_saturation = v;
+            self.food_saturation = v.clamp(0.0, self.food_level as f32);
         }
 
         // Spawn position (optional — bed or respawn anchor)
@@ -234,6 +242,9 @@ impl ServerPlayer {
             nbt.get_int("SpawnZ"),
         ) {
             self.spawn_pos = BlockPos::new(sx, sy, sz);
+        }
+        if let Some(angle) = nbt.get_float("SpawnAngle") {
+            self.spawn_angle = angle;
         }
 
         // Dimension
@@ -304,6 +315,7 @@ impl ServerPlayer {
         nbt.put_int("SpawnX", self.spawn_pos.x);
         nbt.put_int("SpawnY", self.spawn_pos.y);
         nbt.put_int("SpawnZ", self.spawn_pos.z);
+        nbt.put_float("SpawnAngle", self.spawn_angle);
 
         // Dimension
         nbt.put_string("Dimension", self.dimension.to_string());
