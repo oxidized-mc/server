@@ -109,6 +109,24 @@ pub struct ServerPlayer {
     /// Spawn yaw angle.
     pub spawn_angle: f32,
 
+    // -- Experience --
+    /// Experience level (0+).
+    pub xp_level: i32,
+    /// Experience bar progress within the current level (0.0–1.0).
+    pub xp_progress: f32,
+    /// Total experience points earned.
+    pub xp_total: i32,
+    /// Seed for enchanting table randomization.
+    pub xp_seed: i32,
+
+    // -- Combat / status --
+    /// Player's score (incremented by XP orbs, reset on death).
+    pub score: i32,
+    /// Absorption hearts from golden apples / effects (0.0+).
+    pub absorption_amount: f32,
+    /// Location of last death: `(dimension, packed BlockPos)`.
+    pub last_death_location: Option<(ResourceLocation, i64)>,
+
     // -- Mining state --
     /// Position where survival block mining started (for `StopDestroyBlock` validation).
     pub mining_start_pos: Option<BlockPos>,
@@ -122,6 +140,14 @@ pub struct ServerPlayer {
     // -- Rate limiting --
     /// Movement packet rate limiter: (count this second, second start instant).
     pub movement_rate: (u32, std::time::Instant),
+
+    // -- Raw NBT for unimplemented systems (roundtripped to prevent data loss) --
+    /// Active potion/status effects (raw NBT, preserved until effect system is built).
+    pub raw_active_effects: Option<NbtTag>,
+    /// Attribute modifiers (raw NBT, preserved until attribute system is built).
+    pub raw_attributes: Option<NbtTag>,
+    /// Ender chest inventory (raw NBT, preserved until ender chest is implemented).
+    pub raw_ender_items: Option<NbtTag>,
 }
 
 impl ServerPlayer {
@@ -173,6 +199,16 @@ impl ServerPlayer {
             mining_start_time: None,
             latency: 0,
             movement_rate: (0, std::time::Instant::now()),
+            xp_level: 0,
+            xp_progress: 0.0,
+            xp_total: 0,
+            xp_seed: 0,
+            score: 0,
+            absorption_amount: 0.0,
+            last_death_location: None,
+            raw_active_effects: None,
+            raw_attributes: None,
+            raw_ender_items: None,
         }
     }
 
@@ -283,6 +319,56 @@ impl ServerPlayer {
                 }
             }
         }
+
+        // Experience
+        self.xp_level = nbt.get_int("XpLevel").unwrap_or(0);
+        self.xp_progress = nbt.get_float("XpP").unwrap_or(0.0).clamp(0.0, 1.0);
+        self.xp_total = nbt.get_int("XpTotal").unwrap_or(0);
+        self.xp_seed = nbt.get_int("XpSeed").unwrap_or(0);
+
+        // Score
+        self.score = nbt.get_int("Score").unwrap_or(0);
+
+        // Absorption
+        self.absorption_amount = nbt.get_float("AbsorptionAmount").unwrap_or(0.0).max(0.0);
+
+        // Fall-flying (elytra glide state)
+        self.is_fall_flying = nbt.get_byte("FallFlying").unwrap_or(0) != 0;
+
+        // Abilities — load full compound, falling back to game-mode defaults
+        if let Some(ab) = nbt.get_compound("abilities") {
+            self.abilities.invulnerable = ab.get_byte("invulnerable").unwrap_or(0) != 0;
+            self.abilities.flying = ab.get_byte("flying").unwrap_or(0) != 0;
+            self.abilities.can_fly = ab.get_byte("mayfly").unwrap_or(0) != 0;
+            self.abilities.instabuild = ab.get_byte("instabuild").unwrap_or(0) != 0;
+            if let Some(fs) = ab.get_float("flySpeed") {
+                self.abilities.fly_speed = fs;
+            }
+            if let Some(ws) = ab.get_float("walkSpeed") {
+                self.abilities.walk_speed = ws;
+            }
+        }
+
+        // Last death location
+        if let Some(death_compound) = nbt.get_compound("LastDeathLocation") {
+            if let Some(dim_str) = death_compound.get_string("dimension") {
+                if let Ok(dim) = ResourceLocation::from_string(dim_str) {
+                    let pos = death_compound.get_long("pos").unwrap_or(0);
+                    self.last_death_location = Some((dim, pos));
+                }
+            }
+        }
+
+        // Roundtrip raw NBT for unimplemented systems
+        if let Some(tag) = nbt.get("active_effects") {
+            self.raw_active_effects = Some(tag.clone());
+        }
+        if let Some(tag) = nbt.get("attributes") {
+            self.raw_attributes = Some(tag.clone());
+        }
+        if let Some(tag) = nbt.get("EnderItems") {
+            self.raw_ender_items = Some(tag.clone());
+        }
     }
 
     /// Saves player state to an NBT compound for disk persistence.
@@ -336,6 +422,50 @@ impl ServerPlayer {
             }
         }
         nbt.put("Inventory", NbtTag::List(inv_list));
+
+        // Experience
+        nbt.put_int("XpLevel", self.xp_level);
+        nbt.put_float("XpP", self.xp_progress);
+        nbt.put_int("XpTotal", self.xp_total);
+        nbt.put_int("XpSeed", self.xp_seed);
+
+        // Score
+        nbt.put_int("Score", self.score);
+
+        // Absorption
+        nbt.put_float("AbsorptionAmount", self.absorption_amount);
+
+        // Fall-flying
+        nbt.put_byte("FallFlying", i8::from(self.is_fall_flying));
+
+        // Abilities compound
+        let mut ab = NbtCompound::new();
+        ab.put_byte("invulnerable", i8::from(self.abilities.invulnerable));
+        ab.put_byte("flying", i8::from(self.abilities.flying));
+        ab.put_byte("mayfly", i8::from(self.abilities.can_fly));
+        ab.put_byte("instabuild", i8::from(self.abilities.instabuild));
+        ab.put_float("flySpeed", self.abilities.fly_speed);
+        ab.put_float("walkSpeed", self.abilities.walk_speed);
+        nbt.put("abilities", NbtTag::Compound(ab));
+
+        // Last death location
+        if let Some((ref dim, pos)) = self.last_death_location {
+            let mut death = NbtCompound::new();
+            death.put_string("dimension", dim.to_string());
+            death.put_long("pos", pos);
+            nbt.put("LastDeathLocation", NbtTag::Compound(death));
+        }
+
+        // Roundtrip raw NBT for unimplemented systems
+        if let Some(ref tag) = self.raw_active_effects {
+            nbt.put("active_effects", tag.clone());
+        }
+        if let Some(ref tag) = self.raw_attributes {
+            nbt.put("attributes", tag.clone());
+        }
+        if let Some(ref tag) = self.raw_ender_items {
+            nbt.put("EnderItems", tag.clone());
+        }
 
         nbt
     }
@@ -629,5 +759,178 @@ mod tests {
         for i in 0..PlayerInventory::TOTAL_SLOTS {
             assert!(player.inventory.get(i).is_empty());
         }
+    }
+
+    #[test]
+    fn test_xp_roundtrip() {
+        let mut player = make_test_player(1, "Test");
+        player.xp_level = 30;
+        player.xp_progress = 0.75;
+        player.xp_total = 1395;
+        player.xp_seed = 42;
+
+        let nbt = player.save_to_nbt();
+        let mut player2 = make_test_player(2, "Test2");
+        player2.load_from_nbt(&nbt);
+
+        assert_eq!(player2.xp_level, 30);
+        assert!((player2.xp_progress - 0.75).abs() < f32::EPSILON);
+        assert_eq!(player2.xp_total, 1395);
+        assert_eq!(player2.xp_seed, 42);
+    }
+
+    #[test]
+    fn test_score_roundtrip() {
+        let mut player = make_test_player(1, "Test");
+        player.score = 500;
+
+        let nbt = player.save_to_nbt();
+        let mut player2 = make_test_player(2, "Test2");
+        player2.load_from_nbt(&nbt);
+
+        assert_eq!(player2.score, 500);
+    }
+
+    #[test]
+    fn test_absorption_roundtrip() {
+        let mut player = make_test_player(1, "Test");
+        player.absorption_amount = 8.0;
+
+        let nbt = player.save_to_nbt();
+        let mut player2 = make_test_player(2, "Test2");
+        player2.load_from_nbt(&nbt);
+
+        assert!((player2.absorption_amount - 8.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_fall_flying_roundtrip() {
+        let mut player = make_test_player(1, "Test");
+        player.is_fall_flying = true;
+
+        let nbt = player.save_to_nbt();
+        let mut player2 = make_test_player(2, "Test2");
+        player2.load_from_nbt(&nbt);
+
+        assert!(player2.is_fall_flying);
+    }
+
+    #[test]
+    fn test_abilities_roundtrip_preserves_custom_values() {
+        let mut player = make_test_player(1, "Test");
+        player.abilities.flying = true;
+        player.abilities.can_fly = true;
+        player.abilities.fly_speed = 0.10;
+        player.abilities.walk_speed = 0.15;
+
+        let nbt = player.save_to_nbt();
+        let mut player2 = make_test_player(2, "Test2");
+        player2.load_from_nbt(&nbt);
+
+        assert!(player2.abilities.flying);
+        assert!(player2.abilities.can_fly);
+        assert!((player2.abilities.fly_speed - 0.10).abs() < f32::EPSILON);
+        assert!((player2.abilities.walk_speed - 0.15).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_last_death_location_roundtrip() {
+        let mut player = make_test_player(1, "Test");
+        let dim = ResourceLocation::minecraft("overworld");
+        let packed_pos: i64 = ((100_i64 & 0x3FF_FFFF) << 38)
+            | (((-200_i64) & 0x3FF_FFFF) << 12)
+            | (64_i64 & 0xFFF);
+        player.last_death_location = Some((dim.clone(), packed_pos));
+
+        let nbt = player.save_to_nbt();
+        let mut player2 = make_test_player(2, "Test2");
+        player2.load_from_nbt(&nbt);
+
+        let (dim2, pos2) = player2.last_death_location.unwrap();
+        assert_eq!(dim2, dim);
+        assert_eq!(pos2, packed_pos);
+    }
+
+    #[test]
+    fn test_raw_nbt_roundtrip_active_effects() {
+        use oxidized_nbt::TAG_LIST;
+
+        let mut player = make_test_player(1, "Test");
+
+        // Simulate raw active_effects tag from a vanilla world
+        let mut effect = NbtCompound::new();
+        effect.put_byte("id", 1);
+        effect.put_byte("amplifier", 0);
+        effect.put_int("duration", 600);
+
+        let mut effects_list = NbtList::new(TAG_COMPOUND);
+        let _ = effects_list.push(NbtTag::Compound(effect));
+
+        let mut nbt = NbtCompound::new();
+        nbt.put("active_effects", NbtTag::List(effects_list));
+
+        player.load_from_nbt(&nbt);
+        assert!(player.raw_active_effects.is_some());
+
+        let saved = player.save_to_nbt();
+        assert!(saved.get("active_effects").is_some());
+    }
+
+    #[test]
+    fn test_raw_nbt_roundtrip_ender_items() {
+        let mut player = make_test_player(1, "Test");
+
+        let mut item = NbtCompound::new();
+        item.put_string("id", "minecraft:diamond");
+        item.put_byte("count", 64);
+        item.put_byte("Slot", 0);
+
+        let mut ender_list = NbtList::new(TAG_COMPOUND);
+        let _ = ender_list.push(NbtTag::Compound(item));
+
+        let mut nbt = NbtCompound::new();
+        nbt.put("EnderItems", NbtTag::List(ender_list));
+
+        player.load_from_nbt(&nbt);
+        assert!(player.raw_ender_items.is_some());
+
+        let saved = player.save_to_nbt();
+        let ender = saved.get("EnderItems").unwrap();
+        if let NbtTag::List(list) = ender {
+            assert_eq!(list.len(), 1);
+        } else {
+            panic!("EnderItems should be a list");
+        }
+    }
+
+    #[test]
+    fn test_raw_nbt_roundtrip_attributes() {
+        let mut player = make_test_player(1, "Test");
+
+        let mut attr = NbtCompound::new();
+        attr.put_string("Name", "minecraft:generic.max_health");
+        attr.put_double("Base", 20.0);
+
+        let mut attr_list = NbtList::new(TAG_COMPOUND);
+        let _ = attr_list.push(NbtTag::Compound(attr));
+
+        let mut nbt = NbtCompound::new();
+        nbt.put("attributes", NbtTag::List(attr_list));
+
+        player.load_from_nbt(&nbt);
+        assert!(player.raw_attributes.is_some());
+
+        let saved = player.save_to_nbt();
+        assert!(saved.get("attributes").is_some());
+    }
+
+    #[test]
+    fn test_xp_progress_clamped() {
+        let mut player = make_test_player(1, "Test");
+        let mut nbt = NbtCompound::new();
+        nbt.put_float("XpP", 2.5); // out of range
+
+        player.load_from_nbt(&nbt);
+        assert!((player.xp_progress - 1.0).abs() < f32::EPSILON);
     }
 }

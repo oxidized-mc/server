@@ -129,7 +129,7 @@ fn build_login_packet(
             previous_game_mode: GameMode::nullable_id(player.previous_game_mode),
             is_debug: false,
             is_flat,
-            last_death_location: None,
+            last_death_location: player.last_death_location.clone(),
             portal_cooldown: 0,
             sea_level: level_data.sea_level,
         },
