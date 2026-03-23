@@ -212,6 +212,7 @@ fn main() -> anyhow::Result<()> {
             block_registry,
             chunk_generator,
             op_permission_level: config.admin.op_permission_level,
+            spawn_protection: config.gameplay.spawn_protection,
         });
 
         // Build the shared login context.
