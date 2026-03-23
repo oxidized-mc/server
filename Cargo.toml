@@ -39,7 +39,7 @@ sha1           = "0.10"
 
 # Compression
 flate2         = "1"
-lz4_flex       = "0.11"
+lz4_flex       = "0.13"
 
 # Logging/tracing
 tracing             = "0.1"
@@ -82,7 +82,7 @@ glam           = "0.32"
 
 # CLI
 clap           = { version = "4", features = ["derive"] }
-rustyline      = "15"
+rustyline      = "17"
 
 # Testing
 proptest       = "1"
