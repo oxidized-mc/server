@@ -18,9 +18,8 @@ use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
 use oxidized_protocol::packets::play::{
     ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket,
     ClientboundOpenSignEditorPacket, ClientboundSetPlayerInventoryPacket,
-    ClientboundSystemChatPacket, ServerboundPickItemFromBlockPacket,
-    ServerboundPlayerActionPacket, ServerboundSignUpdatePacket, ServerboundUseItemOnPacket,
-    ServerboundUseItemPacket,
+    ClientboundSystemChatPacket, ServerboundPickItemFromBlockPacket, ServerboundPlayerActionPacket,
+    ServerboundSignUpdatePacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
 use oxidized_protocol::types::{BlockPos, Direction, Vec3};
 use oxidized_world::chunk::ChunkPos;
@@ -815,11 +814,9 @@ fn is_replaceable_block(ctx: &Arc<ServerContext>, state_id: u32) -> bool {
         .block_registry
         .get_state(oxidized_world::registry::BlockStateId(state_id as u16))
     {
-        Some(state) => {
-            match ctx.block_registry.get_block_by_index(state.block_index) {
-                Some(block) => &block.name,
-                None => return false,
-            }
+        Some(state) => match ctx.block_registry.get_block_by_index(state.block_index) {
+            Some(block) => &block.name,
+            None => return false,
         },
         None => return false,
     };

@@ -138,8 +138,7 @@ impl PlayerChunkTracker {
             // Shrinking: find chunks outside new range.
             let new_set: HashSet<ChunkPos> =
                 spiral_chunks(self.center, new_view_distance).collect();
-            let to_unload: Vec<ChunkPos> =
-                self.loaded.difference(&new_set).copied().collect();
+            let to_unload: Vec<ChunkPos> = self.loaded.difference(&new_set).copied().collect();
             for p in &to_unload {
                 self.loaded.remove(p);
             }
