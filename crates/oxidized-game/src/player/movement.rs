@@ -43,6 +43,12 @@ pub struct MovementResult {
     pub accepted: bool,
     /// Whether the server should send a position correction to the client.
     pub needs_correction: bool,
+    /// Whether the proposed values contained NaN or Infinity.
+    ///
+    /// Creative/spectator mode skips the speed check but must still reject
+    /// invalid (NaN/Infinity) coordinates — this flag lets callers distinguish
+    /// the two rejection reasons.
+    pub has_invalid_values: bool,
     /// The resolved position (either new or corrected).
     pub new_pos: Vec3,
     /// The resolved yaw rotation.
@@ -113,6 +119,7 @@ pub fn validate_movement(
         return MovementResult {
             accepted: false,
             needs_correction: true,
+            has_invalid_values: true,
             new_pos: current_pos,
             new_yaw: normalize_angle(current_yaw),
             new_pitch: current_pitch.clamp(-90.0, 90.0),
@@ -144,6 +151,7 @@ pub fn validate_movement(
     MovementResult {
         accepted: !needs_correction,
         needs_correction,
+        has_invalid_values: false,
         new_pos,
         new_yaw: normalize_angle(resolved_yaw),
         new_pitch: resolved_pitch,
@@ -516,5 +524,75 @@ mod tests {
         );
         assert!(result.accepted);
         assert!((result.new_yaw - (-10.0)).abs() < f32::EPSILON);
+    }
+
+    // ── has_invalid_values flag tests ──────────────────────────────
+
+    #[test]
+    fn test_has_invalid_values_true_on_nan() {
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(f64::NAN),
+            Some(0.0),
+            Some(0.0),
+            None,
+            None,
+            false,
+        );
+        assert!(result.has_invalid_values);
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
+    }
+
+    #[test]
+    fn test_has_invalid_values_true_on_infinity() {
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(f64::INFINITY),
+            Some(0.0),
+            Some(0.0),
+            None,
+            None,
+            false,
+        );
+        assert!(result.has_invalid_values);
+    }
+
+    #[test]
+    fn test_has_invalid_values_false_on_valid_move() {
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(1.0),
+            Some(0.0),
+            Some(0.0),
+            None,
+            None,
+            false,
+        );
+        assert!(!result.has_invalid_values);
+    }
+
+    #[test]
+    fn test_has_invalid_values_false_on_speed_rejection() {
+        let result = validate_movement(
+            Vec3::ZERO,
+            0.0,
+            0.0,
+            Some(200.0),
+            Some(0.0),
+            Some(0.0),
+            None,
+            None,
+            false,
+        );
+        assert!(!result.has_invalid_values);
+        assert!(!result.accepted);
+        assert!(result.needs_correction);
     }
 }

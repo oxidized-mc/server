@@ -70,7 +70,7 @@ pub async fn handle_movement(
     {
         let mut p = ctx.player.write();
         let now = Instant::now();
-        if now.duration_since(p.movement_rate.1).as_secs() >= 1 {
+        if now.duration_since(p.movement_rate.1).as_millis() >= 1000 {
             p.movement_rate = (0, now);
         }
         p.movement_rate.0 += 1;
@@ -108,8 +108,8 @@ pub async fn handle_movement(
         )
     };
 
-    // Creative/Spectator: keep NaN/coordinate sanitization but skip speed limits.
-    if skip_speed_check {
+    // Creative/Spectator: skip speed limits but still reject NaN/Infinity.
+    if skip_speed_check && !result.has_invalid_values {
         result.needs_correction = false;
         result.accepted = true;
     }
