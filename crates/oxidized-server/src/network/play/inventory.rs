@@ -17,8 +17,8 @@ use oxidized_protocol::packets::play::{
 };
 
 use super::PlayContext;
-use crate::network::{BroadcastMessage, ConnectionError};
 use crate::network::helpers::decode_packet;
+use crate::network::{BroadcastMessage, ConnectionError};
 
 /// Handles `ServerboundSetCarriedItemPacket` (0x35) — hotbar selection change.
 pub async fn handle_set_carried_item(
@@ -158,10 +158,9 @@ pub async fn handle_set_creative_mode_slot(
 
         // Broadcast equipment change if the affected slot is visible to other
         // players (armor, offhand, or the currently selected hotbar slot).
-        if let Some(equip) = internal_slot_to_equipment(
-            internal,
-            player.inventory.selected_slot as usize,
-        ) {
+        if let Some(equip) =
+            internal_slot_to_equipment(internal, player.inventory.selected_slot as usize)
+        {
             let slot_data = {
                 let item = player.inventory.get(internal);
                 if item.is_empty() {
@@ -274,9 +273,7 @@ fn slot_data_to_item_stack(data: &SlotData) -> ItemStack {
 /// Returns `None` for main-inventory slots that are not currently selected.
 fn internal_slot_to_equipment(internal: usize, selected: usize) -> Option<u8> {
     match internal {
-        i if i == selected && i < PlayerInventory::HOTBAR_END => {
-            Some(equipment_slot::MAIN_HAND)
-        },
+        i if i == selected && i < PlayerInventory::HOTBAR_END => Some(equipment_slot::MAIN_HAND),
         PlayerInventory::OFFHAND_SLOT => Some(equipment_slot::OFF_HAND),
         36 => Some(equipment_slot::HEAD),
         37 => Some(equipment_slot::CHEST),

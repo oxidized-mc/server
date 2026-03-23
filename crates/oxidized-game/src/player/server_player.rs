@@ -844,9 +844,8 @@ mod tests {
     fn test_last_death_location_roundtrip() {
         let mut player = make_test_player(1, "Test");
         let dim = ResourceLocation::minecraft("overworld");
-        let packed_pos: i64 = ((100_i64 & 0x3FF_FFFF) << 38)
-            | (((-200_i64) & 0x3FF_FFFF) << 12)
-            | (64_i64 & 0xFFF);
+        let packed_pos: i64 =
+            ((100_i64 & 0x3FF_FFFF) << 38) | (((-200_i64) & 0x3FF_FFFF) << 12) | (64_i64 & 0xFFF);
         player.last_death_location = Some((dim.clone(), packed_pos));
 
         let nbt = player.save_to_nbt();

@@ -271,13 +271,7 @@ pub async fn handle_player_action(
                     player.mining_start_pos = None;
                     player.mining_start_time = None;
                     // Clear mining animation on other players' screens.
-                    broadcast_block_destruction(
-                        play_ctx.server_ctx,
-                        eid,
-                        pkt.pos,
-                        10,
-                        Some(eid),
-                    );
+                    broadcast_block_destruction(play_ctx.server_ctx, eid, pkt.pos, 10, Some(eid));
                 }
             } else {
                 send_ack(play_ctx, pkt.sequence).await?;
@@ -1021,10 +1015,9 @@ pub async fn handle_pick_item_from_block(
                     let mut player = play_ctx.player.write();
                     player.inventory.selected_slot = slot as u8;
                 }
-                let held_pkt =
-                    oxidized_protocol::packets::play::ClientboundSetHeldSlotPacket {
-                        slot: slot as i32,
-                    };
+                let held_pkt = oxidized_protocol::packets::play::ClientboundSetHeldSlotPacket {
+                    slot: slot as i32,
+                };
                 play_ctx.conn.send_packet(&held_pkt).await?;
             },
             Some(slot) => {

@@ -33,6 +33,7 @@ use oxidized_game::player::{
 use oxidized_protocol::auth;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
+use oxidized_protocol::codec::slot::SlotData;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
@@ -43,19 +44,17 @@ use oxidized_protocol::packets::play::{
     ClientboundSetEntityDataPacket, ClientboundSetEquipmentPacket, ClientboundSetTimePacket,
     ClientboundSystemChatPacket, ClockNetworkState, ClockUpdate, GameEventType,
     PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
-    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket, ServerboundChatPacket,
-    ServerboundChunkBatchReceivedPacket, ServerboundClientInformationPlayPacket,
-    ServerboundCommandSuggestionPacket, ServerboundKeepAlivePacket,
-    ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
+    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
+    ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
+    ServerboundClientInformationPlayPacket, ServerboundCommandSuggestionPacket,
+    ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
     ServerboundPickItemFromBlockPacket, ServerboundPlayerAbilitiesPacket,
-    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket,
-    ServerboundPlayerInputPacket, ServerboundSetCarriedItemPacket,
-    ServerboundSetCreativeModeSlotPacket, ServerboundSignUpdatePacket,
-    ServerboundSwingPacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
-    equipment_slot,
+    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
+    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
+    ServerboundSignUpdatePacket, ServerboundSwingPacket, ServerboundUseItemOnPacket,
+    ServerboundUseItemPacket, equipment_slot,
 };
-use oxidized_protocol::codec::slot::SlotData;
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
 use parking_lot::RwLock;
@@ -120,7 +119,11 @@ fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacke
 
     let inv = &player.inventory;
     let to_slot = |stack: &oxidized_game::inventory::ItemStack| -> Option<SlotData> {
-        if stack.is_empty() { None } else { Some(item_stack_to_slot_data(stack)) }
+        if stack.is_empty() {
+            None
+        } else {
+            Some(item_stack_to_slot_data(stack))
+        }
     };
 
     ClientboundSetEquipmentPacket {
@@ -1271,9 +1274,7 @@ fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
 
 /// Builds the DATA_SHARED_FLAGS byte from the player's current state.
 fn build_shared_flags(player: &ServerPlayer) -> u8 {
-    use oxidized_game::entity::data_slots::{
-        FLAG_CROUCHING, FLAG_FALL_FLYING, FLAG_SPRINTING,
-    };
+    use oxidized_game::entity::data_slots::{FLAG_CROUCHING, FLAG_FALL_FLYING, FLAG_SPRINTING};
     let mut flags: u8 = 0;
     if player.sneaking {
         flags |= 1 << FLAG_CROUCHING;

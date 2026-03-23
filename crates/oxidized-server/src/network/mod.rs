@@ -717,9 +717,8 @@ async fn handle_connection(
                             );
                             // Send kick signal to old player's play loop.
                             if let Some(tx) = ctx.server_ctx.kick_channels.get(&uuid) {
-                                let _ = tx.try_send(
-                                    "You logged in from another location".to_string(),
-                                );
+                                let _ =
+                                    tx.try_send("You logged in from another location".to_string());
                             }
                             // Give the old session time to disconnect cleanly.
                             tokio::time::sleep(Duration::from_millis(100)).await;

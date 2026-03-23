@@ -93,8 +93,7 @@ impl Packet for ClientboundSetEquipmentPacket {
         let len = self.equipments.len();
         for (i, (slot, item)) in self.equipments.iter().enumerate() {
             let has_more = i + 1 < len;
-            let slot_byte = slot & !CONTINUE_MASK
-                | if has_more { CONTINUE_MASK } else { 0 };
+            let slot_byte = slot & !CONTINUE_MASK | if has_more { CONTINUE_MASK } else { 0 };
             buf.put_u8(slot_byte);
             slot::write_slot(&mut buf, item.as_ref());
         }
@@ -121,8 +120,7 @@ mod tests {
             equipments: vec![(equipment_slot::MAIN_HAND, None)],
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundSetEquipmentPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundSetEquipmentPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.entity_id, 42);
         assert_eq!(decoded.equipments.len(), 1);
         assert_eq!(decoded.equipments[0].0, equipment_slot::MAIN_HAND);
@@ -145,8 +143,7 @@ mod tests {
             ],
         };
         let encoded = pkt.encode();
-        let decoded =
-            ClientboundSetEquipmentPacket::decode(encoded.freeze()).unwrap();
+        let decoded = ClientboundSetEquipmentPacket::decode(encoded.freeze()).unwrap();
 
         assert_eq!(decoded.entity_id, 7);
         assert_eq!(decoded.equipments.len(), 3);
@@ -170,8 +167,16 @@ mod tests {
         let buf = pkt.encode();
         let data = buf.to_vec();
         // After VarInt(1) = 1 byte, first slot byte should have continue bit set
-        assert_ne!(data[1] & CONTINUE_MASK, 0, "first entry should have continue bit");
+        assert_ne!(
+            data[1] & CONTINUE_MASK,
+            0,
+            "first entry should have continue bit"
+        );
         // VarInt(0) for empty slot = 1 byte, so second slot byte is at [3]
-        assert_eq!(data[3] & CONTINUE_MASK, 0, "last entry should NOT have continue bit");
+        assert_eq!(
+            data[3] & CONTINUE_MASK,
+            0,
+            "last entry should NOT have continue bit"
+        );
     }
 }

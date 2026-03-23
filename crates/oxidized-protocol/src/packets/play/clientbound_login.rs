@@ -51,9 +51,9 @@ impl CommonPlayerSpawnInfo {
         // Holder<DimensionType> wire encoding: VarInt(registry_id + 1).
         let raw_holder_id = varint::read_varint_buf(data)?;
         if raw_holder_id <= 0 {
-            return Err(PacketDecodeError::InvalidData(
-                format!("inline dimension type holders not supported (got {raw_holder_id})"),
-            ));
+            return Err(PacketDecodeError::InvalidData(format!(
+                "inline dimension type holders not supported (got {raw_holder_id})"
+            )));
         }
         let dimension_type_id = raw_holder_id - 1;
         let dimension = ResourceLocation::read(data)?;

@@ -40,8 +40,8 @@ pub mod clientbound_set_chunk_cache_center;
 pub mod clientbound_set_chunk_cache_radius;
 pub mod clientbound_set_default_spawn_position;
 pub mod clientbound_set_entity_data;
-pub mod clientbound_set_equipment;
 pub mod clientbound_set_entity_motion;
+pub mod clientbound_set_equipment;
 pub mod clientbound_set_held_slot;
 pub mod clientbound_set_player_inventory;
 pub mod clientbound_set_simulation_distance;
@@ -124,8 +124,8 @@ pub use clientbound_set_default_spawn_position::ClientboundSetDefaultSpawnPositi
 pub use clientbound_set_entity_data::{
     ClientboundSetEntityDataPacket, DATA_EOF_MARKER, EntityDataEntry,
 };
-pub use clientbound_set_equipment::{ClientboundSetEquipmentPacket, equipment_slot};
 pub use clientbound_set_entity_motion::ClientboundSetEntityMotionPacket;
+pub use clientbound_set_equipment::{ClientboundSetEquipmentPacket, equipment_slot};
 pub use clientbound_set_held_slot::ClientboundSetHeldSlotPacket;
 pub use clientbound_set_player_inventory::ClientboundSetPlayerInventoryPacket;
 pub use clientbound_set_simulation_distance::ClientboundSetSimulationDistancePacket;

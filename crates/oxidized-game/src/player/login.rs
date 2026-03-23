@@ -766,10 +766,8 @@ mod tests {
             &GameRules::default(),
             false,
         );
-        let diff = ClientboundChangeDifficultyPacket::decode(
-            packets[1].body.clone().freeze(),
-        )
-        .unwrap();
+        let diff =
+            ClientboundChangeDifficultyPacket::decode(packets[1].body.clone().freeze()).unwrap();
         assert!(diff.locked);
     }
 }
