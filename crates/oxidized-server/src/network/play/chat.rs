@@ -65,9 +65,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
             name = %ctx.player_name,
             "Illegal characters in chat message — disconnecting",
         );
-        return Err(
-            disconnect_err(ctx.conn, "multiplayer.disconnect.illegal_characters").await,
-        );
+        return Err(disconnect_err(ctx.conn, "multiplayer.disconnect.illegal_characters").await);
     }
 
     if !ctx.rate_limiter.try_acquire() {
@@ -164,8 +162,8 @@ pub async fn handle_chat_command(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    #[allow(clippy::unwrap_used, clippy::expect_used)]
     use super::*;
 
     // ── is_allowed_chat_character ──────────────────────────────────
@@ -173,7 +171,10 @@ mod tests {
     #[test]
     fn test_allowed_char_printable_ascii() {
         for ch in ' '..='~' {
-            assert!(is_allowed_chat_character(ch), "expected '{ch}' to be allowed");
+            assert!(
+                is_allowed_chat_character(ch),
+                "expected '{ch}' to be allowed"
+            );
         }
     }
 

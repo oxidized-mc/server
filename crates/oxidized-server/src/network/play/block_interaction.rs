@@ -989,12 +989,20 @@ mod tests {
 
     #[test]
     fn test_build_height_valid_at_min() {
-        assert!(is_within_build_height(BlockPos::new(0, MIN_BUILD_HEIGHT, 0)));
+        assert!(is_within_build_height(BlockPos::new(
+            0,
+            MIN_BUILD_HEIGHT,
+            0
+        )));
     }
 
     #[test]
     fn test_build_height_valid_at_max() {
-        assert!(is_within_build_height(BlockPos::new(0, MAX_BUILD_HEIGHT, 0)));
+        assert!(is_within_build_height(BlockPos::new(
+            0,
+            MAX_BUILD_HEIGHT,
+            0
+        )));
     }
 
     #[test]
@@ -1004,12 +1012,20 @@ mod tests {
 
     #[test]
     fn test_build_height_below_min() {
-        assert!(!is_within_build_height(BlockPos::new(0, MIN_BUILD_HEIGHT - 1, 0)));
+        assert!(!is_within_build_height(BlockPos::new(
+            0,
+            MIN_BUILD_HEIGHT - 1,
+            0
+        )));
     }
 
     #[test]
     fn test_build_height_above_max() {
-        assert!(!is_within_build_height(BlockPos::new(0, MAX_BUILD_HEIGHT + 1, 0)));
+        assert!(!is_within_build_height(BlockPos::new(
+            0,
+            MAX_BUILD_HEIGHT + 1,
+            0
+        )));
     }
 
     // -- Spawn protection tests --

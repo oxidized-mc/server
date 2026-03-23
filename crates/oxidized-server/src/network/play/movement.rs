@@ -44,9 +44,7 @@ fn should_skip_speed_check(
     elytra_movement_check: bool,
     is_fall_flying: bool,
 ) -> bool {
-    is_creative_or_spectator
-        || !player_movement_check
-        || (is_fall_flying && !elytra_movement_check)
+    is_creative_or_spectator || !player_movement_check || (is_fall_flying && !elytra_movement_check)
 }
 
 /// Handles a movement packet (position, rotation, or both).
