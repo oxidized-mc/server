@@ -22,6 +22,7 @@ use oxidized_protocol::packets::play::{
 };
 use oxidized_protocol::types::{BlockPos, Direction, Vec3};
 use oxidized_world::chunk::ChunkPos;
+use oxidized_world::chunk::level_chunk::{OVERWORLD_MAX_Y, OVERWORLD_MIN_Y};
 use oxidized_world::registry::{AIR, BlockRegistry};
 
 use super::PlayContext;
@@ -50,6 +51,13 @@ const MIN_MINING_DURATION: Duration = Duration::from_millis(50);
 /// Maximum distance from a sign the player can edit (squared).
 const MAX_SIGN_EDIT_DISTANCE_SQ: f64 = 8.0 * 8.0;
 
+/// Minimum valid build height for overworld (inclusive).
+const MIN_BUILD_HEIGHT: i32 = OVERWORLD_MIN_Y;
+
+/// Maximum valid build height for overworld (inclusive).
+/// `OVERWORLD_MAX_Y` is 320 (exclusive), so the last valid Y is 319.
+const MAX_BUILD_HEIGHT: i32 = OVERWORLD_MAX_Y - 1;
+
 /// Returns the squared distance from the player's eye position to the center
 /// of the given block.
 fn player_distance_to_block_sq(play_ctx: &PlayContext<'_>, pos: BlockPos) -> f64 {
@@ -72,6 +80,34 @@ fn is_within_reach(play_ctx: &PlayContext<'_>, pos: BlockPos) -> bool {
     player_distance_to_block_sq(play_ctx, pos) <= limit
 }
 
+/// Returns `true` if the position is within valid overworld build limits.
+fn is_within_build_height(pos: BlockPos) -> bool {
+    pos.y >= MIN_BUILD_HEIGHT && pos.y <= MAX_BUILD_HEIGHT
+}
+
+/// Returns `true` if the position is inside the spawn protection zone.
+///
+/// Vanilla uses Chebyshev distance: `max(|bx - sx|, |bz - sz|)`. A radius
+/// of 0 disables spawn protection entirely.
+///
+/// TODO: Accept player info and skip protection for operators once ops.json
+/// is implemented. Currently all players are treated as non-ops.
+fn is_spawn_protected(ctx: &ServerContext, pos: BlockPos) -> bool {
+    let radius = ctx.spawn_protection;
+    if radius == 0 {
+        return false;
+    }
+
+    let level_data = ctx.level_data.read();
+    let (sx, sz) = (level_data.spawn_x, level_data.spawn_z);
+
+    let dx = (pos.x - sx).unsigned_abs();
+    let dz = (pos.z - sz).unsigned_abs();
+    let chebyshev = dx.max(dz);
+
+    chebyshev < radius
+}
+
 /// Handles `ServerboundPlayerActionPacket` (0x29) — block digging actions.
 ///
 /// In creative mode, `StartDestroyBlock` instantly breaks the block.
@@ -90,6 +126,41 @@ pub async fn handle_player_action(
 
     // Spectators cannot interact with blocks.
     if play_ctx.player.read().game_mode == GameMode::Spectator {
+        resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
+    // Reject destroy actions on positions outside valid build height.
+    if matches!(
+        pkt.action,
+        PlayerAction::StartDestroyBlock
+            | PlayerAction::StopDestroyBlock
+            | PlayerAction::AbortDestroyBlock
+    ) && !is_within_build_height(pkt.pos)
+    {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            pos = ?pkt.pos,
+            "Block action rejected: outside build height"
+        );
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
+    // Reject destroy actions inside the spawn protection zone.
+    if matches!(
+        pkt.action,
+        PlayerAction::StartDestroyBlock | PlayerAction::StopDestroyBlock
+    ) && is_spawn_protected(play_ctx.server_ctx, pkt.pos)
+    {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            pos = ?pkt.pos,
+            "Block action rejected: spawn protection"
+        );
         resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
@@ -266,6 +337,31 @@ pub async fn handle_use_item_on(
     // Compute placement position: offset from clicked face.
     let place_pos = pkt.hit_result.pos.relative(pkt.hit_result.direction);
 
+    // Reject placement outside valid build height.
+    if !is_within_build_height(place_pos) {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            pos = ?place_pos,
+            "Block place rejected: outside build height"
+        );
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
+    // Reject placement inside the spawn protection zone.
+    if is_spawn_protected(play_ctx.server_ctx, place_pos) {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            pos = ?place_pos,
+            "Block place rejected: spawn protection"
+        );
+        resync_block(play_ctx, place_pos, None).await?;
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
     // Get the held item name and check availability.
     let (held_item, game_mode, has_items) = {
         let player = play_ctx.player.read();
@@ -292,6 +388,22 @@ pub async fn handle_use_item_on(
                 return Ok(());
             },
         };
+
+    // Only allow placement if the target position is air (not occupied).
+    let existing = get_block(play_ctx.server_ctx, place_pos);
+    if existing != Some(u32::from(AIR.0)) {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            pos = ?place_pos,
+            existing_state = ?existing,
+            "Block place rejected: position not replaceable"
+        );
+        // Send the actual block state back to correct client prediction.
+        resync_block(play_ctx, place_pos, None).await?;
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
 
     // Set the block in chunk storage.
     let placed = set_block(play_ctx.server_ctx, place_pos, block_state_id);
@@ -825,6 +937,141 @@ mod tests {
                 oxidized_game::worldgen::flat::FlatWorldConfig::default(),
             )),
             op_permission_level: 4,
+            spawn_protection: 16,
         })
+    }
+
+    /// Builds a `ServerContext` with a custom spawn protection radius.
+    fn test_server_ctx_with_spawn_protection(radius: u32) -> Arc<ServerContext> {
+        use oxidized_game::level::game_rules::GameRules;
+        use oxidized_game::level::tick_rate::ServerTickRateManager;
+        use oxidized_game::player::PlayerList;
+        use oxidized_protocol::types::resource_location::ResourceLocation;
+        use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
+        use parking_lot::RwLock;
+        use tokio::sync::broadcast;
+
+        Arc::new(ServerContext {
+            player_list: RwLock::new(PlayerList::new(20)),
+            level_data: RwLock::new(
+                PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+            ),
+            dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
+            max_view_distance: 10,
+            max_simulation_distance: 10,
+            broadcast_tx: broadcast::channel(256).0,
+            color_char: None,
+            commands: oxidized_game::commands::Commands::new(),
+            event_bus: oxidized_game::event::EventBus::new(),
+            max_players: 20,
+            shutdown_tx: broadcast::channel(1).0,
+            game_rules: RwLock::new(GameRules::default()),
+            tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
+            storage: LevelStorageSource::new(""),
+            chunks: dashmap::DashMap::new(),
+            dirty_chunks: dashmap::DashSet::new(),
+            block_registry: Arc::new(BlockRegistry::load().unwrap()),
+            chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+            )),
+            op_permission_level: 4,
+            spawn_protection: radius,
+        })
+    }
+
+    // -- Build height validation tests --
+
+    #[test]
+    fn test_build_height_constants_match_overworld() {
+        assert_eq!(MIN_BUILD_HEIGHT, -64);
+        assert_eq!(MAX_BUILD_HEIGHT, 319);
+    }
+
+    #[test]
+    fn test_build_height_valid_at_min() {
+        assert!(is_within_build_height(BlockPos::new(0, MIN_BUILD_HEIGHT, 0)));
+    }
+
+    #[test]
+    fn test_build_height_valid_at_max() {
+        assert!(is_within_build_height(BlockPos::new(0, MAX_BUILD_HEIGHT, 0)));
+    }
+
+    #[test]
+    fn test_build_height_valid_middle() {
+        assert!(is_within_build_height(BlockPos::new(0, 64, 0)));
+    }
+
+    #[test]
+    fn test_build_height_below_min() {
+        assert!(!is_within_build_height(BlockPos::new(0, MIN_BUILD_HEIGHT - 1, 0)));
+    }
+
+    #[test]
+    fn test_build_height_above_max() {
+        assert!(!is_within_build_height(BlockPos::new(0, MAX_BUILD_HEIGHT + 1, 0)));
+    }
+
+    // -- Spawn protection tests --
+
+    #[test]
+    fn test_spawn_protection_disabled_when_radius_zero() {
+        let ctx = test_server_ctx_with_spawn_protection(0);
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0)));
+    }
+
+    #[test]
+    fn test_spawn_protection_at_spawn_origin() {
+        let ctx = test_server_ctx_with_spawn_protection(16);
+        assert!(is_spawn_protected(&ctx, BlockPos::new(0, 64, 0)));
+    }
+
+    #[test]
+    fn test_spawn_protection_at_boundary() {
+        let ctx = test_server_ctx_with_spawn_protection(16);
+        assert!(is_spawn_protected(&ctx, BlockPos::new(15, 64, 0)));
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(16, 64, 0)));
+    }
+
+    #[test]
+    fn test_spawn_protection_diagonal() {
+        let ctx = test_server_ctx_with_spawn_protection(10);
+        assert!(is_spawn_protected(&ctx, BlockPos::new(9, 64, 9)));
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(10, 64, 10)));
+    }
+
+    #[test]
+    fn test_spawn_protection_negative_coords() {
+        let ctx = test_server_ctx_with_spawn_protection(16);
+        assert!(is_spawn_protected(&ctx, BlockPos::new(-15, 64, -15)));
+    }
+
+    // -- Block replacement validation tests --
+
+    #[test]
+    fn test_placement_on_air_allowed() {
+        let ctx = test_server_ctx();
+        let chunk_pos = ChunkPos::from_block_coords(0, 0);
+        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        ctx.chunks
+            .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
+
+        let pos = BlockPos::new(0, 64, 0);
+        let existing = get_block(&ctx, pos);
+        assert_eq!(existing, Some(u32::from(AIR.0)));
+    }
+
+    #[test]
+    fn test_placement_on_solid_block_rejected() {
+        let ctx = test_server_ctx();
+        let chunk_pos = ChunkPos::from_block_coords(0, 0);
+        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        ctx.chunks
+            .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
+
+        let pos = BlockPos::new(0, 64, 0);
+        assert!(set_block(&ctx, pos, 1));
+        let existing = get_block(&ctx, pos);
+        assert_ne!(existing, Some(u32::from(AIR.0)));
     }
 }

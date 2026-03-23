@@ -100,6 +100,9 @@ pub struct ServerContext {
     /// Operator permission level for all players (from server config).
     /// TODO: Replace with per-player ops from `ops.json`.
     pub op_permission_level: i32,
+    /// Spawn protection radius (Chebyshev distance from world spawn).
+    /// A value of 0 disables spawn protection.
+    pub spawn_protection: u32,
 }
 
 impl ServerContext {
@@ -801,6 +804,7 @@ mod tests {
                     oxidized_game::worldgen::flat::FlatWorldConfig::default(),
                 )),
                 op_permission_level: 4,
+                spawn_protection: 16,
             }),
         })
     }
