@@ -33,7 +33,7 @@ pub mod equipment_slot {
 /// Bit mask for the "more entries follow" continuation flag.
 const CONTINUE_MASK: u8 = 0x80;
 
-/// Set equipment packet (0x68).
+/// Set equipment packet (0x66).
 ///
 /// # Wire Format
 ///
@@ -54,7 +54,7 @@ pub struct ClientboundSetEquipmentPacket {
 }
 
 impl Packet for ClientboundSetEquipmentPacket {
-    const PACKET_ID: i32 = 0x68;
+    const PACKET_ID: i32 = 0x66;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let entity_id = varint::read_varint_buf(&mut data)?;
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundSetEquipmentPacket as Packet>::PACKET_ID, 0x68);
+        assert_eq!(<ClientboundSetEquipmentPacket as Packet>::PACKET_ID, 0x66);
     }
 
     #[test]
