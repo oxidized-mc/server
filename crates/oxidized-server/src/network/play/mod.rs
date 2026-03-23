@@ -367,6 +367,12 @@ pub async fn handle_play_entry(
         "Initial chunk batch sent",
     );
 
+    // Kick any existing session for this UUID before replacing it.
+    // This fires the old session's kick_rx, causing a clean disconnect.
+    if let Some(kick_tx) = server_ctx.kick_channels.get(&uuid) {
+        let _ = kick_tx.try_send("You logged in from another location".to_string());
+    }
+
     // Add player to the server player list (only after successful send).
     let (player_arc, old_player) = server_ctx.player_list.write().add(player);
     if let Some(old) = old_player {

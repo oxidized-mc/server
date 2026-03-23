@@ -16,9 +16,14 @@ use crate::codec::packet::PacketDecodeError;
 /// Common spawn information shared between login and respawn packets.
 ///
 /// Mirrors `net.minecraft.network.protocol.game.CommonPlayerSpawnInfo`.
+///
+/// The `dimension_type_id` field uses vanilla's `Holder<DimensionType>` encoding
+/// (`ByteBufCodecs.holderRegistry`), which writes `VarInt(registry_id + 1)` on the
+/// wire. Value 0 is reserved for inline definitions. Callers should pass the
+/// **raw registry ID** (0 = overworld); encoding adds the +1 automatically.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommonPlayerSpawnInfo {
-    /// Dimension type registry ID (VarInt). 0 = overworld, 1 = the_nether, 2 = the_end.
+    /// Dimension type registry ID (0-based). 0 = overworld, 1 = overworld_caves, etc.
     pub dimension_type_id: i32,
     /// Dimension the player is in.
     pub dimension: ResourceLocation,
@@ -43,7 +48,14 @@ pub struct CommonPlayerSpawnInfo {
 impl CommonPlayerSpawnInfo {
     /// Decodes from a buffer.
     pub fn decode(data: &mut Bytes) -> Result<Self, PacketDecodeError> {
-        let dimension_type_id = varint::read_varint_buf(data)?;
+        // Holder<DimensionType> wire encoding: VarInt(registry_id + 1).
+        let raw_holder_id = varint::read_varint_buf(data)?;
+        if raw_holder_id <= 0 {
+            return Err(PacketDecodeError::InvalidData(
+                format!("inline dimension type holders not supported (got {raw_holder_id})"),
+            ));
+        }
+        let dimension_type_id = raw_holder_id - 1;
         let dimension = ResourceLocation::read(data)?;
         let seed = types::read_i64(data)?;
         if data.remaining() < 1 {
@@ -89,7 +101,9 @@ impl CommonPlayerSpawnInfo {
 
     /// Encodes into a buffer.
     pub fn encode(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(self.dimension_type_id, buf);
+        // Holder<DimensionType> wire encoding: VarInt(registry_id + 1).
+        // 0 is reserved for inline holders; 1+ are registry references.
+        varint::write_varint_buf(self.dimension_type_id + 1, buf);
         self.dimension.write(buf);
         types::write_i64(buf, self.seed);
         buf.put_u8(self.game_mode);
