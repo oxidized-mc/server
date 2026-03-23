@@ -55,6 +55,10 @@ pub struct PrimaryLevelData {
     pub initialized: bool,
     /// Sea level height (default 63).
     pub sea_level: i32,
+    /// Whether the difficulty is locked (prevents players from changing it).
+    pub difficulty_locked: bool,
+    /// World generation seed.
+    pub world_seed: i64,
 }
 
 impl PrimaryLevelData {
@@ -86,6 +90,11 @@ impl PrimaryLevelData {
             allow_commands: data.get_byte("allowCommands").unwrap_or(0) != 0,
             initialized: data.get_byte("initialized").unwrap_or(1) != 0,
             sea_level: data.get_int("SeaLevel").unwrap_or(63),
+            difficulty_locked: data.get_byte("DifficultyLocked").unwrap_or(0) != 0,
+            world_seed: data
+                .get_compound("WorldGenSettings")
+                .and_then(|wgs| wgs.get_long("seed"))
+                .unwrap_or(0),
         })
     }
 
@@ -138,6 +147,12 @@ impl PrimaryLevelData {
         data.put_byte("allowCommands", i8::from(self.allow_commands));
         data.put_byte("initialized", i8::from(self.initialized));
         data.put_int("SeaLevel", self.sea_level);
+        data.put_byte("DifficultyLocked", i8::from(self.difficulty_locked));
+
+        // WorldGenSettings/seed
+        let mut wgs = NbtCompound::new();
+        wgs.put_long("seed", self.world_seed);
+        data.put("WorldGenSettings", NbtTag::Compound(wgs));
 
         let mut root = NbtCompound::new();
         root.put("Data", NbtTag::Compound(data));
@@ -209,6 +224,12 @@ mod tests {
         data.put_byte("Difficulty", 2);
         data.put_byte("allowCommands", 1);
         data.put_byte("initialized", 1);
+        data.put_byte("DifficultyLocked", 1);
+
+        let mut wgs = NbtCompound::new();
+        wgs.put_long("seed", 123_456_789);
+        data.put("WorldGenSettings", NbtTag::Compound(wgs));
+
         data
     }
 
@@ -235,6 +256,8 @@ mod tests {
         assert_eq!(level.difficulty, 2);
         assert!(level.allow_commands);
         assert!(level.initialized);
+        assert!(level.difficulty_locked);
+        assert_eq!(level.world_seed, 123_456_789);
     }
 
     #[test]
@@ -253,6 +276,8 @@ mod tests {
         assert_eq!(level.difficulty, 2); // Normal default
         assert!(!level.allow_commands);
         assert!(level.initialized); // Default true
+        assert!(!level.difficulty_locked);
+        assert_eq!(level.world_seed, 0);
     }
 
     #[test]
@@ -320,6 +345,8 @@ mod tests {
         assert_eq!(level2.allow_commands, level.allow_commands);
         assert_eq!(level2.initialized, level.initialized);
         assert_eq!(level2.sea_level, level.sea_level);
+        assert_eq!(level2.difficulty_locked, level.difficulty_locked);
+        assert_eq!(level2.world_seed, level.world_seed);
     }
 
     #[test]

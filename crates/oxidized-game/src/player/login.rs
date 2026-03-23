@@ -11,6 +11,7 @@
 //! Mirrors `net.minecraft.server.network.ServerGamePacketListenerImpl.handleLogin`.
 
 use bytes::BytesMut;
+use sha2::{Digest, Sha256};
 
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
@@ -45,6 +46,15 @@ pub struct EncodedPacket {
     pub id: i32,
     /// Encoded packet body.
     pub body: BytesMut,
+}
+
+/// Hashes a world seed for client-side biome rendering.
+///
+/// Matches `BiomeManager.obfuscateSeed()` in vanilla: SHA-256 hash of
+/// the 8-byte big-endian seed, interpreted as a signed `i64`.
+fn obfuscate_seed(seed: i64) -> i64 {
+    let hash = Sha256::digest(seed.to_be_bytes());
+    i64::from_be_bytes(hash[..8].try_into().unwrap_or([0; 8]))
 }
 
 /// Builds the complete PLAY-state login packet sequence.
@@ -124,7 +134,7 @@ fn build_login_packet(
         common_spawn_info: CommonPlayerSpawnInfo {
             dimension_type_id,
             dimension: player.dimension.clone(),
-            seed: 0, // hashed seed
+            seed: obfuscate_seed(level_data.world_seed),
             game_mode: player.game_mode.id() as u8,
             previous_game_mode: GameMode::nullable_id(player.previous_game_mode),
             is_debug: false,
@@ -144,7 +154,7 @@ fn build_login_packet(
 fn build_difficulty_packet(level_data: &PrimaryLevelData) -> EncodedPacket {
     let pkt = ClientboundChangeDifficultyPacket {
         difficulty: level_data.difficulty.clamp(0, 3) as u8,
-        locked: false,
+        locked: level_data.difficulty_locked,
     };
     EncodedPacket {
         id: ClientboundChangeDifficultyPacket::PACKET_ID,
@@ -693,5 +703,73 @@ mod tests {
         let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
         assert!(login.hardcore);
+    }
+
+    #[test]
+    fn obfuscate_seed_deterministic() {
+        // Same seed always produces same hash
+        let hash1 = obfuscate_seed(12345);
+        let hash2 = obfuscate_seed(12345);
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn obfuscate_seed_different_for_different_seeds() {
+        assert_ne!(obfuscate_seed(0), obfuscate_seed(1));
+        assert_ne!(obfuscate_seed(12345), obfuscate_seed(-12345));
+    }
+
+    #[test]
+    fn obfuscate_seed_zero_input_nonzero_output() {
+        // SHA-256 of 0 should not be 0
+        assert_ne!(obfuscate_seed(0), 0);
+    }
+
+    #[test]
+    fn login_packet_contains_hashed_seed() {
+        let mut level_data = make_level_data();
+        level_data.world_seed = 42;
+        let player = make_player(1, "Test");
+        let player_list = PlayerList::new(20);
+        let dimensions = vec![ResourceLocation::minecraft("overworld")];
+
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+            false,
+        );
+        let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
+        assert_eq!(login.common_spawn_info.seed, obfuscate_seed(42));
+        assert_ne!(login.common_spawn_info.seed, 0);
+    }
+
+    #[test]
+    fn difficulty_packet_respects_lock() {
+        let mut level_data = make_level_data();
+        level_data.difficulty_locked = true;
+        let player = make_player(1, "Test");
+        let player_list = PlayerList::new(20);
+        let dimensions = vec![ResourceLocation::minecraft("overworld")];
+
+        let packets = build_login_sequence(
+            &player,
+            1,
+            &level_data,
+            &player_list,
+            &dimensions,
+            0,
+            &GameRules::default(),
+            false,
+        );
+        let diff = ClientboundChangeDifficultyPacket::decode(
+            packets[1].body.clone().freeze(),
+        )
+        .unwrap();
+        assert!(diff.locked);
     }
 }
