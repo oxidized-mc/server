@@ -82,14 +82,34 @@ Always read the equivalent Java class in `mc-server-ref/decompiled/net/minecraft
 
 ### Sub-Agent Dispatch
 
+#### Built-in Agents
+
 | Agent | Use for |
 |---|---|
-| `explore` | Java reference lookup, codebase search, ADR review |
-| `task` | Build & test: `cargo test -p <crate>` |
-| `code-review` | ADR compliance, correctness, patterns, improvements |
+| `explore` | Quick codebase search, file discovery, answering structural questions |
+| `task` | Build & test: `cargo test -p <crate>`, `cargo check --workspace` |
+| `code-review` | General code review when custom agents aren't available |
 
-Parallelise independent `explore` calls. **Review↔Fix loop:** fix issues → re-review → repeat until clean pass.
-**Do not delegate implementation or test-writing to sub-agents** — do it yourself.
+#### Custom Agents (`.github/agents/`)
+
+Prefer these over built-in agents — they have project-specific knowledge.
+
+| Agent | File | Use for |
+|---|---|---|
+| `@rust-engineer` | `rust-engineer.md` | Rust implementation — features, bug fixes, refactoring across the workspace |
+| `@java-reference` | `java-reference.md` | Analyze vanilla Java source in `mc-server-ref/decompiled/`, explain algorithms and protocol details |
+| `@reviewer` | `reviewer.md` | Code review — ADR compliance, correctness, vanilla compatibility, performance |
+| `@tester` | `tester.md` | Write tests — unit, integration, property-based, compliance, snapshots (ADR-034) |
+| `@docs-writer` | `docs-writer.md` | Write ADRs, phase docs, code documentation, update memories.md |
+
+#### Dispatch Rules
+
+- Parallelise independent `explore` and `@java-reference` calls.
+- **Review↔Fix loop:** `@reviewer` flags issues → fix them → `@reviewer` re-reviews → repeat until clean pass.
+- Use `@java-reference` before implementing any game logic to understand vanilla behavior first.
+- Use `@tester` for test strategy and test writing.
+- Use `@docs-writer` for ADRs, phase docs, and documentation updates.
+- **Do not delegate implementation to sub-agents** — use `@rust-engineer` for guidance, implement yourself.
 
 ### TDD Cycle
 
