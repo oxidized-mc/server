@@ -39,20 +39,23 @@ use oxidized_protocol::packets::play::{
     ClientboundAddEntityPacket, ClientboundAnimatePacket, ClientboundEntityEventPacket,
     ClientboundGameEventPacket, ClientboundInitializeBorderPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundPlayerPositionPacket, ClientboundRemoveEntitiesPacket, ClientboundSetTimePacket,
+    ClientboundPlayerPositionPacket, ClientboundRemoveEntitiesPacket,
+    ClientboundSetEntityDataPacket, ClientboundSetEquipmentPacket, ClientboundSetTimePacket,
     ClientboundSystemChatPacket, ClockNetworkState, ClockUpdate, GameEventType,
     PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
-    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
-    ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
-    ServerboundClientInformationPlayPacket, ServerboundCommandSuggestionPacket,
-    ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
+    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket, ServerboundChatCommandSignedPacket, ServerboundChatPacket,
+    ServerboundChunkBatchReceivedPacket, ServerboundClientInformationPlayPacket,
+    ServerboundCommandSuggestionPacket, ServerboundKeepAlivePacket,
+    ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
     ServerboundPickItemFromBlockPacket, ServerboundPlayerAbilitiesPacket,
-    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
-    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
-    ServerboundSignUpdatePacket, ServerboundSwingPacket, ServerboundUseItemOnPacket,
-    ServerboundUseItemPacket,
+    ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket,
+    ServerboundPlayerInputPacket, ServerboundSetCarriedItemPacket,
+    ServerboundSetCreativeModeSlotPacket, ServerboundSignUpdatePacket,
+    ServerboundSwingPacket, ServerboundUseItemOnPacket, ServerboundUseItemPacket,
+    equipment_slot,
 };
+use oxidized_protocol::codec::slot::SlotData;
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
 use parking_lot::RwLock;
@@ -86,6 +89,9 @@ pub struct PlayContext<'a> {
 /// Entity type registry ID for players (`minecraft:player`).
 const PLAYER_ENTITY_TYPE_ID: i32 = 155;
 
+/// Entity metadata slot for displayed skin parts (cape, jacket, sleeves, etc.).
+const DATA_PLAYER_MODE_CUSTOMISATION: u8 = 21;
+
 /// Converts a float angle (degrees) to the protocol's packed byte format.
 ///
 /// The packed format maps 0–360° to 0–255, with proper wrapping for
@@ -100,6 +106,31 @@ fn is_movement_packet(id: i32) -> bool {
         || id == ServerboundMovePlayerPosRotPacket::PACKET_ID
         || id == ServerboundMovePlayerRotPacket::PACKET_ID
         || id == ServerboundMovePlayerStatusOnlyPacket::PACKET_ID
+}
+
+/// Builds a [`ClientboundSetEquipmentPacket`] for the given player.
+///
+/// Includes main hand, off hand, and all four armor slots. Empty slots
+/// are included so the client clears any stale equipment.
+fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacket {
+    use inventory::item_stack_to_slot_data;
+
+    let inv = &player.inventory;
+    let to_slot = |stack: &oxidized_game::inventory::ItemStack| -> Option<SlotData> {
+        if stack.is_empty() { None } else { Some(item_stack_to_slot_data(stack)) }
+    };
+
+    ClientboundSetEquipmentPacket {
+        entity_id: player.entity_id,
+        equipments: vec![
+            (equipment_slot::MAIN_HAND, to_slot(inv.get_selected())),
+            (equipment_slot::OFF_HAND, to_slot(inv.get_offhand())),
+            (equipment_slot::FEET, to_slot(inv.get_armor(3))),
+            (equipment_slot::LEGS, to_slot(inv.get_armor(2))),
+            (equipment_slot::CHEST, to_slot(inv.get_armor(1))),
+            (equipment_slot::HEAD, to_slot(inv.get_armor(0))),
+        ],
+    }
 }
 
 /// Handles the PLAY-state login sequence for a newly joined player.
@@ -154,6 +185,7 @@ pub async fn handle_play_entry(
     player.view_distance =
         i32::from(client_info.view_distance).clamp(2, server_ctx.max_view_distance);
     player.simulation_distance = server_ctx.max_simulation_distance;
+    player.model_customisation = client_info.model_customisation;
 
     // Try to load saved player data from playerdata/<uuid>.dat.
     let playerdata_path = format!("world/playerdata/{uuid}.dat");
@@ -458,8 +490,45 @@ pub async fn handle_play_entry(
         };
         server_ctx.broadcast(broadcast);
 
-        // Collect existing players' entity packets (no locks held across await).
-        let other_entities: Vec<ClientboundAddEntityPacket> = {
+        // Broadcast new player's equipment to existing players.
+        {
+            let equip_pkt = {
+                let p = player_arc.read();
+                build_equipment_packet(&p)
+            };
+            let encoded = equip_pkt.encode();
+            server_ctx.broadcast(BroadcastMessage {
+                packet_id: ClientboundSetEquipmentPacket::PACKET_ID,
+                data: encoded.freeze(),
+                exclude_entity: Some(entity_id),
+                target_entity: None,
+            });
+        }
+
+        // Broadcast new player's skin customisation to existing players.
+        {
+            let skin = player_arc.read().model_customisation;
+            let pkt = ClientboundSetEntityDataPacket::single_byte(
+                entity_id,
+                DATA_PLAYER_MODE_CUSTOMISATION,
+                skin,
+            );
+            let encoded = pkt.encode();
+            server_ctx.broadcast(BroadcastMessage {
+                packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
+                data: encoded.freeze(),
+                exclude_entity: Some(entity_id),
+                target_entity: None,
+            });
+        }
+
+        // Collect existing players' entity + equipment + skin packets (no locks
+        // held across await).
+        let other_entities: Vec<(
+            ClientboundAddEntityPacket,
+            ClientboundSetEquipmentPacket,
+            ClientboundSetEntityDataPacket,
+        )> = {
             let player_list = server_ctx.player_list.read();
             player_list
                 .iter()
@@ -468,7 +537,7 @@ pub async fn handle_play_entry(
                     if other.entity_id == entity_id {
                         return None;
                     }
-                    Some(ClientboundAddEntityPacket {
+                    let add = ClientboundAddEntityPacket {
                         entity_id: other.entity_id,
                         uuid: other.uuid,
                         entity_type: PLAYER_ENTITY_TYPE_ID,
@@ -482,14 +551,23 @@ pub async fn handle_play_entry(
                         y_rot: pack_angle(other.yaw),
                         y_head_rot: pack_angle(other.yaw),
                         data: 0,
-                    })
+                    };
+                    let equip = build_equipment_packet(&other);
+                    let skin = ClientboundSetEntityDataPacket::single_byte(
+                        other.entity_id,
+                        DATA_PLAYER_MODE_CUSTOMISATION,
+                        other.model_customisation,
+                    );
+                    Some((add, equip, skin))
                 })
                 .collect()
         };
 
-        // Send existing player entities to the joining player.
-        for pkt in &other_entities {
-            conn.send_packet(pkt).await?;
+        // Send existing player entities + equipment + skin to the joining player.
+        for (add_pkt, equip_pkt, skin_pkt) in &other_entities {
+            conn.send_packet(add_pkt).await?;
+            conn.send_packet(equip_pkt).await?;
+            conn.send_packet(skin_pkt).await?;
         }
     }
 
@@ -517,6 +595,10 @@ pub async fn handle_play_entry(
 
     // Subscribe to broadcast channel.
     let mut broadcast_rx = server_ctx.broadcast_tx.subscribe();
+
+    // Register a per-player kick channel for remote disconnect signaling.
+    let (kick_tx, mut kick_rx) = tokio::sync::mpsc::channel::<String>(1);
+    server_ctx.kick_channels.insert(uuid, kick_tx);
 
     // Per-player chat rate limiter.
     let mut rate_limiter = ChatRateLimiter::new();
@@ -560,6 +642,15 @@ pub async fn handle_play_entry(
     // PLAY read loop — dispatches packets to handler functions.
     loop {
         tokio::select! {
+            // Kick signal from another task (e.g., duplicate login replacement).
+            reason = kick_rx.recv() => {
+                let reason = reason.unwrap_or_else(|| "Kicked".to_string());
+                info!(peer = %addr, name = %player_name, %reason, "Player kicked");
+                let _ = crate::network::helpers::disconnect_err(
+                    play_ctx.conn, &reason,
+                ).await;
+                break;
+            },
             // Keepalive timer — send a ping every 15 seconds.
             _ = keepalive_timer.tick() => {
                 if keepalive_pending {
@@ -836,12 +927,35 @@ pub async fn handle_play_entry(
                                     let new_view_distance =
                                         i32::from(info_pkt.information.view_distance)
                                             .clamp(2, server_ctx.max_view_distance);
-                                    let old_view_distance = {
+                                    let (old_view_distance, skin_changed) = {
                                         let mut p = play_ctx.player.write();
-                                        let old = p.view_distance;
+                                        let old_vd = p.view_distance;
                                         p.view_distance = new_view_distance;
-                                        old
+                                        let old_skin = p.model_customisation;
+                                        p.model_customisation =
+                                            info_pkt.information.model_customisation;
+                                        (old_vd, old_skin != p.model_customisation)
                                     };
+
+                                    // Broadcast skin customisation change to others.
+                                    if skin_changed {
+                                        let skin = play_ctx.player.read().model_customisation;
+                                        let skin_pkt =
+                                            ClientboundSetEntityDataPacket::single_byte(
+                                                entity_id,
+                                                DATA_PLAYER_MODE_CUSTOMISATION,
+                                                skin,
+                                            );
+                                        let encoded = skin_pkt.encode();
+                                        server_ctx.broadcast(BroadcastMessage {
+                                            packet_id:
+                                                ClientboundSetEntityDataPacket::PACKET_ID,
+                                            data: encoded.freeze(),
+                                            exclude_entity: Some(entity_id),
+                                            target_entity: None,
+                                        });
+                                    }
+
                                     if new_view_distance != old_view_distance {
                                         // Update the chunk tracker and send/forget chunks.
                                         let (to_load, to_unload) = play_ctx
@@ -911,6 +1025,22 @@ pub async fn handle_play_entry(
         }
     }
 
+    // Save player data to disk before removing from the list.
+    {
+        let nbt = player_arc.read().save_to_nbt();
+        let playerdata_dir = server_ctx.storage.player_data_dir();
+        let player_uuid = uuid;
+        if let Err(e) = tokio::task::spawn_blocking(move || {
+            std::fs::create_dir_all(&playerdata_dir)?;
+            let path = playerdata_dir.join(format!("{player_uuid}.dat"));
+            oxidized_nbt::write_file(&path, &nbt)
+        })
+        .await
+        {
+            warn!(peer = %addr, uuid = %uuid, error = %e, "Failed to save player data");
+        }
+    }
+
     // Broadcast "Player left the game" system message.
     {
         let leave_msg = ClientboundSystemChatPacket {
@@ -930,6 +1060,7 @@ pub async fn handle_play_entry(
     }
 
     // Clean up — remove player from the list and broadcast removal to tab lists.
+    server_ctx.kick_channels.remove(&uuid);
     server_ctx.player_list.write().remove(&uuid);
     {
         let remove_pkt = ClientboundPlayerInfoRemovePacket { uuids: vec![uuid] };

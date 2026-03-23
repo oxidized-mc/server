@@ -246,39 +246,10 @@ impl Default for ItemStack {
 
 /// Returns the maximum stack size for a given item.
 ///
-/// Most items stack to 64. Tools/armor stack to 1. Some items (ender pearls,
-/// snowballs, etc.) stack to 16. A full item registry lookup will be added
-/// in a later phase; this provides sensible defaults.
+/// Looks up the item in the vanilla item registry. Returns `64` for unknown
+/// items.
 pub fn max_stack_size(item: &ItemId) -> i32 {
-    // TODO(Phase 29+): Look up from the actual item registry.
-    let name = &item.0;
-    if name.contains("_sword")
-        || name.contains("_pickaxe")
-        || name.contains("_axe")
-        || name.contains("_shovel")
-        || name.contains("_hoe")
-        || name.contains("_helmet")
-        || name.contains("_chestplate")
-        || name.contains("_leggings")
-        || name.contains("_boots")
-        || name.contains("shield")
-        || name.contains("trident")
-        || name.ends_with("bow")
-        || name.contains("crossbow")
-        || name.contains("elytra")
-    {
-        1
-    } else if name.contains("ender_pearl")
-        || name.contains("snowball")
-        || name.contains("egg")
-        || name.contains("bucket")
-        || name.contains("sign")
-        || name.contains("banner")
-    {
-        16
-    } else {
-        64
-    }
+    super::item_ids::max_stack_size_by_name(&item.0)
 }
 
 #[cfg(test)]

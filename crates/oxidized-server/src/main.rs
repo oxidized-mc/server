@@ -213,6 +213,7 @@ fn main() -> anyhow::Result<()> {
             chunk_generator,
             op_permission_level: config.admin.op_permission_level,
             spawn_protection: config.gameplay.spawn_protection,
+            kick_channels: dashmap::DashMap::new(),
         });
 
         // Build the shared login context.
@@ -284,6 +285,38 @@ fn main() -> anyhow::Result<()> {
             match tick::save_level_dat(&shutdown_server_ctx).await {
                 Ok(()) => info!("level.dat saved successfully"),
                 Err(e) => error!(error = %e, "Failed to save level.dat on shutdown"),
+            }
+        }
+
+        // Save all online players' data to disk.
+        {
+            let playerdata_dir = shutdown_server_ctx.storage.player_data_dir();
+            let players: Vec<_> = {
+                let list = shutdown_server_ctx.player_list.read();
+                list.iter().map(|p| p.clone()).collect()
+            };
+            if !players.is_empty() {
+                info!("Saving {} player(s)...", players.len());
+                let dir = playerdata_dir.clone();
+                let player_data: Vec<_> = players
+                    .iter()
+                    .map(|p| {
+                        let p = p.read();
+                        (p.uuid, p.save_to_nbt())
+                    })
+                    .collect();
+                if let Err(e) = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+                    std::fs::create_dir_all(&dir)?;
+                    for (uuid, nbt) in &player_data {
+                        let path = dir.join(format!("{uuid}.dat"));
+                        oxidized_nbt::write_file(&path, nbt)?;
+                    }
+                    Ok(())
+                })
+                .await
+                {
+                    error!(error = %e, "Failed to save player data on shutdown");
+                }
             }
         }
 

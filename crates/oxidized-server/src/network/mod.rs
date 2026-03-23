@@ -103,6 +103,8 @@ pub struct ServerContext {
     /// Spawn protection radius (Chebyshev distance from world spawn).
     /// A value of 0 disables spawn protection.
     pub spawn_protection: u32,
+    /// Per-player kick channels: signals a player's play loop to exit.
+    pub kick_channels: DashMap<uuid::Uuid, tokio::sync::mpsc::Sender<String>>,
 }
 
 impl ServerContext {
@@ -166,10 +168,17 @@ impl ServerHandle for ServerContext {
     }
 
     fn kick_player(&self, name: &str, reason: &str) -> bool {
-        // TODO: Implement actual kick via a dedicated kick channel
-        let _ = (name, reason);
-        info!("Kick requested for player '{}': {}", name, reason);
-        false
+        // Find the player's UUID by name, then send a kick signal.
+        let uuid = match self.find_player_uuid(name) {
+            Some(u) => u,
+            None => return false,
+        };
+        if let Some(tx) = self.kick_channels.get(&uuid) {
+            let _ = tx.try_send(reason.to_string());
+            true
+        } else {
+            false
+        }
     }
 
     fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid> {
@@ -697,19 +706,23 @@ async fn handle_connection(
                         let profile = login::handle_login(&mut conn, pkt, ctx).await?;
                         let client_info = configuration::handle_configuration(&mut conn).await?;
 
-                        // Vanilla: disconnect if a player with the same UUID is already online.
+                        // Vanilla: if a player with the same UUID is already online,
+                        // kick the OLD connection and let the new one proceed.
                         let uuid = profile.uuid().unwrap_or_default();
                         if ctx.server_ctx.player_list.read().contains(&uuid) {
-                            warn!(
+                            info!(
                                 peer = %addr,
                                 %uuid,
-                                "Duplicate login — disconnecting new connection",
+                                "Duplicate login — kicking old session",
                             );
-                            return Err(helpers::disconnect_err(
-                                &mut conn,
-                                "You logged in from another location",
-                            )
-                            .await);
+                            // Send kick signal to old player's play loop.
+                            if let Some(tx) = ctx.server_ctx.kick_channels.get(&uuid) {
+                                let _ = tx.try_send(
+                                    "You logged in from another location".to_string(),
+                                );
+                            }
+                            // Give the old session time to disconnect cleanly.
+                            tokio::time::sleep(Duration::from_millis(100)).await;
                         }
 
                         play::handle_play_entry(&mut conn, profile, client_info, ctx).await?;
@@ -806,6 +819,7 @@ mod tests {
                 )),
                 op_permission_level: 4,
                 spawn_protection: 16,
+                kick_channels: dashmap::DashMap::new(),
             }),
         })
     }

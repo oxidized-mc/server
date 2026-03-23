@@ -1,77 +1,71 @@
-//! Placeholder item ID ↔ name mapping.
+//! Item ID ↔ name mapping backed by the vanilla item registry.
 //!
-//! A proper item registry will be built in Phase 22+. Until then, this module
-//! provides a small hardcoded mapping for common items plus a deterministic
-//! hash-based fallback for unknown items.
-//!
-//! Both the login sequence and the play-state inventory handlers share this
-//! mapping to ensure consistency.
+//! Uses [`oxidized_world::registry::ItemRegistry`] loaded from the embedded
+//! `items.json.gz` data (1 506 items in vanilla registration order).
+//! The item's index in the alphabetical list equals its protocol numeric ID.
 
-/// Converts an item resource name to a numeric registry ID.
+use std::sync::LazyLock;
+
+use oxidized_world::registry::ItemRegistry;
+
+/// Lazily-loaded item registry shared by all callers in this process.
+static REGISTRY: LazyLock<ItemRegistry> =
+    LazyLock::new(|| ItemRegistry::load().expect("failed to load embedded item registry"));
+
+/// Converts an item resource name to its vanilla protocol numeric ID.
 ///
-/// Uses a hardcoded mapping for common items plus a hash-based fallback
-/// for unknown items. The fallback is deterministic (same name → same ID)
-/// but will not match vanilla registry IDs.
+/// Returns `0` for empty strings (treated as air). Returns `-1` for names
+/// not present in the vanilla registry.
 ///
 /// # Examples
 ///
 /// ```
 /// use oxidized_game::inventory::item_ids::item_name_to_id;
 ///
-/// assert_eq!(item_name_to_id("minecraft:stone"), 1);
-/// assert_eq!(item_name_to_id("minecraft:air"), 0);
-/// assert_eq!(item_name_to_id(""), 0);
+/// let stone_id = item_name_to_id("minecraft:stone");
+/// assert!(stone_id > 0);
+/// assert_eq!(item_name_to_id(""), -1);
 /// ```
-// TODO(Phase 22+): Replace with proper item registry lookup.
 pub fn item_name_to_id(name: &str) -> i32 {
-    match name {
-        "minecraft:air" | "" => 0,
-        "minecraft:stone" => 1,
-        "minecraft:grass_block" => 8,
-        "minecraft:dirt" => 10,
-        "minecraft:cobblestone" => 14,
-        "minecraft:oak_planks" => 15,
-        "minecraft:diamond" => 802,
-        "minecraft:iron_pickaxe" => 813,
-        "minecraft:diamond_sword" => 824,
-        _ => {
-            // Deterministic hash-based fallback for unknown items.
-            let mut hash: i32 = 0;
-            for b in name.bytes() {
-                hash = hash.wrapping_mul(31).wrapping_add(b as i32);
-            }
-            hash.abs() % 2000 + 100
-        },
+    if name.is_empty() {
+        return -1;
     }
+    REGISTRY.name_to_id(name).unwrap_or(-1)
 }
 
-/// Converts a numeric registry ID back to an item resource name.
+/// Converts a vanilla protocol numeric ID back to an item resource name.
 ///
-/// Only recognizes the hardcoded IDs from [`item_name_to_id`]; all others
-/// return `"minecraft:unknown_{id}"`.
+/// Returns an empty string for IDs not present in the registry.
 ///
 /// # Examples
 ///
 /// ```
-/// use oxidized_game::inventory::item_ids::item_id_to_name;
+/// use oxidized_game::inventory::item_ids::{item_id_to_name, item_name_to_id};
 ///
-/// assert_eq!(item_id_to_name(1), "minecraft:stone");
-/// assert_eq!(item_id_to_name(0), "minecraft:air");
+/// let id = item_name_to_id("minecraft:stone");
+/// assert_eq!(item_id_to_name(id), "minecraft:stone");
 /// ```
-// TODO(Phase 22+): Replace with proper item registry lookup.
 pub fn item_id_to_name(id: i32) -> String {
-    match id {
-        0 => "minecraft:air".to_string(),
-        1 => "minecraft:stone".to_string(),
-        8 => "minecraft:grass_block".to_string(),
-        10 => "minecraft:dirt".to_string(),
-        14 => "minecraft:cobblestone".to_string(),
-        15 => "minecraft:oak_planks".to_string(),
-        802 => "minecraft:diamond".to_string(),
-        813 => "minecraft:iron_pickaxe".to_string(),
-        824 => "minecraft:diamond_sword".to_string(),
-        _ => format!("minecraft:unknown_{id}"),
-    }
+    REGISTRY
+        .id_to_name(id)
+        .unwrap_or("minecraft:air")
+        .to_owned()
+}
+
+/// Returns the maximum stack size for an item by name.
+///
+/// Uses the real vanilla item registry. Returns `64` for unknown items.
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_game::inventory::item_ids::max_stack_size_by_name;
+///
+/// assert_eq!(max_stack_size_by_name("minecraft:diamond_sword"), 1);
+/// assert_eq!(max_stack_size_by_name("minecraft:stone"), 64);
+/// ```
+pub fn max_stack_size_by_name(name: &str) -> i32 {
+    i32::from(REGISTRY.max_stack_size(name))
 }
 
 #[cfg(test)]
@@ -82,41 +76,55 @@ mod tests {
     #[test]
     fn test_known_items_roundtrip() {
         let known = [
-            ("minecraft:air", 0),
-            ("minecraft:stone", 1),
-            ("minecraft:grass_block", 8),
-            ("minecraft:dirt", 10),
-            ("minecraft:cobblestone", 14),
-            ("minecraft:oak_planks", 15),
-            ("minecraft:diamond", 802),
-            ("minecraft:iron_pickaxe", 813),
-            ("minecraft:diamond_sword", 824),
+            "minecraft:air",
+            "minecraft:stone",
+            "minecraft:grass_block",
+            "minecraft:dirt",
+            "minecraft:cobblestone",
+            "minecraft:oak_planks",
+            "minecraft:diamond",
+            "minecraft:iron_pickaxe",
+            "minecraft:diamond_sword",
         ];
-        for (name, expected_id) in known {
+        for name in known {
             let id = item_name_to_id(name);
-            assert_eq!(id, expected_id, "name_to_id failed for {name}");
+            assert!(id >= 0, "name_to_id returned -1 for {name}");
             let back = item_id_to_name(id);
-            assert_eq!(back, name, "id_to_name failed for {expected_id}");
+            assert_eq!(back, name, "roundtrip failed for {name}");
         }
     }
 
     #[test]
-    fn test_empty_maps_to_air() {
-        assert_eq!(item_name_to_id(""), 0);
-        assert_eq!(item_id_to_name(0), "minecraft:air");
+    fn test_empty_returns_negative() {
+        assert_eq!(item_name_to_id(""), -1);
     }
 
     #[test]
-    fn test_unknown_name_gives_stable_id() {
-        let id1 = item_name_to_id("minecraft:emerald");
-        let id2 = item_name_to_id("minecraft:emerald");
-        assert_eq!(id1, id2, "hash must be deterministic");
-        assert!(id1 >= 100, "fallback IDs start at 100");
+    fn test_unknown_name_returns_negative() {
+        assert_eq!(item_name_to_id("minecraft:not_a_real_item_xyz"), -1);
     }
 
     #[test]
-    fn test_unknown_id_gives_placeholder_name() {
-        let name = item_id_to_name(9999);
-        assert_eq!(name, "minecraft:unknown_9999");
+    fn test_unknown_id_returns_air() {
+        assert_eq!(item_id_to_name(999_999), "minecraft:air");
+    }
+
+    #[test]
+    fn test_all_1506_items_roundtrip() {
+        for id in 0..1506 {
+            let name = item_id_to_name(id);
+            assert!(!name.is_empty(), "id {id} returned empty name");
+            let back = item_name_to_id(&name);
+            assert_eq!(back, id, "roundtrip failed for {name} (id {id})");
+        }
+    }
+
+    #[test]
+    fn test_max_stack_size() {
+        assert_eq!(max_stack_size_by_name("minecraft:diamond_sword"), 1);
+        assert_eq!(max_stack_size_by_name("minecraft:stone"), 64);
+        assert_eq!(max_stack_size_by_name("minecraft:ender_pearl"), 16);
+        // Unknown item → default 64
+        assert_eq!(max_stack_size_by_name("minecraft:nonexistent"), 64);
     }
 }

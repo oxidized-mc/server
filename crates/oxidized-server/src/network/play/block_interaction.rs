@@ -206,11 +206,20 @@ pub async fn handle_player_action(
                 do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
             } else {
                 // Record mining start position and time for StopDestroyBlock validation.
-                {
+                let entity_id = {
                     let mut player = play_ctx.player.write();
                     player.mining_start_pos = Some(pkt.pos);
                     player.mining_start_time = Some(Instant::now());
-                }
+                    player.entity_id
+                };
+                // Broadcast mining start animation to other players.
+                broadcast_block_destruction(
+                    play_ctx.server_ctx,
+                    entity_id,
+                    pkt.pos,
+                    0,
+                    Some(entity_id),
+                );
                 debug!(
                     peer = %play_ctx.addr,
                     name = %play_ctx.player_name,
@@ -258,19 +267,37 @@ pub async fn handle_player_action(
                 do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
                 {
                     let mut player = play_ctx.player.write();
+                    let eid = player.entity_id;
                     player.mining_start_pos = None;
                     player.mining_start_time = None;
+                    // Clear mining animation on other players' screens.
+                    broadcast_block_destruction(
+                        play_ctx.server_ctx,
+                        eid,
+                        pkt.pos,
+                        10,
+                        Some(eid),
+                    );
                 }
             } else {
                 send_ack(play_ctx, pkt.sequence).await?;
             }
         },
         PlayerAction::AbortDestroyBlock => {
-            {
+            let entity_id = {
                 let mut player = play_ctx.player.write();
                 player.mining_start_pos = None;
                 player.mining_start_time = None;
-            }
+                player.entity_id
+            };
+            // Clear mining animation on other players' screens.
+            broadcast_block_destruction(
+                play_ctx.server_ctx,
+                entity_id,
+                pkt.pos,
+                10, // 10 = clear animation
+                Some(entity_id),
+            );
             debug!(
                 peer = %play_ctx.addr,
                 name = %play_ctx.player_name,
@@ -287,6 +314,8 @@ pub async fn handle_player_action(
             };
             sync_inventory_slot(play_ctx, sel_slot).await?;
             sync_inventory_slot(play_ctx, off_slot).await?;
+            // Broadcast equipment change (both main hand and off hand changed).
+            super::inventory::broadcast_full_equipment(play_ctx);
             debug!(
                 peer = %play_ctx.addr,
                 name = %play_ctx.player_name,
@@ -803,6 +832,31 @@ fn broadcast_block_update(
     });
 }
 
+/// Broadcasts a block destruction (crack) animation to all connected players.
+///
+/// `progress` 0–9 shows increasing crack stages; 10 clears the animation.
+fn broadcast_block_destruction(
+    ctx: &Arc<ServerContext>,
+    entity_id: i32,
+    pos: BlockPos,
+    progress: u8,
+    exclude_entity: Option<i32>,
+) {
+    use oxidized_protocol::packets::play::ClientboundBlockDestructionPacket;
+    let pkt = ClientboundBlockDestructionPacket {
+        entity_id,
+        pos,
+        progress,
+    };
+    let data = pkt.encode();
+    ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundBlockDestructionPacket::PACKET_ID,
+        data: data.freeze(),
+        exclude_entity,
+        target_entity: None,
+    });
+}
+
 /// Returns `true` if a block state is air or a vanilla-replaceable block.
 ///
 /// Replaceable blocks can be overwritten by block placement without the player
@@ -870,10 +924,10 @@ fn is_sign_block(item_name: &str) -> bool {
     item_name.contains("sign") && !item_name.contains("signal")
 }
 
-/// Handles `ServerboundPickItemFromBlockPacket` (0x24) — creative pick block.
+/// Handles `ServerboundPickItemFromBlockPacket` (0x24) — pick block.
 ///
-/// Looks up the block at the target position and places the corresponding
-/// item into the player's hotbar, then notifies the client of the slot change.
+/// Creative: places a fresh stack of the target block into the hotbar.
+/// Survival: searches inventory for an existing stack and moves it to hotbar.
 pub async fn handle_pick_item_from_block(
     play_ctx: &mut PlayContext<'_>,
     data: Bytes,
@@ -885,9 +939,9 @@ pub async fn handle_pick_item_from_block(
         "PickItemFromBlock",
     )?;
 
-    // Only creative players can pick blocks.
     let game_mode = play_ctx.player.read().game_mode;
-    if game_mode != GameMode::Creative {
+    // Spectators and adventure cannot pick blocks.
+    if game_mode == GameMode::Spectator || game_mode == GameMode::Adventure {
         return Ok(());
     }
 
@@ -907,40 +961,98 @@ pub async fn handle_pick_item_from_block(
         None => return Ok(()),
     };
 
-    // Resolve item name to item ID.
     let item_id = item_name_to_id(&item_name);
+    // Items not in the registry can't be picked.
+    if item_id < 0 {
+        return Ok(());
+    }
 
-    // Place the item into the selected hotbar slot.
-    let (selected, item_name_log) = {
-        let mut player = play_ctx.player.write();
-        let slot = player.inventory.selected_slot as usize;
-        let name_log = item_name.clone();
-        player.inventory.set(slot, ItemStack::new(item_name, 1));
-        (player.inventory.selected_slot, name_log)
-    };
+    if game_mode == GameMode::Creative {
+        // Creative: place a fresh stack of 1 into the selected hotbar slot.
+        let selected = {
+            let mut player = play_ctx.player.write();
+            let slot = player.inventory.selected_slot as usize;
+            player
+                .inventory
+                .set(slot, ItemStack::new(item_name.clone(), 1));
+            player.inventory.selected_slot
+        };
+        let slot_data = {
+            use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
+            Some(SlotData {
+                item_id,
+                count: 1,
+                component_data: ComponentPatchData::default(),
+            })
+        };
+        let set_slot = ClientboundSetPlayerInventoryPacket {
+            slot: i32::from(selected),
+            contents: slot_data,
+        };
+        play_ctx.conn.send_packet(&set_slot).await?;
+    } else {
+        // Survival: search inventory for a matching item and move it to hotbar.
+        let (found_slot, selected) = {
+            let player = play_ctx.player.read();
+            let sel = player.inventory.selected_slot as usize;
+            // Check if the selected slot already has the item.
+            if !player.inventory.get(sel).is_empty()
+                && player.inventory.get(sel).item.0 == item_name
+            {
+                // Already holding it — nothing to do.
+                return Ok(());
+            }
+            // Search hotbar first (0–8), then main inventory (9–35).
+            let mut found = None;
+            for i in 0..36usize {
+                let stack = player.inventory.get(i);
+                if !stack.is_empty() && stack.item.0 == item_name {
+                    found = Some(i);
+                    break;
+                }
+            }
+            (found, sel)
+        };
 
-    // Notify the client of the slot change.
-    let slot_data = {
-        use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
-        Some(SlotData {
-            item_id,
-            count: 1,
-            component_data: ComponentPatchData::default(),
-        })
-    };
-
-    let set_slot = ClientboundSetPlayerInventoryPacket {
-        slot: i32::from(selected), // raw Inventory slot index (hotbar 0–8)
-        contents: slot_data,
-    };
-    play_ctx.conn.send_packet(&set_slot).await?;
+        match found_slot {
+            Some(slot) if slot < 9 => {
+                // Item is already in the hotbar — switch to that slot.
+                {
+                    let mut player = play_ctx.player.write();
+                    player.inventory.selected_slot = slot as u8;
+                }
+                let held_pkt =
+                    oxidized_protocol::packets::play::ClientboundSetHeldSlotPacket {
+                        slot: slot as i32,
+                    };
+                play_ctx.conn.send_packet(&held_pkt).await?;
+            },
+            Some(slot) => {
+                // Item is in main inventory — swap with selected hotbar slot.
+                {
+                    let mut player = play_ctx.player.write();
+                    let sel = player.inventory.selected_slot as usize;
+                    let main_item = player.inventory.get(slot).clone();
+                    let hotbar_item = player.inventory.get(sel).clone();
+                    player.inventory.set(sel, main_item);
+                    player.inventory.set(slot, hotbar_item);
+                }
+                sync_inventory_slot(play_ctx, selected).await?;
+                sync_inventory_slot(play_ctx, slot).await?;
+            },
+            None => {
+                // Item not in inventory — nothing to do in survival.
+            },
+        }
+    }
 
     debug!(
         peer = %play_ctx.addr,
         name = %play_ctx.player_name,
         pos = ?pkt.pos,
-        item = %item_name_log,
-        "Creative pick block"
+        item = %item_name,
+        mode = ?game_mode,
+        "Pick block"
     );
 
     Ok(())
@@ -1113,6 +1225,7 @@ mod tests {
             )),
             op_permission_level: 4,
             spawn_protection: 16,
+            kick_channels: dashmap::DashMap::new(),
         })
     }
 
@@ -1151,6 +1264,7 @@ mod tests {
             )),
             op_permission_level: 4,
             spawn_protection: radius,
+            kick_channels: dashmap::DashMap::new(),
         })
     }
 

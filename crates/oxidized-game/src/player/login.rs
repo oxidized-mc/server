@@ -273,8 +273,7 @@ fn build_held_slot_packet(player: &ServerPlayer) -> EncodedPacket {
 }
 
 /// Converts a game [`ItemStack`] to a wire [`SlotData`] for the login
-/// sequence. Uses the shared placeholder item ID mapping from
-/// [`crate::inventory::item_ids`] until a proper item registry is built (Phase 22+).
+/// sequence. Uses the vanilla item registry to map names to protocol IDs.
 fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
     SlotData {
         count: stack.count,

@@ -420,6 +420,7 @@ mod tests {
             )),
             op_permission_level: 4,
             spawn_protection: 16,
+            kick_channels: dashmap::DashMap::new(),
         })
     }
 

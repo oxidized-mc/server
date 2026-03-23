@@ -75,6 +75,29 @@ impl ItemRegistry {
         self.by_name.get(name).map(|&idx| &self.items[idx])
     }
 
+    /// Returns the protocol numeric ID for an item name, or `None` if unknown.
+    ///
+    /// The ID is the item's index in the vanilla registration-order list
+    /// (alphabetical). Empty strings return `None`.
+    pub fn name_to_id(&self, name: &str) -> Option<i32> {
+        self.by_name.get(name).map(|&idx| idx as i32)
+    }
+
+    /// Returns the item name for a protocol numeric ID, or `None` if out of range.
+    pub fn id_to_name(&self, id: i32) -> Option<&str> {
+        if id < 0 {
+            return None;
+        }
+        self.items.get(id as usize).map(|item| item.name.as_str())
+    }
+
+    /// Returns the maximum stack size for an item by name.
+    ///
+    /// Returns `64` (the vanilla default) if the item is not found.
+    pub fn max_stack_size(&self, name: &str) -> u8 {
+        self.get(name).map_or(64, |item| item.max_stack_size)
+    }
+
     /// Total number of items in the registry.
     pub fn item_count(&self) -> usize {
         self.items.len()
@@ -122,5 +145,37 @@ mod tests {
     fn test_unknown_item_returns_none() {
         let reg = registry();
         assert!(reg.get("minecraft:not_an_item").is_none());
+    }
+
+    #[test]
+    fn test_name_to_id_roundtrip() {
+        let reg = registry();
+        let id = reg.name_to_id("minecraft:stone").expect("stone not found");
+        let name = reg.id_to_name(id).expect("id not found");
+        assert_eq!(name, "minecraft:stone");
+    }
+
+    #[test]
+    fn test_name_to_id_alphabetical_order() {
+        let reg = registry();
+        // Items are in alphabetical order; acacia_boat should be first (index 0).
+        assert_eq!(reg.name_to_id("minecraft:acacia_boat"), Some(0));
+    }
+
+    #[test]
+    fn test_id_to_name_out_of_range() {
+        let reg = registry();
+        assert!(reg.id_to_name(-1).is_none());
+        assert!(reg.id_to_name(999_999).is_none());
+    }
+
+    #[test]
+    fn test_max_stack_size_lookup() {
+        let reg = registry();
+        assert_eq!(reg.max_stack_size("minecraft:diamond_sword"), 1);
+        assert_eq!(reg.max_stack_size("minecraft:stone"), 64);
+        assert_eq!(reg.max_stack_size("minecraft:ender_pearl"), 16);
+        // Unknown item → default 64
+        assert_eq!(reg.max_stack_size("minecraft:nonexistent"), 64);
     }
 }

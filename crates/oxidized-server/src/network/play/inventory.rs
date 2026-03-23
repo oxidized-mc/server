@@ -8,14 +8,16 @@ use oxidized_game::inventory::ItemStack;
 use oxidized_game::inventory::item_ids::{item_id_to_name, item_name_to_id};
 use oxidized_game::player::inventory::PROTOCOL_SLOT_COUNT;
 use oxidized_game::player::{GameMode, PlayerInventory};
+use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
 use oxidized_protocol::packets::play::{
-    ClientboundContainerSetContentPacket, ClientboundSetHeldSlotPacket,
-    ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
+    ClientboundContainerSetContentPacket, ClientboundSetEquipmentPacket,
+    ClientboundSetHeldSlotPacket, ServerboundSetCarriedItemPacket,
+    ServerboundSetCreativeModeSlotPacket, equipment_slot,
 };
 
 use super::PlayContext;
-use crate::network::ConnectionError;
+use crate::network::{BroadcastMessage, ConnectionError};
 use crate::network::helpers::decode_packet;
 
 /// Handles `ServerboundSetCarriedItemPacket` (0x35) — hotbar selection change.
@@ -43,6 +45,26 @@ pub async fn handle_set_carried_item(
 
     let mut player = play_ctx.player.write();
     player.inventory.selected_slot = slot as u8;
+
+    // Broadcast main-hand equipment change to other players.
+    let main_hand_item = player.inventory.get_selected();
+    let slot_data = if main_hand_item.is_empty() {
+        None
+    } else {
+        Some(item_stack_to_slot_data(main_hand_item))
+    };
+    let equip_pkt = ClientboundSetEquipmentPacket {
+        entity_id: player.entity_id,
+        equipments: vec![(equipment_slot::MAIN_HAND, slot_data)],
+    };
+    let encoded = equip_pkt.encode();
+    play_ctx.server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundSetEquipmentPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: Some(player.entity_id),
+        target_entity: None,
+    });
+
     debug!(
         peer = %play_ctx.addr,
         name = %play_ctx.player_name,
@@ -133,6 +155,33 @@ pub async fn handle_set_creative_mode_slot(
     {
         let mut player = play_ctx.player.write();
         player.inventory.set(internal, stack);
+
+        // Broadcast equipment change if the affected slot is visible to other
+        // players (armor, offhand, or the currently selected hotbar slot).
+        if let Some(equip) = internal_slot_to_equipment(
+            internal,
+            player.inventory.selected_slot as usize,
+        ) {
+            let slot_data = {
+                let item = player.inventory.get(internal);
+                if item.is_empty() {
+                    None
+                } else {
+                    Some(item_stack_to_slot_data(item))
+                }
+            };
+            let equip_pkt = ClientboundSetEquipmentPacket {
+                entity_id: player.entity_id,
+                equipments: vec![(equip, slot_data)],
+            };
+            let encoded = equip_pkt.encode();
+            play_ctx.server_ctx.broadcast(BroadcastMessage {
+                packet_id: ClientboundSetEquipmentPacket::PACKET_ID,
+                data: encoded.freeze(),
+                exclude_entity: Some(player.entity_id),
+                target_entity: None,
+            });
+        }
     }
 
     debug!(
@@ -203,9 +252,8 @@ fn build_inventory_slot_list(inventory: &PlayerInventory) -> Vec<Option<SlotData
 
 /// Converts a game `ItemStack` to a wire `SlotData`.
 ///
-/// Uses the shared placeholder item ID mapping from
-/// [`oxidized_game::inventory::item_ids`] until a proper item registry
-/// is built (Phase 22+).
+/// Uses the vanilla item registry to map item names to protocol numeric IDs.
+/// Must only be called for non-empty stacks.
 pub(crate) fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
     SlotData {
         count: stack.count,
@@ -218,6 +266,40 @@ pub(crate) fn item_stack_to_slot_data(stack: &ItemStack) -> SlotData {
 fn slot_data_to_item_stack(data: &SlotData) -> ItemStack {
     let item_name = item_id_to_name(data.item_id);
     ItemStack::new(item_name, data.count)
+}
+
+/// Maps an internal inventory slot index to an equipment slot ID, if the slot
+/// is visible to other players.
+///
+/// Returns `None` for main-inventory slots that are not currently selected.
+fn internal_slot_to_equipment(internal: usize, selected: usize) -> Option<u8> {
+    match internal {
+        i if i == selected && i < PlayerInventory::HOTBAR_END => {
+            Some(equipment_slot::MAIN_HAND)
+        },
+        PlayerInventory::OFFHAND_SLOT => Some(equipment_slot::OFF_HAND),
+        36 => Some(equipment_slot::HEAD),
+        37 => Some(equipment_slot::CHEST),
+        38 => Some(equipment_slot::LEGS),
+        39 => Some(equipment_slot::FEET),
+        _ => None,
+    }
+}
+
+/// Broadcasts the full equipment set for a player to all other players.
+///
+/// Used after offhand swaps or any operation that changes multiple equipment
+/// slots at once.
+pub(crate) fn broadcast_full_equipment(play_ctx: &PlayContext<'_>) {
+    let player = play_ctx.player.read();
+    let equip_pkt = super::build_equipment_packet(&player);
+    let encoded = equip_pkt.encode();
+    play_ctx.server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundSetEquipmentPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: Some(player.entity_id),
+        target_entity: None,
+    });
 }
 
 #[cfg(test)]
@@ -241,10 +323,13 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_item_maps_to_air() {
-        assert_eq!(item_name_to_id(""), 0);
-        assert_eq!(item_name_to_id("minecraft:air"), 0);
-        assert_eq!(item_id_to_name(0), "minecraft:air");
+    fn test_empty_item_maps_correctly() {
+        // Empty string is not a valid item name; returns -1.
+        assert_eq!(item_name_to_id(""), -1);
+        // minecraft:air has a real vanilla registry ID.
+        let air_id = item_name_to_id("minecraft:air");
+        assert!(air_id >= 0);
+        assert_eq!(item_id_to_name(air_id), "minecraft:air");
     }
 
     #[test]
@@ -265,14 +350,16 @@ mod tests {
         // Protocol slot 36 should have the stone
         assert!(slots[36].is_some());
         assert_eq!(slots[36].as_ref().unwrap().count, 64);
-        assert_eq!(slots[36].as_ref().unwrap().item_id, 1); // stone = 1
+        let stone_id = item_name_to_id("minecraft:stone");
+        assert_eq!(slots[36].as_ref().unwrap().item_id, stone_id);
     }
 
     #[test]
     fn test_slot_data_to_item_stack() {
+        let stone_id = item_name_to_id("minecraft:stone");
         let data = SlotData {
             count: 32,
-            item_id: 1,
+            item_id: stone_id,
             component_data: ComponentPatchData::default(),
         };
         let stack = slot_data_to_item_stack(&data);

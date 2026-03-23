@@ -141,6 +141,12 @@ pub struct ServerPlayer {
     /// Movement packet rate limiter: (count this second, second start instant).
     pub movement_rate: (u32, std::time::Instant),
 
+    // -- Display --
+    /// Displayed skin parts bitmask (cape, jacket, sleeves, pants, hat).
+    ///
+    /// Synced to other players via entity metadata slot 21.
+    pub model_customisation: u8,
+
     // -- Raw NBT for unimplemented systems (roundtripped to prevent data loss) --
     /// Active potion/status effects (raw NBT, preserved until effect system is built).
     pub raw_active_effects: Option<NbtTag>,
@@ -199,6 +205,7 @@ impl ServerPlayer {
             mining_start_time: None,
             latency: 0,
             movement_rate: (0, std::time::Instant::now()),
+            model_customisation: 0xFF, // all parts visible by default
             xp_level: 0,
             xp_progress: 0.0,
             xp_total: 0,
