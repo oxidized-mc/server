@@ -58,6 +58,8 @@ pub struct PlayerInfoEntry {
     pub listed: bool,
     /// Whether player has display name (only with UPDATE_DISPLAY_NAME).
     pub has_display_name: bool,
+    /// Custom display name JSON text component (only with UPDATE_DISPLAY_NAME).
+    pub display_name: Option<String>,
     /// Whether to show hat model part (only with UPDATE_HAT).
     pub show_hat: bool,
     /// Tab list order (only with UPDATE_LIST_ORDER).
@@ -97,6 +99,7 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
                 latency: 0,
                 listed: false,
                 has_display_name: false,
+                display_name: None,
                 show_hat: false,
                 list_order: 0,
             };
@@ -156,7 +159,7 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
             if actions.contains(PlayerInfoActions::UPDATE_DISPLAY_NAME) {
                 entry.has_display_name = types::read_bool(&mut data)?;
                 if entry.has_display_name {
-                    let _display = types::read_string(&mut data, 32767)?;
+                    entry.display_name = Some(types::read_string(&mut data, 32767)?);
                 }
             }
 
@@ -220,7 +223,12 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
                 .actions
                 .contains(PlayerInfoActions::UPDATE_DISPLAY_NAME)
             {
-                types::write_bool(&mut buf, false); // No display name
+                types::write_bool(&mut buf, entry.has_display_name);
+                if let Some(ref display) = entry.display_name {
+                    if entry.has_display_name {
+                        types::write_string(&mut buf, display);
+                    }
+                }
             }
 
             if self.actions.contains(PlayerInfoActions::UPDATE_LIST_ORDER) {
@@ -260,6 +268,7 @@ mod tests {
                 latency: 50,
                 listed: true,
                 has_display_name: false,
+                display_name: None,
                 show_hat: false,
                 list_order: 0,
             }],
@@ -293,6 +302,7 @@ mod tests {
                     latency: 0,
                     listed: false,
                     has_display_name: false,
+                    display_name: None,
                     show_hat: false,
                     list_order: 0,
                 },
@@ -304,6 +314,7 @@ mod tests {
                     latency: 0,
                     listed: false,
                     has_display_name: false,
+                    display_name: None,
                     show_hat: false,
                     list_order: 0,
                 },
@@ -337,6 +348,7 @@ mod tests {
                 latency: 0,
                 listed: false,
                 has_display_name: false,
+                display_name: None,
                 show_hat: false,
                 list_order: 0,
             }],
@@ -352,5 +364,54 @@ mod tests {
             decoded.entries[0].properties[0].signature(),
             Some("c2lnbmF0dXJl")
         );
+    }
+
+    #[test]
+    fn test_roundtrip_display_name() {
+        let uuid = uuid::Uuid::new_v4();
+        let display = r#"{"text":"Custom Name","color":"gold"}"#;
+        let pkt = ClientboundPlayerInfoUpdatePacket {
+            actions: PlayerInfoActions(
+                PlayerInfoActions::ADD_PLAYER | PlayerInfoActions::UPDATE_DISPLAY_NAME,
+            ),
+            entries: vec![PlayerInfoEntry {
+                uuid,
+                name: "Steve".into(),
+                properties: vec![],
+                game_mode: 0,
+                latency: 0,
+                listed: false,
+                has_display_name: true,
+                display_name: Some(display.into()),
+                show_hat: false,
+                list_order: 0,
+            }],
+        };
+
+        let encoded = pkt.encode();
+        let decoded = ClientboundPlayerInfoUpdatePacket::decode(encoded.freeze()).unwrap();
+
+        assert!(decoded.entries[0].has_display_name);
+        assert_eq!(decoded.entries[0].display_name.as_deref(), Some(display));
+    }
+
+    #[test]
+    fn test_roundtrip_no_display_name() {
+        let uuid = uuid::Uuid::new_v4();
+        let pkt = ClientboundPlayerInfoUpdatePacket {
+            actions: PlayerInfoActions(PlayerInfoActions::UPDATE_DISPLAY_NAME),
+            entries: vec![PlayerInfoEntry {
+                uuid,
+                has_display_name: false,
+                display_name: None,
+                ..Default::default()
+            }],
+        };
+
+        let encoded = pkt.encode();
+        let decoded = ClientboundPlayerInfoUpdatePacket::decode(encoded.freeze()).unwrap();
+
+        assert!(!decoded.entries[0].has_display_name);
+        assert!(decoded.entries[0].display_name.is_none());
     }
 }

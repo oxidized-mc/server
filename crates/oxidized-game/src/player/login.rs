@@ -208,6 +208,7 @@ fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
                 latency: 0,
                 listed: true,
                 has_display_name: false,
+                display_name: None,
                 show_hat: false,
                 list_order: 0,
             }
