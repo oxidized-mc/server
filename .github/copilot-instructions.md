@@ -7,10 +7,9 @@
 
 ## Before Any Task
 
-1. Read **[memories.md](memories.md)** for prior learnings about the crates you'll touch
-2. Read the **[6 key ADRs](#key-adrs)** + any ADRs linked from the phase doc or touching your crate
-3. Read the **relevant phase doc** (`docs/phases/phase-NN-*.md`) if task belongs to a phase
-4. Read **[lifecycle docs](../docs/lifecycle/README.md)** when process questions arise
+1. Read the **[key ADRs](#key-adrs)** + any ADRs linked from the phase doc or touching your crate
+2. Read the **relevant phase doc** (`docs/phases/phase-NN-*.md`) if task belongs to a phase
+3. Read **[lifecycle docs](../docs/lifecycle/README.md)** when process questions arise
 
 ---
 
@@ -27,10 +26,11 @@
 ## Workspace & Crate Dependencies
 
 ```
+oxidized-types     ← no internal deps (shared coordinate types)
 oxidized-nbt       ← no internal deps
 oxidized-macros    ← no internal deps (proc-macro)
-oxidized-protocol  ← nbt, macros
-oxidized-world     ← nbt
+oxidized-protocol  ← types, nbt, macros
+oxidized-world     ← types, nbt
 oxidized-game      ← protocol, world, nbt
 oxidized-server    ← all crates
 ```
@@ -47,9 +47,9 @@ Follow the [Development Lifecycle](../docs/lifecycle/README.md): Identify → Re
 
 - **Arch Review Gate (Stage 2.5):** Before planning or testing, question every constraining ADR. If outdated → create a superseding ADR first. Ask: Right pattern? Would a Rust dev choose this? Does the client care? Will we regret this in 6 months?
 - **CI:** After every push, wait for all jobs to pass. Never leave `main` broken.
-- **Memories:** Check before starting. Update after phases or when discovering gotchas.
+- **Memories:** Update [memories.md](memories.md) after phases or when discovering gotchas.
 - **Improvement:** Outdated ADRs → supersede. Better patterns → record + refactor. Missing tests → add now. Tech debt → TODO + memories.md.
-- **Retrospective** after every phase → update memories.md.
+- **Retrospective** after every phase → check memories.md for learnings, update it with new findings.
 
 ---
 
@@ -62,7 +62,7 @@ Follow the [Development Lifecycle](../docs/lifecycle/README.md): Identify → Re
 - Ambiguous request or multiple valid approaches
 - Change affects a public trait
 
-**Steps:** Check memories → explore Java ref + Rust code → plan + SQL todos → confirm with user.
+**Steps:** Explore Java ref + Rust code → plan + SQL todos → confirm with user.
 **Skip planning for:** single-file fixes, typos, doc edits, dep bumps.
 
 ### Java Reference
@@ -82,15 +82,14 @@ Always read the equivalent Java class in `mc-server-ref/decompiled/net/minecraft
 
 ### Sub-Agent Dispatch
 
-| Phase | Agent | Use for |
-|---|---|---|
-| Explore | `explore` | Java reference lookup, codebase search, ADR review |
-| Tests (TDD) | `general-purpose` | Write failing tests |
-| Implement | `general-purpose` | Feature code following Java reference |
-| Build/test | `task` | `cargo test -p <crate>` |
-| Code review | `code-review` | ADR compliance, correctness, patterns, improvements |
+| Agent | Use for |
+|---|---|
+| `explore` | Java reference lookup, codebase search, ADR review |
+| `task` | Build & test: `cargo test -p <crate>` |
+| `code-review` | ADR compliance, correctness, patterns, improvements |
 
 Parallelise independent `explore` calls. **Review↔Fix loop:** fix issues → re-review → repeat until clean pass.
+**Do not delegate implementation or test-writing to sub-agents** — do it yourself.
 
 ### TDD Cycle
 
@@ -149,90 +148,35 @@ grep -r "old_name" . --include="*.rs" --include="*.toml" --include="*.md"
 
 ---
 
-## Protocol Quick Reference (26.1-pre-3)
-
-| State | CB | SB |
-|---|---|---|
-| Handshaking | 0 | 1 |
-| Status | 2 | 2 |
-| Login | 5 | 5 |
-| Configuration | 6 | 6 |
-| Play | 127 | 58 |
-
-**Flow:** Handshaking → Status (disconnect) **or** Handshaking → Login → Configuration → Play
-**Encryption:** AES-128-CFB8 via RSA-1024. **Compression:** zlib, threshold 256 bytes.
-**Chunks:** 24× sections (block count + `PalettedContainer<BlockState>` + `PalettedContainer<Biome>`) + heightmaps NBT + light BitSets.
-
----
-
 ## Key ADRs
 
-All in `docs/adr/`. 32+ ADRs total. Read the phase doc's "Architecture Decisions" section before implementing.
+Framework-level decisions that affect all code. All ADRs in `docs/adr/`.
 
-| ADR | Decision | Impact |
-|-----|----------|--------|
-| [002] | `thiserror` libs / `anyhow` binary | Every crate |
-| [007] | `#[derive(McPacket)]` wire format | All packets |
-| [008] | Typestate connections | Protocol states |
-| [013] | Coordinate newtypes | Spatial code |
-| [018] | ECS with `bevy_ecs` | Entity/game logic |
-| [019] | Parallel tick phases | Server core |
+| ADR | Decision |
+|-----|----------|
+| [002] | `thiserror` in libraries, `anyhow` in binary |
+| [018] | ECS with `bevy_ecs` for all entity/game logic |
+| [019] | Dedicated tick thread with parallel phases |
 
+Read the phase doc's "Architecture Decisions" section for domain-specific ADRs.
 **New ADR when:** new crate/public trait, choosing between approaches, expensive-to-reverse decision.
 **Lifecycle:** Proposed → Accepted → Superseded. Never edit accepted — create a superseding one.
 
 ---
 
-## Roadmap (38 Phases)
+## Versioning
 
-Track via SQL `todos` (prefix `p01-` through `p38-`).
-
-| Phase | Milestone |
-|---|---|
-| p01–p02 | Workspace, TCP + VarInt |
-| p03 | Server list ping |
-| p04 | Authentication |
-| p05–p07 | NBT, config state, core types |
-| p08–p11 | Block registry, chunks, Anvil, server level |
-| p12–p14 | Player join, chunk rendering, movement |
-| p15–p18 | Entities, physics, chat, commands |
-| R1 | Arch refactoring (ADR-035/036/037) |
-| R2 | Packet trait refactoring (ADR-007/038) |
-| p19–p22 | World ticks, saves, inventory, block interaction |
-| p23–p27 | Worldgen, combat, mobs, animals |
-| p28–p32 | Redstone, crafting, block entities, advancements, scoreboards |
-| p33–p36 | RCON, loot, enchants, structures |
-| p37 | JSON-RPC management server |
-| p38 | Production hardening, 100+ players |
-
----
-
-## Conventional Commits
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/) for automated versioning.
 
 Format: `<type>(<scope>): <description>`
-
 **Types:** `feat` (minor), `fix` (patch), `perf` (patch), `refactor`, `test`, `docs`, `chore`, `ci`
-**Scopes:** `nbt`, `macros`, `protocol`, `world`, `game`, `server`, `ci`, `deps`
+**Scopes:** `types`, `nbt`, `macros`, `protocol`, `world`, `game`, `server`, `ci`, `deps`
 **Breaking:** `feat!:` + `BREAKING CHANGE:` in body. No `Co-authored-by:` trailers.
-
----
-
-## Design Quick Reference
-
-- Palette compression: `SingleValue` → `Linear` → `HashMap` → `Global`
-- Chunks: `DashMap<ChunkPos, Arc<ChunkColumn>>` + per-section `RwLock`, 24 sections (y=−64..319), index = `(y >> 4) + 4`
-- Registries: compiled core (`build.rs`) + runtime data-driven (data packs)
-- NBT: 3 representations — owned (`IndexMap`), arena (`bumpalo`), borrowed (zero-copy)
-- Auth: online → `sessionserver.mojang.com/session/minecraft/hasJoined`, offline → UUID v3 `"OfflinePlayer:<name>"`
-- 20 TPS default (`50ms`), 256-byte compression threshold, JSON-RPC WebSocket management (disabled by default)
 
 ---
 
 <!-- ADR link references -->
 [002]: ../docs/adr/adr-002-error-handling.md
-[007]: ../docs/adr/adr-007-packet-codec.md
-[008]: ../docs/adr/adr-008-connection-state-machine.md
-[013]: ../docs/adr/adr-013-coordinate-types.md
 [018]: ../docs/adr/adr-018-entity-system.md
 [019]: ../docs/adr/adr-019-tick-loop.md
 [ADR-006]: ../docs/adr/adr-006-network-io.md
