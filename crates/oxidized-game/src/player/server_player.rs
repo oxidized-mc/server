@@ -7,6 +7,7 @@
 //! Mirrors `net.minecraft.server.level.ServerPlayer`.
 
 use std::collections::VecDeque;
+use std::time::Instant;
 
 use oxidized_nbt::{NbtCompound, NbtList, NbtTag, TAG_COMPOUND, TAG_DOUBLE, TAG_FLOAT};
 use oxidized_protocol::auth::GameProfile;
@@ -95,8 +96,8 @@ pub struct ServerPlayer {
     pub chunk_send_rate: f32,
 
     // -- Teleport confirmation --
-    /// Pending teleports the client has not yet confirmed (ID + target position).
-    pub pending_teleports: VecDeque<(i32, Vec3)>,
+    /// Pending teleports the client has not yet confirmed (ID, target position, sent time).
+    pub pending_teleports: VecDeque<(i32, Vec3, Instant)>,
     /// Next teleport ID to assign.
     teleport_id_counter: i32,
 

@@ -567,6 +567,7 @@ fn test_degree_packing_known_angles() {
 
 #[test]
 fn test_teleport_accept_correct_id() {
+    use std::time::Instant;
     use oxidized_game::player::login::handle_accept_teleportation;
 
     let uuid = uuid::Uuid::new_v4();
@@ -575,10 +576,10 @@ fn test_teleport_accept_correct_id() {
     let mut player = ServerPlayer::new(1, profile, dim, GameMode::Survival);
     player
         .pending_teleports
-        .push_back((42, oxidized_protocol::types::Vec3::ZERO));
+        .push_back((42, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
     player
         .pending_teleports
-        .push_back((43, oxidized_protocol::types::Vec3::ZERO));
+        .push_back((43, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
 
     assert!(
         handle_accept_teleportation(&mut player, 42),
@@ -590,6 +591,7 @@ fn test_teleport_accept_correct_id() {
 
 #[test]
 fn test_teleport_accept_wrong_id_fails() {
+    use std::time::Instant;
     use oxidized_game::player::login::handle_accept_teleportation;
 
     let uuid = uuid::Uuid::new_v4();
@@ -598,7 +600,7 @@ fn test_teleport_accept_wrong_id_fails() {
     let mut player = ServerPlayer::new(2, profile, dim, GameMode::Survival);
     player
         .pending_teleports
-        .push_back((10, oxidized_protocol::types::Vec3::ZERO));
+        .push_back((10, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
 
     assert!(
         !handle_accept_teleportation(&mut player, 99),
