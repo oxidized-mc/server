@@ -327,7 +327,7 @@ pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) 
     if let Some(idx) = player
         .pending_teleports
         .iter()
-        .position(|&(id, _)| id == teleport_id)
+        .position(|&(id, _, _)| id == teleport_id)
     {
         // Remove this entry and all entries before it (they're implicitly confirmed).
         for _ in 0..=idx {
@@ -620,9 +620,14 @@ mod tests {
 
     #[test]
     fn accept_teleportation_removes_matching_id() {
+        use std::time::Instant;
         let mut player = make_player(1, "Test");
-        player.pending_teleports.push_back((1, Vec3::ZERO));
-        player.pending_teleports.push_back((2, Vec3::ZERO));
+        player
+            .pending_teleports
+            .push_back((1, Vec3::ZERO, Instant::now()));
+        player
+            .pending_teleports
+            .push_back((2, Vec3::ZERO, Instant::now()));
 
         assert!(handle_accept_teleportation(&mut player, 1));
         assert_eq!(player.pending_teleports.len(), 1);
@@ -631,8 +636,11 @@ mod tests {
 
     #[test]
     fn accept_teleportation_rejects_wrong_id() {
+        use std::time::Instant;
         let mut player = make_player(1, "Test");
-        player.pending_teleports.push_back((1, Vec3::ZERO));
+        player
+            .pending_teleports
+            .push_back((1, Vec3::ZERO, Instant::now()));
 
         assert!(!handle_accept_teleportation(&mut player, 99));
         assert_eq!(player.pending_teleports.len(), 1);
@@ -646,10 +654,17 @@ mod tests {
 
     #[test]
     fn accept_teleportation_clears_all_sequential() {
+        use std::time::Instant;
         let mut player = make_player(1, "Test");
-        player.pending_teleports.push_back((1, Vec3::ZERO));
-        player.pending_teleports.push_back((2, Vec3::ZERO));
-        player.pending_teleports.push_back((3, Vec3::ZERO));
+        player
+            .pending_teleports
+            .push_back((1, Vec3::ZERO, Instant::now()));
+        player
+            .pending_teleports
+            .push_back((2, Vec3::ZERO, Instant::now()));
+        player
+            .pending_teleports
+            .push_back((3, Vec3::ZERO, Instant::now()));
 
         assert!(handle_accept_teleportation(&mut player, 1));
         assert!(handle_accept_teleportation(&mut player, 2));

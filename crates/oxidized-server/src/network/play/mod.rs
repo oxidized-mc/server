@@ -39,9 +39,10 @@ use oxidized_protocol::packets::play::{
     ClientboundAddEntityPacket, ClientboundAnimatePacket, ClientboundEntityEventPacket,
     ClientboundGameEventPacket, ClientboundInitializeBorderPacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundRemoveEntitiesPacket, ClientboundSetTimePacket, ClientboundSystemChatPacket,
-    ClockNetworkState, ClockUpdate, GameEventType, PlayerCommandAction, PlayerInfoActions,
-    PlayerInfoEntry, ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
+    ClientboundPlayerPositionPacket, ClientboundRemoveEntitiesPacket, ClientboundSetTimePacket,
+    ClientboundSystemChatPacket, ClockNetworkState, ClockUpdate, GameEventType,
+    PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
+    ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
     ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
     ServerboundClientInformationPlayPacket, ServerboundCommandSuggestionPacket,
     ServerboundKeepAlivePacket, ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
@@ -167,7 +168,7 @@ pub async fn handle_play_entry(
     let teleport_id = player.next_teleport_id();
     player
         .pending_teleports
-        .push_back((teleport_id, player.pos));
+        .push_back((teleport_id, player.pos, Instant::now()));
 
     let player_name = player.name.clone();
     let player_view_distance = player.view_distance;
@@ -519,6 +520,8 @@ pub async fn handle_play_entry(
     // Keepalive state — send a ping every 15 seconds, timeout after 30.
     const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
     const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(30);
+    // Vanilla resends unconfirmed teleports every 20 ticks (~1 second).
+    const TELEPORT_RESEND_INTERVAL: Duration = Duration::from_secs(1);
     let mut keepalive_timer = tokio::time::interval(KEEPALIVE_INTERVAL);
     keepalive_timer.tick().await; // consume the immediate first tick
     let mut keepalive_pending = false;
@@ -566,9 +569,49 @@ pub async fn handle_play_entry(
                     }
                 }
             },
-            // Per-tick decay for chat rate limiter.
+            // Per-tick decay for chat rate limiter + teleport resend.
             _ = tick_timer.tick() => {
                 play_ctx.rate_limiter.tick();
+
+                // Resend unconfirmed teleports older than 1 second (vanilla: 20 ticks).
+                let resend_list: Vec<(i32, f64, f64, f64, f32, f32)> = {
+                    let now = Instant::now();
+                    let mut p = play_ctx.player.write();
+                    let yaw = p.yaw;
+                    let pitch = p.pitch;
+                    let mut list = Vec::new();
+                    for entry in p.pending_teleports.iter_mut() {
+                        if now.duration_since(entry.2) >= TELEPORT_RESEND_INTERVAL {
+                            list.push((entry.0, entry.1.x, entry.1.y, entry.1.z, yaw, pitch));
+                            entry.2 = now;
+                        }
+                    }
+                    list
+                };
+                let mut resend_failed = false;
+                for (tid, x, y, z, yaw, pitch) in &resend_list {
+                    let pkt = ClientboundPlayerPositionPacket {
+                        teleport_id: *tid,
+                        x: *x,
+                        y: *y,
+                        z: *z,
+                        dx: 0.0,
+                        dy: 0.0,
+                        dz: 0.0,
+                        yaw: *yaw,
+                        pitch: *pitch,
+                        relative_flags: RelativeFlags::empty(),
+                    };
+                    if let Err(e) = play_ctx.conn.send_packet(&pkt).await {
+                        debug!(peer = %addr, name = %player_name, error = %e, "Failed to resend teleport");
+                        resend_failed = true;
+                        break;
+                    }
+                    debug!(peer = %addr, name = %player_name, teleport_id = tid, "Resent unconfirmed teleport");
+                }
+                if resend_failed {
+                    break;
+                }
             },
             // Receive broadcast packets from other systems (chat, block updates, etc.).
             broadcast_result = broadcast_rx.recv() => {

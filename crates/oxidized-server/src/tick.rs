@@ -15,7 +15,7 @@ use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
     ClientboundGameEventPacket, ClientboundSetTimePacket, ClientboundTickingStepPacket,
-    GameEventType,
+    ClockNetworkState, ClockUpdate, GameEventType,
 };
 use rand::Rng;
 use rand::RngExt;
@@ -320,13 +320,20 @@ fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLe
 
 /// Broadcasts a [`ClientboundSetTimePacket`] to all connected players.
 ///
-/// Periodic syncs send empty `clock_updates` (vanilla behaviour). Full
-/// clock data is only sent on join or when the clock parameters change.
+/// Includes the overworld clock update so clients synchronise their
+/// day/night cycle each broadcast (every 20 ticks).
 fn broadcast_time(ctx: &ServerContext, _do_daylight: bool) {
     let ld = ctx.level_data.read();
     let pkt = ClientboundSetTimePacket {
         game_time: ld.time,
-        clock_updates: vec![],
+        clock_updates: vec![ClockUpdate {
+            clock_id: ClientboundSetTimePacket::OVERWORLD_CLOCK_ID,
+            state: ClockNetworkState {
+                total_ticks: ld.day_time,
+                partial_tick: 0.0,
+                rate: 1.0,
+            },
+        }],
     };
     drop(ld);
     broadcast_packet(ctx, &pkt);
@@ -412,6 +419,7 @@ mod tests {
                 oxidized_game::worldgen::flat::FlatWorldConfig::default(),
             )),
             op_permission_level: 4,
+            spawn_protection: 16,
         })
     }
 
