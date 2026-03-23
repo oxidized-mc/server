@@ -176,6 +176,10 @@ pub async fn handle_movement(
             p.yaw = result.new_yaw;
             p.pitch = result.new_pitch;
             p.on_ground = move_pkt.on_ground;
+            // Vanilla: elytra flight ends when the player touches the ground.
+            if move_pkt.on_ground {
+                p.is_fall_flying = false;
+            }
         }
 
         trace!(
