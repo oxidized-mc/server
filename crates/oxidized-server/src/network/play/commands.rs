@@ -19,6 +19,10 @@ use super::PlayContext;
 use crate::network::ServerContext;
 use crate::network::helpers::decode_packet;
 
+/// Maximum number of tab-completion suggestions sent to the client
+/// (vanilla `ServerGamePacketListenerImpl.MAX_COMMAND_SUGGESTIONS`).
+pub const MAX_COMMAND_SUGGESTIONS: usize = 1000;
+
 /// Handles a tab-completion request from the client.
 pub async fn handle_command_suggestion(
     ctx: &mut PlayContext<'_>,
@@ -50,7 +54,10 @@ pub async fn handle_command_suggestion(
     } else {
         (raw.as_str(), 0usize)
     };
-    let suggestions = ctx.server_ctx.commands.completions(input, &source);
+    let mut suggestions = ctx.server_ctx.commands.completions(input, &source);
+
+    // Vanilla caps suggestions at MAX_COMMAND_SUGGESTIONS (1000).
+    suggestions.truncate(MAX_COMMAND_SUGGESTIONS);
 
     // Compute the range from suggestions (all share the
     // same range for a single completion position).
