@@ -1,3 +1,8 @@
+---
+agent: 'vanilla-compliance-fixer'
+description: 'Fix vanilla compliance issues in the Oxidized codebase.'
+---
+
 # Vanilla Compliance Audit
 
 Audit the entire Oxidized codebase for behavioral divergence from the vanilla Minecraft server, then fix every finding.
