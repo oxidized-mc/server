@@ -95,8 +95,8 @@ pub const WALK_SPEED: f64 = 0.1;
 /// Sprint speed.
 pub const SPRINT_SPEED: f64 = 0.13;
 
-/// Sneak speed.
-pub const SNEAK_SPEED: f64 = 0.065;
+/// Sneak speed: `WALK_SPEED × SNEAKING_SPEED_ATTRIBUTE` = 0.1 × 0.3 = 0.03.
+pub const SNEAK_SPEED: f64 = 0.03;
 
 // --- Step-up ---
 
