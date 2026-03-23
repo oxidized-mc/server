@@ -101,6 +101,7 @@ Prefer these over built-in agents — they have project-specific knowledge.
 | `@reviewer` | `reviewer.md` | Code review — ADR compliance, correctness, vanilla compatibility, performance |
 | `@tester` | `tester.md` | Write tests — unit, integration, property-based, compliance, snapshots (ADR-034) |
 | `@docs-writer` | `docs-writer.md` | Write ADRs, phase docs, code documentation, update memories.md |
+| `@vanilla-auditor` | `vanilla-auditor.md` | Vanilla compliance audit — compare Oxidized behavior against decompiled Java source |
 
 #### Dispatch Rules
 
@@ -109,6 +110,7 @@ Prefer these over built-in agents — they have project-specific knowledge.
 - Use `@java-reference` before implementing any game logic to understand vanilla behavior first.
 - Use `@tester` for test strategy and test writing.
 - Use `@docs-writer` for ADRs, phase docs, and documentation updates.
+- Use `@vanilla-auditor` for compliance audits — run before major releases or after implementing new game logic.
 - **Do not delegate implementation to sub-agents** — use `@rust-engineer` for guidance, implement yourself.
 
 ### TDD Cycle
