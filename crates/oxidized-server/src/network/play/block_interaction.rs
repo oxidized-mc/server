@@ -162,10 +162,16 @@ pub async fn handle_player_action(
             pos = ?pkt.pos,
             "Block action rejected: spawn protection"
         );
-        // Vanilla sends "Spawn point is protected" on the actionbar.
+        // Vanilla sends "<pos> is under spawn protection" on the actionbar.
         send_actionbar(
             play_ctx,
-            Component::translatable("build.spawn_protection".to_owned(), vec![]),
+            Component::translatable(
+                "build.spawn_protection".to_owned(),
+                vec![Component::text(format!(
+                    "{}, {}, {}",
+                    pkt.pos.x, pkt.pos.y, pkt.pos.z
+                ))],
+            ),
         )
         .await?;
         resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
@@ -427,7 +433,13 @@ pub async fn handle_use_item_on(
         );
         send_actionbar(
             play_ctx,
-            Component::translatable("build.spawn_protection".to_owned(), vec![]),
+            Component::translatable(
+                "build.spawn_protection".to_owned(),
+                vec![Component::text(format!(
+                    "{}, {}, {}",
+                    place_pos.x, place_pos.y, place_pos.z
+                ))],
+            ),
         )
         .await?;
         resync_block(play_ctx, place_pos, None).await?;
@@ -535,14 +547,9 @@ pub async fn handle_use_item_on(
         play_ctx.conn.send_packet(&sync_pkt).await?;
     }
 
-    // Broadcast block change to all players except the acting player.
-    let entity_id = play_ctx.player.read().entity_id;
-    broadcast_block_update(
-        play_ctx.server_ctx,
-        place_pos,
-        block_state_id as i32,
-        Some(entity_id),
-    );
+    // Broadcast block change to all players (including the acting player).
+    // Vanilla sends updates via the chunk tracking system to everyone.
+    broadcast_block_update(play_ctx.server_ctx, place_pos, block_state_id as i32, None);
 
     // If the placed block is a sign, open the sign editor UI.
     if is_sign_block(&held_item) {
@@ -656,16 +663,12 @@ async fn do_block_break(
         "Block broken"
     );
 
-    // Broadcast the block change to all players except the breaker.
-    let entity_id = play_ctx.player.read().entity_id;
-    broadcast_block_update(
-        play_ctx.server_ctx,
-        pos,
-        u32::from(AIR.0) as i32,
-        Some(entity_id),
-    );
+    // Broadcast the block change to all players (including the breaker).
+    // Vanilla sends the block update via the chunk tracking system to everyone,
+    // in addition to the ack. The client needs both to fully commit the change.
+    broadcast_block_update(play_ctx.server_ctx, pos, u32::from(AIR.0) as i32, None);
 
-    // Acknowledge the sequence.
+    // Acknowledge the sequence so the client accepts its prediction.
     send_ack(play_ctx, sequence).await?;
     Ok(())
 }
@@ -724,26 +727,26 @@ async fn send_actionbar(
 ///
 /// Reads the item from the player's inventory at `internal_slot`, converts
 /// it to protocol format, and sends a `ClientboundSetPlayerInventoryPacket`.
+///
+/// `ClientboundSetPlayerInventoryPacket` uses the vanilla `Inventory` class
+/// slot indices directly (0–8 hotbar, 9–35 main, 36–39 armor, 40 offhand),
+/// NOT the window protocol slot indices.
 async fn sync_inventory_slot(
     play_ctx: &mut PlayContext<'_>,
     internal_slot: usize,
 ) -> Result<(), ConnectionError> {
-    use oxidized_game::player::inventory::PlayerInventory;
-
-    let (proto_slot, contents) = {
+    let contents = {
         let player = play_ctx.player.read();
         let stack = player.inventory.get(internal_slot);
-        let ps = PlayerInventory::to_protocol_slot(internal_slot);
-        let c = if stack.is_empty() {
+        if stack.is_empty() {
             None
         } else {
             Some(super::inventory::item_stack_to_slot_data(stack))
-        };
-        (ps, c)
+        }
     };
 
     let pkt = ClientboundSetPlayerInventoryPacket {
-        slot: i32::from(proto_slot),
+        slot: internal_slot as i32,
         contents,
     };
     play_ctx.conn.send_packet(&pkt).await?;
@@ -927,7 +930,7 @@ pub async fn handle_pick_item_from_block(
     };
 
     let set_slot = ClientboundSetPlayerInventoryPacket {
-        slot: i32::from(selected) + 36, // hotbar protocol offset
+        slot: i32::from(selected), // raw Inventory slot index (hotbar 0–8)
         contents: slot_data,
     };
     play_ctx.conn.send_packet(&set_slot).await?;

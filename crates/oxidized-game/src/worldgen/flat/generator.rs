@@ -130,8 +130,23 @@ fn build_template(config: &FlatWorldConfig) -> ChunkTemplate {
     let mut sky_light = vec![None; OVERWORLD_SECTION_COUNT + 2];
     let surface_section = total_height.div_ceil(16);
     // Sections fully above the surface get full brightness.
-    for slot in &mut sky_light[(surface_section + 2)..] {
+    // +1 accounts for the border section at index 0.
+    for slot in &mut sky_light[(surface_section + 1)..] {
         *slot = Some(DataLayer::filled(15));
+    }
+    // The surface section itself has blocks below and air above.
+    // Air blocks above the surface need sky light 15.
+    let surface_local_y = total_height % 16;
+    if surface_local_y > 0 {
+        let mut layer = DataLayer::new();
+        for y in surface_local_y..16 {
+            for x in 0..16usize {
+                for z in 0..16usize {
+                    layer.set(x, y, z, 15);
+                }
+            }
+        }
+        sky_light[surface_section] = Some(layer);
     }
 
     ChunkTemplate {
