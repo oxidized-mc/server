@@ -7,6 +7,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_game::player::movement::validate_movement;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::ConnectionError;
@@ -28,6 +29,25 @@ use oxidized_game::net::entity_movement::{EntityMoveKind, classify_move, pack_de
 
 use super::PlayContext;
 use crate::network::BroadcastMessage;
+
+/// Determines whether speed validation should be skipped.
+///
+/// Vanilla skips speed checks when:
+/// - The player is in creative or spectator mode
+/// - The `player_movement_check` game rule is `false`
+/// - The player is elytra-flying and `elytra_movement_check` is `false`
+///
+/// NaN/Infinity rejection and coordinate clamping are never skipped.
+fn should_skip_speed_check(
+    is_creative_or_spectator: bool,
+    player_movement_check: bool,
+    elytra_movement_check: bool,
+    is_fall_flying: bool,
+) -> bool {
+    is_creative_or_spectator
+        || !player_movement_check
+        || (is_fall_flying && !elytra_movement_check)
+}
 
 /// Handles a movement packet (position, rotation, or both).
 pub async fn handle_movement(
@@ -92,7 +112,20 @@ pub async fn handle_movement(
         )
     };
 
-    let skip_speed_check = game_mode.is_creative_or_spectator();
+    let (player_movement_check, elytra_movement_check) = {
+        let rules = ctx.server_ctx.game_rules.read();
+        (
+            rules.get_bool(GameRuleKey::PlayerMovementCheck),
+            rules.get_bool(GameRuleKey::ElytraMovementCheck),
+        )
+    };
+
+    let skip_speed_check = should_skip_speed_check(
+        game_mode.is_creative_or_spectator(),
+        player_movement_check,
+        elytra_movement_check,
+        is_fall_flying,
+    );
 
     let mut result = {
         validate_movement(
@@ -108,7 +141,7 @@ pub async fn handle_movement(
         )
     };
 
-    // Creative/Spectator: skip speed limits but still reject NaN/Infinity.
+    // Skip speed limits but still reject NaN/Infinity and apply coordinate clamping.
     if skip_speed_check && !result.has_invalid_values {
         result.needs_correction = false;
         result.accepted = true;
@@ -119,7 +152,8 @@ pub async fn handle_movement(
             let mut p = ctx.player.write();
             let teleport_id = p.next_teleport_id();
             let pos = p.pos;
-            p.pending_teleports.push_back((teleport_id, pos));
+            p.pending_teleports
+                .push_back((teleport_id, pos, Instant::now()));
             ClientboundPlayerPositionPacket {
                 teleport_id,
                 x: p.pos.x,
@@ -418,4 +452,49 @@ async fn send_chunk_updates(
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::should_skip_speed_check;
+
+    #[test]
+    fn test_skip_when_creative_or_spectator() {
+        assert!(should_skip_speed_check(true, true, true, false));
+    }
+
+    #[test]
+    fn test_no_skip_in_survival_with_defaults() {
+        assert!(!should_skip_speed_check(false, true, true, false));
+    }
+
+    #[test]
+    fn test_skip_when_player_movement_check_disabled() {
+        assert!(should_skip_speed_check(false, false, true, false));
+        assert!(should_skip_speed_check(false, false, true, true));
+        assert!(should_skip_speed_check(false, false, false, false));
+    }
+
+    #[test]
+    fn test_skip_elytra_when_elytra_check_disabled_and_flying() {
+        assert!(should_skip_speed_check(false, true, false, true));
+    }
+
+    #[test]
+    fn test_no_skip_elytra_check_disabled_but_not_flying() {
+        assert!(!should_skip_speed_check(false, true, false, false));
+    }
+
+    #[test]
+    fn test_all_rules_disabled_still_skips() {
+        assert!(should_skip_speed_check(false, false, false, true));
+        assert!(should_skip_speed_check(false, false, false, false));
+    }
+
+    #[test]
+    fn test_creative_overrides_regardless_of_rules() {
+        assert!(should_skip_speed_check(true, false, false, false));
+        assert!(should_skip_speed_check(true, true, false, true));
+    }
 }
