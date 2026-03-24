@@ -11,7 +11,7 @@
 
 use std::time::Duration;
 
-use oxidized_protocol::transport::channel::{OutboundPacket, MAX_CONNECTION_MEMORY};
+use oxidized_protocol::transport::channel::{MAX_CONNECTION_MEMORY, OutboundPacket};
 use oxidized_protocol::transport::connection::{ConnectionError, ConnectionWriter};
 use tokio::sync::mpsc;
 use tracing::debug;
@@ -60,7 +60,7 @@ pub async fn writer_loop(
                 // All senders dropped — clean shutdown
                 debug!(peer = %writer.remote_addr(), "Writer task: channel closed, shutting down");
                 return Ok(());
-            }
+            },
         };
 
         // Encode first packet into batch buffer
@@ -86,7 +86,7 @@ pub async fn writer_loop(
 
         // Encrypt + write + flush the entire batch (with timeout)
         match tokio::time::timeout(WRITE_TIMEOUT, writer.flush_batch()).await {
-            Ok(Ok(())) => {}
+            Ok(Ok(())) => {},
             Ok(Err(e)) => return Err(e),
             Err(_) => {
                 debug!(
@@ -97,7 +97,7 @@ pub async fn writer_loop(
                     std::io::ErrorKind::TimedOut,
                     "write timeout (slow client)",
                 )));
-            }
+            },
         }
     }
 }
@@ -124,8 +124,7 @@ mod tests {
         let client_stream = client_handle.await.unwrap();
 
         let server = Connection::new(server_stream, peer_addr).unwrap();
-        let client_conn =
-            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+        let client_conn = Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
 
         let (_reader, writer) = server.into_split();
         (writer, client_conn)
@@ -508,7 +507,10 @@ mod tests {
         // Clean shutdown
         drop(tx);
         let result = handle.await.unwrap();
-        assert!(result.is_ok(), "Normal traffic should not trigger budget error");
+        assert!(
+            result.is_ok(),
+            "Normal traffic should not trigger budget error"
+        );
     }
 
     #[tokio::test]

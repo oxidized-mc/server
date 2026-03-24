@@ -63,9 +63,9 @@ use parking_lot::RwLock;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, info, warn};
 
-use crate::network::{BroadcastMessage, LoginContext, MAX_SERVERBOUND_PLAY_ID, ServerContext};
 use crate::network::reader::reader_loop;
 use crate::network::writer::writer_loop;
+use crate::network::{BroadcastMessage, LoginContext, MAX_SERVERBOUND_PLAY_ID, ServerContext};
 
 use crate::network::helpers::decode_packet;
 

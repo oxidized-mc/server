@@ -150,9 +150,7 @@ async fn compliance_batch_encoding_multiple_packets() {
 
     // Encode 50 packets into the batch buffer
     for i in 0..50 {
-        writer
-            .encode_to_batch(i, &[i as u8; 10])
-            .unwrap();
+        writer.encode_to_batch(i, &[i as u8; 10]).unwrap();
     }
 
     // Single flush should write all 50 packets
@@ -216,7 +214,10 @@ fn compliance_memory_budget_constant() {
 
 #[test]
 fn compliance_channel_capacity_constants() {
-    assert_eq!(INBOUND_CHANNEL_CAPACITY, 128, "Inbound channel: 128 (ADR-006)");
+    assert_eq!(
+        INBOUND_CHANNEL_CAPACITY, 128,
+        "Inbound channel: 128 (ADR-006)"
+    );
     assert_eq!(
         OUTBOUND_CHANNEL_CAPACITY, 512,
         "Outbound channel: 512 (ADR-006)"
@@ -240,7 +241,10 @@ async fn compliance_connection_handle_closed_channel() {
     drop(rx);
 
     let result = handle.send_raw(0x01, Bytes::from_static(b"data")).await;
-    assert!(result.is_err(), "send_raw must fail when writer task has exited");
+    assert!(
+        result.is_err(),
+        "send_raw must fail when writer task has exited"
+    );
 }
 
 #[tokio::test]
@@ -274,9 +278,7 @@ async fn compliance_batch_buffer_normal_load_under_budget() {
     // Simulate a typical server tick: ~50 packets of ~100 bytes each (~5 KB).
     // This should be well under the 256 KB budget.
     for i in 0..50 {
-        writer
-            .encode_to_batch(i, &[0xDD; 100])
-            .unwrap();
+        writer.encode_to_batch(i, &[0xDD; 100]).unwrap();
     }
 
     assert!(

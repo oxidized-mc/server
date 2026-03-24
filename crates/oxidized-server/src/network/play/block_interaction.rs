@@ -195,7 +195,10 @@ pub(super) async fn send_actionbar(
     };
     play_ctx
         .conn_handle
-        .send_raw(ClientboundSystemChatPacket::PACKET_ID, pkt.encode().freeze())
+        .send_raw(
+            ClientboundSystemChatPacket::PACKET_ID,
+            pkt.encode().freeze(),
+        )
         .await?;
     Ok(())
 }

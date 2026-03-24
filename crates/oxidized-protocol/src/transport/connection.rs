@@ -387,14 +387,14 @@ impl Connection {
             Some(cipher) => {
                 let (d, e) = cipher.split();
                 (Some(d), Some(e))
-            }
+            },
             None => (None, None),
         };
         let (decompressor, compressor) = match self.compression {
             Some(comp) => {
                 let (d, c) = comp.split();
                 (Some(d), Some(c))
-            }
+            },
             None => (None, None),
         };
         (

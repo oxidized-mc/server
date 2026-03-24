@@ -66,10 +66,7 @@ pub async fn disconnect(conn: &mut Connection, reason: &str) -> Result<(), Conne
 /// Like [`disconnect_err`] but works with a [`ConnectionHandle`] (play-state
 /// reader/writer model). Sends a disconnect packet through the outbound
 /// channel and returns a [`ConnectionError`] for the caller to propagate.
-pub async fn disconnect_handle(
-    handle: &ConnectionHandle,
-    reason: &str,
-) -> ConnectionError {
+pub async fn disconnect_handle(handle: &ConnectionHandle, reason: &str) -> ConnectionError {
     let pkt = ClientboundDisconnectPacket {
         reason: reason.to_string(),
     };

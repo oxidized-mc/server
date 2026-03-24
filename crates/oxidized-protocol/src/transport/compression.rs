@@ -492,8 +492,7 @@ mod tests {
         for i in 0..5 {
             let data: Vec<u8> = (0..200).map(|j| ((i * 37 + j) % 256) as u8).collect();
             let (data_length, compressed) = compressor.compress(&data).unwrap();
-            let decompressed =
-                decompressor.decompress(data_length, &compressed).unwrap();
+            let decompressed = decompressor.decompress(data_length, &compressed).unwrap();
             assert_eq!(decompressed, data, "split roundtrip {i} failed");
         }
     }

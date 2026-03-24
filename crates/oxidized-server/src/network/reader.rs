@@ -97,7 +97,7 @@ mod tests {
     use super::*;
 
     use bytes::Bytes;
-    use oxidized_protocol::transport::channel::{InboundPacket, INBOUND_CHANNEL_CAPACITY};
+    use oxidized_protocol::transport::channel::{INBOUND_CHANNEL_CAPACITY, InboundPacket};
     use oxidized_protocol::transport::connection::Connection;
     use tokio::net::{TcpListener, TcpStream};
     use tokio::sync::mpsc;
@@ -113,8 +113,7 @@ mod tests {
         let client_stream = client_handle.await.unwrap();
 
         let server = Connection::new(server_stream, peer_addr).unwrap();
-        let client_conn =
-            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+        let client_conn = Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
 
         let (reader, _writer) = server.into_split();
         (reader, client_conn)
@@ -420,10 +419,7 @@ mod tests {
 
         // Send 100 packets with sequential IDs
         for i in 0..100 {
-            client
-                .send_raw(i, &(i as u32).to_le_bytes())
-                .await
-                .unwrap();
+            client.send_raw(i, &(i as u32).to_le_bytes()).await.unwrap();
         }
         client.flush().await.unwrap();
 

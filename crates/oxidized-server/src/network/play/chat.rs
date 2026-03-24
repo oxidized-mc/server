@@ -71,7 +71,11 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
             name = %ctx.player_name,
             "Illegal characters in chat message — disconnecting",
         );
-        return Err(disconnect_handle(ctx.conn_handle, "multiplayer.disconnect.illegal_characters").await);
+        return Err(disconnect_handle(
+            ctx.conn_handle,
+            "multiplayer.disconnect.illegal_characters",
+        )
+        .await);
     }
 
     if !ctx.rate_limiter.try_acquire() {
@@ -142,7 +146,10 @@ pub async fn handle_chat_command(
             is_overlay: false,
         };
         let _ = conn_handle
-            .send_raw(ClientboundSystemChatPacket::PACKET_ID, pkt.encode().freeze())
+            .send_raw(
+                ClientboundSystemChatPacket::PACKET_ID,
+                pkt.encode().freeze(),
+            )
             .await;
     }
 

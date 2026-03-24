@@ -9,8 +9,8 @@ mod handshake;
 pub mod helpers;
 mod login;
 mod play;
-mod status;
 pub mod reader;
+mod status;
 pub mod writer;
 
 use std::net::{IpAddr, SocketAddr};

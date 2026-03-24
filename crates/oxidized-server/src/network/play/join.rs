@@ -165,7 +165,15 @@ pub(super) async fn send_join_sequence(
             .await?;
     }
 
-    send_level_info(conn_handle, &player, &player_name, uuid, entity_id, server_ctx).await?;
+    send_level_info(
+        conn_handle,
+        &player,
+        &player_name,
+        uuid,
+        entity_id,
+        server_ctx,
+    )
+    .await?;
 
     // Send initial chunk batch using the world generator.
     let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
@@ -225,8 +233,15 @@ pub(super) async fn send_join_sequence(
         });
     }
 
-    broadcast_player_join(conn_handle, &player_arc, &player_name, uuid, entity_id, server_ctx)
-        .await?;
+    broadcast_player_join(
+        conn_handle,
+        &player_arc,
+        &player_name,
+        uuid,
+        entity_id,
+        server_ctx,
+    )
+    .await?;
 
     info!(
         peer = %addr,

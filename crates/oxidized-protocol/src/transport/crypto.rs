@@ -633,7 +633,7 @@ mod tests {
         // Encrypt with split EncryptCipher
         let cipher = CipherState::new(&secret);
         let (_dec, mut enc) = cipher.split();
-        let mut data_split = original.clone();
+        let mut data_split = original;
         enc.encrypt(&mut data_split);
 
         assert_eq!(

@@ -117,9 +117,9 @@ impl ConnectionHandle {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use bytes::{BytesMut, Bytes};
     use crate::codec::packet::{Packet, PacketDecodeError};
     use crate::codec::types::{read_i32, write_i32};
+    use bytes::{Bytes, BytesMut};
 
     /// Minimal test packet for handle tests.
     #[derive(Debug, Clone, PartialEq)]
@@ -214,9 +214,7 @@ mod tests {
         // Drop receiver to close the channel
         drop(rx);
 
-        let result = handle
-            .send_raw(0x01, Bytes::from_static(b"data"))
-            .await;
+        let result = handle.send_raw(0x01, Bytes::from_static(b"data")).await;
         assert!(result.is_err());
     }
 

@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use oxidized_protocol::channel::{
-    InboundPacket, INBOUND_CHANNEL_CAPACITY, OUTBOUND_CHANNEL_CAPACITY, OutboundPacket,
+    INBOUND_CHANNEL_CAPACITY, InboundPacket, OUTBOUND_CHANNEL_CAPACITY, OutboundPacket,
 };
 use oxidized_protocol::connection::Connection;
 use oxidized_protocol::handle::ConnectionHandle;
@@ -261,8 +261,7 @@ async fn compliance_rate_limit_600_packets_in_50ms() {
     let client_stream = client_handle.await.unwrap();
 
     let server = Connection::new(server_stream, peer_addr).unwrap();
-    let mut client_conn =
-        Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+    let mut client_conn = Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
 
     let (reader, _writer) = server.into_split();
     // Large inbound channel so backpressure doesn't prevent rate limit detection
