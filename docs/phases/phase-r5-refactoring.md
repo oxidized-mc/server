@@ -1,6 +1,6 @@
 # Phase R5 — Data-Driven Dispatch & Code Deduplication
 
-**Status:** 📋 Planned  
+**Status:** 🔧 In Progress  
 **Crates:** all  
 **Reward:** Zero string-based block behavior dispatch in production code. All block
 categorization uses O(1) flags, tags, or registry properties. Packet and command
@@ -13,7 +13,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 
 | Sub-task | Description | Status |
 |----------|-------------|--------|
-| R5.1 | Enrich BlockStateFlags (ADR-012 compliance) | 📋 Planned |
+| R5.1 | Enrich BlockStateFlags (ADR-012 compliance) | ✅ Done |
 | R5.2 | Enrich BlockStateEntry with block properties | 📋 Planned |
 | R5.3 | Implement block tag loading from vanilla data | 📋 Planned |
 | R5.4 | Replace string-based block categorization with flags/tags | 📋 Planned |
@@ -225,6 +225,23 @@ Group B sub-tasks can be done in any order and in parallel with Group A.
   HAS_COLLISION|IS_OPAQUE, water=IS_LIQUID|IS_REPLACEABLE, etc.)
 - New test: `is_replaceable` flag matches the exact set of blocks currently
   listed in `placement.rs::is_replaceable_block()`
+
+**Completion notes:**
+- `tools/extract_block_properties.py` created — parses `Blocks.java` builder
+  chains, cross-references `BlockEntityType.java` for block entities, and
+  resolves class hierarchy for `useWithoutItem()` interactable detection
+- `block_properties.json.gz` generated (10.6 KB, 1168 blocks)
+- `BlockStateFlags` expanded from `u8` (3 flags) to `u16` (12 flags):
+  IS_AIR, IS_DEFAULT, IS_LIQUID, IS_SOLID, HAS_COLLISION, IS_OPAQUE,
+  IS_REPLACEABLE, HAS_BLOCK_ENTITY, TICKS_RANDOMLY, REQUIRES_TOOL,
+  IS_FLAMMABLE, IS_INTERACTABLE
+- `build.rs` reads `block_properties.json.gz` and sets all flags per block
+- 9 convenience methods added to `BlockStateId` (is_solid, has_collision,
+  is_opaque, is_replaceable, has_block_entity, ticks_randomly, requires_tool,
+  is_flammable, is_interactable)
+- 10 verification tests added (flag spot-checks, replaceable cross-check,
+  interactable/non-interactable, block entity, flammable, glass transparency)
+- All 1716+ workspace tests pass
 
 **Data extraction prerequisite:**
 A new extraction script `tools/extract_block_properties.py` must be created to

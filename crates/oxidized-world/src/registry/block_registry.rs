@@ -313,4 +313,213 @@ mod tests {
         assert_eq!(reg.block_name_from_state_id(0), Some("minecraft:air"));
         assert_eq!(reg.block_name_from_state_id(1), Some("minecraft:stone"));
     }
+
+    // ── R5.1: BlockStateFlags enrichment verification ──────────────────
+
+    #[test]
+    fn test_air_flags() {
+        let air = BlockStateId(0);
+        assert!(air.is_air(), "air should be IS_AIR");
+        assert!(!air.has_collision(), "air should not have collision");
+        assert!(!air.is_solid(), "air should not be solid");
+        assert!(air.is_replaceable(), "air should be replaceable");
+
+        // cave_air and void_air
+        let cave_air = BlockRegistry
+            .default_state("minecraft:cave_air")
+            .expect("cave_air missing");
+        assert!(cave_air.is_air());
+        let void_air = BlockRegistry
+            .default_state("minecraft:void_air")
+            .expect("void_air missing");
+        assert!(void_air.is_air());
+    }
+
+    #[test]
+    fn test_liquid_flags() {
+        let water = BlockRegistry
+            .default_state("minecraft:water")
+            .expect("water missing");
+        assert!(water.is_liquid(), "water should be IS_LIQUID");
+        assert!(water.is_replaceable(), "water should be replaceable");
+        assert!(!water.has_collision(), "water should not have collision");
+
+        let lava = BlockRegistry
+            .default_state("minecraft:lava")
+            .expect("lava missing");
+        assert!(lava.is_liquid(), "lava should be IS_LIQUID");
+    }
+
+    #[test]
+    fn test_stone_flags() {
+        let stone = BlockStateId(1);
+        assert!(stone.is_solid(), "stone should be solid");
+        assert!(stone.has_collision(), "stone should have collision");
+        assert!(stone.is_opaque(), "stone should be opaque");
+        assert!(stone.requires_tool(), "stone should require tool");
+        assert!(!stone.is_air(), "stone should not be air");
+        assert!(!stone.is_liquid(), "stone should not be liquid");
+        assert!(!stone.is_replaceable(), "stone should not be replaceable");
+        assert!(!stone.is_interactable(), "stone should not be interactable");
+    }
+
+    #[test]
+    fn test_interactable_blocks() {
+        let interactable = [
+            "minecraft:crafting_table",
+            "minecraft:chest",
+            "minecraft:furnace",
+            "minecraft:anvil",
+            "minecraft:enchanting_table",
+            "minecraft:barrel",
+            "minecraft:brewing_stand",
+            "minecraft:hopper",
+            "minecraft:lever",
+            "minecraft:oak_door",
+            "minecraft:oak_button",
+            "minecraft:oak_fence_gate",
+        ];
+        for name in &interactable {
+            let state = BlockRegistry
+                .default_state(name)
+                .unwrap_or_else(|| panic!("{name} missing"));
+            assert!(
+                state.is_interactable(),
+                "{name} should be interactable"
+            );
+        }
+    }
+
+    #[test]
+    fn test_non_interactable_blocks() {
+        let non_interactable = [
+            "minecraft:stone",
+            "minecraft:dirt",
+            "minecraft:grass_block",
+            "minecraft:oak_planks",
+            "minecraft:cobblestone",
+            "minecraft:oak_log",
+        ];
+        for name in &non_interactable {
+            let state = BlockRegistry
+                .default_state(name)
+                .unwrap_or_else(|| panic!("{name} missing"));
+            assert!(
+                !state.is_interactable(),
+                "{name} should not be interactable"
+            );
+        }
+    }
+
+    #[test]
+    fn test_block_entity_blocks() {
+        let with_be = [
+            "minecraft:chest",
+            "minecraft:furnace",
+            "minecraft:hopper",
+            "minecraft:beacon",
+            "minecraft:brewing_stand",
+            "minecraft:spawner",
+        ];
+        for name in &with_be {
+            let state = BlockRegistry
+                .default_state(name)
+                .unwrap_or_else(|| panic!("{name} missing"));
+            assert!(
+                state.has_block_entity(),
+                "{name} should have block entity"
+            );
+        }
+    }
+
+    #[test]
+    fn test_replaceable_matches_known_set() {
+        // Verify that all blocks from the old is_replaceable_block() in
+        // placement.rs are marked replaceable via the new flag.
+        let expected_replaceable = [
+            "minecraft:air",
+            "minecraft:cave_air",
+            "minecraft:void_air",
+            "minecraft:water",
+            "minecraft:lava",
+            "minecraft:short_grass",
+            "minecraft:tall_grass",
+            "minecraft:seagrass",
+            "minecraft:tall_seagrass",
+            "minecraft:fire",
+            "minecraft:soul_fire",
+            "minecraft:snow",
+            "minecraft:vine",
+            "minecraft:dead_bush",
+            "minecraft:fern",
+            "minecraft:large_fern",
+            "minecraft:structure_void",
+            "minecraft:light",
+            "minecraft:crimson_roots",
+            "minecraft:warped_roots",
+            "minecraft:nether_sprouts",
+            "minecraft:hanging_roots",
+            "minecraft:glow_lichen",
+        ];
+        for name in &expected_replaceable {
+            let state = BlockRegistry
+                .default_state(name)
+                .unwrap_or_else(|| panic!("{name} missing"));
+            assert!(
+                state.is_replaceable(),
+                "{name} should be replaceable"
+            );
+        }
+    }
+
+    #[test]
+    fn test_flammable_blocks() {
+        let flammable = [
+            "minecraft:oak_planks",
+            "minecraft:oak_log",
+            "minecraft:oak_leaves",
+        ];
+        for name in &flammable {
+            let state = BlockRegistry
+                .default_state(name)
+                .unwrap_or_else(|| panic!("{name} missing"));
+            assert!(
+                state.is_flammable(),
+                "{name} should be flammable"
+            );
+        }
+
+        // Stone and iron should not be flammable
+        let stone = BlockStateId(1);
+        assert!(!stone.is_flammable(), "stone should not be flammable");
+    }
+
+    #[test]
+    fn test_random_ticking_blocks() {
+        let ticking = [
+            "minecraft:grass_block",
+            "minecraft:ice",
+        ];
+        for name in &ticking {
+            let state = BlockRegistry
+                .default_state(name)
+                .unwrap_or_else(|| panic!("{name} missing"));
+            assert!(
+                state.ticks_randomly(),
+                "{name} should tick randomly"
+            );
+        }
+
+        // Stone should not tick randomly
+        assert!(!BlockStateId(1).ticks_randomly());
+    }
+
+    #[test]
+    fn test_glass_transparency() {
+        let glass = BlockRegistry
+            .default_state("minecraft:glass")
+            .expect("glass missing");
+        assert!(!glass.is_opaque(), "glass should not be opaque");
+        assert!(glass.has_collision(), "glass should have collision");
+    }
 }

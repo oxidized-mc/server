@@ -51,6 +51,60 @@ impl BlockStateId {
         self.data().flags.contains(BlockStateFlags::IS_LIQUID)
     }
 
+    /// Returns `true` if this block has a full solid collision shape.
+    #[inline]
+    pub fn is_solid(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::IS_SOLID)
+    }
+
+    /// Returns `true` if this block has collision geometry.
+    #[inline]
+    pub fn has_collision(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::HAS_COLLISION)
+    }
+
+    /// Returns `true` if this block occludes adjacent faces.
+    #[inline]
+    pub fn is_opaque(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::IS_OPAQUE)
+    }
+
+    /// Returns `true` if this block can be replaced by placing another block.
+    #[inline]
+    pub fn is_replaceable(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::IS_REPLACEABLE)
+    }
+
+    /// Returns `true` if this block has a block entity (tile entity).
+    #[inline]
+    pub fn has_block_entity(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::HAS_BLOCK_ENTITY)
+    }
+
+    /// Returns `true` if this block ticks randomly.
+    #[inline]
+    pub fn ticks_randomly(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::TICKS_RANDOMLY)
+    }
+
+    /// Returns `true` if this block requires the correct tool to drop items.
+    #[inline]
+    pub fn requires_tool(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::REQUIRES_TOOL)
+    }
+
+    /// Returns `true` if this block can be ignited by lava.
+    #[inline]
+    pub fn is_flammable(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::IS_FLAMMABLE)
+    }
+
+    /// Returns `true` if this block opens a UI or changes state on right-click.
+    #[inline]
+    pub fn is_interactable(self) -> bool {
+        self.data().flags.contains(BlockStateFlags::IS_INTERACTABLE)
+    }
+
     /// Computes property key-value pairs for this state on the fly
     /// using stride arithmetic.
     ///
@@ -118,18 +172,37 @@ pub struct BlockStateEntry {
 }
 
 bitflags! {
-    /// Flags for a block state, derivable from vanilla data.
+    /// Flags for a block state, derived from vanilla block property data.
     ///
-    /// Additional flags (IS_SOLID, HAS_COLLISION, etc.) will be added once
-    /// the Java data extraction pipeline provides that metadata.
+    /// Stored as `u16` per ADR-012 to accommodate current and future flags.
+    /// The extraction script (`tools/extract_block_properties.py`) produces the
+    /// data that `build.rs` uses to set these flags at compile time.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct BlockStateFlags: u8 {
+    pub struct BlockStateFlags: u16 {
         /// Block is air (`air`, `cave_air`, `void_air`).
-        const IS_AIR     = 0x01;
+        const IS_AIR           = 1 << 0;
         /// This is the default state for its block type.
-        const IS_DEFAULT = 0x02;
+        const IS_DEFAULT       = 1 << 1;
         /// Block is a liquid (`water`, `lava`).
-        const IS_LIQUID  = 0x04;
+        const IS_LIQUID        = 1 << 2;
+        /// Block has a full solid collision shape.
+        const IS_SOLID         = 1 << 3;
+        /// Block has collision geometry (mobs/players cannot walk through).
+        const HAS_COLLISION    = 1 << 4;
+        /// Block occludes adjacent faces for culling purposes.
+        const IS_OPAQUE        = 1 << 5;
+        /// Block can be replaced by placing another block on it.
+        const IS_REPLACEABLE   = 1 << 6;
+        /// Block has an associated block entity (tile entity).
+        const HAS_BLOCK_ENTITY = 1 << 7;
+        /// Block ticks randomly (crop growth, grass spread, etc.).
+        const TICKS_RANDOMLY   = 1 << 8;
+        /// Block requires the correct tool to drop items.
+        const REQUIRES_TOOL    = 1 << 9;
+        /// Block can be ignited by lava.
+        const IS_FLAMMABLE     = 1 << 10;
+        /// Block opens a UI or changes state on right-click (without item).
+        const IS_INTERACTABLE  = 1 << 11;
     }
 }
 

@@ -18,9 +18,11 @@ use std::path::Path;
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
     let data_path = Path::new(&manifest_dir).join("src/data/blocks.json.gz");
+    let props_path = Path::new(&manifest_dir).join("src/data/block_properties.json.gz");
 
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed={}", data_path.display());
+    println!("cargo::rerun-if-changed={}", props_path.display());
 
     let compressed = fs::read(&data_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", data_path.display()));
@@ -34,6 +36,9 @@ fn main() {
     let obj = root
         .as_object()
         .expect("blocks.json root must be an object");
+
+    // ── Load block properties ───────────────────────────────────────────
+    let block_props = load_block_properties(&props_path);
 
     // ── Parse all blocks ────────────────────────────────────────────────
     let mut blocks: Vec<BlockData> = Vec::with_capacity(obj.len());
@@ -56,14 +61,14 @@ fn main() {
 
     // ── Build per-state data ────────────────────────────────────────────
     let mut state_block_type = vec![0u16; state_count];
-    let mut state_flags = vec![0u8; state_count];
+    let mut state_flags = vec![0u16; state_count];
 
     for block in &blocks {
-        let base_flags = base_flags_for(&block.definition_type);
+        let base_flags = compute_flags(&block.name, &block.definition_type, &block_props);
         for state in &block.states {
             let idx = state.id as usize;
             state_block_type[idx] = block.type_index;
-            state_flags[idx] = base_flags | if state.is_default { 0x02 } else { 0 };
+            state_flags[idx] = base_flags | if state.is_default { 0x0002 } else { 0 };
         }
     }
 
@@ -250,15 +255,107 @@ fn parse_block(name: &str, value: &serde_json::Value) -> BlockData {
     }
 }
 
-fn base_flags_for(definition_type: &str) -> u8 {
-    let mut f = 0u8;
+fn compute_flags(
+    block_name: &str,
+    definition_type: &str,
+    block_props: &HashMap<String, BlockProperties>,
+) -> u16 {
+    // IS_AIR and IS_LIQUID from definition_type (fallback)
+    let mut f = 0u16;
     if definition_type == "minecraft:air" {
-        f |= 0x01; // IS_AIR
+        f |= 0x0001; // IS_AIR
     }
     if definition_type == "minecraft:liquid" {
-        f |= 0x04; // IS_LIQUID
+        f |= 0x0004; // IS_LIQUID
+    }
+
+    // Enrich from extracted block properties
+    if let Some(props) = block_props.get(block_name) {
+        if props.is_air {
+            f |= 0x0001; // IS_AIR
+        }
+        if props.is_liquid {
+            f |= 0x0004; // IS_LIQUID
+        }
+        if props.is_solid {
+            f |= 0x0008; // IS_SOLID
+        }
+        if props.has_collision {
+            f |= 0x0010; // HAS_COLLISION
+        }
+        if props.is_opaque {
+            f |= 0x0020; // IS_OPAQUE
+        }
+        if props.is_replaceable {
+            f |= 0x0040; // IS_REPLACEABLE
+        }
+        if props.has_block_entity {
+            f |= 0x0080; // HAS_BLOCK_ENTITY
+        }
+        if props.ticks_randomly {
+            f |= 0x0100; // TICKS_RANDOMLY
+        }
+        if props.requires_tool {
+            f |= 0x0200; // REQUIRES_TOOL
+        }
+        if props.is_flammable {
+            f |= 0x0400; // IS_FLAMMABLE
+        }
+        if props.is_interactable {
+            f |= 0x0800; // IS_INTERACTABLE
+        }
     }
     f
+}
+
+#[derive(Debug)]
+struct BlockProperties {
+    has_collision: bool,
+    is_air: bool,
+    is_liquid: bool,
+    is_replaceable: bool,
+    is_opaque: bool,
+    is_flammable: bool,
+    requires_tool: bool,
+    ticks_randomly: bool,
+    has_block_entity: bool,
+    is_interactable: bool,
+    is_solid: bool,
+}
+
+fn load_block_properties(path: &Path) -> HashMap<String, BlockProperties> {
+    let compressed =
+        fs::read(path).unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+    let mut decoder = flate2::read::GzDecoder::new(&compressed[..]);
+    let mut json_str = String::new();
+    decoder
+        .read_to_string(&mut json_str)
+        .expect("Failed to decompress block_properties.json.gz");
+
+    let root: serde_json::Value =
+        serde_json::from_str(&json_str).expect("Invalid block_properties.json");
+    let obj = root
+        .as_object()
+        .expect("block_properties.json root must be an object");
+
+    let mut result = HashMap::with_capacity(obj.len());
+    for (name, value) in obj {
+        let bp = BlockProperties {
+            has_collision: value["has_collision"].as_bool().unwrap_or(true),
+            is_air: value["is_air"].as_bool().unwrap_or(false),
+            is_liquid: value["is_liquid"].as_bool().unwrap_or(false),
+            is_replaceable: value["is_replaceable"].as_bool().unwrap_or(false),
+            is_opaque: value["is_opaque"].as_bool().unwrap_or(true),
+            is_flammable: value["is_flammable"].as_bool().unwrap_or(false),
+            requires_tool: value["requires_tool"].as_bool().unwrap_or(false),
+            ticks_randomly: value["ticks_randomly"].as_bool().unwrap_or(false),
+            has_block_entity: value["has_block_entity"].as_bool().unwrap_or(false),
+            is_interactable: value["is_interactable"].as_bool().unwrap_or(false),
+            is_solid: value["is_solid"].as_bool().unwrap_or(false),
+        };
+        result.insert(name.clone(), bp);
+    }
+    result
 }
 
 /// Compute the stride for each property by examining actual state data.
@@ -302,7 +399,7 @@ fn write_generated(
     blocks: &[BlockData],
     state_count: usize,
     state_block_type: &[u16],
-    state_flags: &[u8],
+    state_flags: &[u16],
     prop_defs: &[PropDefOut],
     prop_values: &[String],
     name_lookup: &[(&str, u16)],
