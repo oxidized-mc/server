@@ -25,7 +25,10 @@ impl Packet for ClientboundSystemChatPacket {
         } else {
             false
         };
-        Ok(Self { content, is_overlay })
+        Ok(Self {
+            content,
+            is_overlay,
+        })
     }
 
     fn encode(&self) -> BytesMut {

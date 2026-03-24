@@ -33,7 +33,10 @@ impl Packet for ClientboundChangeDifficultyPacket {
         }
         let difficulty = data.get_u8();
         let is_locked = types::read_bool(&mut data)?;
-        Ok(Self { difficulty, is_locked })
+        Ok(Self {
+            difficulty,
+            is_locked,
+        })
     }
 
     fn encode(&self) -> BytesMut {

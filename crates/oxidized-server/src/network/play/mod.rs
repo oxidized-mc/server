@@ -33,9 +33,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
-use oxidized_game::player::{
-    ServerPlayer, handle_accept_teleportation,
-};
+use oxidized_game::player::{ServerPlayer, handle_accept_teleportation};
 use oxidized_protocol::auth;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
@@ -43,13 +41,10 @@ use oxidized_protocol::codec::slot::SlotData;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundAnimatePacket, ClientboundKeepAlivePacket,
-    ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundPlayerPositionPacket,
-    ClientboundRemoveEntitiesPacket,
-    ClientboundSetEntityDataPacket, ClientboundSetEquipmentPacket,
-    ClientboundSystemChatPacket,
-    PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
+    ClientboundAnimatePacket, ClientboundKeepAlivePacket, ClientboundPlayerInfoRemovePacket,
+    ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
+    ClientboundRemoveEntitiesPacket, ClientboundSetEntityDataPacket, ClientboundSetEquipmentPacket,
+    ClientboundSystemChatPacket, PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
     ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
     ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
     ServerboundClientInformationPlayPacket, ServerboundCommandSuggestionPacket,
@@ -162,8 +157,7 @@ pub async fn handle_play_entry(
 ) -> Result<(), ConnectionError> {
     let server_ctx = &ctx.server_ctx;
 
-    let join_state =
-        join::send_join_sequence(conn, profile, client_info, server_ctx).await?;
+    let join_state = join::send_join_sequence(conn, profile, client_info, server_ctx).await?;
     let player_arc = join_state.player;
     let player_name = join_state.name;
     let uuid = join_state.uuid;

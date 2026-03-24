@@ -10,8 +10,8 @@ use oxidized_protocol::packets::play::ServerboundSignUpdatePacket;
 
 use super::PlayContext;
 use super::block_interaction::player_distance_to_block_sq;
-use crate::network::helpers::decode_packet;
 use crate::network::ConnectionError;
+use crate::network::helpers::decode_packet;
 
 /// Maximum distance from a sign the player can edit (squared).
 const MAX_SIGN_EDIT_DISTANCE_SQ: f64 = 8.0 * 8.0;

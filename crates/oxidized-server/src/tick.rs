@@ -151,12 +151,7 @@ pub fn run_tick_loop(ctx: &ServerContext, shutdown: &AtomicBool) {
 }
 
 /// Performs one game tick.
-fn do_tick(
-    ctx: &ServerContext,
-    tick_count: u64,
-    rng: &mut impl Rng,
-    weather: &mut WeatherLevels,
-) {
+fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &mut WeatherLevels) {
     // Snapshot game rules once per tick to minimize lock acquisitions.
     let (do_daylight, do_weather) = {
         let rules = ctx.game_rules.read();
@@ -357,9 +352,7 @@ fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
 ///
 /// Suitable for the tick thread (which is allowed to block) and other
 /// non-async contexts.
-fn save_level_dat_blocking(
-    ctx: &ServerContext,
-) -> Result<(), Box<dyn std::error::Error + Send>> {
+fn save_level_dat_blocking(ctx: &ServerContext) -> Result<(), Box<dyn std::error::Error + Send>> {
     let level_data = ctx.level_data.read().clone();
     let level_dat_path = ctx.storage.level_dat_path();
     level_data
@@ -399,13 +392,13 @@ fn autosave_level_dat(ctx: &ServerContext) {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
     use oxidized_game::level::{GameRules, ServerTickRateManager};
     use oxidized_game::player::PlayerList;
     use oxidized_protocol::types::resource_location::ResourceLocation;
     use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
     use parking_lot::RwLock;
     use rand::SeedableRng;
+    use std::sync::Arc;
 
     const TICKS_PER_DAY: i64 = 24_000;
 
@@ -621,8 +614,7 @@ mod tests {
             .name("tick".into())
             .spawn(move || {
                 // Capture thread name before entering the loop.
-                *name_capture.lock().unwrap() =
-                    std::thread::current().name().map(String::from);
+                *name_capture.lock().unwrap() = std::thread::current().name().map(String::from);
                 run_tick_loop(&ctx, &shutdown_clone);
             })
             .expect("failed to spawn tick thread");
@@ -632,6 +624,10 @@ mod tests {
         handle.join().expect("tick thread panicked");
 
         let name = thread_name.lock().unwrap();
-        assert_eq!(name.as_deref(), Some("tick"), "tick loop must run on the 'tick' thread");
+        assert_eq!(
+            name.as_deref(),
+            Some("tick"),
+            "tick loop must run on the 'tick' thread"
+        );
     }
 }

@@ -16,8 +16,8 @@ use oxidized_protocol::packets::play::{
 use tracing::debug;
 
 use super::PlayContext;
-use crate::network::helpers::decode_packet;
 use crate::network::BroadcastMessage;
+use crate::network::helpers::decode_packet;
 
 /// Builds the `DATA_SHARED_FLAGS` byte from the player's current state.
 pub(super) fn build_shared_flags(player: &ServerPlayer) -> u8 {

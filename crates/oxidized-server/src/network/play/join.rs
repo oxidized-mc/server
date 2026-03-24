@@ -11,9 +11,9 @@ use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
     ClientboundAddEntityPacket, ClientboundEntityEventPacket, ClientboundGameEventPacket,
     ClientboundInitializeBorderPacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundRemoveEntitiesPacket, ClientboundSetEntityDataPacket,
-    ClientboundSetEquipmentPacket, ClientboundSetTimePacket, ClientboundSystemChatPacket,
-    ClockNetworkState, ClockUpdate, GameEventType, PlayerInfoActions, PlayerInfoEntry,
+    ClientboundRemoveEntitiesPacket, ClientboundSetEntityDataPacket, ClientboundSetEquipmentPacket,
+    ClientboundSetTimePacket, ClientboundSystemChatPacket, ClockNetworkState, ClockUpdate,
+    GameEventType, PlayerInfoActions, PlayerInfoEntry,
 };
 use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
@@ -219,8 +219,7 @@ pub(super) async fn send_join_sequence(
         });
     }
 
-    broadcast_player_join(conn, &player_arc, &player_name, uuid, entity_id, server_ctx)
-        .await?;
+    broadcast_player_join(conn, &player_arc, &player_name, uuid, entity_id, server_ctx).await?;
 
     info!(
         peer = %addr,

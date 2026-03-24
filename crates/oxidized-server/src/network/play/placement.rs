@@ -17,8 +17,8 @@ use oxidized_world::registry::{AIR, BlockRegistry};
 
 use super::PlayContext;
 use super::block_interaction::{
-    broadcast_block_update, get_block, is_spawn_protected, is_within_build_height, is_within_reach,
-    resync_block, send_ack, send_actionbar, set_block, MIN_BUILD_HEIGHT,
+    MIN_BUILD_HEIGHT, broadcast_block_update, get_block, is_spawn_protected,
+    is_within_build_height, is_within_reach, resync_block, send_ack, send_actionbar, set_block,
 };
 use crate::network::helpers::decode_packet;
 use crate::network::{ConnectionError, ServerContext};

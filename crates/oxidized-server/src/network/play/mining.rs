@@ -11,8 +11,8 @@ use tracing::debug;
 
 use oxidized_game::player::GameMode;
 use oxidized_protocol::codec::Packet;
-use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
 use oxidized_protocol::packets::play::ServerboundPlayerActionPacket;
+use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
 use oxidized_protocol::types::BlockPos;
 
 use super::PlayContext;

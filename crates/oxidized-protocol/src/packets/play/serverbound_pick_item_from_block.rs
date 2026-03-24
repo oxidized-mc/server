@@ -34,7 +34,10 @@ impl Packet for ServerboundPickItemFromBlockPacket {
         let raw = types::read_i64(&mut data)?;
         let pos = BlockPos::from_long(raw);
         let is_including_data = types::read_bool(&mut data)?;
-        Ok(Self { pos, is_including_data })
+        Ok(Self {
+            pos,
+            is_including_data,
+        })
     }
 
     fn encode(&self) -> BytesMut {

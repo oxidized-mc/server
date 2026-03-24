@@ -981,7 +981,10 @@ is_online_mode   =   false
 
         let mut config = ServerConfig::default();
         config.apply_env_overrides();
-        assert_eq!(config.network.port, 25565, "invalid value should be ignored");
+        assert_eq!(
+            config.network.port, 25565,
+            "invalid value should be ignored"
+        );
 
         remove_env_vars(&vars);
     }
@@ -994,7 +997,10 @@ is_online_mode   =   false
 
         let mut config = ServerConfig::default();
         config.apply_env_overrides();
-        assert!(!config.gameplay.is_hardcore, "invalid bool should be ignored");
+        assert!(
+            !config.gameplay.is_hardcore,
+            "invalid bool should be ignored"
+        );
 
         remove_env_vars(&vars);
     }
@@ -1038,7 +1044,10 @@ is_online_mode   =   false
 
         assert_eq!(config.network.port, 19132);
         // All other fields unchanged
-        assert_eq!(config.network.is_online_mode, default.network.is_online_mode);
+        assert_eq!(
+            config.network.is_online_mode,
+            default.network.is_online_mode
+        );
         assert_eq!(config.gameplay, default.gameplay);
         assert_eq!(config.world, default.world);
 

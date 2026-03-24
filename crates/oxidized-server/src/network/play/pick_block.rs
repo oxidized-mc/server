@@ -16,8 +16,8 @@ use oxidized_world::registry::AIR;
 
 use super::PlayContext;
 use super::block_interaction::{get_block, sync_inventory_slot};
-use crate::network::helpers::decode_packet;
 use crate::network::ConnectionError;
+use crate::network::helpers::decode_packet;
 
 /// Handles `ServerboundPickItemFromBlockPacket` (0x24) — pick block.
 ///

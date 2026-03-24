@@ -122,7 +122,10 @@ impl Coordinates {
 
     /// Returns `true` if any component is relative or local.
     pub fn has_relative(&self) -> bool {
-        self.kind == CoordinateKind::Local || self.x.is_relative || self.y.is_relative || self.z.is_relative
+        self.kind == CoordinateKind::Local
+            || self.x.is_relative
+            || self.y.is_relative
+            || self.z.is_relative
     }
 }
 
