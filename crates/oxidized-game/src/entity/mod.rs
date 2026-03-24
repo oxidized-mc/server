@@ -11,8 +11,12 @@
 //!
 //! Corresponds to `net.minecraft.world.entity.Entity` and related classes.
 
+pub mod bundles;
+pub mod components;
 pub mod data_slots;
 pub mod id;
+pub mod markers;
+pub mod phases;
 pub mod synched_data;
 pub mod tracker;
 

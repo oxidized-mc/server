@@ -1,6 +1,6 @@
 # Phase R3 — ADR Compliance & Code Quality Refactoring
 
-**Status:** 🔄 In Progress  
+**Status:** ✅ Done  
 **Crates:** all  
 **Reward:** Every crate fully complies with its governing ADRs. Lint violations are
 zero. Naming, documentation, and architectural patterns match the documented
@@ -22,16 +22,9 @@ scaffolded with tests. The codebase is audit-clean and ready to scale to Phase 3
 | R3.7 | Documentation Gaps (Project Style Rules) | ✅ Done |
 | R3.8 | Worldgen Pipeline Structural Compliance (ADR-016) | ✅ Done |
 | R3.9 | Lighting Engine Structural Compliance (ADR-017) | ✅ Done |
-| R3.10 | Entity System Structural Compliance (ADR-018) | ❌ Not Started |
+| R3.10 | Entity System Structural Compliance (ADR-018) | ✅ Done |
 
-**Remaining work:** R3.10 adds scaffolding types and tests for
-the ECS entity system. These are type definitions
-and module skeletons only — no feature implementation. See detailed plan below.
-
-**Codebase verification (R3.10 gaps):**
-- `entity/components.rs`, `markers.rs`, `phases.rs`, `bundles.rs` — do not exist
-- `docs/entity-mapping.md` — does not exist
-- `#[derive(Component)]` types — none in codebase (bevy_ecs dep present but unused)
+**All sub-tasks complete.** The codebase is audit-clean and ready for Phase 38.
 
 ---
 
@@ -833,10 +826,10 @@ tests broken (monolithic Entity struct is unchanged).
 - [x] `LightEngine`, `LightUpdateQueue` module skeleton exists (R3.9)
 - [x] `DataLayer` has property-based roundtrip tests
 - [x] Light packet compliance tests pass
-- [ ] ECS component types defined with `#[derive(Component)]` (R3.10)
-- [ ] Marker components and spawn bundles compile and pass query tests
-- [ ] `TickPhase` enum matches ADR-018 phase order
-- [ ] `docs/entity-mapping.md` skeleton created
+- [x] ECS component types defined with `#[derive(Component)]` (R3.10)
+- [x] Marker components and spawn bundles compile and pass query tests
+- [x] `TickPhase` enum matches ADR-018 phase order
+- [x] `docs/entity-mapping.md` skeleton created
 - [x] `cargo test --workspace` passes with zero failures
 - [x] `cargo clippy --workspace -- -D warnings` produces zero warnings
 - [x] `cargo doc --workspace --no-deps` builds cleanly
@@ -914,7 +907,7 @@ Summary of all 39 ADRs vs. current codebase status:
 | 015 | Disk I/O | ✅ Compliant | spawn_blocking for all file I/O |
 | 016 | Worldgen Pipeline | ⚠️ Scaffolding | ChunkStatus + trait exist; scheduler/priority types added in R3.8 |
 | 017 | Lighting Engine | ⚠️ Scaffolding | DataLayer + serializer + engine/queue skeleton + proptests + compliance tests (R3.9) |
-| 018 | Entity System | ⚠️ Scaffolding | bevy_ecs dep exists; component types + bundles added in R3.10 |
+| 018 | Entity System | ⚠️ Scaffolding | bevy_ecs components, markers, bundles, and TickPhase scaffolded (R3.10) |
 | 019 | Tick Loop | ✅ Compliant | Dedicated OS thread "tick" |
 | 020 | Player Session | 🟡 Future phase | Arc<RwLock> model, not channel-based |
 | 021 | Physics | ✅ Compliant | Per-axis sweep implemented |
