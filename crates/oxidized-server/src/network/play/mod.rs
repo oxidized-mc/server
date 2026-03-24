@@ -16,9 +16,16 @@
 pub mod block_interaction;
 pub mod chat;
 pub mod commands;
+mod entity_tracking;
 pub mod helpers;
 pub mod inventory;
+mod join;
+mod keepalive;
+pub mod mining;
 pub mod movement;
+pub mod pick_block;
+pub mod placement;
+pub mod sign_editing;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -27,8 +34,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::player::{
-    GameMode, ServerPlayer, build_container_set_content_packet, build_login_sequence,
-    build_spawn_position_packet, handle_accept_teleportation,
+    ServerPlayer, handle_accept_teleportation,
 };
 use oxidized_protocol::auth;
 use oxidized_protocol::chat::Component;
@@ -37,13 +43,13 @@ use oxidized_protocol::codec::slot::SlotData;
 use oxidized_protocol::connection::{Connection, ConnectionError};
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
-    ClientboundAddEntityPacket, ClientboundAnimatePacket, ClientboundEntityEventPacket,
-    ClientboundGameEventPacket, ClientboundInitializeBorderPacket, ClientboundKeepAlivePacket,
+    ClientboundAnimatePacket, ClientboundKeepAlivePacket,
     ClientboundPlayerInfoRemovePacket, ClientboundPlayerInfoUpdatePacket,
-    ClientboundPlayerPositionPacket, ClientboundRemoveEntitiesPacket,
-    ClientboundSetEntityDataPacket, ClientboundSetEquipmentPacket, ClientboundSetTimePacket,
-    ClientboundSystemChatPacket, ClockNetworkState, ClockUpdate, GameEventType,
-    PlayerCommandAction, PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
+    ClientboundPlayerPositionPacket,
+    ClientboundRemoveEntitiesPacket,
+    ClientboundSetEntityDataPacket, ClientboundSetEquipmentPacket,
+    ClientboundSystemChatPacket,
+    PlayerInfoActions, PlayerInfoEntry, RelativeFlags,
     ServerboundAcceptTeleportationPacket, ServerboundChatCommandPacket,
     ServerboundChatCommandSignedPacket, ServerboundChatPacket, ServerboundChunkBatchReceivedPacket,
     ServerboundClientInformationPlayPacket, ServerboundCommandSuggestionPacket,
@@ -55,7 +61,6 @@ use oxidized_protocol::packets::play::{
     ServerboundSignUpdatePacket, ServerboundSwingPacket, ServerboundUseItemOnPacket,
     ServerboundUseItemPacket, equipment_slot,
 };
-use oxidized_protocol::types::resource_location::ResourceLocation;
 use oxidized_world::chunk::ChunkPos;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
@@ -155,458 +160,20 @@ pub async fn handle_play_entry(
     client_info: ClientInformation,
     ctx: &LoginContext,
 ) -> Result<(), ConnectionError> {
-    let addr = conn.remote_addr();
     let server_ctx = &ctx.server_ctx;
 
-    let uuid = profile.uuid().ok_or_else(|| {
-        ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "Profile has invalid UUID",
-        ))
-    })?;
-
-    // Vanilla: canPlayerLogin — reject if server is full (and this isn't a reconnect).
-    let is_server_full = {
-        let player_list = server_ctx.player_list.read();
-        player_list.is_full() && !player_list.contains(&uuid)
-    };
-    if is_server_full {
-        warn!(peer = %addr, uuid = %uuid, "Server full — rejecting login");
-        return Err(crate::network::helpers::disconnect_err(conn, "Server is full!").await);
-    }
-
-    // Create ServerPlayer with entity ID from the player list.
-    let entity_id = server_ctx.player_list.read().next_entity_id();
-    let game_mode = GameMode::from_id(server_ctx.level_data.read().game_type);
-    let dimension = ResourceLocation::from_string("minecraft:overworld").map_err(|e| {
-        ConnectionError::Io(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            e.to_string(),
-        ))
-    })?;
-
-    let mut player = ServerPlayer::new(entity_id, profile, dimension, game_mode);
-
-    // Apply client preferences, capped to server maximums.
-    player.view_distance =
-        i32::from(client_info.view_distance).clamp(2, server_ctx.max_view_distance);
-    player.simulation_distance = server_ctx.max_simulation_distance;
-    player.model_customisation = client_info.model_customisation;
-
-    // Try to load saved player data from playerdata/<uuid>.dat.
-    let playerdata_path = format!("world/playerdata/{uuid}.dat");
-    if std::path::Path::new(&playerdata_path).exists() {
-        match oxidized_nbt::read_file(std::path::Path::new(&playerdata_path)) {
-            Ok(nbt) => {
-                player.load_from_nbt(&nbt);
-                debug!(peer = %addr, uuid = %uuid, "Loaded player data from disk");
-            },
-            Err(e) => {
-                warn!(peer = %addr, uuid = %uuid, error = %e, "Failed to load player data — using defaults");
-            },
-        }
-    } else {
-        // New player — spawn at world spawn, centered on the block (vanilla: +0.5 on X/Z).
-        let (sx, sy, sz) = server_ctx.level_data.read().spawn_pos();
-        player.pos = oxidized_protocol::types::Vec3::new(
-            f64::from(sx) + 0.5,
-            f64::from(sy),
-            f64::from(sz) + 0.5,
-        );
-        debug!(peer = %addr, uuid = %uuid, "New player — spawning at world spawn");
-    }
-
-    // Assign a teleport ID for the initial position packet.
-    let teleport_id = player.next_teleport_id();
-    player
-        .pending_teleports
-        .push_back((teleport_id, player.pos, Instant::now()));
-
-    let player_name = player.name.clone();
-    let player_view_distance = player.view_distance;
-    let player_chunk_x = player.pos.x.floor() as i32;
-    let player_chunk_z = player.pos.z.floor() as i32;
-
-    // Build the login sequence.
-    let dimension_type_id = 0; // overworld = 0 in registry order
-    let is_flat = server_ctx.chunk_generator.generator_type() == "minecraft:flat";
-    let packets = {
-        let level_data = server_ctx.level_data.read();
-        let player_list = server_ctx.player_list.read();
-        let game_rules = server_ctx.game_rules.read();
-        build_login_sequence(
-            &player,
-            teleport_id,
-            &level_data,
-            &player_list,
-            &server_ctx.dimensions,
-            dimension_type_id,
-            &game_rules,
-            is_flat,
-        )
-    };
-
-    // Send all login packets before adding player to the list.
-    // This prevents a "ghost" player entry if sending fails.
-    for pkt in &packets {
-        conn.send_raw(pkt.id, &pkt.body).await?;
-    }
-    conn.flush().await?;
-
-    // Send EntityEvent with the player's permission level (vanilla sends
-    // this via sendPlayerPermissionLevel — event IDs 24–28).
-    {
-        let perm_level = server_ctx.op_permission_level.clamp(0, 4) as u8;
-        conn.send_packet(&ClientboundEntityEventPacket {
-            entity_id,
-            event_id: ClientboundEntityEventPacket::PERMISSION_LEVEL_BASE + perm_level,
-        })
-        .await?;
-    }
-
-    // Send the command tree so the client can offer tab-completion.
-    {
-        let cmd_source = commands::make_command_source(&player_name, uuid, &player, server_ctx);
-        let tree = server_ctx.commands.serialize_tree(&cmd_source);
-        let cmd_pkt = commands::commands_packet_from_tree(&tree);
-        conn.send_packet(&cmd_pkt).await?;
-    }
-
-    // Send default world border state (vanilla: sendLevelInfo).
-    conn.send_packet(&ClientboundInitializeBorderPacket {
-        new_center_x: 0.0,
-        new_center_z: 0.0,
-        old_size: 59_999_968.0,
-        new_size: 59_999_968.0,
-        lerp_time: 0,
-        new_absolute_max_size: 29_999_984,
-        warning_blocks: 5,
-        warning_time: 15,
-    })
-    .await?;
-
-    // Send time sync with overworld clock data (vanilla: sendLevelInfo).
-    {
-        let time_pkt = {
-            let ld = server_ctx.level_data.read();
-            ClientboundSetTimePacket {
-                game_time: ld.time,
-                clock_updates: vec![ClockUpdate {
-                    clock_id: ClientboundSetTimePacket::OVERWORLD_CLOCK_ID,
-                    state: ClockNetworkState {
-                        total_ticks: ld.day_time,
-                        partial_tick: 0.0,
-                        rate: 1.0,
-                    },
-                }],
-            }
-        };
-        conn.send_packet(&time_pkt).await?;
-    }
-
-    // Send spawn position (vanilla: sendLevelInfo → respawnData).
-    {
-        let spawn_pkt = {
-            let ld = server_ctx.level_data.read();
-            build_spawn_position_packet(&player, &ld)
-        };
-        conn.send_raw(spawn_pkt.id, &spawn_pkt.body).await?;
-    }
-
-    // Send weather state if it is currently raining (vanilla: sendLevelInfo).
-    let (is_raining, is_thundering) = {
-        let ld = server_ctx.level_data.read();
-        (ld.is_raining, ld.is_thundering)
-    };
-    if is_raining {
-        conn.send_packet(&ClientboundGameEventPacket {
-            event: GameEventType::StartRaining,
-            param: 0.0,
-        })
-        .await?;
-        conn.send_packet(&ClientboundGameEventPacket {
-            event: GameEventType::RainLevelChange,
-            param: 1.0,
-        })
-        .await?;
-        if is_thundering {
-            conn.send_packet(&ClientboundGameEventPacket {
-                event: GameEventType::ThunderLevelChange,
-                param: 1.0,
-            })
-            .await?;
-        }
-    }
-
-    // Signal the client that chunk loading is about to begin (must be
-    // BEFORE chunks are sent — vanilla ordering requirement).
-    conn.send_packet(&ClientboundGameEventPacket {
-        event: GameEventType::LevelChunksLoadStart,
-        param: 0.0,
-    })
-    .await?;
-
-    // Send initial chunk batch using the world generator.
-    let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
-    let chunk_count = helpers::send_initial_chunks(
-        conn,
-        chunk_center,
-        player_view_distance,
-        &server_ctx.chunks,
-        server_ctx.chunk_generator.as_ref(),
-    )
-    .await?;
-
-    // Send inventory last, after chunks (vanilla: initInventoryMenu).
-    {
-        let inv_pkt = build_container_set_content_packet(&player);
-        conn.send_raw(inv_pkt.id, &inv_pkt.body).await?;
-    }
-
-    info!(
-        peer = %addr,
-        uuid = %uuid,
-        chunks = chunk_count,
-        "Initial chunk batch sent",
-    );
-
-    // Kick any existing session for this UUID before replacing it.
-    // This fires the old session's kick_rx, causing a clean disconnect.
-    if let Some(kick_tx) = server_ctx.kick_channels.get(&uuid) {
-        let _ = kick_tx.try_send("You logged in from another location".to_string());
-    }
-
-    // Add player to the server player list (only after successful send).
-    let (player_arc, old_player) = server_ctx.player_list.write().add(player);
-    if let Some(old) = old_player {
-        let old_p = old.read();
-        let old_entity_id = old_p.entity_id;
-        drop(old_p);
-        warn!(
-            peer = %addr,
-            uuid = %uuid,
-            name = %player_name,
-            old_entity_id = old_entity_id,
-            "Duplicate login — replacing existing player session",
-        );
-        // Remove old entity from all clients.
-        let remove_entity = ClientboundRemoveEntitiesPacket {
-            entity_ids: vec![old_entity_id],
-        };
-        let encoded = remove_entity.encode();
-        server_ctx.broadcast(BroadcastMessage {
-            packet_id: ClientboundRemoveEntitiesPacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: None,
-            target_entity: None,
-        });
-    }
-
-    // Send the joining player their own tab list entry (the login sequence
-    // was built before the player was added to the list, so it's missing).
-    {
-        let self_info = {
-            let p = player_arc.read();
-            ClientboundPlayerInfoUpdatePacket {
-                actions: PlayerInfoActions(
-                    PlayerInfoActions::ADD_PLAYER
-                        | PlayerInfoActions::INITIALIZE_CHAT
-                        | PlayerInfoActions::UPDATE_GAME_MODE
-                        | PlayerInfoActions::UPDATE_LISTED
-                        | PlayerInfoActions::UPDATE_LATENCY
-                        | PlayerInfoActions::UPDATE_DISPLAY_NAME
-                        | PlayerInfoActions::UPDATE_LIST_ORDER
-                        | PlayerInfoActions::UPDATE_HAT,
-                ),
-                entries: vec![PlayerInfoEntry {
-                    uuid,
-                    name: player_name.clone(),
-                    properties: p.profile.properties().to_vec(),
-                    game_mode: p.game_mode as i32,
-                    latency: 0,
-                    listed: true,
-                    has_display_name: false,
-                    display_name: None,
-                    show_hat: false,
-                    list_order: 0,
-                }],
-            }
-        };
-        conn.send_packet(&self_info).await?;
-    }
-
-    // Broadcast the new player to all existing players' tab lists.
-    {
-        let p = player_arc.read();
-        let join_info = ClientboundPlayerInfoUpdatePacket {
-            actions: PlayerInfoActions(
-                PlayerInfoActions::ADD_PLAYER
-                    | PlayerInfoActions::INITIALIZE_CHAT
-                    | PlayerInfoActions::UPDATE_GAME_MODE
-                    | PlayerInfoActions::UPDATE_LISTED
-                    | PlayerInfoActions::UPDATE_LATENCY
-                    | PlayerInfoActions::UPDATE_DISPLAY_NAME
-                    | PlayerInfoActions::UPDATE_LIST_ORDER
-                    | PlayerInfoActions::UPDATE_HAT,
-            ),
-            entries: vec![PlayerInfoEntry {
-                uuid,
-                name: player_name.clone(),
-                properties: p.profile.properties().to_vec(),
-                game_mode: p.game_mode as i32,
-                latency: 0,
-                listed: true,
-                has_display_name: false,
-                display_name: None,
-                show_hat: false,
-                list_order: 0,
-            }],
-        };
-        drop(p);
-        let encoded = join_info.encode();
-        let broadcast = BroadcastMessage {
-            packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: Some(entity_id),
-            target_entity: None,
-        };
-        server_ctx.broadcast(broadcast);
-    }
-
-    // Broadcast the new player's entity to all existing players, and send
-    // all existing players' entities to the joining player.
-    {
-        let add_entity = {
-            let p = player_arc.read();
-            ClientboundAddEntityPacket {
-                entity_id,
-                uuid,
-                entity_type: PLAYER_ENTITY_TYPE_ID,
-                x: p.pos.x,
-                y: p.pos.y,
-                z: p.pos.z,
-                vx: 0.0,
-                vy: 0.0,
-                vz: 0.0,
-                x_rot: pack_angle(p.pitch),
-                y_rot: pack_angle(p.yaw),
-                y_head_rot: pack_angle(p.yaw),
-                data: 0,
-            }
-        };
-
-        // Broadcast new player entity to existing players.
-        let encoded = add_entity.encode();
-        let broadcast = BroadcastMessage {
-            packet_id: ClientboundAddEntityPacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: Some(entity_id),
-            target_entity: None,
-        };
-        server_ctx.broadcast(broadcast);
-
-        // Broadcast new player's equipment to existing players.
-        {
-            let equip_pkt = {
-                let p = player_arc.read();
-                build_equipment_packet(&p)
-            };
-            let encoded = equip_pkt.encode();
-            server_ctx.broadcast(BroadcastMessage {
-                packet_id: ClientboundSetEquipmentPacket::PACKET_ID,
-                data: encoded.freeze(),
-                exclude_entity: Some(entity_id),
-                target_entity: None,
-            });
-        }
-
-        // Broadcast new player's skin customisation to existing players.
-        {
-            let skin = player_arc.read().model_customisation;
-            let pkt = ClientboundSetEntityDataPacket::single_byte(
-                entity_id,
-                DATA_PLAYER_MODE_CUSTOMISATION,
-                skin,
-            );
-            let encoded = pkt.encode();
-            server_ctx.broadcast(BroadcastMessage {
-                packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
-                data: encoded.freeze(),
-                exclude_entity: Some(entity_id),
-                target_entity: None,
-            });
-        }
-
-        // Collect existing players' entity + equipment + skin packets (no locks
-        // held across await).
-        let other_entities: Vec<(
-            ClientboundAddEntityPacket,
-            ClientboundSetEquipmentPacket,
-            ClientboundSetEntityDataPacket,
-        )> = {
-            let player_list = server_ctx.player_list.read();
-            player_list
-                .iter()
-                .filter_map(|other_arc| {
-                    let other = other_arc.read();
-                    if other.entity_id == entity_id {
-                        return None;
-                    }
-                    let add = ClientboundAddEntityPacket {
-                        entity_id: other.entity_id,
-                        uuid: other.uuid,
-                        entity_type: PLAYER_ENTITY_TYPE_ID,
-                        x: other.pos.x,
-                        y: other.pos.y,
-                        z: other.pos.z,
-                        vx: 0.0,
-                        vy: 0.0,
-                        vz: 0.0,
-                        x_rot: pack_angle(other.pitch),
-                        y_rot: pack_angle(other.yaw),
-                        y_head_rot: pack_angle(other.yaw),
-                        data: 0,
-                    };
-                    let equip = build_equipment_packet(&other);
-                    let skin = ClientboundSetEntityDataPacket::single_byte(
-                        other.entity_id,
-                        DATA_PLAYER_MODE_CUSTOMISATION,
-                        other.model_customisation,
-                    );
-                    Some((add, equip, skin))
-                })
-                .collect()
-        };
-
-        // Send existing player entities + equipment + skin to the joining player.
-        for (add_pkt, equip_pkt, skin_pkt) in &other_entities {
-            conn.send_packet(add_pkt).await?;
-            conn.send_packet(equip_pkt).await?;
-            conn.send_packet(skin_pkt).await?;
-        }
-    }
-
-    // Broadcast "Player joined the game" system message (vanilla yellow text).
-    {
-        let join_msg = ClientboundSystemChatPacket {
-            content: Component::translatable(
-                "multiplayer.player.joined",
-                vec![Component::text(&player_name)],
-            ),
-            overlay: false,
-        };
-        let encoded = join_msg.encode();
-        server_ctx.broadcast(BroadcastMessage {
-            packet_id: ClientboundSystemChatPacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: None,
-            target_entity: None,
-        });
-    }
+    let join_state =
+        join::send_join_sequence(conn, profile, client_info, server_ctx).await?;
+    let player_arc = join_state.player;
+    let player_name = join_state.name;
+    let uuid = join_state.uuid;
+    let entity_id = join_state.entity_id;
+    let addr = conn.remote_addr();
 
     // Track which chunks the player has loaded.
-    let initial_chunk = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
-    let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, player_view_distance);
+    let initial_chunk =
+        ChunkPos::from_block_coords(join_state.initial_chunk_x, join_state.initial_chunk_z);
+    let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, join_state.view_distance);
 
     // Subscribe to broadcast channel.
     let mut broadcast_rx = server_ctx.broadcast_tx.subscribe();
@@ -617,15 +184,6 @@ pub async fn handle_play_entry(
 
     // Per-player chat rate limiter.
     let mut rate_limiter = ChatRateLimiter::new();
-
-    info!(
-        peer = %addr,
-        uuid = %uuid,
-        name = %player_name,
-        entity_id = entity_id,
-        packets = packets.len(),
-        "PLAY login sequence sent",
-    );
 
     // Keepalive state — send a ping every 15 seconds, timeout after 30.
     const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
@@ -773,12 +331,12 @@ pub async fn handle_play_entry(
                     Ok(pkt) => {
                         match pkt.id {
                             ServerboundKeepAlivePacket::PACKET_ID => {
-                                match handle_keepalive(
+                                match keepalive::handle_keepalive(
                                     pkt.data, addr, &player_name,
                                     &mut keepalive_pending, keepalive_challenge, &keepalive_sent_at,
                                     &player_arc,
                                 ) {
-                                    KeepaliveResult::Ok(ka_uuid, ka_latency) => {
+                                    keepalive::KeepaliveResult::Ok(ka_uuid, ka_latency) => {
                                         // Broadcast latency update to all players' tab lists.
                                         let latency_update = ClientboundPlayerInfoUpdatePacket {
                                             actions: PlayerInfoActions(PlayerInfoActions::UPDATE_LATENCY),
@@ -796,12 +354,12 @@ pub async fn handle_play_entry(
                                             target_entity: None,
                                         });
                                     },
-                                    KeepaliveResult::Mismatch => {
+                                    keepalive::KeepaliveResult::Mismatch => {
                                         // Vanilla disconnects on wrong keepalive ID.
                                         info!(peer = %addr, name = %player_name, "Keepalive mismatch — disconnecting");
                                         break;
                                     },
-                                    KeepaliveResult::DecodeError => {},
+                                    keepalive::KeepaliveResult::DecodeError => {},
                                 }
                             },
                             id if is_movement_packet(id) => {
@@ -816,10 +374,10 @@ pub async fn handle_play_entry(
                                 handle_chunk_batch_ack(&play_ctx, pkt.data);
                             },
                             ServerboundPlayerCommandPacket::PACKET_ID => {
-                                handle_player_command(&play_ctx, pkt.data);
+                                entity_tracking::handle_player_command(&play_ctx, pkt.data);
                             },
                             ServerboundPlayerInputPacket::PACKET_ID => {
-                                handle_player_input(&play_ctx, pkt.data);
+                                entity_tracking::handle_player_input(&play_ctx, pkt.data);
                             },
                             ServerboundChatPacket::PACKET_ID => {
                                 if let Ok(chat_pkt) = decode_packet::<ServerboundChatPacket>(
@@ -1107,60 +665,6 @@ pub async fn handle_play_entry(
     Ok(())
 }
 
-/// Result of processing a keepalive response.
-enum KeepaliveResult {
-    /// Valid response — contains (uuid, latency) for broadcast.
-    Ok(uuid::Uuid, i32),
-    /// Decode error — ignore silently.
-    DecodeError,
-    /// Wrong challenge ID or not pending — vanilla disconnects.
-    Mismatch,
-}
-
-/// Handles a keepalive response from the client.
-///
-/// Computes latency as an exponential moving average:
-/// `latency = (old * 3 + sample) / 4` (matching vanilla).
-///
-/// Returns [`KeepaliveResult`] so the caller can broadcast latency updates
-/// or disconnect on mismatch (matching vanilla behavior).
-fn handle_keepalive(
-    data: bytes::Bytes,
-    addr: SocketAddr,
-    player_name: &str,
-    keepalive_pending: &mut bool,
-    keepalive_challenge: i64,
-    keepalive_sent_at: &Instant,
-    player: &Arc<RwLock<ServerPlayer>>,
-) -> KeepaliveResult {
-    let ka = match decode_packet::<ServerboundKeepAlivePacket>(data, addr, player_name, "KeepAlive")
-    {
-        Ok(pkt) => pkt,
-        Err(_) => return KeepaliveResult::DecodeError,
-    };
-
-    if *keepalive_pending && ka.id == keepalive_challenge {
-        *keepalive_pending = false;
-        let sample = keepalive_sent_at.elapsed().as_millis() as i32;
-        let mut p = player.write();
-        p.latency = (p.latency * 3 + sample) / 4;
-        let latency = p.latency;
-        let uuid = p.uuid;
-        debug!(peer = %addr, name = %player_name, latency_ms = latency, "Keepalive response");
-        KeepaliveResult::Ok(uuid, latency)
-    } else {
-        warn!(
-            peer = %addr,
-            name = %player_name,
-            expected = keepalive_challenge,
-            got = ka.id,
-            pending = *keepalive_pending,
-            "Keepalive mismatch — disconnecting",
-        );
-        KeepaliveResult::Mismatch
-    }
-}
-
 /// Handles a teleport confirmation from the client.
 fn handle_accept_teleport(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     if let Ok(ack) = decode_packet::<ServerboundAcceptTeleportationPacket>(
@@ -1201,169 +705,6 @@ fn handle_chunk_batch_ack(ctx: &PlayContext<'_>, data: bytes::Bytes) {
                 invalid_rate = rate,
                 "Ignored invalid chunk send rate",
             );
-        }
-    }
-}
-
-/// Handles player command packets (sprint, elytra, sleep, riding, etc.).
-///
-/// Note: sneaking is NOT handled here — in 26.1 it is sent via
-/// `ServerboundPlayerInputPacket` bit flags (see `handle_player_input`).
-fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
-    use oxidized_game::entity::data_slots::DATA_SHARED_FLAGS;
-    use oxidized_protocol::packets::play::ClientboundSetEntityDataPacket;
-
-    if let Ok(cmd) = decode_packet::<ServerboundPlayerCommandPacket>(
-        data,
-        ctx.addr,
-        ctx.player_name,
-        "PlayerCommand",
-    ) {
-        match cmd.action {
-            PlayerCommandAction::StartSprinting => {
-                let entity_id = {
-                    let mut p = ctx.player.write();
-                    p.sprinting = true;
-                    p.entity_id
-                };
-                broadcast_entity_flags(ctx, entity_id);
-                debug!(peer = %ctx.addr, name = %ctx.player_name, "Player started sprinting");
-            },
-            PlayerCommandAction::StopSprinting => {
-                let entity_id = {
-                    let mut p = ctx.player.write();
-                    p.sprinting = false;
-                    p.entity_id
-                };
-                broadcast_entity_flags(ctx, entity_id);
-                debug!(peer = %ctx.addr, name = %ctx.player_name, "Player stopped sprinting");
-            },
-            PlayerCommandAction::StartFallFlying => {
-                let entity_id = {
-                    let mut p = ctx.player.write();
-                    p.is_fall_flying = true;
-                    p.entity_id
-                };
-                // Broadcast fall-flying flag.
-                let flags = build_shared_flags(&ctx.player.read());
-                let pkt = ClientboundSetEntityDataPacket::single_byte(
-                    entity_id,
-                    DATA_SHARED_FLAGS,
-                    flags,
-                );
-                let encoded = pkt.encode();
-                ctx.server_ctx.broadcast(BroadcastMessage {
-                    packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
-                    data: encoded.freeze(),
-                    exclude_entity: Some(entity_id),
-                    target_entity: None,
-                });
-                debug!(peer = %ctx.addr, name = %ctx.player_name, "Player started elytra flight");
-            },
-            _ => {
-                debug!(
-                    peer = %ctx.addr,
-                    name = %ctx.player_name,
-                    action = ?cmd.action,
-                    "Player command (unhandled action)",
-                );
-            },
-        }
-    }
-}
-
-/// Builds the DATA_SHARED_FLAGS byte from the player's current state.
-fn build_shared_flags(player: &ServerPlayer) -> u8 {
-    use oxidized_game::entity::data_slots::{FLAG_CROUCHING, FLAG_FALL_FLYING, FLAG_SPRINTING};
-    let mut flags: u8 = 0;
-    if player.sneaking {
-        flags |= 1 << FLAG_CROUCHING;
-    }
-    if player.sprinting {
-        flags |= 1 << FLAG_SPRINTING;
-    }
-    if player.is_fall_flying {
-        flags |= 1 << FLAG_FALL_FLYING;
-    }
-    flags
-}
-
-/// Broadcasts the current entity shared flags to all other players.
-fn broadcast_entity_flags(ctx: &PlayContext<'_>, entity_id: i32) {
-    use oxidized_game::entity::data_slots::DATA_SHARED_FLAGS;
-    use oxidized_protocol::packets::play::ClientboundSetEntityDataPacket;
-
-    let flags = build_shared_flags(&ctx.player.read());
-    let pkt = ClientboundSetEntityDataPacket::single_byte(entity_id, DATA_SHARED_FLAGS, flags);
-    let encoded = pkt.encode();
-    ctx.server_ctx.broadcast(BroadcastMessage {
-        packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
-        data: encoded.freeze(),
-        exclude_entity: Some(entity_id),
-        target_entity: None,
-    });
-}
-
-/// Handles player input packets (shift, sprint flags).
-///
-/// When sneaking or sprinting state changes, broadcasts entity metadata
-/// to all other players so they can see the pose change.
-fn handle_player_input(ctx: &PlayContext<'_>, data: bytes::Bytes) {
-    use oxidized_game::entity::data_slots::DATA_POSE;
-    use oxidized_protocol::packets::play::ClientboundSetEntityDataPacket;
-    use oxidized_protocol::packets::play::clientbound_set_entity_data::EntityDataEntry;
-
-    if let Ok(input_pkt) = decode_packet::<ServerboundPlayerInputPacket>(
-        data,
-        ctx.addr,
-        ctx.player_name,
-        "PlayerInput",
-    ) {
-        let (old_sneaking, old_sprinting, entity_id) = {
-            let p = ctx.player.read();
-            (p.sneaking, p.sprinting, p.entity_id)
-        };
-        let new_sneaking = input_pkt.input.shift;
-        let new_sprinting = input_pkt.input.sprint;
-
-        // Update local state.
-        {
-            let mut p = ctx.player.write();
-            p.sneaking = new_sneaking;
-            p.sprinting = new_sprinting;
-        }
-
-        // Broadcast entity metadata if flags changed.
-        if old_sneaking != new_sneaking || old_sprinting != new_sprinting {
-            let flags = build_shared_flags(&ctx.player.read());
-
-            // Pose: 5 = sneaking, 0 = standing.
-            let pose: i32 = if new_sneaking { 5 } else { 0 };
-            let mut pose_bytes = bytes::BytesMut::new();
-            oxidized_protocol::codec::varint::write_varint_buf(pose, &mut pose_bytes);
-
-            let pkt = ClientboundSetEntityDataPacket {
-                entity_id,
-                entries: vec![
-                    EntityDataEntry {
-                        slot: oxidized_game::entity::data_slots::DATA_SHARED_FLAGS,
-                        serializer_type: 0, // Byte
-                        value_bytes: vec![flags],
-                    },
-                    EntityDataEntry {
-                        slot: DATA_POSE,
-                        serializer_type: 20, // Pose (VarInt enum)
-                        value_bytes: pose_bytes.to_vec(),
-                    },
-                ],
-            };
-            let encoded = pkt.encode();
-            ctx.server_ctx.broadcast(BroadcastMessage {
-                packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
-                data: encoded.freeze(),
-                exclude_entity: Some(entity_id),
-                target_entity: None,
-            });
         }
     }
 }
