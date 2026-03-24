@@ -1,6 +1,6 @@
 # Phase R4 — Network I/O Refactoring (ADR-006 Compliance)
 
-**Status:** ❌ Not Started  
+**Status:** 🟡 In Progress  
 **Crates:** `oxidized-protocol`, `oxidized-server`  
 **Reward:** Every player connection uses a reader/writer task pair with bounded
 channels, batch flushing, per-connection memory budgets, and packet rate limiting.
@@ -13,8 +13,8 @@ unbounded buffers, and clean cancellation. ADR-006 compliance is complete.
 
 | Sub-task | Description | Status |
 |----------|-------------|--------|
-| R4.1 | Define channel types and connection handle API | ❌ Not Started |
-| R4.2 | Split Connection into reader/writer halves | ❌ Not Started |
+| R4.1 | Define channel types and connection handle API | ✅ Complete |
+| R4.2 | Split Connection into reader/writer halves | ✅ Complete |
 | R4.3 | Implement writer task with batch flushing | ❌ Not Started |
 | R4.4 | Implement reader task with rate limiting | ❌ Not Started |
 | R4.5 | Migrate pre-play states (Handshake/Status/Login/Config) | ❌ Not Started |
@@ -755,10 +755,13 @@ async fn test_full_connection_lifecycle_with_task_pair() {
 
 ## Migration Strategy
 
-### Phase 1: Foundation (R4.1 + R4.2) — no behavioral changes
+### Phase 1: Foundation (R4.1 + R4.2) — ✅ Complete
 
-Add the new types and `into_split()` method. Nothing calls them yet.
-All existing tests pass unchanged.
+Added the new types and `into_split()` method. Nothing calls them in
+production yet. All existing tests pass unchanged, plus 30 new tests
+covering channel types, handle API, cipher/compression split, and
+connection reader/writer halves (including encrypted + compressed
+roundtrips).
 
 ### Phase 2: Writer task (R4.3) — testable in isolation
 
@@ -896,5 +899,5 @@ R4.10 (compliance)       ── depends on all above
 | 006 | Per-connection memory budget (256 KB) | ❌ → target |
 | 006 | Throughput benchmark (>5000 pkt/s) | ❌ → target |
 | 006 | Backpressure test | ❌ → target |
-| 009 | Cipher state split for task pair | ❌ → target |
+| 009 | Cipher state split for task pair | ✅ Complete |
 | 020 | Network ↔ game channels | 🟡 Partial (outbound only; full ADR-020 in P15) |

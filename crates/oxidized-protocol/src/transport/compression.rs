@@ -179,6 +179,143 @@ impl CompressionState {
 
         Ok(std::mem::take(&mut self.buf))
     }
+
+    /// Splits this compression state into independent compressor and
+    /// decompressor halves with the same threshold.
+    ///
+    /// Each half owns its own internal buffer. Used when splitting a
+    /// connection into reader (decompressor) and writer (compressor) tasks.
+    pub fn split(self) -> (Decompressor, Compressor) {
+        (
+            Decompressor {
+                threshold: self.threshold,
+                buf: Vec::with_capacity(8192),
+            },
+            Compressor {
+                threshold: self.threshold,
+                buf: self.buf,
+            },
+        )
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Split compression halves
+// ---------------------------------------------------------------------------
+
+/// Decompression half of a split [`CompressionState`].
+///
+/// Used by the connection reader task after [`CompressionState::split`].
+#[derive(Debug)]
+pub struct Decompressor {
+    threshold: usize,
+    buf: Vec<u8>,
+}
+
+impl Decompressor {
+    /// Returns the compression threshold in bytes.
+    pub fn threshold(&self) -> usize {
+        self.threshold
+    }
+
+    /// Decompresses a packet payload.
+    ///
+    /// - If `data_length == 0`: returns the raw data unchanged.
+    /// - If `data_length > 0`: decompresses and validates size.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CompressionError`] on invalid or oversized data.
+    pub fn decompress(
+        &mut self,
+        data_length: i32,
+        compressed: &[u8],
+    ) -> Result<Vec<u8>, CompressionError> {
+        if data_length == 0 {
+            return Ok(compressed.to_vec());
+        }
+
+        let expected_len = data_length as usize;
+
+        if expected_len > MAXIMUM_UNCOMPRESSED_LENGTH {
+            return Err(CompressionError::UncompressedTooLarge(expected_len));
+        }
+
+        if compressed.len() > MAXIMUM_COMPRESSED_LENGTH {
+            return Err(CompressionError::CompressedTooLarge(compressed.len()));
+        }
+
+        if expected_len < self.threshold {
+            return Err(CompressionError::BelowThreshold {
+                data_length: expected_len,
+                threshold: self.threshold,
+            });
+        }
+
+        self.buf.clear();
+        self.buf.reserve(expected_len);
+        let mut decoder = ZlibDecoder::new(compressed);
+        decoder.read_to_end(&mut self.buf)?;
+
+        if self.buf.len() != expected_len {
+            return Err(CompressionError::SizeMismatch {
+                declared: expected_len,
+                actual: self.buf.len(),
+            });
+        }
+
+        Ok(std::mem::take(&mut self.buf))
+    }
+}
+
+/// Compression half of a split [`CompressionState`].
+///
+/// Used by the connection writer task after [`CompressionState::split`].
+#[derive(Debug)]
+pub struct Compressor {
+    threshold: usize,
+    buf: Vec<u8>,
+}
+
+impl Compressor {
+    /// Returns the compression threshold in bytes.
+    pub fn threshold(&self) -> usize {
+        self.threshold
+    }
+
+    /// Compresses a packet payload if it exceeds the threshold.
+    ///
+    /// Returns `(data_length, payload)`:
+    /// - If `data.len() < threshold`: `data_length = 0`, `payload` is
+    ///   the original data (uncompressed).
+    /// - If `data.len() >= threshold`: `data_length = data.len()`,
+    ///   `payload` is the zlib-compressed data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CompressionError`] on oversized data or zlib failure.
+    pub fn compress(&mut self, data: &[u8]) -> Result<(i32, Vec<u8>), CompressionError> {
+        if data.len() > MAXIMUM_UNCOMPRESSED_LENGTH {
+            return Err(CompressionError::UncompressedTooLarge(data.len()));
+        }
+
+        if data.len() < self.threshold {
+            return Ok((0, data.to_vec()));
+        }
+
+        self.buf.clear();
+        let mut encoder = ZlibEncoder::new(data, Compression::default());
+        encoder.read_to_end(&mut self.buf)?;
+
+        let data_length = i32::try_from(data.len())
+            .map_err(|_| CompressionError::UncompressedTooLarge(data.len()))?;
+
+        if self.buf.len() > MAXIMUM_COMPRESSED_LENGTH {
+            return Err(CompressionError::CompressedTooLarge(self.buf.len()));
+        }
+
+        Ok((data_length, std::mem::take(&mut self.buf)))
+    }
 }
 
 #[cfg(test)]
@@ -309,6 +446,55 @@ mod tests {
             let (data_length, compressed) = state.compress(&data).unwrap();
             let decompressed = state.decompress(data_length, &compressed).unwrap();
             assert_eq!(decompressed, data, "roundtrip {i} failed");
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // CompressionState::split tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_split_roundtrip() {
+        let state = CompressionState::new(64);
+        let (mut decompressor, mut compressor) = state.split();
+
+        let data: Vec<u8> = (0..200).map(|i| (i % 256) as u8).collect();
+        let (data_length, compressed) = compressor.compress(&data).unwrap();
+        let decompressed = decompressor.decompress(data_length, &compressed).unwrap();
+        assert_eq!(decompressed, data);
+    }
+
+    #[test]
+    fn test_split_below_threshold() {
+        let state = CompressionState::new(256);
+        let (mut decompressor, mut compressor) = state.split();
+
+        let data = b"short";
+        let (data_length, payload) = compressor.compress(data).unwrap();
+        assert_eq!(data_length, 0);
+        let decompressed = decompressor.decompress(data_length, &payload).unwrap();
+        assert_eq!(decompressed, data.to_vec());
+    }
+
+    #[test]
+    fn test_split_preserves_threshold() {
+        let state = CompressionState::new(128);
+        let (decompressor, compressor) = state.split();
+        assert_eq!(compressor.threshold(), 128);
+        assert_eq!(decompressor.threshold(), 128);
+    }
+
+    #[test]
+    fn test_split_multiple_roundtrips() {
+        let state = CompressionState::new(64);
+        let (mut decompressor, mut compressor) = state.split();
+
+        for i in 0..5 {
+            let data: Vec<u8> = (0..200).map(|j| ((i * 37 + j) % 256) as u8).collect();
+            let (data_length, compressed) = compressor.compress(&data).unwrap();
+            let decompressed =
+                decompressor.decompress(data_length, &compressed).unwrap();
+            assert_eq!(decompressed, data, "split roundtrip {i} failed");
         }
     }
 }

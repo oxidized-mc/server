@@ -189,11 +189,94 @@ impl CipherState {
             self.enc_iv[15] = *byte;
         }
     }
+
+    /// Splits this cipher into independent decrypt and encrypt halves.
+    ///
+    /// Each half owns its own AES key schedule and IV register, allowing
+    /// concurrent decryption (reader task) and encryption (writer task)
+    /// after the connection is split.
+    pub fn split(self) -> (DecryptCipher, EncryptCipher) {
+        (
+            DecryptCipher {
+                cipher: self.cipher.clone(),
+                iv: self.dec_iv,
+            },
+            EncryptCipher {
+                cipher: self.cipher,
+                iv: self.enc_iv,
+            },
+        )
+    }
 }
 
 impl std::fmt::Debug for CipherState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CipherState").finish()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Split cipher halves
+// ---------------------------------------------------------------------------
+
+/// Decrypt half of a split [`CipherState`].
+///
+/// Owns an independent AES key schedule and the decryption IV register.
+/// Used by the connection reader task after [`CipherState::split`].
+pub struct DecryptCipher {
+    cipher: Aes128,
+    iv: [u8; 16],
+}
+
+impl DecryptCipher {
+    /// Decrypts data in-place using AES-128-CFB8.
+    ///
+    /// Must be called on the raw byte stream (before frame decoding).
+    pub fn decrypt(&mut self, data: &mut [u8]) {
+        for byte in data.iter_mut() {
+            let mut block = self.iv.into();
+            self.cipher.encrypt_block(&mut block);
+            let ciphertext_byte = *byte;
+            *byte ^= block[0];
+            self.iv.copy_within(1.., 0);
+            self.iv[15] = ciphertext_byte;
+        }
+    }
+}
+
+impl std::fmt::Debug for DecryptCipher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DecryptCipher").finish()
+    }
+}
+
+/// Encrypt half of a split [`CipherState`].
+///
+/// Owns an independent AES key schedule and the encryption IV register.
+/// Used by the connection writer task after [`CipherState::split`].
+pub struct EncryptCipher {
+    cipher: Aes128,
+    iv: [u8; 16],
+}
+
+impl EncryptCipher {
+    /// Encrypts data in-place using AES-128-CFB8.
+    ///
+    /// Must be called on the raw byte stream (after frame encoding).
+    pub fn encrypt(&mut self, data: &mut [u8]) {
+        for byte in data.iter_mut() {
+            let mut block = self.iv.into();
+            self.cipher.encrypt_block(&mut block);
+            *byte ^= block[0];
+            self.iv.copy_within(1.., 0);
+            self.iv[15] = *byte;
+        }
+    }
+}
+
+impl std::fmt::Debug for EncryptCipher {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EncryptCipher").finish()
     }
 }
 
@@ -515,5 +598,75 @@ mod tests {
         let c2 = generate_challenge();
         // Technically could be equal, but astronomically unlikely
         assert_ne!(c1, c2, "two challenges should almost certainly differ");
+    }
+
+    // -----------------------------------------------------------------------
+    // CipherState::split tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_cipher_split_roundtrip() {
+        let secret = [0x42u8; 16];
+        let cipher = CipherState::new(&secret);
+        let (mut decrypt, mut encrypt) = cipher.split();
+
+        let original = b"Hello, split cipher!".to_vec();
+        let mut data = original.clone();
+
+        encrypt.encrypt(&mut data);
+        assert_ne!(data, original);
+
+        decrypt.decrypt(&mut data);
+        assert_eq!(data, original);
+    }
+
+    #[test]
+    fn test_cipher_split_matches_unsplit() {
+        let secret = [0x13u8; 16];
+
+        // Encrypt with unsplit CipherState
+        let mut unsplit = CipherState::new(&secret);
+        let original = b"consistency check".to_vec();
+        let mut data_unsplit = original.clone();
+        unsplit.encrypt(&mut data_unsplit);
+
+        // Encrypt with split EncryptCipher
+        let cipher = CipherState::new(&secret);
+        let (_dec, mut enc) = cipher.split();
+        let mut data_split = original.clone();
+        enc.encrypt(&mut data_split);
+
+        assert_eq!(
+            data_unsplit, data_split,
+            "split cipher should produce identical ciphertext"
+        );
+    }
+
+    #[test]
+    fn test_cipher_split_multi_chunk() {
+        let secret = [0xAB; 16];
+        let cipher = CipherState::new(&secret);
+        let (mut decrypt, mut encrypt) = cipher.split();
+
+        // Encrypt in multiple chunks (simulating multiple packets)
+        let chunk1 = b"first chunk".to_vec();
+        let chunk2 = b"second chunk".to_vec();
+        let chunk3 = b"third chunk".to_vec();
+
+        let mut enc1 = chunk1.clone();
+        let mut enc2 = chunk2.clone();
+        let mut enc3 = chunk3.clone();
+
+        encrypt.encrypt(&mut enc1);
+        encrypt.encrypt(&mut enc2);
+        encrypt.encrypt(&mut enc3);
+
+        decrypt.decrypt(&mut enc1);
+        decrypt.decrypt(&mut enc2);
+        decrypt.decrypt(&mut enc3);
+
+        assert_eq!(enc1, chunk1);
+        assert_eq!(enc2, chunk2);
+        assert_eq!(enc3, chunk3);
     }
 }

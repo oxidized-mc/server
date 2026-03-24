@@ -15,6 +15,8 @@ pub mod transport;
 pub mod types;
 
 // Re-export transport sub-modules at the crate root for backwards compatibility.
+pub use transport::channel;
 pub use transport::compression;
 pub use transport::connection;
 pub use transport::crypto;
+pub use transport::handle;
