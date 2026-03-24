@@ -210,6 +210,12 @@ fn main() -> anyhow::Result<()> {
                 world_seed = level_data.world_seed,
                 "New world initialized"
             );
+
+            // Persist immediately so seed and spawn position survive crashes
+            // before the first autosave.
+            if let Err(e) = level_data.save(&level_dat_path) {
+                warn!(error = %e, "Failed to save initial level.dat");
+            }
         }
 
         let server_ctx = Arc::new(ServerContext {

@@ -145,14 +145,29 @@ pub async fn handle_use_item_on(
     }
 
     // Get the held item name and check availability.
-    let (held_item, game_mode, has_items) = {
+    let (held_item, game_mode, has_items, is_sneaking) = {
         let player = play_ctx.player.read();
         let selected = player.inventory.get_selected();
         let name = selected.item.0.clone();
         let gm = player.game_mode;
         let has = !selected.is_empty() && selected.count > 0;
-        (name, gm, has)
+        (name, gm, has, player.is_sneaking)
     };
+
+    // Vanilla: if the clicked block is interactable and the player is NOT
+    // sneaking (or has empty hands), perform block interaction instead of
+    // placement. Since we don't implement full interactions yet, we skip
+    // placement to prevent placing blocks on crafting tables, chests, etc.
+    let clicked_block = get_block(play_ctx.server_ctx, clicked_pos);
+    let suppress_use = is_sneaking && has_items;
+    if !suppress_use {
+        if let Some(state) = clicked_block {
+            if is_interactable_block(play_ctx.server_ctx, state) {
+                send_ack(play_ctx, pkt.sequence).await?;
+                return Ok(());
+            }
+        }
+    }
 
     // In non-Creative modes, verify the player actually has items.
     if game_mode != GameMode::Creative && !has_items {
@@ -192,6 +207,20 @@ pub async fn handle_use_item_on(
             "Block place rejected: position not replaceable"
         );
         // Send the actual block state back to correct client prediction.
+        resync_block(play_ctx, place_pos, None).await?;
+        send_ack(play_ctx, pkt.sequence).await?;
+        return Ok(());
+    }
+
+    // Reject placement if the block would intersect the placing player's
+    // bounding box (vanilla: prevents suffocation by self-placement).
+    if block_intersects_player(play_ctx, place_pos) {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            pos = ?place_pos,
+            "Block place rejected: would intersect player"
+        );
         resync_block(play_ctx, place_pos, None).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
@@ -439,8 +468,9 @@ fn held_item_to_block_state(
 /// Determines the facing direction for block placement.
 ///
 /// Most blocks face *opposite* to the player's look direction (toward the
-/// player). Blocks that attach to surfaces (e.g., buttons, levers, torches)
-/// or have special placement rules use the clicked face instead.
+/// player), matching vanilla `HorizontalDirectionalBlock.getStateForPlacement`.
+/// Blocks like stairs, doors, and beds override this to face in the player's
+/// look direction. Wall-mounted blocks use the clicked face.
 fn facing_for_placement(
     item_name: &str,
     player_yaw: f32,
@@ -451,13 +481,17 @@ fn facing_for_placement(
         return clicked_face;
     }
 
-    // Observer and piston face toward the player (same as look direction)
-    if item_name.contains("observer") || item_name.contains("piston") {
-        return Direction::from_y_rot(f64::from(player_yaw));
+    let player_direction = Direction::from_y_rot(f64::from(player_yaw));
+
+    // Blocks that face in the player's look direction (vanilla overrides
+    // that use getHorizontalDirection() without getOpposite()).
+    if is_player_direction_block(item_name) {
+        return player_direction;
     }
 
     // Most directional blocks face opposite to the player's look direction
-    Direction::from_y_rot(f64::from(player_yaw)).opposite()
+    // (toward the player), including pistons and observers.
+    player_direction.opposite()
 }
 
 /// Returns `true` for blocks that mount on a wall surface rather than being
@@ -472,6 +506,22 @@ fn is_wall_mountable(item_name: &str) -> bool {
         || item_name.contains("wall_skull")
         || item_name.contains("wall_fan")
         || item_name.contains("item_frame")
+}
+
+/// Returns `true` for blocks whose `facing` property should match the
+/// player's look direction (not the opposite).
+///
+/// In vanilla, `HorizontalDirectionalBlock` uses
+/// `getHorizontalDirection().getOpposite()` (toward the player), but many
+/// subclasses override placement to use `getHorizontalDirection()` directly.
+fn is_player_direction_block(item_name: &str) -> bool {
+    item_name.ends_with("_bed")
+        || item_name.ends_with("_door")
+        || item_name.contains("stairs")
+        || item_name.contains("fence_gate")
+        || item_name.contains("trapdoor")
+        || item_name.contains("repeater")
+        || item_name.contains("comparator")
 }
 
 /// Maps a clicked face direction to the corresponding axis for log-type blocks.
@@ -528,7 +578,7 @@ fn double_block_companion(
     _registry: &BlockRegistry,
     primary_pos: BlockPos,
     primary_state_id: u32,
-    player_yaw: f32,
+    _player_yaw: f32,
 ) -> Option<(BlockPos, u32)> {
     let primary = BlockStateId(primary_state_id as u16);
 
@@ -538,7 +588,14 @@ fn double_block_companion(
         Some((primary_pos.above(), u32::from(upper.0)))
     } else if is_bed_block(item_name) {
         // Beds: primary = foot, companion = head in the facing direction.
-        let facing = Direction::from_y_rot(f64::from(player_yaw)).opposite();
+        // The foot's `facing` property already points from foot→head (set by
+        // `facing_for_placement` to the player's look direction).
+        let facing_name = primary
+            .properties()
+            .iter()
+            .find(|&&(k, _)| k == "facing")
+            .map(|&(_, v)| v)?;
+        let facing = direction_from_name(facing_name)?;
         let head_pos = primary_pos.relative(facing);
         let head = primary.with_property("part", "head")?;
         Some((head_pos, u32::from(head.0)))
@@ -624,4 +681,103 @@ fn direction_from_name(name: &str) -> Option<Direction> {
         "down" => Some(Direction::Down),
         _ => None,
     }
+}
+
+/// Returns `true` if the block state represents an interactable block.
+///
+/// Interactable blocks (crafting table, chest, bed, etc.) have a primary
+/// "use" action when right-clicked. Vanilla processes `state.useItemOn()`
+/// before item placement; if the block is interactable and the player is
+/// not sneaking, placement is suppressed.
+fn is_interactable_block(ctx: &Arc<ServerContext>, state_id: u32) -> bool {
+    let bsid = BlockStateId(state_id as u16);
+    if (bsid.0 as usize) >= ctx.block_registry.state_count() {
+        return false;
+    }
+    let name = bsid.block_name();
+    matches!(
+        name,
+        "minecraft:crafting_table"
+            | "minecraft:chest"
+            | "minecraft:trapped_chest"
+            | "minecraft:ender_chest"
+            | "minecraft:furnace"
+            | "minecraft:blast_furnace"
+            | "minecraft:smoker"
+            | "minecraft:enchanting_table"
+            | "minecraft:anvil"
+            | "minecraft:chipped_anvil"
+            | "minecraft:damaged_anvil"
+            | "minecraft:cartography_table"
+            | "minecraft:grindstone"
+            | "minecraft:loom"
+            | "minecraft:stonecutter"
+            | "minecraft:smithing_table"
+            | "minecraft:brewing_stand"
+            | "minecraft:barrel"
+            | "minecraft:hopper"
+            | "minecraft:dropper"
+            | "minecraft:dispenser"
+            | "minecraft:lever"
+            | "minecraft:repeater"
+            | "minecraft:comparator"
+            | "minecraft:daylight_detector"
+            | "minecraft:note_block"
+            | "minecraft:jukebox"
+            | "minecraft:beacon"
+            | "minecraft:shulker_box"
+            | "minecraft:lectern"
+            | "minecraft:bell"
+            | "minecraft:respawn_anchor"
+            | "minecraft:decorated_pot"
+            | "minecraft:crafter"
+    ) || name.ends_with("_bed")
+        || name.ends_with("_door")
+        || name.ends_with("_fence_gate")
+        || name.ends_with("_trapdoor")
+        || name.ends_with("_button")
+        || name.ends_with("_shulker_box")
+        || name.contains("sign")
+}
+
+/// Player half-width (vanilla: 0.3 from center).
+const PLAYER_HALF_WIDTH: f64 = 0.3;
+/// Standing player height (vanilla: 1.8).
+const PLAYER_STANDING_HEIGHT: f64 = 1.8;
+/// Sneaking player height (vanilla: 1.5).
+const PLAYER_SNEAKING_HEIGHT: f64 = 1.5;
+
+/// Returns `true` if placing a full block at `pos` would intersect the
+/// placing player's axis-aligned bounding box.
+fn block_intersects_player(play_ctx: &PlayContext<'_>, pos: BlockPos) -> bool {
+    let player = play_ctx.player.read();
+    let px = player.pos.x;
+    let py = player.pos.y;
+    let pz = player.pos.z;
+    let height = if player.is_sneaking {
+        PLAYER_SNEAKING_HEIGHT
+    } else {
+        PLAYER_STANDING_HEIGHT
+    };
+
+    // Player AABB: (px - 0.3, py, pz - 0.3) to (px + 0.3, py + height, pz + 0.3)
+    // Block AABB:  (bx, by, bz) to (bx + 1, by + 1, bz + 1)
+    let bx = pos.x as f64;
+    let by = pos.y as f64;
+    let bz = pos.z as f64;
+
+    let player_min_x = px - PLAYER_HALF_WIDTH;
+    let player_max_x = px + PLAYER_HALF_WIDTH;
+    let player_min_y = py;
+    let player_max_y = py + height;
+    let player_min_z = pz - PLAYER_HALF_WIDTH;
+    let player_max_z = pz + PLAYER_HALF_WIDTH;
+
+    // AABB overlap test: overlap on all three axes means intersection.
+    player_min_x < bx + 1.0
+        && player_max_x > bx
+        && player_min_y < by + 1.0
+        && player_max_y > by
+        && player_min_z < bz + 1.0
+        && player_max_z > bz
 }
