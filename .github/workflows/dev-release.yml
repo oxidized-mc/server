@@ -116,7 +116,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.BINARY_NAME }}-nightly-${{ matrix.target }}
           path: |
@@ -133,7 +133,7 @@ jobs:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist/
           merge-multiple: true
