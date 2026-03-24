@@ -12,8 +12,10 @@ use oxidized_protocol::packets::play::{
     ClientboundOpenSignEditorPacket, ClientboundSetPlayerInventoryPacket,
     ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
+use oxidized_protocol::types::BlockPos;
+use oxidized_protocol::types::direction::{Axis, Direction};
 use oxidized_world::chunk::level_chunk::OVERWORLD_MAX_Y;
-use oxidized_world::registry::{AIR, BlockRegistry};
+use oxidized_world::registry::{AIR, BlockRegistry, BlockStateId};
 
 use super::PlayContext;
 use super::block_interaction::{
@@ -159,15 +161,21 @@ pub async fn handle_use_item_on(
     }
 
     // Determine block state to place from the held item.
-    let block_state_id =
-        match held_item_to_block_state(&held_item, &play_ctx.server_ctx.block_registry) {
-            Some(id) => id,
-            None => {
-                // Not a placeable block — just acknowledge.
-                send_ack(play_ctx, pkt.sequence).await?;
-                return Ok(());
-            },
-        };
+    let player_yaw = play_ctx.player.read().yaw;
+    let block_state_id = match held_item_to_block_state(
+        &held_item,
+        &play_ctx.server_ctx.block_registry,
+        player_yaw,
+        pkt.hit_result.direction,
+        pkt.hit_result.cursor_y,
+    ) {
+        Some(id) => id,
+        None => {
+            // Not a placeable block — just acknowledge.
+            send_ack(play_ctx, pkt.sequence).await?;
+            return Ok(());
+        },
+    };
 
     // Allow placement if target is air or a replaceable block (tall grass, water, etc.)
     let existing = get_block(play_ctx.server_ctx, place_pos);
@@ -243,8 +251,39 @@ pub async fn handle_use_item_on(
     }
 
     // Broadcast block change to all players (including the acting player).
-    // Vanilla sends updates via the chunk tracking system to everyone.
     broadcast_block_update(play_ctx.server_ctx, place_pos, block_state_id as i32, None);
+
+    // Place the complementary block for double-block items (doors, beds,
+    // tall plants). The primary block was already placed above; this adds
+    // the matching upper/lower or head/foot half.
+    if let Some((companion_pos, companion_state)) = double_block_companion(
+        &held_item,
+        &play_ctx.server_ctx.block_registry,
+        place_pos,
+        block_state_id,
+        player_yaw,
+    ) {
+        if is_within_build_height(companion_pos) {
+            // Only place companion if the target is air or replaceable.
+            let companion_existing = get_block(play_ctx.server_ctx, companion_pos);
+            let companion_replaceable = match companion_existing {
+                Some(state) => is_replaceable_block(play_ctx.server_ctx, state),
+                None => false,
+            };
+            if companion_replaceable {
+                let companion_ok =
+                    set_block(play_ctx.server_ctx, companion_pos, companion_state);
+                if companion_ok {
+                    broadcast_block_update(
+                        play_ctx.server_ctx,
+                        companion_pos,
+                        companion_state as i32,
+                        None,
+                    );
+                }
+            }
+        }
+    }
 
     // If the placed block is a sign, open the sign editor UI.
     if is_sign_block(&held_item) {
@@ -333,20 +372,256 @@ fn is_replaceable_block(ctx: &Arc<ServerContext>, state_id: u32) -> bool {
     )
 }
 
-/// Maps a held item name to a block state ID for placement.
+/// Maps a held item name to a block state ID for placement, applying
+/// directional and positional properties based on the placement context.
 ///
-/// Uses a simple heuristic: look up the item name in the block registry and
-/// return its default state. Items that are not placeable blocks return `None`.
-fn held_item_to_block_state(item_name: &str, registry: &BlockRegistry) -> Option<u32> {
+/// Uses the block registry's default state as a starting point, then adjusts:
+/// - **`facing`**: horizontal direction opposite to the player's look direction
+///   (vanilla convention: blocks face *toward* the player)
+/// - **`axis`**: from the clicked block face (logs, pillars, basalt)
+/// - **`half`**: top/bottom from cursor Y position (slabs, trapdoors)
+/// - **`type`**: top/bottom for slabs using cursor Y
+///
+/// Items that are not placeable blocks return `None`.
+fn held_item_to_block_state(
+    item_name: &str,
+    registry: &BlockRegistry,
+    player_yaw: f32,
+    clicked_face: Direction,
+    cursor_y: f32,
+) -> Option<u32> {
     if item_name.is_empty() || item_name == "minecraft:air" {
         return None;
     }
 
-    let state = registry.default_state(item_name)?;
+    let mut state = registry.default_state(item_name)?;
+
+    // Apply facing property: most directional blocks face opposite to
+    // the player's look direction (so the front faces the player).
+    let props = state.properties();
+    let has_facing = props.iter().any(|&(name, _)| name == "facing");
+    let has_axis = props.iter().any(|&(name, _)| name == "axis");
+    let has_half = props.iter().any(|&(name, _)| name == "half");
+    let has_type = props.iter().any(|&(name, _)| name == "type");
+
+    if has_facing {
+        let facing = facing_for_placement(item_name, player_yaw, clicked_face);
+        if let Some(new_state) = state.with_property("facing", facing.name()) {
+            state = new_state;
+        }
+    }
+
+    if has_axis {
+        let axis = axis_from_face(clicked_face);
+        if let Some(new_state) = state.with_property("axis", axis.name()) {
+            state = new_state;
+        }
+    }
+
+    if has_half {
+        let half = half_from_cursor(cursor_y, clicked_face);
+        if let Some(new_state) = state.with_property("half", half) {
+            state = new_state;
+        }
+    }
+
+    // Slabs use "type" instead of "half" for top/bottom.
+    if has_type && item_name.contains("slab") {
+        let slab_type = slab_type_from_cursor(cursor_y, clicked_face);
+        if let Some(new_state) = state.with_property("type", slab_type) {
+            state = new_state;
+        }
+    }
+
     Some(u32::from(state.0))
+}
+
+/// Determines the facing direction for block placement.
+///
+/// Most blocks face *opposite* to the player's look direction (toward the
+/// player). Blocks that attach to surfaces (e.g., buttons, levers, torches)
+/// or have special placement rules use the clicked face instead.
+fn facing_for_placement(
+    item_name: &str,
+    player_yaw: f32,
+    clicked_face: Direction,
+) -> Direction {
+    // Wall-mounted blocks face the direction of the clicked face
+    if is_wall_mountable(item_name) && clicked_face.is_horizontal() {
+        return clicked_face;
+    }
+
+    // Observer and piston face toward the player (same as look direction)
+    if item_name.contains("observer") || item_name.contains("piston") {
+        return Direction::from_y_rot(f64::from(player_yaw));
+    }
+
+    // Most directional blocks face opposite to the player's look direction
+    Direction::from_y_rot(f64::from(player_yaw)).opposite()
+}
+
+/// Returns `true` for blocks that mount on a wall surface rather than being
+/// placed freestanding.
+fn is_wall_mountable(item_name: &str) -> bool {
+    item_name.contains("button")
+        || item_name.contains("lever")
+        || item_name.contains("wall_torch")
+        || item_name.contains("wall_sign")
+        || item_name.contains("wall_banner")
+        || item_name.contains("wall_head")
+        || item_name.contains("wall_skull")
+        || item_name.contains("wall_fan")
+        || item_name.contains("item_frame")
+}
+
+/// Maps a clicked face direction to the corresponding axis for log-type blocks.
+fn axis_from_face(face: Direction) -> Axis {
+    face.axis()
+}
+
+/// Determines the "half" property value (top/bottom) based on cursor position.
+///
+/// Vanilla rule: if the player clicks the top half of a face (cursor Y ≥ 0.5)
+/// or clicks the bottom face of a block, the block is placed as "top" half.
+fn half_from_cursor(cursor_y: f32, clicked_face: Direction) -> &'static str {
+    if clicked_face == Direction::Down {
+        "top"
+    } else if clicked_face == Direction::Up {
+        "bottom"
+    } else if cursor_y >= 0.5 {
+        "top"
+    } else {
+        "bottom"
+    }
+}
+
+/// Determines the slab "type" property (top/bottom) based on cursor position.
+///
+/// Uses the same logic as `half_from_cursor` but with slab-specific values.
+fn slab_type_from_cursor(cursor_y: f32, clicked_face: Direction) -> &'static str {
+    if clicked_face == Direction::Down {
+        "top"
+    } else if clicked_face == Direction::Up {
+        "bottom"
+    } else if cursor_y >= 0.5 {
+        "top"
+    } else {
+        "bottom"
+    }
 }
 
 /// Returns `true` if the item name represents a sign block.
 fn is_sign_block(item_name: &str) -> bool {
     item_name.contains("sign") && !item_name.contains("signal")
+}
+
+/// Computes the companion block position and state for double-block items.
+///
+/// Returns `Some((pos, state_id))` for the second half of:
+/// - **Doors**: upper half at y+1 (half=upper, same facing)
+/// - **Beds**: head part at facing direction offset (part=head, same facing)
+/// - **Tall plants**: upper half at y+1 (half=upper)
+///
+/// Returns `None` for non-double-block items.
+fn double_block_companion(
+    item_name: &str,
+    _registry: &BlockRegistry,
+    primary_pos: BlockPos,
+    primary_state_id: u32,
+    player_yaw: f32,
+) -> Option<(BlockPos, u32)> {
+    let primary = BlockStateId(primary_state_id as u16);
+
+    if is_door_block(item_name) {
+        // Doors: primary = lower half, companion = upper half at y+1.
+        let upper = primary.with_property("half", "upper")?;
+        Some((primary_pos.above(), u32::from(upper.0)))
+    } else if is_bed_block(item_name) {
+        // Beds: primary = foot, companion = head in the facing direction.
+        let facing = Direction::from_y_rot(f64::from(player_yaw)).opposite();
+        let head_pos = primary_pos.relative(facing);
+        let head = primary.with_property("part", "head")?;
+        Some((head_pos, u32::from(head.0)))
+    } else if is_tall_plant(item_name) {
+        // Tall plants: primary = lower, companion = upper at y+1.
+        // Tall plants use "half" with values "upper"/"lower".
+        let upper = primary.with_property("half", "upper")?;
+        Some((primary_pos.above(), u32::from(upper.0)))
+    } else {
+        None
+    }
+}
+
+/// Returns `true` if the item is a door block (any wood type or iron).
+fn is_door_block(item_name: &str) -> bool {
+    item_name.ends_with("_door")
+}
+
+/// Returns `true` if the item is a bed block (any color).
+fn is_bed_block(item_name: &str) -> bool {
+    item_name.ends_with("_bed")
+}
+
+/// Returns `true` if the item is a tall double-height plant.
+fn is_tall_plant(item_name: &str) -> bool {
+    matches!(
+        item_name,
+        "minecraft:sunflower"
+            | "minecraft:lilac"
+            | "minecraft:rose_bush"
+            | "minecraft:peony"
+            | "minecraft:tall_grass"
+            | "minecraft:large_fern"
+            | "minecraft:pitcher_plant"
+            | "minecraft:tall_seagrass"
+    )
+}
+
+/// Computes the companion break position for double-block items.
+///
+/// When breaking one half of a double block, the other half must also be
+/// removed. Returns `Some(pos)` of the companion block to remove.
+pub(super) fn double_block_break_companion(
+    block_name: &str,
+    state_id: u32,
+    pos: BlockPos,
+) -> Option<BlockPos> {
+    let state = BlockStateId(state_id as u16);
+    let props = state.properties();
+
+    if is_door_block(block_name) || is_tall_plant(block_name) {
+        // Doors and tall plants use "half": "upper"/"lower"
+        let half = props.iter().find(|&&(k, _)| k == "half").map(|&(_, v)| v)?;
+        match half {
+            "upper" => Some(pos.below()),
+            "lower" => Some(pos.above()),
+            _ => None,
+        }
+    } else if is_bed_block(block_name) {
+        // Beds use "part": "head"/"foot" and "facing" for direction
+        let part = props.iter().find(|&&(k, _)| k == "part").map(|&(_, v)| v)?;
+        let facing_name =
+            props.iter().find(|&&(k, _)| k == "facing").map(|&(_, v)| v)?;
+        let facing = direction_from_name(facing_name)?;
+        match part {
+            "head" => Some(pos.relative(facing.opposite())),
+            "foot" => Some(pos.relative(facing)),
+            _ => None,
+        }
+    } else {
+        None
+    }
+}
+
+/// Parses a direction name string into a `Direction`.
+fn direction_from_name(name: &str) -> Option<Direction> {
+    match name {
+        "north" => Some(Direction::North),
+        "south" => Some(Direction::South),
+        "east" => Some(Direction::East),
+        "west" => Some(Direction::West),
+        "up" => Some(Direction::Up),
+        "down" => Some(Direction::Down),
+        _ => None,
+    }
 }

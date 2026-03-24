@@ -4,7 +4,6 @@
 //! broadcasts position changes to other players, and sends/forgets chunks
 //! when the player crosses chunk boundaries.
 
-use std::sync::Arc;
 use std::time::Instant;
 
 use oxidized_game::level::game_rules::GameRuleKey;
@@ -21,7 +20,6 @@ use oxidized_protocol::packets::play::{
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
 use oxidized_world::chunk::ChunkPos;
-use parking_lot::RwLock;
 use tracing::{debug, trace, warn};
 
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
@@ -413,17 +411,9 @@ pub(super) async fn send_chunk_updates(
             .await?;
 
         for pos in to_load {
-            // Use the existing chunk from storage if available (preserves block
-            // changes), otherwise generate a new one.
-            let chunk_ref = ctx
-                .server_ctx
-                .chunks
-                .entry(*pos)
-                .or_insert_with(|| {
-                    let chunk = ctx.server_ctx.chunk_generator.generate_chunk(*pos);
-                    Arc::new(RwLock::new(chunk))
-                })
-                .clone();
+            // Load from disk or generate, preserving in-memory block changes.
+            let chunk_ref =
+                super::helpers::get_or_create_chunk(ctx.server_ctx, *pos).await;
 
             let chunk_pkt = build_chunk_packet(&chunk_ref.read());
             ctx.conn_handle

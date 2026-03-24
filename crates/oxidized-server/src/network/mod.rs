@@ -30,6 +30,7 @@ use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState
 use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::ServerStatus;
 use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::anvil::{AsyncChunkLoader, ChunkSerializer};
 use oxidized_world::chunk::{ChunkPos, LevelChunk};
 use oxidized_world::registry::BlockRegistry;
 use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
@@ -99,6 +100,10 @@ pub struct ServerContext {
     pub block_registry: Arc<BlockRegistry>,
     /// Chunk generator — produces new chunks on demand for unseen positions.
     pub chunk_generator: Arc<dyn ChunkGenerator>,
+    /// Async chunk loader — loads chunks from disk (region files).
+    pub chunk_loader: Arc<AsyncChunkLoader>,
+    /// Chunk serializer — converts in-memory chunks to Anvil NBT format.
+    pub chunk_serializer: Arc<ChunkSerializer>,
     /// Operator permission level for all players (from server config).
     /// TODO: Replace with per-player ops from `ops.json`.
     pub op_permission_level: i32,
@@ -786,6 +791,11 @@ mod tests {
     }
 
     fn test_login_context() -> Arc<LoginContext> {
+        let block_registry = Arc::new(BlockRegistry::load().unwrap());
+        let loader = oxidized_world::anvil::AnvilChunkLoader::new(
+            std::path::Path::new(""),
+            block_registry.clone(),
+        );
         Arc::new(LoginContext {
             server_status: Arc::new(test_server_status()),
             keypair: Arc::new(ServerKeyPair::generate().unwrap()),
@@ -814,9 +824,13 @@ mod tests {
                 storage: LevelStorageSource::new(""),
                 chunks: dashmap::DashMap::new(),
                 dirty_chunks: dashmap::DashSet::new(),
-                block_registry: Arc::new(BlockRegistry::load().unwrap()),
+                block_registry: block_registry.clone(),
                 chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
                     oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                )),
+                chunk_loader: Arc::new(oxidized_world::anvil::AsyncChunkLoader::new(loader)),
+                chunk_serializer: Arc::new(oxidized_world::anvil::ChunkSerializer::new(
+                    block_registry,
                 )),
                 op_permission_level: 4,
                 spawn_protection: 16,

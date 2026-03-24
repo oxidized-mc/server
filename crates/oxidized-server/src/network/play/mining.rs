@@ -23,7 +23,7 @@ use super::block_interaction::{
 use crate::network::helpers::decode_packet;
 use crate::network::{BroadcastMessage, ConnectionError, ServerContext};
 use oxidized_protocol::chat::Component;
-use oxidized_world::registry::AIR;
+use oxidized_world::registry::{AIR, BlockStateId};
 use std::sync::Arc;
 
 /// Minimum survival mining duration.
@@ -312,6 +312,31 @@ async fn do_block_break(
     // Vanilla sends the block update via the chunk tracking system to everyone,
     // in addition to the ack. The client needs both to fully commit the change.
     broadcast_block_update(play_ctx.server_ctx, pos, u32::from(AIR.0) as i32, None);
+
+    // Break the companion block of double-block items (doors, beds, tall plants).
+    if let Some(old) = old_state {
+        let block_name = BlockStateId(old as u16).block_name();
+        if let Some(companion_pos) =
+            super::placement::double_block_break_companion(block_name, old, pos)
+        {
+            let companion_state = get_block(play_ctx.server_ctx, companion_pos);
+            if companion_state.is_some_and(|s| s != u32::from(AIR.0)) {
+                let removed = super::block_interaction::set_block(
+                    play_ctx.server_ctx,
+                    companion_pos,
+                    u32::from(AIR.0),
+                );
+                if removed {
+                    broadcast_block_update(
+                        play_ctx.server_ctx,
+                        companion_pos,
+                        u32::from(AIR.0) as i32,
+                        None,
+                    );
+                }
+            }
+        }
+    }
 
     // Acknowledge the sequence so the client accepts its prediction.
     send_ack(play_ctx, sequence).await?;

@@ -21,6 +21,7 @@ use oxidized_protocol::constants;
 use oxidized_protocol::crypto::ServerKeyPair;
 use oxidized_protocol::status::{ServerStatus, StatusPlayers, StatusVersion};
 use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
 use oxidized_world::registry::BlockRegistry;
 use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
 use tokio::sync::broadcast;
@@ -178,6 +179,13 @@ fn main() -> anyhow::Result<()> {
         let chunk_generator: Arc<dyn ChunkGenerator> =
             Arc::new(FlatChunkGenerator::new(FlatWorldConfig::default()));
 
+        // Create the chunk loader and serializer for disk I/O.
+        let region_dir = storage.region_dir(oxidized_world::storage::Dimension::Overworld);
+        let anvil_loader =
+            AnvilChunkLoader::new(&region_dir, Arc::clone(&block_registry));
+        let chunk_loader = Arc::new(AsyncChunkLoader::new(anvil_loader));
+        let chunk_serializer = Arc::new(ChunkSerializer::new(Arc::clone(&block_registry)));
+
         // Set spawn position to the generator's recommended Y for new worlds.
         let is_new_world = !level_dat_path.exists();
         if is_new_world {
@@ -211,6 +219,8 @@ fn main() -> anyhow::Result<()> {
             dirty_chunks: dashmap::DashSet::new(),
             block_registry,
             chunk_generator,
+            chunk_loader,
+            chunk_serializer,
             op_permission_level: config.admin.op_permission_level,
             spawn_protection: config.gameplay.spawn_protection,
             kick_channels: dashmap::DashMap::new(),
@@ -292,6 +302,18 @@ fn main() -> anyhow::Result<()> {
             match tick::save_level_dat(&shutdown_server_ctx).await {
                 Ok(()) => info!("level.dat saved successfully"),
                 Err(e) => error!(error = %e, "Failed to save level.dat on shutdown"),
+            }
+        }
+
+        // Flush all dirty chunks to region files.
+        {
+            let dirty_count = shutdown_server_ctx.dirty_chunks.len();
+            if dirty_count > 0 {
+                info!(dirty_count, "Saving dirty chunks...");
+                match tick::save_dirty_chunks(&shutdown_server_ctx).await {
+                    Ok(saved) => info!(saved, "Chunks saved successfully"),
+                    Err(e) => error!(error = %e, "Failed to save chunks on shutdown"),
+                }
             }
         }
 

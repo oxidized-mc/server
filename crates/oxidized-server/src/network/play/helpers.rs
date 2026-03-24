@@ -4,10 +4,8 @@
 
 use std::sync::Arc;
 
-use dashmap::DashMap;
 use oxidized_game::chunk::view_distance::spiral_chunks;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
-use oxidized_game::worldgen::ChunkGenerator;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::ConnectionError;
 use oxidized_protocol::handle::ConnectionHandle;
@@ -17,14 +15,58 @@ use oxidized_protocol::packets::play::{
 };
 use oxidized_world::chunk::{ChunkPos, LevelChunk};
 use parking_lot::RwLock;
+use tracing::warn;
+
+use crate::network::ServerContext;
+
+/// Loads a chunk from disk or generates a new one, inserting it into
+/// the shared chunk storage.
+///
+/// Checks the in-memory `DashMap` first, then tries disk, then generates.
+pub(super) async fn get_or_create_chunk(
+    server_ctx: &ServerContext,
+    pos: ChunkPos,
+) -> Arc<RwLock<LevelChunk>> {
+    // Fast path: already in memory.
+    if let Some(existing) = server_ctx.chunks.get(&pos) {
+        return existing.clone();
+    }
+
+    // Try loading from disk.
+    match server_ctx.chunk_loader.load_chunk(pos.x, pos.z).await {
+        Ok(Some(chunk)) => {
+            return server_ctx
+                .chunks
+                .entry(pos)
+                .or_insert_with(|| Arc::new(RwLock::new(chunk)))
+                .clone();
+        },
+        Ok(None) => {
+            // Not on disk — will generate below.
+        },
+        Err(e) => {
+            warn!(chunk_x = pos.x, chunk_z = pos.z, error = %e, "Failed to load chunk from disk");
+        },
+    }
+
+    // Generate a new chunk.
+    server_ctx
+        .chunks
+        .entry(pos)
+        .or_insert_with(|| {
+            let chunk = server_ctx.chunk_generator.generate_chunk(pos);
+            Arc::new(RwLock::new(chunk))
+        })
+        .clone()
+}
 
 /// Sends the initial chunk batch for a player joining the world.
 ///
-/// Generates chunks using the provided [`ChunkGenerator`] in a spiral pattern
-/// around the player and sends them wrapped in `ChunkBatchStart` /
-/// `ChunkBatchFinished` framing via the outbound channel.
+/// Loads chunks from disk or generates them using the [`ChunkGenerator`]
+/// in a spiral pattern around the player, sending them wrapped in
+/// `ChunkBatchStart` / `ChunkBatchFinished` framing via the outbound channel.
 ///
-/// Each chunk is also registered in the shared `chunk_storage` map so that
+/// Each chunk is also registered in the shared chunk storage so that
 /// play-state handlers (block breaking/placing) can read and modify blocks.
 ///
 /// Returns the number of chunks sent.
@@ -32,8 +74,7 @@ pub async fn send_initial_chunks(
     conn_handle: &ConnectionHandle,
     center: ChunkPos,
     view_distance: i32,
-    chunk_storage: &DashMap<ChunkPos, Arc<RwLock<LevelChunk>>>,
-    chunk_generator: &dyn ChunkGenerator,
+    server_ctx: &ServerContext,
 ) -> Result<i32, ConnectionError> {
     // Start the chunk batch.
     conn_handle
@@ -45,13 +86,7 @@ pub async fn send_initial_chunks(
 
     let mut count: i32 = 0;
     for chunk_pos in spiral_chunks(center, view_distance) {
-        let chunk_ref = chunk_storage
-            .entry(chunk_pos)
-            .or_insert_with(|| {
-                let chunk = chunk_generator.generate_chunk(chunk_pos);
-                Arc::new(RwLock::new(chunk))
-            })
-            .clone();
+        let chunk_ref = get_or_create_chunk(server_ctx, chunk_pos).await;
 
         let pkt = build_chunk_packet(&chunk_ref.read());
         conn_handle

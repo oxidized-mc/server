@@ -405,10 +405,16 @@ mod tests {
         use oxidized_game::level::tick_rate::ServerTickRateManager;
         use oxidized_game::player::PlayerList;
         use oxidized_protocol::types::resource_location::ResourceLocation;
+        use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
         use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
         use parking_lot::RwLock;
         use tokio::sync::broadcast;
 
+        let block_registry = Arc::new(BlockRegistry::load().unwrap());
+        let loader = AnvilChunkLoader::new(
+            std::path::Path::new(""),
+            block_registry.clone(),
+        );
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
             level_data: RwLock::new(
@@ -428,10 +434,12 @@ mod tests {
             storage: LevelStorageSource::new(""),
             chunks: dashmap::DashMap::new(),
             dirty_chunks: dashmap::DashSet::new(),
-            block_registry: Arc::new(BlockRegistry::load().unwrap()),
+            block_registry: block_registry.clone(),
             chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
                 oxidized_game::worldgen::flat::FlatWorldConfig::default(),
             )),
+            chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
+            chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
             op_permission_level: 4,
             spawn_protection: 16,
             kick_channels: dashmap::DashMap::new(),
@@ -444,10 +452,16 @@ mod tests {
         use oxidized_game::level::tick_rate::ServerTickRateManager;
         use oxidized_game::player::PlayerList;
         use oxidized_protocol::types::resource_location::ResourceLocation;
+        use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
         use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
         use parking_lot::RwLock;
         use tokio::sync::broadcast;
 
+        let block_registry = Arc::new(BlockRegistry::load().unwrap());
+        let loader = AnvilChunkLoader::new(
+            std::path::Path::new(""),
+            block_registry.clone(),
+        );
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
             level_data: RwLock::new(
@@ -467,10 +481,12 @@ mod tests {
             storage: LevelStorageSource::new(""),
             chunks: dashmap::DashMap::new(),
             dirty_chunks: dashmap::DashSet::new(),
-            block_registry: Arc::new(BlockRegistry::load().unwrap()),
+            block_registry: block_registry.clone(),
             chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
                 oxidized_game::worldgen::flat::FlatWorldConfig::default(),
             )),
+            chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
+            chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
             op_permission_level: 4,
             spawn_protection: radius,
             kick_channels: dashmap::DashMap::new(),

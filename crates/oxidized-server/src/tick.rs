@@ -8,6 +8,7 @@
 //!
 //! Corresponds to `net.minecraft.server.MinecraftServer.tickServer()`.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
@@ -17,6 +18,8 @@ use oxidized_protocol::packets::play::{
     ClientboundGameEventPacket, ClientboundSetTimePacket, ClientboundTickingStepPacket,
     ClockNetworkState, ClockUpdate, GameEventType,
 };
+use oxidized_world::anvil::{RegionFile, compress_zlib};
+use oxidized_world::chunk::ChunkPos;
 use rand::Rng;
 use rand::RngExt;
 use rand::SeedableRng;
@@ -190,6 +193,7 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
     };
     if tick_count > 0 && tick_count % autosave_interval == 0 {
         autosave_level_dat(ctx);
+        autosave_chunks(ctx);
     }
 }
 
@@ -386,6 +390,191 @@ fn autosave_level_dat(ctx: &ServerContext) {
     }
 }
 
+/// Saves all dirty chunks to region files synchronously.
+///
+/// Drains the `dirty_chunks` set, serializes each chunk using
+/// [`ChunkSerializer`], compresses with zlib, and writes to the
+/// appropriate `.mca` region file. Chunks are grouped by region
+/// to minimise file opens/flushes.
+///
+/// Returns the number of chunks saved.
+///
+/// # Errors
+///
+/// Returns the first I/O error encountered. Chunks already written
+/// before the error remain on disk.
+pub fn save_dirty_chunks_blocking(
+    ctx: &ServerContext,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
+    let dirty: Vec<ChunkPos> = ctx.dirty_chunks.iter().map(|r| *r).collect();
+    if dirty.is_empty() {
+        return Ok(0);
+    }
+
+    let region_dir = ctx
+        .storage
+        .region_dir(oxidized_world::storage::Dimension::Overworld);
+
+    // Group chunks by region coordinates.
+    let mut by_region: HashMap<(i32, i32), Vec<ChunkPos>> = HashMap::new();
+    for pos in &dirty {
+        let rx = pos.x.div_euclid(32);
+        let rz = pos.z.div_euclid(32);
+        by_region.entry((rx, rz)).or_default().push(*pos);
+    }
+
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as u32)
+        .unwrap_or(0);
+
+    let mut saved = 0usize;
+    for ((rx, rz), positions) in &by_region {
+        let region_path = region_dir.join(format!("r.{rx}.{rz}.mca"));
+        let mut region = if region_path.exists() {
+            RegionFile::open_rw(&region_path)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
+        } else {
+            RegionFile::create(&region_path)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
+        };
+
+        for pos in positions {
+            let chunk_ref = match ctx.chunks.get(pos) {
+                Some(r) => r.clone(),
+                None => continue, // Chunk was unloaded since marking dirty
+            };
+            let chunk = chunk_ref.read();
+            let nbt_bytes = match ctx.chunk_serializer.serialize(&chunk) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    warn!(pos = ?pos, error = %e, "Failed to serialize chunk, will retry");
+                    continue;
+                },
+            };
+            let compressed = match compress_zlib(&nbt_bytes) {
+                Ok(data) => data,
+                Err(e) => {
+                    warn!(pos = ?pos, error = %e, "Failed to compress chunk, will retry");
+                    continue;
+                },
+            };
+            match region.write_chunk_data(pos.x, pos.z, &compressed, timestamp) {
+                Ok(()) => {
+                    // Only remove from dirty set after successful write.
+                    ctx.dirty_chunks.remove(pos);
+                    saved += 1;
+                },
+                Err(e) => {
+                    warn!(pos = ?pos, error = %e, "Failed to write chunk, will retry");
+                },
+            }
+        }
+    }
+
+    Ok(saved)
+}
+
+/// Autosaves dirty chunks from the tick thread, logging the outcome.
+fn autosave_chunks(ctx: &ServerContext) {
+    if ctx.dirty_chunks.is_empty() {
+        return;
+    }
+    debug!("Autosaving dirty chunks...");
+    match save_dirty_chunks_blocking(ctx) {
+        Ok(count) => debug!(count, "Chunk autosave complete"),
+        Err(e) => warn!(error = %e, "Chunk autosave failed"),
+    }
+}
+
+/// Saves dirty chunks asynchronously via `spawn_blocking` (ADR-015).
+///
+/// Used by the shutdown save path (which runs in async context).
+/// Serializes all dirty chunks in the current thread, then writes
+/// them to region files on a blocking thread.
+pub async fn save_dirty_chunks(
+    ctx: &ServerContext,
+) -> Result<usize, Box<dyn std::error::Error + Send>> {
+    let dirty: Vec<ChunkPos> = ctx.dirty_chunks.iter().map(|r| *r).collect();
+    if dirty.is_empty() {
+        return Ok(0);
+    }
+
+    let region_dir = ctx
+        .storage
+        .region_dir(oxidized_world::storage::Dimension::Overworld);
+    let serializer = ctx.chunk_serializer.clone();
+
+    // Serialize all dirty chunks, skipping failures (they stay dirty).
+    let mut chunk_data: Vec<(ChunkPos, Vec<u8>)> = Vec::with_capacity(dirty.len());
+    for pos in &dirty {
+        let chunk_ref = match ctx.chunks.get(pos) {
+            Some(r) => r.clone(),
+            None => continue,
+        };
+        let chunk = chunk_ref.read();
+        let nbt_bytes = match serializer.serialize(&chunk) {
+            Ok(b) => b,
+            Err(e) => {
+                warn!(pos = ?pos, error = %e, "Failed to serialize chunk on shutdown");
+                continue;
+            },
+        };
+        match compress_zlib(&nbt_bytes) {
+            Ok(compressed) => chunk_data.push((*pos, compressed)),
+            Err(e) => {
+                warn!(pos = ?pos, error = %e, "Failed to compress chunk on shutdown");
+            },
+        }
+    }
+
+    // Track which positions we successfully serialized so we can
+    // remove them from dirty_chunks after the disk write.
+    let serialized_positions: Vec<ChunkPos> =
+        chunk_data.iter().map(|(pos, _)| *pos).collect();
+
+    let result = tokio::task::spawn_blocking(move || -> Result<usize, Box<dyn std::error::Error + Send>> {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as u32)
+            .unwrap_or(0);
+
+        let mut by_region: HashMap<(i32, i32), Vec<(ChunkPos, Vec<u8>)>> = HashMap::new();
+        for (pos, data) in chunk_data {
+            let rx = pos.x.div_euclid(32);
+            let rz = pos.z.div_euclid(32);
+            by_region.entry((rx, rz)).or_default().push((pos, data));
+        }
+
+        let mut saved = 0usize;
+        for ((rx, rz), chunks) in &by_region {
+            let region_path = region_dir.join(format!("r.{rx}.{rz}.mca"));
+            let mut region = if region_path.exists() {
+                RegionFile::open_rw(&region_path)
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
+            } else {
+                RegionFile::create(&region_path)
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
+            };
+            for (pos, compressed) in chunks {
+                region.write_chunk_data(pos.x, pos.z, compressed, timestamp)
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+                saved += 1;
+            }
+        }
+        Ok(saved)
+    })
+    .await
+    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)??;
+
+    // Remove successfully saved chunks from the dirty set.
+    for pos in &serialized_positions {
+        ctx.dirty_chunks.remove(pos);
+    }
+
+    Ok(result)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -401,9 +590,15 @@ mod tests {
     const TICKS_PER_DAY: i64 = 24_000;
 
     fn test_ctx() -> Arc<ServerContext> {
+        use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
         use oxidized_world::registry::BlockRegistry;
         use tokio::sync::broadcast;
 
+        let block_registry = Arc::new(BlockRegistry::load().unwrap());
+        let loader = AnvilChunkLoader::new(
+            std::path::Path::new(""),
+            block_registry.clone(),
+        );
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
             level_data: RwLock::new(
@@ -423,10 +618,12 @@ mod tests {
             storage: LevelStorageSource::new(""),
             chunks: dashmap::DashMap::new(),
             dirty_chunks: dashmap::DashSet::new(),
-            block_registry: Arc::new(BlockRegistry::load().unwrap()),
+            block_registry: block_registry.clone(),
             chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
                 oxidized_game::worldgen::flat::FlatWorldConfig::default(),
             )),
+            chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
+            chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
             op_permission_level: 4,
             spawn_protection: 16,
             kick_channels: dashmap::DashMap::new(),

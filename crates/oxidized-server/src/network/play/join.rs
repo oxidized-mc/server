@@ -181,8 +181,7 @@ pub(super) async fn send_join_sequence(
         conn_handle,
         chunk_center,
         player_view_distance,
-        &server_ctx.chunks,
-        server_ctx.chunk_generator.as_ref(),
+        server_ctx,
     )
     .await?;
 
