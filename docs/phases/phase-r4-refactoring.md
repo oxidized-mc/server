@@ -16,7 +16,7 @@ unbounded buffers, and clean cancellation. ADR-006 compliance is complete.
 | R4.1 | Define channel types and connection handle API | ✅ Complete |
 | R4.2 | Split Connection into reader/writer halves | ✅ Complete |
 | R4.3 | Implement writer task with batch flushing | ✅ Complete |
-| R4.4 | Implement reader task with rate limiting | ❌ Not Started |
+| R4.4 | Implement reader task with rate limiting | ✅ Complete |
 | R4.5 | Migrate pre-play states (Handshake/Status/Login/Config) | ❌ Not Started |
 | R4.6 | Migrate play state — inbound path | ❌ Not Started |
 | R4.7 | Migrate play state — outbound path (direct sends) | ❌ Not Started |
@@ -780,10 +780,22 @@ and multiple flush cycles. 10 writer task tests in `oxidized-server`
 covering single/multiple packets, drain cycles, clean shutdown, TCP
 close, encryption, compression, memory budget, and packet ordering.
 
-### Phase 3: Reader task (R4.4) — testable in isolation
+### Phase 3: Reader task (R4.4) — ✅ Complete
 
-Implement and test `reader_loop`. Reads from `ConnectionReader`,
-dispatches to a channel. Rate limiting tested with burst sends.
+Implemented `reader_loop` in `oxidized-server/src/network/reader.rs`. The
+reader task reads raw packets from `ConnectionReader` (handling decryption
+and decompression), enforces a per-tick rate limit (500 packets per 50 ms
+window per ADR-006), and dispatches decoded packets through the bounded
+inbound channel to game logic. Backpressure is applied naturally: when the
+inbound channel (128 capacity) is full, `send().await` blocks, which stops
+TCP reads, triggering TCP flow control on the client. Clean shutdown occurs
+when the inbound channel receiver drops.
+
+**Tests added:** 11 reader task tests in `oxidized-server` covering single
+and multiple packet dispatch, rate limit enforcement, rate limit window
+reset, clean shutdown on receiver drop, TCP close handling, backpressure
+blocking, encrypted packets, compressed packets, encrypted+compressed
+combined, and packet ordering preservation.
 
 ### Phase 4: Integration (R4.5 + R4.6 + R4.7 + R4.8) — the big switch
 
@@ -902,11 +914,11 @@ R4.10 (compliance)       ── depends on all above
 | ADR | Requirement | Status |
 |-----|-------------|--------|
 | 006 | Per-connection reader/writer task pair | ❌ → target |
-| 006 | Bounded inbound channel (128) | ❌ → target |
+| 006 | Bounded inbound channel (128) | ✅ Complete |
 | 006 | Bounded outbound channel (512) | ❌ → target |
 | 006 | Writer batch flushing | ✅ Complete |
 | 006 | TCP_NODELAY | ✅ Already compliant |
-| 006 | Rate limiting (500/tick) | ❌ → target |
+| 006 | Rate limiting (500/tick) | ✅ Complete |
 | 006 | Per-connection memory budget (256 KB) | ❌ → target |
 | 006 | Throughput benchmark (>5000 pkt/s) | ❌ → target |
 | 006 | Backpressure test | ❌ → target |

@@ -97,6 +97,10 @@ pub enum ConnectionError {
     /// A protocol-level error when decoding a typed packet.
     #[error("protocol error: {0}")]
     Protocol(#[from] PacketDecodeError),
+
+    /// The client exceeded the packet rate limit (ADR-006).
+    #[error("rate limited: client exceeded {0} packets per tick window")]
+    RateLimited(u32),
 }
 
 // ---------------------------------------------------------------------------

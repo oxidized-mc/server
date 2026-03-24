@@ -10,6 +10,7 @@ pub mod helpers;
 mod login;
 mod play;
 mod status;
+pub mod reader;
 pub mod writer;
 
 use std::net::{IpAddr, SocketAddr};
