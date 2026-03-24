@@ -1720,6 +1720,7 @@ dependencies = [
  "dashmap",
  "glam 0.32.1",
  "indexmap",
+ "insta",
  "lru",
  "oxidized-nbt",
  "oxidized-protocol",

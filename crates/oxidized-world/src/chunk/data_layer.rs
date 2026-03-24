@@ -210,4 +210,101 @@ mod tests {
         let dl2 = DataLayer::from_bytes(&bytes).unwrap();
         assert_eq!(dl2.get(3, 7, 11), 14);
     }
+
+    #[test]
+    fn test_filled_15_byte_pattern() {
+        let dl = DataLayer::filled(15);
+        // Every byte should be 0xFF (both nibbles = 15)
+        assert!(dl.as_bytes().iter().all(|&b| b == 0xFF));
+        assert_eq!(dl.as_bytes().len(), DATA_LAYER_SIZE);
+        insta::assert_snapshot!(
+            "filled_15_first_16_bytes",
+            format!("{:02X?}", &dl.as_bytes()[..16])
+        );
+    }
+
+    #[test]
+    fn test_filled_0_byte_pattern() {
+        let dl = DataLayer::filled(0);
+        assert!(dl.as_bytes().iter().all(|&b| b == 0x00));
+    }
+
+    #[test]
+    fn test_filled_arbitrary_value() {
+        for v in 0..=15 {
+            let dl = DataLayer::filled(v);
+            let expected_byte = v | (v << 4);
+            assert!(
+                dl.as_bytes().iter().all(|&b| b == expected_byte),
+                "filled({v}) should produce byte {expected_byte:#04X}"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// get(x,y,z) returns the value previously set(x,y,z) for all valid coordinates.
+        #[test]
+        fn proptest_get_returns_set_value(
+            x in 0usize..16,
+            y in 0usize..16,
+            z in 0usize..16,
+            value in 0u8..=15,
+        ) {
+            let mut dl = DataLayer::new();
+            dl.set(x, y, z, value);
+            prop_assert_eq!(dl.get(x, y, z), value);
+        }
+
+        /// Setting one nibble never corrupts its adjacent nibble (same byte).
+        #[test]
+        fn proptest_adjacent_nibbles_independent(
+            y in 0usize..16,
+            z in 0usize..16,
+            even_x in (0usize..8).prop_map(|x| x * 2),
+            val_even in 0u8..=15,
+            val_odd in 0u8..=15,
+        ) {
+            let mut dl = DataLayer::new();
+            let odd_x = even_x + 1;
+
+            // Set both nibbles in the same byte
+            dl.set(even_x, y, z, val_even);
+            dl.set(odd_x, y, z, val_odd);
+
+            prop_assert_eq!(dl.get(even_x, y, z), val_even,
+                "even nibble corrupted at ({}, {}, {})", even_x, y, z);
+            prop_assert_eq!(dl.get(odd_x, y, z), val_odd,
+                "odd nibble corrupted at ({}, {}, {})", odd_x, y, z);
+
+            // Set even again — odd must survive
+            dl.set(even_x, y, z, val_even ^ 0x0F);
+            prop_assert_eq!(dl.get(odd_x, y, z), val_odd,
+                "odd nibble corrupted after re-setting even at ({}, {}, {})", even_x, y, z);
+        }
+
+        /// from_bytes(layer.as_bytes()) roundtrips perfectly.
+        #[test]
+        fn proptest_from_bytes_roundtrip(
+            bytes in proptest::collection::vec(any::<u8>(), DATA_LAYER_SIZE),
+        ) {
+            let dl = DataLayer::from_bytes(&bytes).unwrap();
+            prop_assert_eq!(dl.as_bytes(), bytes.as_slice());
+
+            // Also verify all 4096 nibble positions survive roundtrip
+            let dl2 = DataLayer::from_bytes(dl.as_bytes()).unwrap();
+            for x in 0..16 {
+                for y in 0..16 {
+                    for z in 0..16 {
+                        prop_assert_eq!(dl.get(x, y, z), dl2.get(x, y, z));
+                    }
+                }
+            }
+        }
+    }
 }

@@ -10,6 +10,7 @@ pub mod entity;
 pub mod event;
 pub mod inventory;
 pub mod level;
+pub mod lighting;
 pub mod net;
 pub mod physics;
 pub mod player;

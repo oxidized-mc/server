@@ -21,16 +21,14 @@ scaffolded with tests. The codebase is audit-clean and ready to scale to Phase 3
 | R3.6 | Boolean Naming Convention (Project Style Rules) | ✅ Done |
 | R3.7 | Documentation Gaps (Project Style Rules) | ✅ Done |
 | R3.8 | Worldgen Pipeline Structural Compliance (ADR-016) | ✅ Done |
-| R3.9 | Lighting Engine Structural Compliance (ADR-017) | ❌ Not Started |
+| R3.9 | Lighting Engine Structural Compliance (ADR-017) | ✅ Done |
 | R3.10 | Entity System Structural Compliance (ADR-018) | ❌ Not Started |
 
-**Remaining work:** R3.9–R3.10 add scaffolding types and tests for
-lighting engine and ECS entity system. These are type definitions
-and module skeletons only — no feature implementation. See detailed plans below.
+**Remaining work:** R3.10 adds scaffolding types and tests for
+the ECS entity system. These are type definitions
+and module skeletons only — no feature implementation. See detailed plan below.
 
-**Codebase verification (R3.9–R3.10 gaps):**
-- `lighting/` module — does not exist
-- `DataLayer` proptest coverage — missing (only unit tests exist)
+**Codebase verification (R3.10 gaps):**
 - `entity/components.rs`, `markers.rs`, `phases.rs`, `bundles.rs` — do not exist
 - `docs/entity-mapping.md` — does not exist
 - `#[derive(Component)]` types — none in codebase (bevy_ecs dep present but unused)
@@ -832,9 +830,9 @@ tests broken (monolithic Entity struct is unchanged).
 - [x] All public `Result`-returning functions have `# Errors` doc section
 - [x] `rayon` re-added to workspace with scheduler scaffolding (R3.8)
 - [x] `WorldgenScheduler`, `ChunkGenPriority`, `StatusRequirement` types exist with tests
-- [ ] `LightEngine`, `LightUpdateQueue` module skeleton exists (R3.9)
-- [ ] `DataLayer` has property-based roundtrip tests
-- [ ] Light packet compliance tests pass
+- [x] `LightEngine`, `LightUpdateQueue` module skeleton exists (R3.9)
+- [x] `DataLayer` has property-based roundtrip tests
+- [x] Light packet compliance tests pass
 - [ ] ECS component types defined with `#[derive(Component)]` (R3.10)
 - [ ] Marker components and spawn bundles compile and pass query tests
 - [ ] `TickPhase` enum matches ADR-018 phase order
@@ -915,7 +913,7 @@ Summary of all 39 ADRs vs. current codebase status:
 | 014 | Chunk Storage | ✅ Compliant | Anvil format + atomic writes |
 | 015 | Disk I/O | ✅ Compliant | spawn_blocking for all file I/O |
 | 016 | Worldgen Pipeline | ⚠️ Scaffolding | ChunkStatus + trait exist; scheduler/priority types added in R3.8 |
-| 017 | Lighting Engine | ⚠️ Scaffolding | DataLayer + serializer exist; engine skeleton added in R3.9 |
+| 017 | Lighting Engine | ⚠️ Scaffolding | DataLayer + serializer + engine/queue skeleton + proptests + compliance tests (R3.9) |
 | 018 | Entity System | ⚠️ Scaffolding | bevy_ecs dep exists; component types + bundles added in R3.10 |
 | 019 | Tick Loop | ✅ Compliant | Dedicated OS thread "tick" |
 | 020 | Player Session | 🟡 Future phase | Arc<RwLock> model, not channel-based |
