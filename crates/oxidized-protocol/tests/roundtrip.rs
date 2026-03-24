@@ -121,7 +121,7 @@ fn roundtrip_clientbound_hello() {
         server_id: "oxidized".to_string(),
         public_key: vec![0xDE, 0xAD, 0xBE, 0xEF],
         challenge: vec![0xCA, 0xFE, 0xBA, 0xBE],
-        should_authenticate: true,
+        is_authenticating: true,
     });
 }
 

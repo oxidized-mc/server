@@ -24,7 +24,7 @@ pub struct ClientboundHelloPacket {
     /// A random challenge token for the client to encrypt.
     pub challenge: Vec<u8>,
     /// Whether the client should proceed with Mojang authentication.
-    pub should_authenticate: bool,
+    pub is_authenticating: bool,
 }
 
 impl Packet for ClientboundHelloPacket {
@@ -34,12 +34,12 @@ impl Packet for ClientboundHelloPacket {
         let server_id = types::read_string(&mut data, 20)?;
         let public_key = types::read_byte_array(&mut data, 256)?;
         let challenge = types::read_byte_array(&mut data, 256)?;
-        let should_authenticate = types::read_bool(&mut data)?;
+        let is_authenticating = types::read_bool(&mut data)?;
         Ok(Self {
             server_id,
             public_key,
             challenge,
-            should_authenticate,
+            is_authenticating,
         })
     }
 
@@ -48,7 +48,7 @@ impl Packet for ClientboundHelloPacket {
         types::write_string(&mut buf, &self.server_id);
         types::write_byte_array(&mut buf, &self.public_key);
         types::write_byte_array(&mut buf, &self.challenge);
-        types::write_bool(&mut buf, self.should_authenticate);
+        types::write_bool(&mut buf, self.is_authenticating);
         buf
     }
 }
@@ -64,7 +64,7 @@ mod tests {
             server_id: "".to_string(),
             public_key: vec![0x30, 0x82, 0x01, 0x22],
             challenge: vec![0x01, 0x02, 0x03, 0x04],
-            should_authenticate: true,
+            is_authenticating: true,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundHelloPacket::decode(encoded.freeze()).unwrap();

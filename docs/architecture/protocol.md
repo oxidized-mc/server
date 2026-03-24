@@ -136,7 +136,7 @@ Java: `net.minecraft.network.protocol.status.ServerStatus`
 | ID | Packet | Fields |
 |----|--------|--------|
 | `0x00` | `ClientboundLoginDisconnectPacket` | `reason: Component(JSON)` |
-| `0x01` | `ClientboundHelloPacket` | `server_id: String`, `public_key: ByteArray`, `challenge: ByteArray`, `should_authenticate: bool` |
+| `0x01` | `ClientboundHelloPacket` | `server_id: String`, `public_key: ByteArray`, `challenge: ByteArray`, `is_authenticating: bool` |
 | `0x02` | `ClientboundLoginFinishedPacket` | `uuid: Uuid`, `name: String(16)`, `properties: Vec<Property>` _(terminal)_ |
 | `0x03` | `ClientboundLoginCompressionPacket` | `compression_threshold: VarInt` |
 | `0x04` | `ClientboundCustomQueryPacket` | `message_id: VarInt`, `channel: ResourceLocation`, `data: ByteArray` |

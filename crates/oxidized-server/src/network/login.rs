@@ -170,7 +170,7 @@ async fn authenticate_online(
         server_id: String::new(),
         public_key: ctx.keypair.public_key_der().to_vec(),
         challenge: challenge.to_vec(),
-        should_authenticate: true,
+        is_authenticating: true,
     };
     conn.send_packet(&hello_response).await?;
 

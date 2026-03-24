@@ -1,5 +1,6 @@
 # Phase R3 — ADR Compliance & Code Quality Refactoring
 
+**Status:** ✅ Complete  
 **Crates:** all  
 **Reward:** Every crate fully complies with its governing ADRs. Lint violations are
 zero. Naming, documentation, and architectural patterns match the documented
@@ -417,21 +418,21 @@ Count of `missing_docs` warnings decreases from current baseline to zero.
 
 ## Acceptance Criteria
 
-- [ ] `unwrap_used`, `expect_used`, `panic` clippy lints are "deny" in workspace
-- [ ] `print_stdout`, `print_stderr` clippy lints are "deny" in workspace
-- [ ] `anyhow` removed from `oxidized-protocol` dependencies
-- [ ] All error enums have `#[non_exhaustive]`
-- [ ] Tick loop runs on dedicated OS thread (not Tokio task)
-- [ ] `bumpalo` and `rayon` removed from workspace (re-add when used)
-- [ ] `OXIDIZED_*` environment variable overrides work for all config fields
-- [ ] No file exceeds 800 LOC (excluding tests) per ADR-035
-- [ ] `play/mod.rs` split into ≥3 submodules
-- [ ] `block_interaction.rs` split into ≥3 submodules
-- [ ] Boolean fields use `is_`/`has_`/`can_` prefix (with serde renames)
+- [x] `unwrap_used`, `expect_used`, `panic` clippy lints are "deny" in workspace
+- [x] `print_stdout`, `print_stderr` clippy lints are "deny" in workspace
+- [x] `anyhow` removed from `oxidized-protocol` dependencies
+- [x] All error enums have `#[non_exhaustive]`
+- [x] Tick loop runs on dedicated OS thread (not Tokio task)
+- [x] `bumpalo` and `rayon` removed from workspace (re-add when used)
+- [x] `OXIDIZED_*` environment variable overrides work for all config fields
+- [x] No file exceeds 800 LOC (excluding tests) per ADR-035
+- [x] `play/mod.rs` split into ≥3 submodules
+- [x] `block_interaction.rs` split into ≥3 submodules
+- [x] Boolean fields use `is_`/`has_`/`can_` prefix (with serde renames)
 - [x] Zero `missing_docs` warnings on cross-crate public APIs
 - [x] All public `Result`-returning functions have `# Errors` doc section
-- [ ] `cargo test --workspace` passes with zero failures
-- [ ] `cargo clippy --workspace -- -D warnings` produces zero warnings
+- [x] `cargo test --workspace` passes with zero failures
+- [x] `cargo clippy --workspace -- -D warnings` produces zero warnings
 - [x] `cargo doc --workspace --no-deps` builds cleanly
 
 ---
@@ -481,10 +482,10 @@ Summary of all 39 ADRs vs. current codebase status:
 | ADR | Title | Compliance | Notes |
 |-----|-------|------------|-------|
 | 001 | Async Runtime | ✅ Compliant | Tokio multi-threaded |
-| 002 | Error Handling | ⚠️ **R3.1** | Lint levels too low; anyhow in protocol; 2 missing #[non_exhaustive] |
+| 002 | Error Handling | ✅ Compliant | thiserror in libs, deny lints, #[non_exhaustive] |
 | 003 | Crate Architecture | ✅ Compliant | Dependency DAG correct |
-| 004 | Logging | ⚠️ **R3.1** | println/eprintln not linted |
-| 005 | Configuration | ⚠️ **R3.4** | No env var overrides |
+| 004 | Logging | ✅ Compliant | print_stdout/print_stderr denied |
+| 005 | Configuration | ✅ Compliant | env var overrides implemented |
 | 006 | Network I/O | 🟡 Deferred | Single-task model works; consider superseding ADR |
 | 007 | Packet Codec | ✅ Compliant | All 87 packets have PACKET_ID + Packet trait |
 | 008 | Connection State | ✅ Compliant | Pragmatic amendment in ADR-036 |
@@ -498,7 +499,7 @@ Summary of all 39 ADRs vs. current codebase status:
 | 016 | Worldgen Pipeline | 🟡 Future phase | rayon declared but unused |
 | 017 | Lighting Engine | 🟡 Future phase | Not yet implemented |
 | 018 | Entity System | 🟡 Future phase | bevy_ecs not yet integrated |
-| 019 | Tick Loop | ❌ **R3.2** | Runs on Tokio task, not OS thread |
+| 019 | Tick Loop | ✅ Compliant | Dedicated OS thread "tick" |
 | 020 | Player Session | 🟡 Future phase | Arc<RwLock> model, not channel-based |
 | 021 | Physics | ✅ Compliant | Per-axis sweep implemented |
 | 022 | Command Framework | ✅ Compliant | Brigadier-compatible graph |
@@ -508,13 +509,13 @@ Summary of all 39 ADRs vs. current codebase status:
 | 026 | Loot Tables | 🟡 Future phase | Not yet implemented |
 | 027 | Recipe System | 🟡 Future phase | Not yet implemented |
 | 028 | Chat Components | ✅ Compliant | Enum tree + manual serde |
-| 029 | Memory Management | ⚠️ **R3.3** | mimalloc ✅, bumpalo unused |
+| 029 | Memory Management | ✅ Compliant | mimalloc ✅, bumpalo removed (re-add when used) |
 | 030 | Shutdown & Crash | ✅ Compliant | Graceful shutdown implemented |
 | 031 | Management API | 🟡 Future phase | Not yet implemented |
 | 032 | Scalability | 🟡 Future phase | Not yet implemented |
-| 033 | Config Format | ⚠️ **R3.4** | TOML ✅, env vars missing |
+| 033 | Config Format | ✅ Compliant | TOML ✅, OXIDIZED_* env vars ✅ |
 | 034 | Testing Strategy | ✅ Compliant | 1657 tests, all categories |
-| 035 | Module Structure | ⚠️ **R3.5** | 2 files > 800 LOC |
+| 035 | Module Structure | ✅ Compliant | All files ≤ 800 LOC (excl. tests) |
 | 036 | Packet Handlers | ✅ Compliant | Module split complete (R1) |
 | 037 | Type Macros | ✅ Compliant | impl_vector_ops/directional/axis_accessor |
 | 038 | Packet Trait | ✅ Compliant | Unified Packet trait + error (R2) |

@@ -79,7 +79,7 @@ fn test_login_hello_encode_decode() {
         server_id: "oxidized".to_string(),
         public_key: vec![0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04],
         challenge: vec![0xCA, 0xFE, 0xBA, 0xBE],
-        should_authenticate: true,
+        is_authenticating: true,
     };
     let encoded = pkt.encode();
     let decoded = ClientboundHelloPacket::decode(encoded.freeze()).unwrap();
@@ -89,7 +89,7 @@ fn test_login_hello_encode_decode() {
         [0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04]
     );
     assert_eq!(decoded.challenge, [0xCA, 0xFE, 0xBA, 0xBE]);
-    assert!(decoded.should_authenticate);
+    assert!(decoded.is_authenticating);
 }
 
 // ---------------------------------------------------------------------------

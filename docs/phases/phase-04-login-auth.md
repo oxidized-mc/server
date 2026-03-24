@@ -49,7 +49,7 @@ pub struct ClientboundHelloPacket {
     pub server_id: String,          // always "" in modern versions
     pub public_key: Vec<u8>,        // DER-encoded RSA public key
     pub challenge: Vec<u8>,         // 4 random bytes
-    pub should_authenticate: bool,  // online_mode
+    pub is_authenticating: bool,    // online_mode
 }
 
 /// 0x02 — login complete (terminal packet → switch to CONFIGURATION)
@@ -253,7 +253,7 @@ async fn handle_login(
                     server_id: "".into(),
                     public_key: key_pair.public_key_der().to_vec(),
                     challenge: challenge.to_vec(),
-                    should_authenticate: true,
+                    is_authenticating: true,
                 }).await?;
                 conn.login_state = LoginState::AwaitingKey { name: hello.name, challenge };
             } else {

@@ -115,7 +115,7 @@ Client                                 Server
   │    String: server_id (always "")     │
   │    ByteArray: public_key (DER/X509)  │
   │    ByteArray: verify_token (4 bytes) │
-  │    Boolean: should_authenticate      │
+  │    Boolean: is_authenticating       │
   │                                      │
   │ ← generate 16-byte shared_secret (AES key)
   │ ← encrypt shared_secret with server RSA public key
