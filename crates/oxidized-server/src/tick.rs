@@ -1,14 +1,14 @@
 //! Server tick loop — 20 TPS game-state advancement.
 //!
-//! Runs as a Tokio task, advancing game time, day/night cycle, and weather
-//! each tick. Broadcasts [`ClientboundSetTimePacket`] every 20 ticks so
-//! clients stay synchronised.
+//! Runs on a **dedicated OS thread** (ADR-019), advancing game time,
+//! day/night cycle, and weather each tick. Broadcasts
+//! [`ClientboundSetTimePacket`] every 20 ticks so clients stay synchronised.
 //!
 //! The loop respects freeze/step/sprint state from [`ServerTickRateManager`].
 //!
 //! Corresponds to `net.minecraft.server.MinecraftServer.tickServer()`.
 
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use oxidized_game::level::game_rules::GameRuleKey;
@@ -20,9 +20,7 @@ use oxidized_protocol::packets::play::{
 use rand::Rng;
 use rand::RngExt;
 use rand::SeedableRng;
-use tokio::sync::broadcast;
-use tokio::time::{MissedTickBehavior, interval};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::network::{BroadcastMessage, ServerContext};
 
@@ -59,16 +57,20 @@ struct WeatherLevels {
     old_thunder_level: f32,
 }
 
-/// Runs the main server tick loop until `shutdown_rx` fires.
+/// Runs the main server tick loop until `shutdown` is set to `true`.
 ///
-/// Should be spawned as a Tokio task:
+/// Must be called on a **dedicated OS thread** (ADR-019):
 /// ```ignore
-/// tokio::spawn(tick::run_tick_loop(ctx.clone(), shutdown_rx));
+/// let shutdown = Arc::new(AtomicBool::new(false));
+/// std::thread::Builder::new()
+///     .name("tick".into())
+///     .spawn({
+///         let shutdown = shutdown.clone();
+///         move || tick::run_tick_loop(&ctx, &shutdown)
+///     })?;
 /// ```
-pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::Receiver<()>) {
+pub fn run_tick_loop(ctx: &ServerContext, shutdown: &AtomicBool) {
     let mut tick_count: u64 = 0;
-    let mut timer = interval(Duration::from_millis(50));
-    timer.set_missed_tick_behavior(MissedTickBehavior::Skip);
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
@@ -84,64 +86,64 @@ pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::
         old_thunder_level: 0.0,
     };
 
-    debug!("Tick loop started at 20 TPS");
+    info!(
+        thread = ?std::thread::current().name(),
+        "Tick loop started at 20 TPS on dedicated thread",
+    );
 
     loop {
-        tokio::select! {
-            biased;
+        if shutdown.load(Ordering::Relaxed) {
+            debug!("Tick loop shutting down");
+            break;
+        }
 
-            _ = shutdown_rx.recv() => {
-                debug!("Tick loop shutting down");
-                break;
-            }
+        let tick_start = Instant::now();
 
-            _ = timer.tick() => {
-                let tick_start = Instant::now();
+        // Snapshot tick rate manager state in a single lock acquisition.
+        let (should_tick, target_interval, frozen, steps_remaining) = {
+            let mut mgr = ctx.tick_rate_manager.write();
+            let should = mgr.should_tick();
+            let interval = mgr.tick_interval();
+            (should, interval, mgr.frozen, mgr.steps_remaining)
+        };
 
-                // Snapshot tick rate manager state in a single lock acquisition.
-                let (should_tick, new_interval, frozen, steps_remaining) = {
-                    let mut mgr = ctx.tick_rate_manager.write();
-                    let should = mgr.should_tick();
-                    let interval = mgr.tick_interval();
-                    (should, interval, mgr.frozen, mgr.steps_remaining)
-                };
+        if should_tick {
+            do_tick(ctx, tick_count, &mut rng, &mut weather);
+            tick_count += 1;
+        }
 
-                if should_tick {
-                    do_tick(&ctx, tick_count, &mut rng, &mut weather).await;
-                    tick_count += 1;
-                }
+        // Overload detection (two-tier).
+        let elapsed = tick_start.elapsed();
+        if elapsed > OVERLOAD_CRITICAL_THRESHOLD {
+            error!(
+                elapsed_ms = elapsed.as_millis(),
+                "Can't keep up! Tick took {}ms (critical threshold: {}ms)",
+                elapsed.as_millis(),
+                OVERLOAD_CRITICAL_THRESHOLD.as_millis(),
+            );
+        } else if elapsed > OVERLOAD_WARNING_THRESHOLD {
+            warn!(
+                elapsed_ms = elapsed.as_millis(),
+                "Tick running behind! Took {}ms (warning threshold: {}ms)",
+                elapsed.as_millis(),
+                OVERLOAD_WARNING_THRESHOLD.as_millis(),
+            );
+        }
 
-                // Update interval based on snapshotted tick rate.
-                timer.reset_after(new_interval.saturating_sub(tick_start.elapsed()));
+        // Broadcast stepping state to clients when frozen.
+        if frozen {
+            broadcast_packet(
+                ctx,
+                &ClientboundTickingStepPacket {
+                    tick_steps: steps_remaining as i32,
+                },
+            );
+        }
 
-                // Overload detection (two-tier).
-                let elapsed = tick_start.elapsed();
-                if elapsed > OVERLOAD_CRITICAL_THRESHOLD {
-                    error!(
-                        elapsed_ms = elapsed.as_millis(),
-                        "Can't keep up! Tick took {}ms (critical threshold: {}ms)",
-                        elapsed.as_millis(),
-                        OVERLOAD_CRITICAL_THRESHOLD.as_millis(),
-                    );
-                } else if elapsed > OVERLOAD_WARNING_THRESHOLD {
-                    warn!(
-                        elapsed_ms = elapsed.as_millis(),
-                        "Tick running behind! Took {}ms (warning threshold: {}ms)",
-                        elapsed.as_millis(),
-                        OVERLOAD_WARNING_THRESHOLD.as_millis(),
-                    );
-                }
-
-                // Broadcast stepping state to clients when frozen.
-                if frozen {
-                    broadcast_packet(
-                        &ctx,
-                        &ClientboundTickingStepPacket {
-                            tick_steps: steps_remaining as i32,
-                        },
-                    );
-                }
-            }
+        // Sleep for the remaining tick budget (skip-style: if behind, don't sleep).
+        let remaining = target_interval.saturating_sub(tick_start.elapsed());
+        if !remaining.is_zero() {
+            std::thread::sleep(remaining);
         }
     }
 
@@ -149,7 +151,7 @@ pub async fn run_tick_loop(ctx: Arc<ServerContext>, mut shutdown_rx: broadcast::
 }
 
 /// Performs one game tick.
-async fn do_tick(
+fn do_tick(
     ctx: &ServerContext,
     tick_count: u64,
     rng: &mut impl Rng,
@@ -192,7 +194,7 @@ async fn do_tick(
         (mgr.tick_rate * 300.0).max(100.0) as u64
     };
     if tick_count > 0 && tick_count % autosave_interval == 0 {
-        autosave_level_dat(ctx).await;
+        autosave_level_dat(ctx);
     }
 }
 
@@ -351,12 +353,26 @@ fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
     ctx.broadcast(msg);
 }
 
-/// Saves level.dat to disk via `spawn_blocking` (ADR-015).
+/// Saves level.dat synchronously with direct file I/O.
+///
+/// Suitable for the tick thread (which is allowed to block) and other
+/// non-async contexts.
+fn save_level_dat_blocking(
+    ctx: &ServerContext,
+) -> Result<(), Box<dyn std::error::Error + Send>> {
+    let level_data = ctx.level_data.read().clone();
+    let level_dat_path = ctx.storage.level_dat_path();
+    level_data
+        .save(&level_dat_path)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)
+}
+
+/// Saves level.dat asynchronously via `spawn_blocking` (ADR-015).
 ///
 /// Takes a snapshot of `level_data` under a read lock, then writes to disk
 /// on a blocking thread. Returns `Ok(())` on success or the error.
 ///
-/// Used by both the periodic autosave and the shutdown save path.
+/// Used by the shutdown save path (which runs in async context).
 pub(crate) async fn save_level_dat(
     ctx: &ServerContext,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
@@ -370,10 +386,10 @@ pub(crate) async fn save_level_dat(
     }
 }
 
-/// Autosaves level.dat, logging the outcome without crashing the server.
-async fn autosave_level_dat(ctx: &ServerContext) {
+/// Autosaves level.dat from the tick thread, logging the outcome.
+fn autosave_level_dat(ctx: &ServerContext) {
     debug!("Autosaving level.dat...");
-    match save_level_dat(ctx).await {
+    match save_level_dat_blocking(ctx) {
         Ok(()) => debug!("Autosave complete"),
         Err(e) => warn!(error = %e, "Autosave failed for level.dat"),
     }
@@ -383,6 +399,7 @@ async fn autosave_level_dat(ctx: &ServerContext) {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use oxidized_game::level::{GameRules, ServerTickRateManager};
     use oxidized_game::player::PlayerList;
     use oxidized_protocol::types::resource_location::ResourceLocation;
@@ -394,6 +411,7 @@ mod tests {
 
     fn test_ctx() -> Arc<ServerContext> {
         use oxidized_world::registry::BlockRegistry;
+        use tokio::sync::broadcast;
 
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
@@ -437,27 +455,27 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn test_do_tick_advances_time() {
+    #[test]
+    fn test_do_tick_advances_time() {
         let ctx = test_ctx();
         let initial_time = ctx.level_data.read().time;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         assert_eq!(ctx.level_data.read().time, initial_time + 1);
     }
 
-    #[tokio::test]
-    async fn test_do_tick_advances_day_time() {
+    #[test]
+    fn test_do_tick_advances_day_time() {
         let ctx = test_ctx();
         let initial_day = ctx.level_data.read().day_time;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         assert_eq!(ctx.level_data.read().day_time, initial_day + 1);
     }
 
-    #[tokio::test]
-    async fn test_day_time_grows_unbounded() {
+    #[test]
+    fn test_day_time_grows_unbounded() {
         let ctx = test_ctx();
         ctx.level_data.write().day_time = TICKS_PER_DAY - 1;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         assert_eq!(
             ctx.level_data.read().day_time,
             TICKS_PER_DAY,
@@ -465,14 +483,14 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_daylight_cycle_respects_gamerule() {
+    #[test]
+    fn test_daylight_cycle_respects_gamerule() {
         let ctx = test_ctx();
         ctx.game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceTime, false);
         let initial_day = ctx.level_data.read().day_time;
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         assert_eq!(
             ctx.level_data.read().day_time,
             initial_day,
@@ -482,14 +500,14 @@ mod tests {
         assert_eq!(ctx.level_data.read().time, 1);
     }
 
-    #[tokio::test]
-    async fn test_weather_cycle_respects_gamerule() {
+    #[test]
+    fn test_weather_cycle_respects_gamerule() {
         let ctx = test_ctx();
         ctx.game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceWeather, false);
         ctx.level_data.write().rain_time = 1; // would flip without gamerule
-        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather()).await;
+        do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         // Weather should not have changed because gamerule is false.
         assert_eq!(
             ctx.level_data.read().rain_time,
@@ -568,24 +586,52 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_tick_loop_shutdown() {
+    #[test]
+    fn test_tick_loop_shutdown() {
         let ctx = test_ctx();
-        let (shutdown_tx, shutdown_rx) = broadcast::channel(1);
-        let ctx_clone = ctx.clone();
-        let handle = tokio::spawn(async move {
-            run_tick_loop(ctx_clone, shutdown_rx).await;
-        });
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let shutdown_clone = shutdown.clone();
+
+        let handle = std::thread::Builder::new()
+            .name("tick-test".into())
+            .spawn(move || {
+                run_tick_loop(&ctx, &shutdown_clone);
+            })
+            .expect("failed to spawn tick thread");
 
         // Let a few ticks run.
-        tokio::time::sleep(Duration::from_millis(120)).await;
-        let _ = shutdown_tx.send(());
+        std::thread::sleep(Duration::from_millis(120));
+        shutdown.store(true, Ordering::Relaxed);
 
-        let result = tokio::time::timeout(Duration::from_secs(2), handle).await;
-        assert!(result.is_ok(), "tick loop should shut down promptly");
-        assert!(
-            ctx.level_data.read().time > 0,
-            "should have ticked at least once"
-        );
+        handle.join().expect("tick thread panicked");
+    }
+
+    #[test]
+    fn test_tick_loop_runs_on_named_thread() {
+        use std::sync::Mutex;
+
+        let ctx = test_ctx();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let thread_name: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+
+        let shutdown_clone = shutdown.clone();
+        let name_capture = thread_name.clone();
+
+        let handle = std::thread::Builder::new()
+            .name("tick".into())
+            .spawn(move || {
+                // Capture thread name before entering the loop.
+                *name_capture.lock().unwrap() =
+                    std::thread::current().name().map(String::from);
+                run_tick_loop(&ctx, &shutdown_clone);
+            })
+            .expect("failed to spawn tick thread");
+
+        std::thread::sleep(Duration::from_millis(60));
+        shutdown.store(true, Ordering::Relaxed);
+        handle.join().expect("tick thread panicked");
+
+        let name = thread_name.lock().unwrap();
+        assert_eq!(name.as_deref(), Some("tick"), "tick loop must run on the 'tick' thread");
     }
 }

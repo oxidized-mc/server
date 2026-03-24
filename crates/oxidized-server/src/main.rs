@@ -11,6 +11,7 @@ mod tick;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use clap::Parser;
@@ -241,10 +242,16 @@ fn main() -> anyhow::Result<()> {
         let console_server_ctx = login_ctx.server_ctx.clone();
         let shutdown_server_ctx = login_ctx.server_ctx.clone();
 
-        // Spawn the server tick loop (20 TPS).
-        let tick_shutdown = shutdown_tx.subscribe();
+        // Spawn the server tick loop on a dedicated OS thread (ADR-019).
+        let tick_shutdown = Arc::new(AtomicBool::new(false));
         let tick_ctx = login_ctx.server_ctx.clone();
-        tokio::spawn(tick::run_tick_loop(tick_ctx, tick_shutdown));
+        let tick_shutdown_clone = tick_shutdown.clone();
+        let tick_thread = std::thread::Builder::new()
+            .name("tick".into())
+            .spawn(move || {
+                tick::run_tick_loop(&tick_ctx, &tick_shutdown_clone);
+            })
+            .map_err(|e| anyhow::anyhow!("failed to spawn tick thread: {e}"))?;
 
         // Spawn the TCP listener.
         let listener_shutdown = shutdown_tx.subscribe();
@@ -276,6 +283,7 @@ fn main() -> anyhow::Result<()> {
             },
         }
         info!("Shutdown signal received");
+        tick_shutdown.store(true, Ordering::Relaxed);
         let _ = shutdown_tx.send(());
 
         // Save level.dat on shutdown (ADR-030: graceful shutdown saves).
@@ -333,6 +341,26 @@ fn main() -> anyhow::Result<()> {
                     SHUTDOWN_TIMEOUT.as_secs()
                 );
             },
+        }
+
+        // Join the tick thread so it finishes cleanly before exit.
+        const TICK_JOIN_TIMEOUT: Duration = Duration::from_secs(5);
+        let tick_join_start = std::time::Instant::now();
+        loop {
+            if tick_thread.is_finished() {
+                if let Err(e) = tick_thread.join() {
+                    warn!("Tick thread panicked: {e:?}");
+                }
+                break;
+            }
+            if tick_join_start.elapsed() > TICK_JOIN_TIMEOUT {
+                warn!(
+                    "Tick thread did not exit within {}s",
+                    TICK_JOIN_TIMEOUT.as_secs()
+                );
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
         }
 
         // Join the console thread so it doesn't outlive the runtime.
