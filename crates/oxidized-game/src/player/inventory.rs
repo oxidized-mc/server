@@ -162,7 +162,7 @@ impl PlayerInventory {
         if self.slots[sel].is_empty() {
             return None;
         }
-        let dropped = std::mem::replace(&mut self.slots[sel], ItemStack::empty());
+        let dropped = std::mem::take(&mut self.slots[sel]);
         Some(dropped)
     }
 

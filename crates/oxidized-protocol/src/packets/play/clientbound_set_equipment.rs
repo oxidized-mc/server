@@ -139,7 +139,7 @@ mod tests {
             equipments: vec![
                 (equipment_slot::MAIN_HAND, Some(stone.clone())),
                 (equipment_slot::OFF_HAND, None),
-                (equipment_slot::HEAD, Some(stone.clone())),
+                (equipment_slot::HEAD, Some(stone)),
             ],
         };
         let encoded = pkt.encode();

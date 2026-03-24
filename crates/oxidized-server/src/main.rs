@@ -293,7 +293,7 @@ fn main() -> anyhow::Result<()> {
             let playerdata_dir = shutdown_server_ctx.storage.player_data_dir();
             let players: Vec<_> = {
                 let list = shutdown_server_ctx.player_list.read();
-                list.iter().map(|p| p.clone()).collect()
+                list.iter().cloned().collect()
             };
             if !players.is_empty() {
                 info!("Saving {} player(s)...", players.len());

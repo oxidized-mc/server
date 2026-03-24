@@ -9,6 +9,7 @@ use std::sync::LazyLock;
 use oxidized_world::registry::ItemRegistry;
 
 /// Lazily-loaded item registry shared by all callers in this process.
+#[allow(clippy::expect_used)] // Static init — no way to propagate errors.
 static REGISTRY: LazyLock<ItemRegistry> =
     LazyLock::new(|| ItemRegistry::load().expect("failed to load embedded item registry"));
 

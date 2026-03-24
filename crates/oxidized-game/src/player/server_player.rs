@@ -479,7 +479,7 @@ impl ServerPlayer {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
 
@@ -859,8 +859,6 @@ mod tests {
 
     #[test]
     fn test_raw_nbt_roundtrip_active_effects() {
-        use oxidized_nbt::TAG_LIST;
-
         let mut player = make_test_player(1, "Test");
 
         // Simulate raw active_effects tag from a vanilla world

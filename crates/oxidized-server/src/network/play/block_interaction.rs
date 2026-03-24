@@ -380,12 +380,8 @@ pub async fn handle_use_item_on(
         pkt.hit_result.cursor_z,
     );
     const CURSOR_EPSILON: f32 = 0.0000001;
-    if cx < -CURSOR_EPSILON
-        || cx > 1.0 + CURSOR_EPSILON
-        || cy < -CURSOR_EPSILON
-        || cy > 1.0 + CURSOR_EPSILON
-        || cz < -CURSOR_EPSILON
-        || cz > 1.0 + CURSOR_EPSILON
+    let valid_range = -CURSOR_EPSILON..=1.0 + CURSOR_EPSILON;
+    if !valid_range.contains(&cx) || !valid_range.contains(&cy) || !valid_range.contains(&cz)
     {
         debug!(
             peer = %play_ctx.addr,
