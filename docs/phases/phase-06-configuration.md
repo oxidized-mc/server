@@ -1,5 +1,6 @@
 # Phase 6 — Configuration State
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-protocol`  
 **Reward:** A connected and authenticated client transitions through CONFIGURATION
 and reaches PLAY — the final handshake before gameplay.

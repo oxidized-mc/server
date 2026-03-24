@@ -1,5 +1,6 @@
 # Phase 1 — Project Bootstrap
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-server`  
 **Reward:** The project compiles, runs, logs a startup message, reads config.
 
@@ -219,7 +220,7 @@ crates/oxidized-protocol/src/
 
 ---
 
-## Status: ✅ COMPLETE (with lifecycle retrofit)
+## Completion Notes
 
 **Initial implementation:** 2026-03-17 — 26 tests, 6 crates, CI green  
 **Lifecycle retrofit:** 2026-03-17 — ADR audit + test audit + fixes

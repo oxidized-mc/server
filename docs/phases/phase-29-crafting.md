@@ -1,5 +1,6 @@
 # Phase 29 — Crafting
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Player can craft items using 2×2 grid; `/recipe` command works.
 

@@ -1,5 +1,6 @@
 # Phase 32 — Scoreboard
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** `/scoreboard`, `/team`, `/bossbar` commands work; scores show in tab list.
 

@@ -1,5 +1,6 @@
 # Phase 34 — Loot Tables
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Mobs drop correct items on death; chest loot generates correctly;
 fishing gives varied catches.

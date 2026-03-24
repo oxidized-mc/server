@@ -1,5 +1,6 @@
 # Phase 9 — Chunk Data Structures
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-world`  
 **Reward:** In-memory chunk that matches the wire format exactly. All section
 get/set operations, bit-packed palette storage, and light arrays are correct and

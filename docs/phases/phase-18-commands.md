@@ -1,5 +1,6 @@
 # Phase 18 — Commands (Brigadier)
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** `/help`, `/tp`, `/gamemode`, `/stop` all work; tab-complete works.
 

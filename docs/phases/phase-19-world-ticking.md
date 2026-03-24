@@ -1,5 +1,6 @@
 # Phase 19 — World Ticking
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** Day/night cycle works, blocks tick, weather changes.
 

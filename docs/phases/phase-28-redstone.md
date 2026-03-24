@@ -1,5 +1,6 @@
 # Phase 28 — Redstone
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Basic redstone circuits work: levers, buttons, wire, torches, repeaters, pistons.
 

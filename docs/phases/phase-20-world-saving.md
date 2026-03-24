@@ -1,5 +1,6 @@
 # Phase 20 — World Saving
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** World persists across server restarts.
 

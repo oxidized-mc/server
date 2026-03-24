@@ -1,5 +1,6 @@
 # Phase 7 — Core Data Types
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-world`  
 **Reward:** All foundational spatial and game-state types are implemented and
 tested — the building blocks every other system depends on.

@@ -1,5 +1,6 @@
 # Phase 33 — RCON + Query
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-server`  
 **Reward:** Server manageable remotely via RCON; Query protocol works for server
 list tools (e.g. MCStat, minequery).

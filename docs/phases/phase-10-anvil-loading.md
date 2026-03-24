@@ -1,5 +1,6 @@
 # Phase 10 — Anvil World Loading
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-world`  
 **Reward:** Load an existing Minecraft world from disk. Given a world folder,
 read `.mca` region files, decompress chunk NBT, deserialize each

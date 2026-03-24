@@ -1,5 +1,6 @@
 # Phase 8 — Block & Item Registry
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-world`  
 **Reward:** Any block can be looked up by name or state ID; any item by name.
 The global palettes are correct and match vanilla.

@@ -1,5 +1,6 @@
 # Phase 30 — Block Entities
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Chests open and hold items, furnaces smelt, signs show text.
 

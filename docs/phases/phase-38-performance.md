@@ -1,5 +1,6 @@
 # Phase 38 — Performance Hardening
 
+**Status:** 📋 Planned  
 **Crate:** all  
 **Reward:** Server handles 100+ concurrent players without lag; watchdog
 catches hangs; crashes produce actionable reports.

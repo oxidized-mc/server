@@ -1,5 +1,6 @@
 # Phase 36 — World Structures
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-world` + `oxidized-game`  
 **Reward:** Villages, dungeons, mineshafts, and strongholds generate correctly
 in newly created worlds; the `/locate` command finds them.

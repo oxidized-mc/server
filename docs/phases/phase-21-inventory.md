@@ -1,5 +1,6 @@
 # Phase 21 — Inventory & Items
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** Player inventory visible, items persist, creative mode gives items.
 

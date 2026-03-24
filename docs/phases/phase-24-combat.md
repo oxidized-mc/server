@@ -1,5 +1,6 @@
 # Phase 24 — LivingEntity + Combat
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Players take damage, die, respawn correctly; HUD shows health.
 

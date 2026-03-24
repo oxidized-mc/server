@@ -1,5 +1,6 @@
 # Phase 14 — Player Movement
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** A player can walk, run, jump, and sneak. The server tracks their
 position correctly, broadcasts movement to nearby players, loads and unloads

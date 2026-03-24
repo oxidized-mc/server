@@ -1,5 +1,6 @@
 # Phase 16 — Basic Physics
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** Players and entities fall due to gravity, collide with solid blocks,
 and come to rest on the ground. Fluid physics add buoyancy in water and lava.

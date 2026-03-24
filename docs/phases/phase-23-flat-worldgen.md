@@ -1,5 +1,6 @@
 # Phase 23 — Flat World Generation
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** New worlds generate as a flat world; the player spawns on ground.
 

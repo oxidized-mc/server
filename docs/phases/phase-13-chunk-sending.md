@@ -1,5 +1,6 @@
 # Phase 13 — Chunk Sending
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** A player who joins the world can see it: chunks render correctly
 in the vanilla client. The full `ClientboundLevelChunkWithLightPacket` is

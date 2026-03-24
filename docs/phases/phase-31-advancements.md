@@ -1,5 +1,6 @@
 # Phase 31 — Advancements
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Advancements pop up when unlocked, progress tracked per-player, `/advancement` works.
 

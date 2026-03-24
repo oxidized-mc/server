@@ -1,5 +1,6 @@
 # Phase 15 — Entity Framework + Tracking
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** Entities appear in the world and are synchronised to all nearby
 players. Spawning any entity causes `ClientboundAddEntityPacket` to be sent to

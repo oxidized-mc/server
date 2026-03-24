@@ -1,5 +1,6 @@
 # Phase 22 — Block Interaction
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** Player can break and place blocks; changes are visible to all players.
 

@@ -9,6 +9,36 @@ scaffolded with tests. The codebase is audit-clean and ready to scale to Phase 3
 
 ---
 
+## Progress Summary
+
+| Sub-task | Description | Status |
+|----------|-------------|--------|
+| R3.1 | Lint & Error Handling Strictness (ADR-002, ADR-004) | ✅ Done |
+| R3.2 | Tick Loop Threading Model (ADR-019) | ✅ Done |
+| R3.3 | Remove Unused Dependencies (ADR-029, ADR-016) | ✅ Done |
+| R3.4 | Environment Variable Configuration Overrides (ADR-005/033) | ✅ Done |
+| R3.5 | File Size Violations (ADR-035) | ✅ Done |
+| R3.6 | Boolean Naming Convention (Project Style Rules) | ✅ Done |
+| R3.7 | Documentation Gaps (Project Style Rules) | ✅ Done |
+| R3.8 | Worldgen Pipeline Structural Compliance (ADR-016) | ❌ Not Started |
+| R3.9 | Lighting Engine Structural Compliance (ADR-017) | ❌ Not Started |
+| R3.10 | Entity System Structural Compliance (ADR-018) | ❌ Not Started |
+
+**Remaining work:** R3.8–R3.10 add scaffolding types and tests for worldgen
+scheduling, lighting engine, and ECS entity system. These are type definitions
+and module skeletons only — no feature implementation. See detailed plans below.
+
+**Codebase verification (R3.8–R3.10 gaps):**
+- `worldgen/scheduler.rs`, `priority.rs`, `status_requirements.rs` — do not exist
+- `rayon` — not in workspace deps (removed in R3.3, needs re-adding)
+- `lighting/` module — does not exist
+- `DataLayer` proptest coverage — missing (only unit tests exist)
+- `entity/components.rs`, `markers.rs`, `phases.rs`, `bundles.rs` — do not exist
+- `docs/entity-mapping.md` — does not exist
+- `#[derive(Component)]` types — none in codebase (bevy_ecs dep present but unused)
+
+---
+
 ## Architecture Decisions
 
 Before implementing this phase, review:

@@ -1,5 +1,6 @@
 # Phase 11 — Server Level + Block Access
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** Query any block in the loaded world. Given a `BlockPos`, the server
 returns the correct `BlockState`, loading the chunk on demand if necessary.

@@ -1,5 +1,6 @@
 # Phase R2 — Packet Trait & Unified Codec Refactoring
 
+**Status:** ✅ Complete  
 **Crates:** `oxidized-protocol`, `oxidized-server`
 **Reward:** All packets implement a common `Packet` trait with unified error handling,
 enabling generic send/receive, eliminating 15 duplicate error types and 16 identical

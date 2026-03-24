@@ -1,5 +1,6 @@
 # Phase 35 — Enchantments + Potion Effects
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Enchanted tools deal correct extra damage and have correct special
 behaviours; potions apply status effects that visually and mechanically affect

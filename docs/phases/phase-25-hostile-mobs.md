@@ -1,5 +1,6 @@
 # Phase 25 — Hostile Mobs
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Zombies, skeletons, creepers spawn, pathfind, and attack the player.
 

@@ -1,5 +1,6 @@
 # Phase R1 — Architectural Refactoring
 
+**Status:** ✅ Complete  
 **Crates:** `oxidized-server`, `oxidized-protocol`, `oxidized-game`  
 **Reward:** Codebase is modular, extensible, and ready to scale to 58 Play packets
 and 38 phases without structural degradation.

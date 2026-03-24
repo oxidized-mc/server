@@ -1,5 +1,6 @@
 # Phase 37 — JSON-RPC Management API
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-server`  
 **Reward:** Server manageable via WebSocket JSON-RPC; management tools (e.g.
 Minecraft Bedrock Editor, custom dashboards) can connect and call methods.

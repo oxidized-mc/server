@@ -1,5 +1,6 @@
 # Phase 12 — Player Join + World Entry
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** A connecting player transitions from CONFIGURATION state to PLAY
 state, receives the full login packet sequence in the correct order, and appears

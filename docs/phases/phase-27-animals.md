@@ -1,5 +1,6 @@
 # Phase 27 — Animals
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** Cows, sheep, pigs graze, can be bred, and drop correct items.
 

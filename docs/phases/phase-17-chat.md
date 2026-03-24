@@ -1,5 +1,6 @@
 # Phase 17 — Chat System
 
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`  
 **Reward:** Players can chat with each other and use `/say` and `/me`.
 

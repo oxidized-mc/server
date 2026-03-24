@@ -1,5 +1,6 @@
 # Phase 26 — Noise-Based World Generation
 
+**Status:** 📋 Planned  
 **Crate:** `oxidized-game`  
 **Reward:** New worlds generate realistic overworld terrain with biomes.
 
