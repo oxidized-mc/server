@@ -641,6 +641,72 @@ impl ConnectionWriter {
     pub fn batch_buf_len(&self) -> usize {
         self.batch_buf.len()
     }
+
+    // -----------------------------------------------------------------------
+    // Batch encoding (R4.3 — writer task)
+    // -----------------------------------------------------------------------
+
+    /// Encodes a single packet into the batch buffer without writing.
+    ///
+    /// Builds the complete frame (packet ID + body → compress → length
+    /// prefix) and appends it to the internal batch buffer. Call
+    /// [`flush_batch`](Self::flush_batch) to encrypt and write the
+    /// accumulated batch to the network.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConnectionError`] on compression errors.
+    pub fn encode_to_batch(&mut self, id: i32, data: &[u8]) -> Result<(), ConnectionError> {
+        // Step 1: Build inner payload (packet_id + body)
+        let mut inner = BytesMut::new();
+        varint::write_varint_buf(id, &mut inner);
+        inner.extend_from_slice(data);
+
+        // Step 2: Handle compression (if enabled)
+        let frame_content = if let Some(ref mut compressor) = self.compressor {
+            let (data_length, payload) = compressor.compress(&inner)?;
+            let mut compressed_frame = BytesMut::new();
+            varint::write_varint_buf(data_length, &mut compressed_frame);
+            compressed_frame.extend_from_slice(&payload);
+            compressed_frame
+        } else {
+            inner
+        };
+
+        // Step 3: Append frame (VarInt length prefix + content) to batch
+        varint::write_varint_buf(frame_content.len() as i32, &mut self.batch_buf);
+        self.batch_buf.extend_from_slice(&frame_content);
+
+        Ok(())
+    }
+
+    /// Encrypts and writes the entire batch buffer, then clears it.
+    ///
+    /// Encrypts all accumulated frames in-place (if encryption is
+    /// enabled), writes the batch to the TCP stream in a single
+    /// `write_all` call, flushes, and clears the buffer for reuse.
+    ///
+    /// If the batch buffer is empty, this is a no-op.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConnectionError`] on I/O failure.
+    pub async fn flush_batch(&mut self) -> Result<(), ConnectionError> {
+        if self.batch_buf.is_empty() {
+            return Ok(());
+        }
+
+        // Encrypt entire batch in-place
+        if let Some(ref mut cipher) = self.encrypt {
+            cipher.encrypt(&mut self.batch_buf);
+        }
+
+        // Single write for the entire batch
+        self.writer.write_all(&self.batch_buf).await?;
+        self.writer.flush().await?;
+        self.batch_buf.clear();
+        Ok(())
+    }
 }
 
 impl fmt::Debug for ConnectionWriter {
@@ -1225,5 +1291,242 @@ mod tests {
         // Ensure Debug doesn't panic
         let _ = format!("{reader:?}");
         let _ = format!("{writer:?}");
+    }
+
+    // -----------------------------------------------------------------------
+    // Batch encoding (R4.3) tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_batch_single_packet() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        let (_reader, mut writer) = server.into_split();
+
+        // Encode one packet into batch
+        writer.encode_to_batch(0x0B, b"hello batch").unwrap();
+        assert!(writer.batch_buf_len() > 0);
+
+        // Flush the batch
+        writer.flush_batch().await.unwrap();
+        assert_eq!(writer.batch_buf_len(), 0);
+
+        // Client reads it back
+        let pkt = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt.id, 0x0B);
+        assert_eq!(&pkt.data[..], b"hello batch");
+    }
+
+    #[tokio::test]
+    async fn test_batch_multiple_packets() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        let (_reader, mut writer) = server.into_split();
+
+        // Encode three packets into one batch
+        writer.encode_to_batch(0x01, b"first").unwrap();
+        writer.encode_to_batch(0x02, b"second").unwrap();
+        writer.encode_to_batch(0x03, b"third").unwrap();
+
+        // Single flush for all three
+        writer.flush_batch().await.unwrap();
+        assert_eq!(writer.batch_buf_len(), 0);
+
+        // Client reads all three
+        let pkt1 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt1.id, 0x01);
+        assert_eq!(&pkt1.data[..], b"first");
+
+        let pkt2 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt2.id, 0x02);
+        assert_eq!(&pkt2.data[..], b"second");
+
+        let pkt3 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt3.id, 0x03);
+        assert_eq!(&pkt3.data[..], b"third");
+    }
+
+    #[tokio::test]
+    async fn test_batch_empty_flush_is_noop() {
+        let (conn, _client) = loopback_pair().await;
+        let (_reader, mut writer) = conn.into_split();
+
+        // Flushing an empty batch should not error
+        writer.flush_batch().await.unwrap();
+        assert_eq!(writer.batch_buf_len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_batch_clears_after_flush() {
+        let (conn, _client) = loopback_pair().await;
+        let (_reader, mut writer) = conn.into_split();
+
+        writer.encode_to_batch(0x01, b"data").unwrap();
+        assert!(writer.batch_buf_len() > 0);
+
+        writer.flush_batch().await.unwrap();
+        assert_eq!(writer.batch_buf_len(), 0);
+
+        // Second batch works too
+        writer.encode_to_batch(0x02, b"more data").unwrap();
+        assert!(writer.batch_buf_len() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_batch_encrypted_roundtrip() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let mut server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        let secret = [0x55u8; 16];
+        server.enable_encryption(&secret);
+        client_conn.enable_encryption(&secret);
+
+        let (_reader, mut writer) = server.into_split();
+
+        // Batch two encrypted packets
+        writer.encode_to_batch(0x10, b"encrypted one").unwrap();
+        writer.encode_to_batch(0x11, b"encrypted two").unwrap();
+        writer.flush_batch().await.unwrap();
+
+        let pkt1 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt1.id, 0x10);
+        assert_eq!(&pkt1.data[..], b"encrypted one");
+
+        let pkt2 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt2.id, 0x11);
+        assert_eq!(&pkt2.data[..], b"encrypted two");
+    }
+
+    #[tokio::test]
+    async fn test_batch_compressed_roundtrip() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let mut server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        server.enable_compression(64);
+        client_conn.enable_compression(64);
+
+        let (_reader, mut writer) = server.into_split();
+
+        // Large payload (above threshold) — compressed
+        let payload = vec![0xAB; 256];
+        writer.encode_to_batch(0x20, &payload).unwrap();
+        // Small payload (below threshold) — uncompressed but with data_length=0
+        writer.encode_to_batch(0x21, b"tiny").unwrap();
+        writer.flush_batch().await.unwrap();
+
+        let pkt1 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt1.id, 0x20);
+        assert_eq!(&pkt1.data[..], &payload[..]);
+
+        let pkt2 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt2.id, 0x21);
+        assert_eq!(&pkt2.data[..], b"tiny");
+    }
+
+    #[tokio::test]
+    async fn test_batch_encrypted_and_compressed_roundtrip() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let mut server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        let secret = [0xAAu8; 16];
+        server.enable_encryption(&secret);
+        client_conn.enable_encryption(&secret);
+        server.enable_compression(64);
+        client_conn.enable_compression(64);
+
+        let (_reader, mut writer) = server.into_split();
+
+        // Large (encrypted + compressed) + small (encrypted, below threshold)
+        let large = vec![0xCD; 512];
+        writer.encode_to_batch(0x30, &large).unwrap();
+        writer.encode_to_batch(0x31, b"small").unwrap();
+        writer.flush_batch().await.unwrap();
+
+        let pkt1 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt1.id, 0x30);
+        assert_eq!(&pkt1.data[..], &large[..]);
+
+        let pkt2 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt2.id, 0x31);
+        assert_eq!(&pkt2.data[..], b"small");
+    }
+
+    #[tokio::test]
+    async fn test_batch_multiple_flush_cycles() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let client_stream = client_handle.await.unwrap();
+
+        let server = Connection::new(server_stream, peer_addr).unwrap();
+        let mut client_conn =
+            Connection::new(client_stream, "127.0.0.1:0".parse().unwrap()).unwrap();
+
+        let (_reader, mut writer) = server.into_split();
+
+        // Cycle 1
+        writer.encode_to_batch(0x01, b"cycle1").unwrap();
+        writer.flush_batch().await.unwrap();
+
+        // Cycle 2
+        writer.encode_to_batch(0x02, b"cycle2a").unwrap();
+        writer.encode_to_batch(0x03, b"cycle2b").unwrap();
+        writer.flush_batch().await.unwrap();
+
+        let pkt1 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt1.id, 0x01);
+        assert_eq!(&pkt1.data[..], b"cycle1");
+
+        let pkt2 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt2.id, 0x02);
+        assert_eq!(&pkt2.data[..], b"cycle2a");
+
+        let pkt3 = client_conn.read_raw_packet().await.unwrap();
+        assert_eq!(pkt3.id, 0x03);
+        assert_eq!(&pkt3.data[..], b"cycle2b");
     }
 }

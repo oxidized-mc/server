@@ -15,7 +15,7 @@ unbounded buffers, and clean cancellation. ADR-006 compliance is complete.
 |----------|-------------|--------|
 | R4.1 | Define channel types and connection handle API | ✅ Complete |
 | R4.2 | Split Connection into reader/writer halves | ✅ Complete |
-| R4.3 | Implement writer task with batch flushing | ❌ Not Started |
+| R4.3 | Implement writer task with batch flushing | ✅ Complete |
 | R4.4 | Implement reader task with rate limiting | ❌ Not Started |
 | R4.5 | Migrate pre-play states (Handshake/Status/Login/Config) | ❌ Not Started |
 | R4.6 | Migrate play state — inbound path | ❌ Not Started |
@@ -763,11 +763,22 @@ covering channel types, handle API, cipher/compression split, and
 connection reader/writer halves (including encrypted + compressed
 roundtrips).
 
-### Phase 2: Writer task (R4.3) — testable in isolation
+### Phase 2: Writer task (R4.3) — ✅ Complete
 
-Implement and thoroughly test `writer_loop`. It reads from a channel
-and writes to a `ConnectionWriter`. No integration with existing code
-yet — tested with mock channels.
+Implemented `writer_loop` in `oxidized-server/src/network/writer.rs` and
+batch encoding methods (`encode_to_batch`, `flush_batch`) on
+`ConnectionWriter`. The writer task blocks on `recv().await` for the
+first packet, drains all remaining queued packets via `try_recv()`,
+encodes each into the batch buffer (with per-frame compression), then
+encrypts the entire batch in-place and flushes with a single `write_all`
+syscall. Includes 30-second write timeout for slow-client detection and
+256 KB per-connection memory budget enforcement.
+
+**Tests added:** 8 batch encoding tests in `oxidized-protocol` covering
+plaintext, encrypted, compressed, and combined roundtrips across single
+and multiple flush cycles. 10 writer task tests in `oxidized-server`
+covering single/multiple packets, drain cycles, clean shutdown, TCP
+close, encryption, compression, memory budget, and packet ordering.
 
 ### Phase 3: Reader task (R4.4) — testable in isolation
 
@@ -893,7 +904,7 @@ R4.10 (compliance)       ── depends on all above
 | 006 | Per-connection reader/writer task pair | ❌ → target |
 | 006 | Bounded inbound channel (128) | ❌ → target |
 | 006 | Bounded outbound channel (512) | ❌ → target |
-| 006 | Writer batch flushing | ❌ → target |
+| 006 | Writer batch flushing | ✅ Complete |
 | 006 | TCP_NODELAY | ✅ Already compliant |
 | 006 | Rate limiting (500/tick) | ❌ → target |
 | 006 | Per-connection memory budget (256 KB) | ❌ → target |
