@@ -116,11 +116,14 @@ pub async fn handle_use_item_on(
     }
 
     // Reject placement inside the spawn protection zone.
-    if is_spawn_protected(play_ctx.server_ctx, place_pos) {
+    // Vanilla checks the *clicked* block position, not the computed placement
+    // position, and resyncs both blocks to fully correct client predictions.
+    let clicked_pos = pkt.hit_result.pos;
+    if is_spawn_protected(play_ctx.server_ctx, clicked_pos) {
         debug!(
             peer = %play_ctx.addr,
             name = %play_ctx.player_name,
-            pos = ?place_pos,
+            pos = ?clicked_pos,
             "Block place rejected: spawn protection"
         );
         send_actionbar(
@@ -129,12 +132,12 @@ pub async fn handle_use_item_on(
                 "build.spawn_protection".to_owned(),
                 vec![Component::text(format!(
                     "{}, {}, {}",
-                    place_pos.x, place_pos.y, place_pos.z
+                    clicked_pos.x, clicked_pos.y, clicked_pos.z
                 ))],
             ),
         )
         .await?;
-        resync_block(play_ctx, place_pos, None).await?;
+        resync_block(play_ctx, clicked_pos, Some(pkt.hit_result.direction)).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
     }
