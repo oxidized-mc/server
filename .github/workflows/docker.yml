@@ -19,6 +19,10 @@ on:
         required: true
         default: "nightly"
 
+concurrency:
+  group: docker-release
+  cancel-in-progress: true
+
 permissions:
   contents: read
   packages: write
