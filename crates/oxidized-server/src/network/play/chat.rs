@@ -41,6 +41,11 @@ pub fn is_chat_message_illegal(message: &str) -> bool {
 }
 
 /// Handles an incoming chat message from a player.
+///
+/// # Errors
+///
+/// Returns [`ConnectionError`] if the message is illegal or exceeds
+/// the length limit, causing the player to be disconnected.
 pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(), ConnectionError> {
     // Empty messages are silently ignored (vanilla behaviour).
     if message.is_empty() {

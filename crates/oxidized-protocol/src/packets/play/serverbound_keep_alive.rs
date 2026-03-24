@@ -1,6 +1,6 @@
 //! ServerboundKeepAlivePacket (0x1C) — client keepalive response.
 //!
-//! Sent by the client in response to a [`ClientboundKeepAlivePacket`].
+//! Sent by the client in response to a [`ClientboundKeepAlivePacket`](crate::packets::play::ClientboundKeepAlivePacket).
 //! The `id` field must match the challenge sent by the server.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};

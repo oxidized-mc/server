@@ -1,7 +1,7 @@
 //! ClientboundKeepAlivePacket (0x2C) — server keepalive ping.
 //!
 //! Sent every 15 seconds during the PLAY state. The client must respond
-//! with [`ServerboundKeepAlivePacket`] echoing the same `id`. If no
+//! with [`ServerboundKeepAlivePacket`](crate::packets::play::ServerboundKeepAlivePacket) echoing the same `id`. If no
 //! response arrives within 30 seconds, the server disconnects the client.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};

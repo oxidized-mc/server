@@ -1,7 +1,7 @@
 //! [`HumanoidArm`] — which hand the player uses as their main hand.
 //!
 //! Maps to the vanilla `HumanoidArm` enum.
-//! Used in [`ServerboundClientInformationPacket`] during configuration.
+//! Used in [`ServerboundClientInformationPacket`](crate::packets::configuration::ServerboundClientInformationPacket) during configuration.
 
 /// Which hand the player uses as their main hand.
 ///

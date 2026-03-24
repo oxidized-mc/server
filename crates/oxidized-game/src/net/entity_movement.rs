@@ -2,7 +2,7 @@
 //!
 //! Provides helpers for encoding entity position changes as delta shorts
 //! (1/4096 block precision) and packing rotation degrees into bytes
-//! (0–255 → 0–360°). Used to build [`ClientboundMoveEntityPacket`]
+//! (0–255 → 0–360°). Used to build `ClientboundMoveEntityPacket`
 //! variants and decide when to fall back to full position sync.
 
 /// Scale factor for delta position encoding (1 block = 4096 units).

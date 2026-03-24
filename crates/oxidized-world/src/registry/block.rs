@@ -111,7 +111,7 @@ impl BlockStateId {
 /// from the state's offset within its block using stride arithmetic.
 #[derive(Debug, Clone, Copy)]
 pub struct BlockStateEntry {
-    /// Index into [`BLOCK_DEFS`](super::generated::BLOCK_DEFS).
+    /// Index into `BLOCK_DEFS`.
     pub block_type: u16,
     /// Bitflags for commonly queried properties.
     pub flags: BlockStateFlags,
@@ -149,7 +149,7 @@ pub struct BlockDef {
     pub default_state: u16,
     /// Number of properties for this block.
     pub prop_count: u8,
-    /// Offset into [`PROPERTY_DEFS`](super::generated::PROPERTY_DEFS).
+    /// Offset into `PROPERTY_DEFS`.
     pub props_offset: u16,
 }
 
@@ -163,7 +163,7 @@ pub struct PropertyDef {
     pub name: &'static str,
     /// Number of possible values.
     pub num_values: u8,
-    /// Offset into [`PROPERTY_VALUES`](super::generated::PROPERTY_VALUES).
+    /// Offset into `PROPERTY_VALUES`.
     pub values_offset: u16,
     /// Stride for this property in state index computation.
     pub stride: u16,

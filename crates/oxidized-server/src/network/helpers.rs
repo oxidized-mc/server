@@ -54,6 +54,10 @@ pub async fn disconnect_err(conn: &mut Connection, reason: &str) -> ConnectionEr
 
 /// Sends a disconnect packet to the client and returns a corresponding
 /// [`ConnectionError`].
+///
+/// # Errors
+///
+/// Always returns a [`ConnectionError`] wrapping the disconnect reason.
 pub async fn disconnect(conn: &mut Connection, reason: &str) -> Result<(), ConnectionError> {
     Err(disconnect_err(conn, reason).await)
 }

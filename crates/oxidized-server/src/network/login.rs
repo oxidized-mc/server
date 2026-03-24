@@ -33,7 +33,7 @@ use super::helpers::{decode_packet, disconnect, disconnect_err};
 /// [`ClientboundLoginFinishedPacket`], and transitions to
 /// [`ConnectionState::Configuration`].
 ///
-/// Returns the authenticated [`GameProfile`] for use in subsequent
+/// Returns the authenticated [`GameProfile`](oxidized_protocol::auth::GameProfile) for use in subsequent
 /// protocol states.
 ///
 /// # Errors
@@ -149,7 +149,7 @@ pub async fn handle_login(
 /// Performs online-mode authentication: encryption handshake, shared secret
 /// exchange, and Mojang session server verification.
 ///
-/// Returns the authenticated [`GameProfile`] from Mojang's session server.
+/// Returns the authenticated [`GameProfile`](oxidized_protocol::auth::GameProfile) from Mojang's session server.
 ///
 /// # Errors
 ///

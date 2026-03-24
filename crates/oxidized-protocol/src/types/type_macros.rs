@@ -167,7 +167,7 @@ macro_rules! impl_protocol_enum {
             ///
             /// # Errors
             ///
-            /// Returns [`TypeError`] if the buffer is truncated or the value
+            /// Returns [`TypeError`](crate::codec::types::TypeError) if the buffer is truncated or the value
             /// is out of range.
             pub fn read(buf: &mut ::bytes::Bytes) -> Result<Self, $crate::codec::types::TypeError> {
                 let id = $crate::codec::varint::read_varint_buf(buf)?;

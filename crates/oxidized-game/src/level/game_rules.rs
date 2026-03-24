@@ -467,6 +467,11 @@ impl GameRules {
 
     /// Sets a rule from a string value. Returns `Err` if the value is invalid
     /// for the rule's type.
+    ///
+    /// # Errors
+    ///
+    /// Returns the parse failure message if `value` cannot be converted to the
+    /// rule's expected type (bool or integer).
     pub fn set_from_string(&mut self, key: GameRuleKey, value: &str) -> Result<(), String> {
         match &self.values[Self::idx(key)] {
             GameRuleValue::Bool(_) => {

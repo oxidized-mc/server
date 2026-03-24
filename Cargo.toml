@@ -109,6 +109,7 @@ inherits  = "release"
 debug     = true
 
 [workspace.lints.rust]
+# TODO(R3.7): Escalate to "deny" once existing gaps are filled
 missing_docs       = "warn"
 unsafe_code        = "deny"
 unused_imports     = "warn"

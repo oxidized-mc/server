@@ -142,7 +142,7 @@ fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacke
 /// Handles the PLAY-state login sequence for a newly joined player.
 ///
 /// Creates a [`ServerPlayer`], loads saved player data (if available),
-/// builds the 11-packet login sequence via [`build_login_sequence`], and
+/// builds the 11-packet login sequence via [`build_login_sequence`](oxidized_game::player::login::build_login_sequence), and
 /// sends them to the client. Then enters the main play loop to process
 /// incoming PLAY packets.
 ///

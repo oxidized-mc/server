@@ -21,6 +21,11 @@ pub struct LastSeenMessagesUpdate {
 
 impl LastSeenMessagesUpdate {
     /// Decodes from a buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketDecodeError`] if the buffer is truncated or contains
+    /// invalid data.
     pub fn decode(data: &mut Bytes) -> Result<Self, PacketDecodeError> {
         let offset = varint::read_varint_buf(data)?;
         if data.remaining() < 4 {

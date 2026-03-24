@@ -32,6 +32,11 @@ impl Component {
     }
 
     /// Decode a component from an NBT tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns a descriptive error string if the tag structure is invalid
+    /// or contains an unrecognised component type.
     pub fn from_nbt(tag: &NbtTag) -> Result<Self, String> {
         match tag {
             NbtTag::String(s) => Ok(Component::text(s.as_str())),

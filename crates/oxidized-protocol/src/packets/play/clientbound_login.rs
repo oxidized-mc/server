@@ -47,6 +47,11 @@ pub struct CommonPlayerSpawnInfo {
 
 impl CommonPlayerSpawnInfo {
     /// Decodes from a buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PacketDecodeError`] if the buffer is truncated or contains
+    /// invalid dimension/gamemode data.
     pub fn decode(data: &mut Bytes) -> Result<Self, PacketDecodeError> {
         // Holder<DimensionType> wire encoding: VarInt(registry_id + 1).
         let raw_holder_id = varint::read_varint_buf(data)?;

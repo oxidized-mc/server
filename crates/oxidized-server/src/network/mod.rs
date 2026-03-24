@@ -662,7 +662,7 @@ pub async fn listen(
 /// Handles a single client connection through the protocol state machine.
 ///
 /// Dispatches packets based on the current [`ConnectionState`]:
-/// - **Handshaking** → parse [`ClientIntentionPacket`], transition state
+/// - **Handshaking** → parse [`ClientIntentionPacket`](oxidized_protocol::packets::handshake::ClientIntentionPacket), transition state
 /// - **Status** → respond with server status JSON and pong
 /// - **Login** → authenticate, enable encryption/compression, finish login
 async fn handle_connection(

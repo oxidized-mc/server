@@ -28,6 +28,11 @@ fn get_typed<S, T>(
 }
 
 /// Gets an integer argument by name.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not an integer.
 pub fn get_integer<S>(ctx: &CommandContext<S>, name: &str) -> Result<i32, CommandError> {
     get_typed(ctx, name, "an integer", |r| match r {
         ArgumentResult::Integer(v) => Some(*v),
@@ -36,6 +41,11 @@ pub fn get_integer<S>(ctx: &CommandContext<S>, name: &str) -> Result<i32, Comman
 }
 
 /// Gets a long argument by name.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not a long.
 pub fn get_long<S>(ctx: &CommandContext<S>, name: &str) -> Result<i64, CommandError> {
     get_typed(ctx, name, "a long", |r| match r {
         ArgumentResult::Long(v) => Some(*v),
@@ -44,6 +54,11 @@ pub fn get_long<S>(ctx: &CommandContext<S>, name: &str) -> Result<i64, CommandEr
 }
 
 /// Gets a float argument by name.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not a float.
 pub fn get_float<S>(ctx: &CommandContext<S>, name: &str) -> Result<f32, CommandError> {
     get_typed(ctx, name, "a float", |r| match r {
         ArgumentResult::Float(v) => Some(*v),
@@ -52,6 +67,11 @@ pub fn get_float<S>(ctx: &CommandContext<S>, name: &str) -> Result<f32, CommandE
 }
 
 /// Gets a double argument by name.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not a double.
 pub fn get_double<S>(ctx: &CommandContext<S>, name: &str) -> Result<f64, CommandError> {
     get_typed(ctx, name, "a double", |r| match r {
         ArgumentResult::Double(v) => Some(*v),
@@ -60,6 +80,11 @@ pub fn get_double<S>(ctx: &CommandContext<S>, name: &str) -> Result<f64, Command
 }
 
 /// Gets a boolean argument by name.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not a boolean.
 pub fn get_bool<S>(ctx: &CommandContext<S>, name: &str) -> Result<bool, CommandError> {
     get_typed(ctx, name, "a boolean", |r| match r {
         ArgumentResult::Bool(v) => Some(*v),
@@ -68,6 +93,11 @@ pub fn get_bool<S>(ctx: &CommandContext<S>, name: &str) -> Result<bool, CommandE
 }
 
 /// Gets a string argument by name.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not a string.
 pub fn get_string<'a, S>(ctx: &'a CommandContext<S>, name: &str) -> Result<&'a str, CommandError> {
     match get_arg_result(ctx, name)? {
         ArgumentResult::String(v) => Ok(v.as_str()),
@@ -78,6 +108,11 @@ pub fn get_string<'a, S>(ctx: &'a CommandContext<S>, name: &str) -> Result<&'a s
 }
 
 /// Gets a gamemode argument by name.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not a game mode.
 pub fn get_gamemode<S>(ctx: &CommandContext<S>, name: &str) -> Result<GameType, CommandError> {
     get_typed(ctx, name, "a game mode", |r| match r {
         ArgumentResult::Gamemode(gm) => Some(*gm),
@@ -86,6 +121,11 @@ pub fn get_gamemode<S>(ctx: &CommandContext<S>, name: &str) -> Result<GameType, 
 }
 
 /// Gets a time argument by name (in ticks).
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if no argument named `name` exists or
+/// the argument is not a time or integer value.
 pub fn get_time<S>(ctx: &CommandContext<S>, name: &str) -> Result<i32, CommandError> {
     match get_arg_result(ctx, name)? {
         // Accept both Time and raw Integer as ticks

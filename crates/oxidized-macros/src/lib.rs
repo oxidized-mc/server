@@ -7,7 +7,7 @@
 //! struct will compile successfully but will **not** produce any trait implementations.
 //!
 //! Currently, all 59+ packets in `oxidized-protocol` are manually implemented using
-//! inherent `decode()`/`encode()` methods and the [`Packet`] trait from
+//! inherent `decode()`/`encode()` methods and the `Packet` trait from
 //! [ADR-038](../../../docs/adr/adr-038-packet-trait-unified-codec.md). The derive
 //! macros below will be implemented in a future phase to replace that boilerplate.
 //!

@@ -1,6 +1,3 @@
-#![warn(missing_docs)]
-#![deny(unsafe_code)]
-
 //! NBT (Named Binary Tag) read/write implementation for Minecraft.
 //!
 //! Supports all 13 tag types, Modified UTF-8, memory accounting,

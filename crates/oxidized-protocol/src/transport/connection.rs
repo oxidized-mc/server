@@ -129,6 +129,10 @@ impl Connection {
     ///
     /// Sets `TCP_NODELAY` for low-latency writes (per ADR-006) and splits
     /// the stream into independent read/write halves.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if `TCP_NODELAY` cannot be set.
     pub fn new(stream: TcpStream, addr: SocketAddr) -> io::Result<Self> {
         stream.set_nodelay(true)?;
         let (reader, writer) = stream.into_split();

@@ -1,13 +1,13 @@
 //! Container menu types and the foundation for container interactions.
 //!
 //! This module defines the [`MenuType`] enum (all container types in Minecraft)
-//! and will host the [`ContainerMenu`] trait in a future phase when full
+//! and will host the `ContainerMenu` trait in a future phase when full
 //! container interaction (shift-click, drag, double-click) is implemented.
 
 /// All container/menu types in Minecraft.
 ///
 /// The discriminant values match the vanilla registry IDs sent on the wire
-/// in [`ClientboundOpenScreenPacket`].
+/// in `ClientboundOpenScreenPacket`.
 ///
 /// # Examples
 ///

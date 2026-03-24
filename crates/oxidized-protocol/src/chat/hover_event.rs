@@ -80,6 +80,11 @@ impl HoverEvent {
     /// Decode a hover event from an NBT compound.
     ///
     /// Returns `Ok(None)` for unrecognized actions.
+    ///
+    /// # Errors
+    ///
+    /// Returns a descriptive error string if a recognised action has
+    /// malformed or missing fields.
     pub fn from_nbt(compound: &NbtCompound) -> Result<Option<Self>, String> {
         let action = match compound.get_string("action") {
             Some(a) => a,

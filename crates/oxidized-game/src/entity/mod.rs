@@ -5,7 +5,7 @@
 //! - [`id::next_entity_id()`] — global atomic entity ID counter
 //! - [`synched_data::SynchedEntityData`] — per-entity dirty-tracked data slots
 //! - [`data_slots`] — base entity data slot index constants
-//! - [`Aabb`](oxidized_protocol::types::aabb::Aabb) — axis-aligned bounding box (from `oxidized-protocol`)
+//! - [`Aabb`] — axis-aligned bounding box (from `oxidized-protocol`)
 //! - [`Entity`] — base entity struct combining ID, position, and metadata
 //! - [`tracker::EntityTracker`] — tracks which players see each entity
 //!

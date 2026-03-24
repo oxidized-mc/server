@@ -1,7 +1,7 @@
 //! Block and item registry system.
 //!
 //! Block data is generated at compile time from embedded vanilla JSON
-//! (see [`generated`]).  Provides O(1) lookup of block states by numeric ID
+//! (see `generated`).  Provides O(1) lookup of block states by numeric ID
 //! and blocks/items by name.
 
 mod block;

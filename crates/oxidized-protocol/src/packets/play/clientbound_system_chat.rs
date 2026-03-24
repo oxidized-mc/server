@@ -65,6 +65,11 @@ pub fn write_component_nbt(buf: &mut BytesMut, component: &Component) {
 }
 
 /// Reads a [`Component`] from network NBT in the buffer.
+///
+/// # Errors
+///
+/// Returns [`PacketDecodeError`] if the NBT data is malformed or the
+/// component structure is invalid.
 pub fn read_component_nbt(data: &mut Bytes) -> Result<Component, PacketDecodeError> {
     let mut cursor = std::io::Cursor::new(data.as_ref());
     let mut acc = oxidized_nbt::NbtAccounter::unlimited();

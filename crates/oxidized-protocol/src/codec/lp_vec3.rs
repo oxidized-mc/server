@@ -1,5 +1,5 @@
 //! Low-precision Vec3 encoding for entity velocity in
-//! [`ClientboundAddEntityPacket`].
+//! [`ClientboundAddEntityPacket`](crate::packets::play::ClientboundAddEntityPacket).
 //!
 //! Mirrors `net.minecraft.network.LpVec3` in vanilla. Uses a compact
 //! bit-packed format that encodes three f64 components into 6–10 bytes

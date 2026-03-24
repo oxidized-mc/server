@@ -64,26 +64,47 @@ impl<'a> StringReader<'a> {
     }
 
     /// Reads an integer.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError::Parse`] if the next word is not a valid integer.
     pub fn read_integer(&mut self) -> Result<i32, CommandError> {
         self.read_numeric("integer")
     }
 
     /// Reads a long.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError::Parse`] if the next word is not a valid long.
     pub fn read_long(&mut self) -> Result<i64, CommandError> {
         self.read_numeric("long")
     }
 
     /// Reads a float.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError::Parse`] if the next word is not a valid float.
     pub fn read_float(&mut self) -> Result<f32, CommandError> {
         self.read_numeric("float")
     }
 
     /// Reads a double.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError::Parse`] if the next word is not a valid double.
     pub fn read_double(&mut self) -> Result<f64, CommandError> {
         self.read_numeric("double")
     }
 
     /// Reads a boolean.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError::Parse`] if the next word is not `"true"` or
+    /// `"false"`.
     pub fn read_bool(&mut self) -> Result<bool, CommandError> {
         let word = self.read_word();
         match word {

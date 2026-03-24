@@ -1,7 +1,7 @@
 //! Serverbound player movement packets.
 //!
 //! Four wire packets map to four Rust structs, each implementing
-//! [`Packet`](crate::codec::Packet). The packet IDs correspond to the four
+//! [`Packet`]. The packet IDs correspond to the four
 //! Java inner classes: `Pos`, `PosRot`, `Rot`, `StatusOnly`.
 //!
 //! All four variants convert into [`ServerboundMovePlayerPacket`] via `From`,

@@ -50,6 +50,10 @@ impl Commands {
     }
 
     /// Parse and execute a command string (without leading `/`).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError`] if parsing or execution fails.
     pub fn dispatch(&self, input: &str, source: CommandSourceStack) -> Result<i32, CommandError> {
         let input = input.trim_start_matches('/');
         let parse = self.dispatcher.parse(input, source)?;

@@ -7,7 +7,7 @@ use super::generated;
 
 /// Registry of all block types and block states.
 ///
-/// All data is generated at compile time in [`super::generated`].  This struct
+/// All data is generated at compile time in the `generated` module.  This struct
 /// is zero-sized and acts as a convenient handle with the same API surface that
 /// consumers already use.  Passing `Arc<BlockRegistry>` around is cheap (it
 /// holds no data) and avoids changing call-sites.

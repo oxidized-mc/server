@@ -143,7 +143,7 @@ pub fn make_command_source_for_player(
     }
 }
 
-/// Converts the game crate's [`CommandTreeData`] into a protocol-level
+/// Converts the game crate's [`CommandTreeData`](oxidized_game::commands::CommandTreeData) into a protocol-level
 /// [`ClientboundCommandsPacket`].
 pub fn commands_packet_from_tree(
     tree: &oxidized_game::commands::CommandTreeData,

@@ -33,6 +33,11 @@ impl<S: Clone + Send + Sync + 'static> CommandDispatcher<S> {
 
     /// Parses input against the command graph, returning a ready-to-execute
     /// context with parsed arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError::Parse`] if the command name is unknown, the
+    /// source lacks permission, or any argument fails to parse.
     pub fn parse(&self, input: &str, source: S) -> Result<ParseResults<S>, CommandError> {
         let mut reader = StringReader::new(input, 0);
 
@@ -147,6 +152,11 @@ impl<S: Clone + Send + Sync + 'static> CommandDispatcher<S> {
     }
 
     /// Executes a previously-parsed command.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CommandError::Parse`] if the parse result has no resolved
+    /// command. May also propagate errors from the command handler itself.
     pub fn execute(&self, parse: &ParseResults<S>) -> Result<i32, CommandError> {
         let cmd = parse
             .context

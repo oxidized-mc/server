@@ -43,7 +43,7 @@ use crate::inventory::ItemStack;
 /// ```
 #[derive(Debug)]
 pub struct ServerPlayer {
-    /// Network entity ID (unique per server session, assigned by [`PlayerList`]).
+    /// Network entity ID (unique per server session, assigned by [`PlayerList`](crate::player::PlayerList)).
     pub entity_id: i32,
     /// Mojang account UUID.
     pub uuid: Uuid,
@@ -159,7 +159,7 @@ pub struct ServerPlayer {
 impl ServerPlayer {
     /// Creates a new player with the given entity ID, profile, dimension, and game mode.
     ///
-    /// The entity ID should be obtained from [`PlayerList::next_entity_id`].
+    /// The entity ID should be obtained from [`PlayerList::next_entity_id`](crate::player::PlayerList::next_entity_id).
     ///
     /// Only 4 required parameters — a builder is not needed. If the
     /// constructor grows beyond 5 parameters, introduce a

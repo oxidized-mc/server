@@ -126,7 +126,7 @@ impl PhysicsBlockProperties {
     ///
     /// Iterates known physics-affecting blocks and assigns their
     /// properties to all of their state IDs. Blocks not listed in
-    /// [`PHYSICS_OVERRIDES`] get default values.
+    /// `PHYSICS_OVERRIDES` get default values.
     pub fn from_registry(registry: &BlockRegistry) -> Self {
         let size = registry.state_array_size();
         let mut friction = vec![BLOCK_FRICTION_DEFAULT; size];

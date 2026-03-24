@@ -191,6 +191,11 @@ fn validate_coordinate_mix(locals: &[bool]) -> Result<CoordinateKind, CommandErr
 }
 
 /// Parses three whitespace-separated double coordinates supporting `~`/`^`.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if a coordinate component cannot be parsed
+/// or if relative (`~`) and local (`^`) coordinates are mixed.
 pub fn parse_coordinates3(reader: &mut StringReader<'_>) -> Result<Coordinates, CommandError> {
     let read_double = |r: &mut StringReader<'_>| r.read_double();
     let (x, x_local) = parse_single_coord(reader, read_double)?;
@@ -203,6 +208,11 @@ pub fn parse_coordinates3(reader: &mut StringReader<'_>) -> Result<Coordinates, 
 }
 
 /// Parses three whitespace-separated integer coordinates supporting `~`/`^`.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if a coordinate component cannot be parsed
+/// or if relative (`~`) and local (`^`) coordinates are mixed.
 pub fn parse_int_coordinates3(reader: &mut StringReader<'_>) -> Result<Coordinates, CommandError> {
     let read_int = |r: &mut StringReader<'_>| Ok(r.read_integer()? as f64);
     let (x, x_local) = parse_single_coord(reader, read_int)?;
@@ -215,6 +225,11 @@ pub fn parse_int_coordinates3(reader: &mut StringReader<'_>) -> Result<Coordinat
 }
 
 /// Parses two whitespace-separated coordinates (x z) for Vec2/Rotation.
+///
+/// # Errors
+///
+/// Returns [`CommandError::Parse`] if a coordinate component cannot be parsed
+/// or if relative (`~`) and local (`^`) coordinates are mixed.
 pub fn parse_coordinates2(reader: &mut StringReader<'_>) -> Result<Coordinates, CommandError> {
     let (x, x_local) = parse_single_coord(reader, |r| r.read_double())?;
     reader.skip_whitespace();

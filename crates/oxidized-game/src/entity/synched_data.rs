@@ -301,7 +301,7 @@ impl SynchedEntityData {
 
     /// Collects all defined slots (for initial entity spawn).
     ///
-    /// Unlike [`pack_dirty`], this returns every defined slot regardless
+    /// Unlike [`Self::pack_dirty`], this returns every defined slot regardless
     /// of dirty state. Used when sending the full entity data on spawn.
     pub fn pack_all(&self) -> Vec<DirtyDataValue<'_>> {
         self.items

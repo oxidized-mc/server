@@ -4,7 +4,7 @@
 //! day/night cycle, and weather each tick. Broadcasts
 //! [`ClientboundSetTimePacket`] every 20 ticks so clients stay synchronised.
 //!
-//! The loop respects freeze/step/sprint state from [`ServerTickRateManager`].
+//! The loop respects freeze/step/sprint state from [`ServerTickRateManager`](oxidized_game::level::ServerTickRateManager).
 //!
 //! Corresponds to `net.minecraft.server.MinecraftServer.tickServer()`.
 
