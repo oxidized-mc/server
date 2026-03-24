@@ -132,8 +132,8 @@ impl CommonPlayerSpawnInfo {
 pub struct ClientboundLoginPacket {
     /// The player's entity ID.
     pub player_id: i32,
-    /// Whether this is a hardcore world.
-    pub hardcore: bool,
+    /// Whether this is a is_hardcore world.
+    pub is_hardcore: bool,
     /// All dimension identifiers.
     pub dimensions: Vec<ResourceLocation>,
     /// Maximum number of players (display only).
@@ -143,15 +143,15 @@ pub struct ClientboundLoginPacket {
     /// Simulation distance in chunks.
     pub simulation_distance: i32,
     /// Whether reduced debug info is enabled.
-    pub reduced_debug_info: bool,
+    pub has_reduced_debug_info: bool,
     /// Whether to show the death screen.
-    pub show_death_screen: bool,
+    pub is_showing_death_screen: bool,
     /// Whether limited crafting is enabled.
-    pub do_limited_crafting: bool,
+    pub is_limited_crafting: bool,
     /// Spawn information for the initial dimension.
     pub common_spawn_info: CommonPlayerSpawnInfo,
     /// Whether the server enforces secure chat.
-    pub enforces_secure_chat: bool,
+    pub is_secure_chat_enforced: bool,
 }
 
 impl Packet for ClientboundLoginPacket {
@@ -159,7 +159,7 @@ impl Packet for ClientboundLoginPacket {
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let player_id = types::read_i32(&mut data)?;
-        let hardcore = types::read_bool(&mut data)?;
+        let is_hardcore = types::read_bool(&mut data)?;
 
         let dim_count = varint::read_varint_buf(&mut data)? as usize;
         let mut dimensions = Vec::with_capacity(dim_count);
@@ -170,31 +170,31 @@ impl Packet for ClientboundLoginPacket {
         let max_players = varint::read_varint_buf(&mut data)?;
         let chunk_radius = varint::read_varint_buf(&mut data)?;
         let simulation_distance = varint::read_varint_buf(&mut data)?;
-        let reduced_debug_info = types::read_bool(&mut data)?;
-        let show_death_screen = types::read_bool(&mut data)?;
-        let do_limited_crafting = types::read_bool(&mut data)?;
+        let has_reduced_debug_info = types::read_bool(&mut data)?;
+        let is_showing_death_screen = types::read_bool(&mut data)?;
+        let is_limited_crafting = types::read_bool(&mut data)?;
         let common_spawn_info = CommonPlayerSpawnInfo::decode(&mut data)?;
-        let enforces_secure_chat = types::read_bool(&mut data)?;
+        let is_secure_chat_enforced = types::read_bool(&mut data)?;
 
         Ok(Self {
             player_id,
-            hardcore,
+            is_hardcore,
             dimensions,
             max_players,
             chunk_radius,
             simulation_distance,
-            reduced_debug_info,
-            show_death_screen,
-            do_limited_crafting,
+            has_reduced_debug_info,
+            is_showing_death_screen,
+            is_limited_crafting,
             common_spawn_info,
-            enforces_secure_chat,
+            is_secure_chat_enforced,
         })
     }
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(128);
         types::write_i32(&mut buf, self.player_id);
-        types::write_bool(&mut buf, self.hardcore);
+        types::write_bool(&mut buf, self.is_hardcore);
 
         varint::write_varint_buf(self.dimensions.len() as i32, &mut buf);
         for dim in &self.dimensions {
@@ -204,11 +204,11 @@ impl Packet for ClientboundLoginPacket {
         varint::write_varint_buf(self.max_players, &mut buf);
         varint::write_varint_buf(self.chunk_radius, &mut buf);
         varint::write_varint_buf(self.simulation_distance, &mut buf);
-        types::write_bool(&mut buf, self.reduced_debug_info);
-        types::write_bool(&mut buf, self.show_death_screen);
-        types::write_bool(&mut buf, self.do_limited_crafting);
+        types::write_bool(&mut buf, self.has_reduced_debug_info);
+        types::write_bool(&mut buf, self.is_showing_death_screen);
+        types::write_bool(&mut buf, self.is_limited_crafting);
         self.common_spawn_info.encode(&mut buf);
-        types::write_bool(&mut buf, self.enforces_secure_chat);
+        types::write_bool(&mut buf, self.is_secure_chat_enforced);
         buf
     }
 }
@@ -221,7 +221,7 @@ mod tests {
     fn sample_login_packet() -> ClientboundLoginPacket {
         ClientboundLoginPacket {
             player_id: 42,
-            hardcore: false,
+            is_hardcore: false,
             dimensions: vec![
                 ResourceLocation::minecraft("overworld"),
                 ResourceLocation::minecraft("the_nether"),
@@ -230,9 +230,9 @@ mod tests {
             max_players: 20,
             chunk_radius: 10,
             simulation_distance: 10,
-            reduced_debug_info: false,
-            show_death_screen: true,
-            do_limited_crafting: false,
+            has_reduced_debug_info: false,
+            is_showing_death_screen: true,
+            is_limited_crafting: false,
             common_spawn_info: CommonPlayerSpawnInfo {
                 dimension_type_id: 0,
                 dimension: ResourceLocation::minecraft("overworld"),
@@ -245,7 +245,7 @@ mod tests {
                 portal_cooldown: 0,
                 sea_level: 63,
             },
-            enforces_secure_chat: false,
+            is_secure_chat_enforced: false,
         }
     }
 
@@ -256,18 +256,18 @@ mod tests {
         let decoded = ClientboundLoginPacket::decode(encoded.freeze()).unwrap();
 
         assert_eq!(decoded.player_id, 42);
-        assert!(!decoded.hardcore);
+        assert!(!decoded.is_hardcore);
         assert_eq!(decoded.dimensions.len(), 3);
         assert_eq!(decoded.max_players, 20);
         assert_eq!(decoded.chunk_radius, 10);
         assert_eq!(decoded.simulation_distance, 10);
-        assert!(!decoded.reduced_debug_info);
-        assert!(decoded.show_death_screen);
-        assert!(!decoded.do_limited_crafting);
+        assert!(!decoded.has_reduced_debug_info);
+        assert!(decoded.is_showing_death_screen);
+        assert!(!decoded.is_limited_crafting);
         assert_eq!(decoded.common_spawn_info.game_mode, 0);
         assert_eq!(decoded.common_spawn_info.previous_game_mode, -1);
         assert_eq!(decoded.common_spawn_info.sea_level, 63);
-        assert!(!decoded.enforces_secure_chat);
+        assert!(!decoded.is_secure_chat_enforced);
     }
 
     #[test]
@@ -293,9 +293,9 @@ mod tests {
     #[test]
     fn test_login_packet_hardcore() {
         let mut pkt = sample_login_packet();
-        pkt.hardcore = true;
+        pkt.is_hardcore = true;
         let encoded = pkt.encode();
         let decoded = ClientboundLoginPacket::decode(encoded.freeze()).unwrap();
-        assert!(decoded.hardcore);
+        assert!(decoded.is_hardcore);
     }
 }

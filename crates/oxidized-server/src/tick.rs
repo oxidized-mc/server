@@ -100,11 +100,11 @@ pub fn run_tick_loop(ctx: &ServerContext, shutdown: &AtomicBool) {
         let tick_start = Instant::now();
 
         // Snapshot tick rate manager state in a single lock acquisition.
-        let (should_tick, target_interval, frozen, steps_remaining) = {
+        let (should_tick, target_interval, is_frozen, steps_remaining) = {
             let mut mgr = ctx.tick_rate_manager.write();
             let should = mgr.should_tick();
             let interval = mgr.tick_interval();
-            (should, interval, mgr.frozen, mgr.steps_remaining)
+            (should, interval, mgr.is_frozen, mgr.steps_remaining)
         };
 
         if should_tick {
@@ -131,7 +131,7 @@ pub fn run_tick_loop(ctx: &ServerContext, shutdown: &AtomicBool) {
         }
 
         // Broadcast stepping state to clients when frozen.
-        if frozen {
+        if is_frozen {
             broadcast_packet(
                 ctx,
                 &ClientboundTickingStepPacket {

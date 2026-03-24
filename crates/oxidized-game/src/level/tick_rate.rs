@@ -11,11 +11,11 @@ pub struct ServerTickRateManager {
     /// Target ticks per second (default 20.0).
     pub tick_rate: f32,
     /// Whether the server is frozen (no game ticks advance).
-    pub frozen: bool,
+    pub is_frozen: bool,
     /// Remaining steps to advance while frozen.
     pub steps_remaining: u32,
     /// Whether the server is in sprint mode (ticks as fast as possible).
-    pub sprinting: bool,
+    pub is_sprinting: bool,
     /// Remaining ticks in the current sprint.
     pub sprint_ticks_remaining: u64,
     /// Frozen state saved before a sprint, restored when the sprint ends.
@@ -26,9 +26,9 @@ impl Default for ServerTickRateManager {
     fn default() -> Self {
         Self {
             tick_rate: 20.0,
-            frozen: false,
+            is_frozen: false,
             steps_remaining: 0,
-            sprinting: false,
+            is_sprinting: false,
             sprint_ticks_remaining: 0,
             previous_frozen: false,
         }
@@ -46,12 +46,12 @@ impl ServerTickRateManager {
 
     /// Returns `true` if the server is frozen and has no pending steps.
     pub fn is_frozen(&self) -> bool {
-        self.frozen && self.steps_remaining == 0
+        self.is_frozen && self.steps_remaining == 0
     }
 
     /// Returns `true` if the server is frozen but has pending steps.
     pub fn should_step(&self) -> bool {
-        self.frozen && self.steps_remaining > 0
+        self.is_frozen && self.steps_remaining > 0
     }
 
     /// Consumes one pending step. No-op if no steps remain.
@@ -70,17 +70,17 @@ impl ServerTickRateManager {
     ///
     /// This accounts for frozen state, stepping, and sprinting.
     pub fn should_tick(&mut self) -> bool {
-        if self.sprinting {
+        if self.is_sprinting {
             if self.sprint_ticks_remaining > 0 {
                 self.sprint_ticks_remaining -= 1;
                 return true;
             }
             // Sprint ended — restore previous frozen state.
-            self.sprinting = false;
-            self.frozen = self.previous_frozen;
+            self.is_sprinting = false;
+            self.is_frozen = self.previous_frozen;
         }
 
-        if self.frozen {
+        if self.is_frozen {
             if self.steps_remaining > 0 {
                 self.steps_remaining -= 1;
                 return true;
@@ -96,9 +96,9 @@ impl ServerTickRateManager {
     /// Saves the current frozen state and unfreezes for the duration of
     /// the sprint. The frozen state is restored when the sprint ends.
     pub fn start_sprint(&mut self, ticks: u64) {
-        self.previous_frozen = self.frozen;
-        self.frozen = false;
-        self.sprinting = true;
+        self.previous_frozen = self.is_frozen;
+        self.is_frozen = false;
+        self.is_sprinting = true;
         self.sprint_ticks_remaining = ticks;
     }
 
@@ -122,14 +122,14 @@ mod tests {
     fn test_default_is_20_tps() {
         let mgr = ServerTickRateManager::default();
         assert!((mgr.tick_rate - 20.0).abs() < f32::EPSILON);
-        assert!(!mgr.frozen);
-        assert!(!mgr.sprinting);
+        assert!(!mgr.is_frozen);
+        assert!(!mgr.is_sprinting);
     }
 
     #[test]
     fn test_freeze_and_step() {
         let mut mgr = ServerTickRateManager {
-            frozen: true,
+            is_frozen: true,
             ..Default::default()
         };
         assert!(mgr.is_frozen());
@@ -143,7 +143,7 @@ mod tests {
         mgr.consume_step();
         mgr.consume_step();
         assert!(!mgr.should_step());
-        assert!(mgr.is_frozen(), "still frozen after all steps consumed");
+        assert!(mgr.is_frozen(), "still is_frozen after all steps consumed");
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn test_should_tick_frozen() {
         let mut mgr = ServerTickRateManager {
-            frozen: true,
+            is_frozen: true,
             ..Default::default()
         };
         assert!(!mgr.should_tick());
@@ -174,7 +174,7 @@ mod tests {
     #[test]
     fn test_should_tick_frozen_with_steps() {
         let mut mgr = ServerTickRateManager {
-            frozen: true,
+            is_frozen: true,
             ..Default::default()
         };
         mgr.request_steps(2);
@@ -187,30 +187,30 @@ mod tests {
     fn test_sprint() {
         let mut mgr = ServerTickRateManager::default();
         mgr.start_sprint(3);
-        assert!(mgr.sprinting);
+        assert!(mgr.is_sprinting);
         assert!(mgr.should_tick());
         assert!(mgr.should_tick());
         assert!(mgr.should_tick());
         // Sprint ended, but was not frozen before — should still tick normally.
         assert!(mgr.should_tick());
-        assert!(!mgr.sprinting);
-        assert!(!mgr.frozen, "was not frozen before sprint");
+        assert!(!mgr.is_sprinting);
+        assert!(!mgr.is_frozen, "was not is_frozen before sprint");
     }
 
     #[test]
     fn test_sprint_restores_frozen_state() {
         let mut mgr = ServerTickRateManager {
-            frozen: true,
+            is_frozen: true,
             ..Default::default()
         };
         mgr.start_sprint(2);
         // Sprint unfreezes temporarily.
-        assert!(!mgr.frozen);
+        assert!(!mgr.is_frozen);
         assert!(mgr.should_tick());
         assert!(mgr.should_tick());
         // Sprint ended — frozen state should be restored.
-        assert!(!mgr.should_tick(), "should be frozen again after sprint");
-        assert!(mgr.frozen, "frozen state restored after sprint");
+        assert!(!mgr.should_tick(), "should be is_frozen again after sprint");
+        assert!(mgr.is_frozen, "is_frozen state restored after sprint");
     }
 
     #[test]

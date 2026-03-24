@@ -145,11 +145,11 @@ pub async fn handle_movement(
 
     // Skip speed limits but still reject NaN/Infinity and apply coordinate clamping.
     if skip_speed_check && !result.has_invalid_values {
-        result.needs_correction = false;
-        result.accepted = true;
+        result.is_correction_needed = false;
+        result.is_accepted = true;
     }
 
-    if result.needs_correction {
+    if result.is_correction_needed {
         let correction = {
             let mut p = ctx.player.write();
             let teleport_id = p.next_teleport_id();
@@ -177,9 +177,9 @@ pub async fn handle_movement(
             p.pos = result.new_pos;
             p.yaw = result.new_yaw;
             p.pitch = result.new_pitch;
-            p.on_ground = move_pkt.on_ground;
+            p.is_on_ground = move_pkt.is_on_ground;
             // Vanilla: elytra flight ends when the player touches the ground.
-            if move_pkt.on_ground {
+            if move_pkt.is_on_ground {
                 p.is_fall_flying = false;
             }
         }
@@ -190,7 +190,7 @@ pub async fn handle_movement(
             x = result.new_pos.x,
             y = result.new_pos.y,
             z = result.new_pos.z,
-            on_ground = move_pkt.on_ground,
+            is_on_ground = move_pkt.is_on_ground,
             "Position updated",
         );
 
@@ -206,7 +206,7 @@ pub async fn handle_movement(
             old_pitch,
             result.new_yaw,
             result.new_pitch,
-            move_pkt.on_ground,
+            move_pkt.is_on_ground,
             has_pos,
             has_rot,
         );
@@ -243,7 +243,7 @@ fn broadcast_movement(
     _old_pitch: f32,
     new_yaw: f32,
     new_pitch: f32,
-    on_ground: bool,
+    is_on_ground: bool,
     has_pos: bool,
     has_rot: bool,
 ) {
@@ -271,7 +271,7 @@ fn broadcast_movement(
                     dz,
                     yaw: packed_yaw,
                     pitch: packed_pitch,
-                    on_ground,
+                    is_on_ground,
                 };
                 ctx.server_ctx.broadcast(BroadcastMessage {
                     packet_id: ClientboundMoveEntityPosRotPacket::PACKET_ID,
@@ -292,7 +292,7 @@ fn broadcast_movement(
                     vz: 0.0,
                     yaw: new_yaw,
                     pitch: new_pitch,
-                    on_ground,
+                    is_on_ground,
                 };
                 ctx.server_ctx.broadcast(BroadcastMessage {
                     packet_id: oxidized_protocol::packets::play::ClientboundEntityPositionSyncPacket::PACKET_ID,
@@ -313,7 +313,7 @@ fn broadcast_movement(
                     dx,
                     dy,
                     dz,
-                    on_ground,
+                    is_on_ground,
                 };
                 ctx.server_ctx.broadcast(BroadcastMessage {
                     packet_id: ClientboundMoveEntityPosPacket::PACKET_ID,
@@ -333,7 +333,7 @@ fn broadcast_movement(
                     vz: 0.0,
                     yaw: new_yaw,
                     pitch: new_pitch,
-                    on_ground,
+                    is_on_ground,
                 };
                 ctx.server_ctx.broadcast(BroadcastMessage {
                     packet_id: oxidized_protocol::packets::play::ClientboundEntityPositionSyncPacket::PACKET_ID,
@@ -348,7 +348,7 @@ fn broadcast_movement(
             entity_id,
             yaw: packed_yaw,
             pitch: packed_pitch,
-            on_ground,
+            is_on_ground,
         };
         ctx.server_ctx.broadcast(BroadcastMessage {
             packet_id: ClientboundMoveEntityRotPacket::PACKET_ID,

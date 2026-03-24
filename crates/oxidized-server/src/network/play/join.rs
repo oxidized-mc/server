@@ -383,10 +383,10 @@ async fn broadcast_player_join(
                     properties: p.profile.properties().to_vec(),
                     game_mode: p.game_mode as i32,
                     latency: 0,
-                    listed: true,
+                    is_listed: true,
                     has_display_name: false,
                     display_name: None,
-                    show_hat: false,
+                    is_hat_visible: false,
                     list_order: 0,
                 }],
             }
@@ -414,10 +414,10 @@ async fn broadcast_player_join(
                 properties: p.profile.properties().to_vec(),
                 game_mode: p.game_mode as i32,
                 latency: 0,
-                listed: true,
+                is_listed: true,
                 has_display_name: false,
                 display_name: None,
-                show_hat: false,
+                is_hat_visible: false,
                 list_order: 0,
             }],
         };
@@ -552,7 +552,7 @@ async fn broadcast_player_join(
                 "multiplayer.player.joined",
                 vec![Component::text(player_name)],
             ),
-            overlay: false,
+            is_overlay: false,
         };
         let encoded = join_msg.encode();
         server_ctx.broadcast(BroadcastMessage {

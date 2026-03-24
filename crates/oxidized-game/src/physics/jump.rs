@@ -24,7 +24,7 @@ use super::constants::*;
 /// use oxidized_protocol::types::resource_location::ResourceLocation;
 ///
 /// let mut entity = Entity::new(ResourceLocation::minecraft("player"), 0.6, 1.8);
-/// entity.on_ground = true;
+/// entity.is_on_ground = true;
 /// apply_jump(&mut entity, 0, 1.0);
 /// assert!((entity.vy - 0.42).abs() < 0.001);
 /// ```
@@ -33,7 +33,7 @@ pub fn apply_jump(entity: &mut Entity, jump_boost_level: u8, jump_factor: f64) {
     entity.vy = base;
 
     if entity.is_sprinting() {
-        // Sprint-jump: horizontal boost in facing direction.
+        // Sprint-is_jumping: horizontal boost in facing direction.
         let yaw_rad = f64::from(entity.yaw).to_radians();
         entity.vx -= yaw_rad.sin() * SPRINT_JUMP_BOOST;
         entity.vz += yaw_rad.cos() * SPRINT_JUMP_BOOST;
@@ -51,7 +51,7 @@ mod tests {
     fn make_entity_on_ground() -> Entity {
         let mut e = Entity::new(ResourceLocation::minecraft("pig"), 0.6, 1.8);
         e.set_pos(0.5, 1.0, 0.5);
-        e.on_ground = true;
+        e.is_on_ground = true;
         e
     }
 

@@ -63,7 +63,7 @@ pub enum ArgumentResult {
         /// The angle in degrees.
         value: f32,
         /// Whether relative to the source's current angle.
-        relative: bool,
+        is_relative: bool,
     },
     /// An entity anchor point.
     EntityAnchor(EntityAnchorKind),
@@ -343,11 +343,11 @@ mod tests {
         match result {
             ArgumentResult::Coordinates(coords) => {
                 assert_eq!(coords.kind, CoordinateKind::World);
-                assert!(coords.x.relative);
+                assert!(coords.x.is_relative);
                 assert!((coords.x.value - 10.0).abs() < f64::EPSILON);
-                assert!(coords.y.relative);
+                assert!(coords.y.is_relative);
                 assert!((coords.y.value - 0.0).abs() < f64::EPSILON);
-                assert!(coords.z.relative);
+                assert!(coords.z.is_relative);
                 assert!((coords.z.value - -5.0).abs() < f64::EPSILON);
             },
             _ => panic!("Expected Coordinates, got {result:?}"),
@@ -369,7 +369,7 @@ mod tests {
         match result {
             ArgumentResult::Coordinates(coords) => {
                 assert_eq!(coords.kind, CoordinateKind::Local);
-                assert!(coords.x.relative);
+                assert!(coords.x.is_relative);
                 assert!((coords.x.value - 1.0).abs() < f64::EPSILON);
                 assert!((coords.y.value - 0.0).abs() < f64::EPSILON);
                 assert!((coords.z.value - 2.0).abs() < f64::EPSILON);
@@ -392,10 +392,10 @@ mod tests {
         match result {
             ArgumentResult::Coordinates(coords) => {
                 assert_eq!(coords.kind, CoordinateKind::World);
-                assert!(coords.x.relative);
+                assert!(coords.x.is_relative);
                 assert!((coords.x.value).abs() < f64::EPSILON);
-                assert!(coords.y.relative);
-                assert!(coords.z.relative);
+                assert!(coords.y.is_relative);
+                assert!(coords.z.is_relative);
             },
             _ => panic!("Expected Coordinates, got {result:?}"),
         }
@@ -408,7 +408,7 @@ mod tests {
         match result {
             ArgumentResult::Coordinates(coords) => {
                 assert_eq!(coords.kind, CoordinateKind::World);
-                assert!(coords.x.relative);
+                assert!(coords.x.is_relative);
                 assert!((coords.x.value - 5.0).abs() < f64::EPSILON);
             },
             _ => panic!("Expected Coordinates, got {result:?}"),
@@ -460,7 +460,7 @@ mod tests {
             result,
             ArgumentResult::Angle {
                 value: 45.5,
-                relative: false
+                is_relative: false
             }
         );
     }
@@ -473,7 +473,7 @@ mod tests {
             result,
             ArgumentResult::Angle {
                 value: 10.0,
-                relative: true
+                is_relative: true
             }
         );
     }
@@ -486,7 +486,7 @@ mod tests {
             result,
             ArgumentResult::Angle {
                 value: 0.0,
-                relative: true
+                is_relative: true
             }
         );
     }
@@ -625,9 +625,9 @@ mod tests {
         let result = parse_argument(&mut reader, &ArgumentType::Rotation).unwrap();
         match result {
             ArgumentResult::Coordinates(coords) => {
-                assert!(coords.x.relative);
+                assert!(coords.x.is_relative);
                 assert!((coords.x.value - 10.0).abs() < f64::EPSILON);
-                assert!(coords.z.relative);
+                assert!(coords.z.is_relative);
                 assert!((coords.z.value - 0.0).abs() < f64::EPSILON);
             },
             _ => panic!("Expected Coordinates for relative rotation"),

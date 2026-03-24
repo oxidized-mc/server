@@ -40,9 +40,9 @@ pub struct DimensionType {
     /// Sea level Y coordinate. Overworld: 63.
     pub sea_level: i32,
     /// No rain, water evaporates. `true` for the Nether.
-    pub ultrawarm: bool,
+    pub is_ultrawarm: bool,
     /// `false` for the End (no natural mob spawning rules).
-    pub natural: bool,
+    pub is_natural: bool,
     /// Ambient light level (0.0 in Overworld, 0.1 in Nether).
     pub ambient_light: f32,
     /// Tag for blocks that burn infinitely in this dimension.
@@ -108,8 +108,8 @@ impl DimensionType {
             height: 384,
             logical_height: 384,
             sea_level: 63,
-            ultrawarm: false,
-            natural: true,
+            is_ultrawarm: false,
+            is_natural: true,
             ambient_light: 0.0,
             infiniburn: ResourceLocation::minecraft("infiniburn_overworld"),
             effects: ResourceLocation::minecraft("overworld"),
@@ -132,8 +132,8 @@ impl DimensionType {
             height: 256,
             logical_height: 128,
             sea_level: 32,
-            ultrawarm: true,
-            natural: false,
+            is_ultrawarm: true,
+            is_natural: false,
             ambient_light: 0.1,
             infiniburn: ResourceLocation::minecraft("infiniburn_nether"),
             effects: ResourceLocation::minecraft("the_nether"),
@@ -156,8 +156,8 @@ impl DimensionType {
             height: 256,
             logical_height: 256,
             sea_level: 0,
-            ultrawarm: false,
-            natural: false,
+            is_ultrawarm: false,
+            is_natural: false,
             ambient_light: 0.25,
             infiniburn: ResourceLocation::minecraft("infiniburn_end"),
             effects: ResourceLocation::minecraft("the_end"),
@@ -234,8 +234,8 @@ mod tests {
         let dt = DimensionType::overworld();
         assert!(dt.has_skylight);
         assert!(!dt.has_ceiling);
-        assert!(!dt.ultrawarm);
-        assert!(dt.natural);
+        assert!(!dt.is_ultrawarm);
+        assert!(dt.is_natural);
         assert!(!dt.has_fixed_time);
         assert!(!dt.has_ender_dragon_fight);
         assert!((dt.coordinate_scale - 1.0).abs() < f64::EPSILON);
@@ -248,8 +248,8 @@ mod tests {
         let dt = DimensionType::nether();
         assert!(!dt.has_skylight);
         assert!(dt.has_ceiling);
-        assert!(dt.ultrawarm);
-        assert!(!dt.natural);
+        assert!(dt.is_ultrawarm);
+        assert!(!dt.is_natural);
         assert!(dt.has_fixed_time);
         assert!(!dt.has_ender_dragon_fight);
         assert!((dt.coordinate_scale - 8.0).abs() < f64::EPSILON);
@@ -263,7 +263,7 @@ mod tests {
         assert!(dt.has_ender_dragon_fight);
         assert!(dt.has_skylight);
         assert!((dt.coordinate_scale - 1.0).abs() < f64::EPSILON);
-        assert!(!dt.natural);
+        assert!(!dt.is_natural);
         assert!((dt.ambient_light - 0.25).abs() < f32::EPSILON);
     }
 

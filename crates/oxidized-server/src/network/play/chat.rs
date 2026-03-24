@@ -83,7 +83,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
     );
     let sys_pkt = ClientboundSystemChatPacket {
         content: decorated,
-        overlay: false,
+        is_overlay: false,
     };
     let encoded = sys_pkt.encode();
     let broadcast_msg = BroadcastMessage {
@@ -133,7 +133,7 @@ pub async fn handle_chat_command(
     while let Ok(component) = feedback_rx.try_recv() {
         let pkt = ClientboundSystemChatPacket {
             content: component,
-            overlay: false,
+            is_overlay: false,
         };
         let _ = conn
             .send_raw(ClientboundSystemChatPacket::PACKET_ID, &pkt.encode())
@@ -153,7 +153,7 @@ pub async fn handle_chat_command(
         Err(e) => {
             let err_msg = ClientboundSystemChatPacket {
                 content: Component::text(format!("{e}")),
-                overlay: false,
+                is_overlay: false,
             };
             let _ = conn.send_packet(&err_msg).await;
             debug!(player = %player_name, command = %command, error = %e, "Command failed");

@@ -34,7 +34,7 @@ impl ConsoleHelper {
             display_name: "Server".to_string(),
             server: self.server_ctx.clone(),
             feedback_sender: Arc::new(|_: &Component| {}),
-            silent: true,
+            is_silent: true,
         }
     }
 }
@@ -125,7 +125,7 @@ pub fn run_console_loop(server_ctx: Arc<ServerContext>) {
                             let _ = writeln!(out, "{component}");
                         }
                     }),
-                    silent: false,
+                    is_silent: false,
                 };
 
                 match server_ctx.commands.dispatch(&line, source) {

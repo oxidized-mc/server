@@ -18,13 +18,13 @@ use crate::types::BlockPos;
 /// | Field | Type | Description |
 /// |-------|------|-------------|
 /// | pos | i64 | Packed block position |
-/// | include_data | bool | Whether to copy block entity data (NBT) |
+/// | including_data | bool | Whether to copy block entity data (NBT) |
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerboundPickItemFromBlockPacket {
     /// Block position to pick from.
     pub pos: BlockPos,
     /// Whether to include block entity NBT data.
-    pub include_data: bool,
+    pub is_including_data: bool,
 }
 
 impl Packet for ServerboundPickItemFromBlockPacket {
@@ -33,14 +33,14 @@ impl Packet for ServerboundPickItemFromBlockPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let raw = types::read_i64(&mut data)?;
         let pos = BlockPos::from_long(raw);
-        let include_data = types::read_bool(&mut data)?;
-        Ok(Self { pos, include_data })
+        let is_including_data = types::read_bool(&mut data)?;
+        Ok(Self { pos, is_including_data })
     }
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(9);
         types::write_i64(&mut buf, self.pos.as_long());
-        types::write_bool(&mut buf, self.include_data);
+        types::write_bool(&mut buf, self.is_including_data);
         buf
     }
 }
@@ -63,24 +63,24 @@ mod tests {
     fn test_encode_decode_roundtrip() {
         let pkt = ServerboundPickItemFromBlockPacket {
             pos: BlockPos::new(100, 64, -200),
-            include_data: true,
+            is_including_data: true,
         };
         let buf = pkt.encode();
         let decoded = ServerboundPickItemFromBlockPacket::decode(buf.freeze()).unwrap();
         assert_eq!(decoded.pos.x, 100);
         assert_eq!(decoded.pos.y, 64);
         assert_eq!(decoded.pos.z, -200);
-        assert!(decoded.include_data);
+        assert!(decoded.is_including_data);
     }
 
     #[test]
     fn test_without_data() {
         let pkt = ServerboundPickItemFromBlockPacket {
             pos: BlockPos::new(0, 0, 0),
-            include_data: false,
+            is_including_data: false,
         };
         let buf = pkt.encode();
         let decoded = ServerboundPickItemFromBlockPacket::decode(buf.freeze()).unwrap();
-        assert!(!decoded.include_data);
+        assert!(!decoded.is_including_data);
     }
 }

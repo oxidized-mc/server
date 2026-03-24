@@ -20,7 +20,7 @@ use crate::codec::types::{read_f32, read_f64, write_f32, write_f64};
 const FLAG_ON_GROUND: u8 = 0x01;
 const FLAG_HORIZONTAL_COLLISION: u8 = 0x02;
 
-/// Reads the one-byte flags field, returning `(on_ground, horizontal_collision)`.
+/// Reads the one-byte flags field, returning `(is_on_ground, has_horizontal_collision)`.
 fn read_flags(buf: &mut Bytes) -> Result<(bool, bool), PacketDecodeError> {
     if !buf.has_remaining() {
         return Err(PacketDecodeError::Type(
@@ -35,9 +35,9 @@ fn read_flags(buf: &mut Bytes) -> Result<(bool, bool), PacketDecodeError> {
 }
 
 /// Encodes the flags byte from on_ground and horizontal_collision.
-fn encode_flags(buf: &mut BytesMut, on_ground: bool, horizontal_collision: bool) {
-    let flags = if on_ground { FLAG_ON_GROUND } else { 0 }
-        | if horizontal_collision {
+fn encode_flags(buf: &mut BytesMut, is_on_ground: bool, has_horizontal_collision: bool) {
+    let flags = if is_on_ground { FLAG_ON_GROUND } else { 0 }
+        | if has_horizontal_collision {
             FLAG_HORIZONTAL_COLLISION
         } else {
             0
@@ -68,9 +68,9 @@ pub struct ServerboundMovePlayerPosPacket {
     /// World Z coordinate.
     pub z: f64,
     /// Whether the player is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
     /// Whether the player is colliding horizontally.
-    pub horizontal_collision: bool,
+    pub has_horizontal_collision: bool,
 }
 
 impl Packet for ServerboundMovePlayerPosPacket {
@@ -80,13 +80,13 @@ impl Packet for ServerboundMovePlayerPosPacket {
         let x = read_f64(&mut data)?;
         let y = read_f64(&mut data)?;
         let z = read_f64(&mut data)?;
-        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        let (is_on_ground, has_horizontal_collision) = read_flags(&mut data)?;
         Ok(Self {
             x,
             y,
             z,
-            on_ground,
-            horizontal_collision,
+            is_on_ground,
+            has_horizontal_collision,
         })
     }
 
@@ -95,7 +95,7 @@ impl Packet for ServerboundMovePlayerPosPacket {
         write_f64(&mut buf, self.x);
         write_f64(&mut buf, self.y);
         write_f64(&mut buf, self.z);
-        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        encode_flags(&mut buf, self.is_on_ground, self.has_horizontal_collision);
         buf
     }
 }
@@ -129,9 +129,9 @@ pub struct ServerboundMovePlayerPosRotPacket {
     /// Pitch rotation in degrees.
     pub pitch: f32,
     /// Whether the player is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
     /// Whether the player is colliding horizontally.
-    pub horizontal_collision: bool,
+    pub has_horizontal_collision: bool,
 }
 
 impl Packet for ServerboundMovePlayerPosRotPacket {
@@ -143,15 +143,15 @@ impl Packet for ServerboundMovePlayerPosRotPacket {
         let z = read_f64(&mut data)?;
         let yaw = read_f32(&mut data)?;
         let pitch = read_f32(&mut data)?;
-        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        let (is_on_ground, has_horizontal_collision) = read_flags(&mut data)?;
         Ok(Self {
             x,
             y,
             z,
             yaw,
             pitch,
-            on_ground,
-            horizontal_collision,
+            is_on_ground,
+            has_horizontal_collision,
         })
     }
 
@@ -162,7 +162,7 @@ impl Packet for ServerboundMovePlayerPosRotPacket {
         write_f64(&mut buf, self.z);
         write_f32(&mut buf, self.yaw);
         write_f32(&mut buf, self.pitch);
-        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        encode_flags(&mut buf, self.is_on_ground, self.has_horizontal_collision);
         buf
     }
 }
@@ -187,9 +187,9 @@ pub struct ServerboundMovePlayerRotPacket {
     /// Pitch rotation in degrees.
     pub pitch: f32,
     /// Whether the player is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
     /// Whether the player is colliding horizontally.
-    pub horizontal_collision: bool,
+    pub has_horizontal_collision: bool,
 }
 
 impl Packet for ServerboundMovePlayerRotPacket {
@@ -198,12 +198,12 @@ impl Packet for ServerboundMovePlayerRotPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let yaw = read_f32(&mut data)?;
         let pitch = read_f32(&mut data)?;
-        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        let (is_on_ground, has_horizontal_collision) = read_flags(&mut data)?;
         Ok(Self {
             yaw,
             pitch,
-            on_ground,
-            horizontal_collision,
+            is_on_ground,
+            has_horizontal_collision,
         })
     }
 
@@ -211,7 +211,7 @@ impl Packet for ServerboundMovePlayerRotPacket {
         let mut buf = BytesMut::with_capacity(9);
         write_f32(&mut buf, self.yaw);
         write_f32(&mut buf, self.pitch);
-        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        encode_flags(&mut buf, self.is_on_ground, self.has_horizontal_collision);
         buf
     }
 }
@@ -230,25 +230,25 @@ impl Packet for ServerboundMovePlayerRotPacket {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerboundMovePlayerStatusOnlyPacket {
     /// Whether the player is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
     /// Whether the player is colliding horizontally.
-    pub horizontal_collision: bool,
+    pub has_horizontal_collision: bool,
 }
 
 impl Packet for ServerboundMovePlayerStatusOnlyPacket {
     const PACKET_ID: i32 = 0x21;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let (on_ground, horizontal_collision) = read_flags(&mut data)?;
+        let (is_on_ground, has_horizontal_collision) = read_flags(&mut data)?;
         Ok(Self {
-            on_ground,
-            horizontal_collision,
+            is_on_ground,
+            has_horizontal_collision,
         })
     }
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(1);
-        encode_flags(&mut buf, self.on_ground, self.horizontal_collision);
+        encode_flags(&mut buf, self.is_on_ground, self.has_horizontal_collision);
         buf
     }
 }
@@ -276,9 +276,9 @@ pub struct ServerboundMovePlayerPacket {
     /// Pitch rotation in degrees (present in Rot and PosRot).
     pub pitch: Option<f32>,
     /// Whether the player is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
     /// Whether the player is colliding horizontally.
-    pub horizontal_collision: bool,
+    pub has_horizontal_collision: bool,
 }
 
 impl ServerboundMovePlayerPacket {
@@ -310,8 +310,8 @@ impl From<ServerboundMovePlayerPosPacket> for ServerboundMovePlayerPacket {
             z: Some(p.z),
             yaw: None,
             pitch: None,
-            on_ground: p.on_ground,
-            horizontal_collision: p.horizontal_collision,
+            is_on_ground: p.is_on_ground,
+            has_horizontal_collision: p.has_horizontal_collision,
         }
     }
 }
@@ -324,8 +324,8 @@ impl From<ServerboundMovePlayerPosRotPacket> for ServerboundMovePlayerPacket {
             z: Some(p.z),
             yaw: Some(p.yaw),
             pitch: Some(p.pitch),
-            on_ground: p.on_ground,
-            horizontal_collision: p.horizontal_collision,
+            is_on_ground: p.is_on_ground,
+            has_horizontal_collision: p.has_horizontal_collision,
         }
     }
 }
@@ -338,8 +338,8 @@ impl From<ServerboundMovePlayerRotPacket> for ServerboundMovePlayerPacket {
             z: None,
             yaw: Some(p.yaw),
             pitch: Some(p.pitch),
-            on_ground: p.on_ground,
-            horizontal_collision: p.horizontal_collision,
+            is_on_ground: p.is_on_ground,
+            has_horizontal_collision: p.has_horizontal_collision,
         }
     }
 }
@@ -352,8 +352,8 @@ impl From<ServerboundMovePlayerStatusOnlyPacket> for ServerboundMovePlayerPacket
             z: None,
             yaw: None,
             pitch: None,
-            on_ground: p.on_ground,
-            horizontal_collision: p.horizontal_collision,
+            is_on_ground: p.is_on_ground,
+            has_horizontal_collision: p.has_horizontal_collision,
         }
     }
 }
@@ -369,8 +369,8 @@ mod tests {
             x: 1.5,
             y: 64.0,
             z: -3.25,
-            on_ground: true,
-            horizontal_collision: false,
+            is_on_ground: true,
+            has_horizontal_collision: false,
         };
         let encoded = pkt.encode();
         assert_eq!(encoded.len(), 25); // 3×f64 (24) + flags (1)
@@ -384,8 +384,8 @@ mod tests {
             x: 1.5,
             y: 64.0,
             z: -3.25,
-            on_ground: true,
-            horizontal_collision: false,
+            is_on_ground: true,
+            has_horizontal_collision: false,
         };
         let unified: ServerboundMovePlayerPacket = pkt.into();
         assert!((unified.x.unwrap() - 1.5).abs() < f64::EPSILON);
@@ -393,8 +393,8 @@ mod tests {
         assert!((unified.z.unwrap() + 3.25).abs() < f64::EPSILON);
         assert!(unified.yaw.is_none());
         assert!(unified.pitch.is_none());
-        assert!(unified.on_ground);
-        assert!(!unified.horizontal_collision);
+        assert!(unified.is_on_ground);
+        assert!(!unified.has_horizontal_collision);
         assert!(unified.has_pos());
         assert!(!unified.has_rot());
     }
@@ -407,8 +407,8 @@ mod tests {
             z: 20.0,
             yaw: 90.0,
             pitch: -15.0,
-            on_ground: false,
-            horizontal_collision: false,
+            is_on_ground: false,
+            has_horizontal_collision: false,
         };
         let encoded = pkt.encode();
         assert_eq!(encoded.len(), 33); // 3×f64 (24) + 2×f32 (8) + flags (1)
@@ -424,14 +424,14 @@ mod tests {
             z: 20.0,
             yaw: 90.0,
             pitch: -15.0,
-            on_ground: false,
-            horizontal_collision: false,
+            is_on_ground: false,
+            has_horizontal_collision: false,
         };
         let unified: ServerboundMovePlayerPacket = pkt.into();
         assert!((unified.x.unwrap() - 10.0).abs() < f64::EPSILON);
         assert!((unified.yaw.unwrap() - 90.0).abs() < f32::EPSILON);
         assert!((unified.pitch.unwrap() + 15.0).abs() < f32::EPSILON);
-        assert!(!unified.on_ground);
+        assert!(!unified.is_on_ground);
         assert!(unified.has_pos());
         assert!(unified.has_rot());
     }
@@ -441,8 +441,8 @@ mod tests {
         let pkt = ServerboundMovePlayerRotPacket {
             yaw: 180.0,
             pitch: 45.0,
-            on_ground: true,
-            horizontal_collision: false,
+            is_on_ground: true,
+            has_horizontal_collision: false,
         };
         let encoded = pkt.encode();
         assert_eq!(encoded.len(), 9); // 2×f32 (8) + flags (1)
@@ -455,13 +455,13 @@ mod tests {
         let pkt = ServerboundMovePlayerRotPacket {
             yaw: 180.0,
             pitch: 45.0,
-            on_ground: true,
-            horizontal_collision: false,
+            is_on_ground: true,
+            has_horizontal_collision: false,
         };
         let unified: ServerboundMovePlayerPacket = pkt.into();
         assert!(unified.x.is_none());
         assert!((unified.yaw.unwrap() - 180.0).abs() < f32::EPSILON);
-        assert!(unified.on_ground);
+        assert!(unified.is_on_ground);
         assert!(!unified.has_pos());
         assert!(unified.has_rot());
     }
@@ -469,8 +469,8 @@ mod tests {
     #[test]
     fn test_status_only_roundtrip() {
         let pkt = ServerboundMovePlayerStatusOnlyPacket {
-            on_ground: true,
-            horizontal_collision: true,
+            is_on_ground: true,
+            has_horizontal_collision: true,
         };
         let encoded = pkt.encode();
         assert_eq!(encoded.len(), 1); // flags only
@@ -481,14 +481,14 @@ mod tests {
     #[test]
     fn test_status_only_to_unified() {
         let pkt = ServerboundMovePlayerStatusOnlyPacket {
-            on_ground: true,
-            horizontal_collision: true,
+            is_on_ground: true,
+            has_horizontal_collision: true,
         };
         let unified: ServerboundMovePlayerPacket = pkt.into();
         assert!(unified.x.is_none());
         assert!(unified.yaw.is_none());
-        assert!(unified.on_ground);
-        assert!(unified.horizontal_collision);
+        assert!(unified.is_on_ground);
+        assert!(unified.has_horizontal_collision);
         assert!(!unified.has_pos());
         assert!(!unified.has_rot());
     }
@@ -501,8 +501,8 @@ mod tests {
             z: Some(0.0),
             yaw: None,
             pitch: None,
-            on_ground: false,
-            horizontal_collision: false,
+            is_on_ground: false,
+            has_horizontal_collision: false,
         };
         assert!(pkt.contains_invalid_values());
     }
@@ -515,8 +515,8 @@ mod tests {
             z: Some(0.0),
             yaw: None,
             pitch: None,
-            on_ground: false,
-            horizontal_collision: false,
+            is_on_ground: false,
+            has_horizontal_collision: false,
         };
         assert!(pkt.contains_invalid_values());
     }
@@ -529,8 +529,8 @@ mod tests {
             z: Some(-200.0),
             yaw: Some(90.0),
             pitch: Some(-15.0),
-            on_ground: true,
-            horizontal_collision: false,
+            is_on_ground: true,
+            has_horizontal_collision: false,
         };
         assert!(!pkt.contains_invalid_values());
     }
@@ -541,13 +541,13 @@ mod tests {
             x: 0.0,
             y: 0.0,
             z: 0.0,
-            on_ground: false,
-            horizontal_collision: true,
+            is_on_ground: false,
+            has_horizontal_collision: true,
         };
         let encoded = pkt.encode();
         let decoded = ServerboundMovePlayerPosPacket::decode(encoded.freeze()).unwrap();
-        assert!(!decoded.on_ground);
-        assert!(decoded.horizontal_collision);
+        assert!(!decoded.is_on_ground);
+        assert!(decoded.has_horizontal_collision);
     }
 
     #[test]

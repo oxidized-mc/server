@@ -177,7 +177,7 @@ pub struct CommandSourceStack {
     /// A callback to send feedback messages to this source.
     pub feedback_sender: Arc<dyn Fn(&Component) + Send + Sync>,
     /// If true, suppress all feedback messages.
-    pub silent: bool,
+    pub is_silent: bool,
 }
 
 impl CommandSourceStack {
@@ -188,7 +188,7 @@ impl CommandSourceStack {
 
     /// Sends a success message to the source and optionally broadcasts to ops.
     pub fn send_success(&self, component: &Component, broadcast_to_ops: bool) {
-        if !self.silent {
+        if !self.is_silent {
             (self.feedback_sender)(component);
         }
         if broadcast_to_ops {

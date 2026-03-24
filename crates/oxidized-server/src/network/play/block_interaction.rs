@@ -50,7 +50,7 @@ pub(super) const MAX_BUILD_HEIGHT: i32 = OVERWORLD_MAX_Y - 1;
 /// of the given block.
 pub(super) fn player_distance_to_block_sq(play_ctx: &PlayContext<'_>, pos: BlockPos) -> f64 {
     let player = play_ctx.player.read();
-    let eye_height = if player.sneaking { 1.27 } else { 1.62 };
+    let eye_height = if player.is_sneaking { 1.27 } else { 1.62 };
     let eye = Vec3::new(player.pos.x, player.pos.y + eye_height, player.pos.z);
     let block_center = Vec3::new(pos.x as f64 + 0.5, pos.y as f64 + 0.5, pos.z as f64 + 0.5);
     eye.distance_to_sqr(block_center)
@@ -192,7 +192,7 @@ pub(super) async fn send_actionbar(
     use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
     let pkt = ClientboundSystemChatPacket {
         content: message,
-        overlay: true,
+        is_overlay: true,
     };
     play_ctx
         .conn

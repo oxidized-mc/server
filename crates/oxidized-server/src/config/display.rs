@@ -9,9 +9,9 @@ pub struct DisplayConfig {
     /// Message of the day shown in the server list.
     pub motd: String,
     /// Respond to server-list pings (default `true`).
-    pub enable_status: bool,
+    pub is_status_enabled: bool,
     /// Hide player names from the server list (default `false`).
-    pub hide_online_players: bool,
+    pub is_hiding_online_players: bool,
     /// Entity tracking range as a percentage (default `100`).
     pub entity_broadcast_range_percentage: i32,
     /// Heartbeat interval in seconds for status polling (default `5`).
@@ -22,8 +22,8 @@ impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
             motd: "An Oxidized Minecraft Server".to_string(),
-            enable_status: true,
-            hide_online_players: false,
+            is_status_enabled: true,
+            is_hiding_online_players: false,
             entity_broadcast_range_percentage: 100,
             status_heartbeat_interval: 5,
         }

@@ -60,11 +60,11 @@ pub struct ServerPlayer {
     /// Pitch rotation in degrees (vertical).
     pub pitch: f32,
     /// Whether the player is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
     /// Whether the player is currently sneaking (shift held).
-    pub sneaking: bool,
+    pub is_sneaking: bool,
     /// Whether the player is currently sprinting.
-    pub sprinting: bool,
+    pub is_sprinting: bool,
     /// Whether the player is currently fall-flying (elytra glide).
     pub is_fall_flying: bool,
 
@@ -181,9 +181,9 @@ impl ServerPlayer {
             pos: Vec3::ZERO,
             yaw: 0.0,
             pitch: 0.0,
-            on_ground: false,
-            sneaking: false,
-            sprinting: false,
+            is_on_ground: false,
+            is_sneaking: false,
+            is_sprinting: false,
             is_fall_flying: false,
             game_mode,
             previous_game_mode: None,
@@ -298,8 +298,8 @@ impl ServerPlayer {
             }
         }
 
-        self.on_ground = nbt.get_byte("OnGround").unwrap_or(0) != 0;
-        self.sneaking = nbt.get_byte("Sneaking").unwrap_or(0) != 0;
+        self.is_on_ground = nbt.get_byte("OnGround").unwrap_or(0) != 0;
+        self.is_sneaking = nbt.get_byte("Sneaking").unwrap_or(0) != 0;
 
         // Selected hotbar slot
         if let Some(v) = nbt.get_int("SelectedItemSlot") {
@@ -344,10 +344,10 @@ impl ServerPlayer {
 
         // Abilities — load full compound, falling back to game-mode defaults
         if let Some(ab) = nbt.get_compound("abilities") {
-            self.abilities.invulnerable = ab.get_byte("invulnerable").unwrap_or(0) != 0;
-            self.abilities.flying = ab.get_byte("flying").unwrap_or(0) != 0;
+            self.abilities.is_invulnerable = ab.get_byte("is_invulnerable").unwrap_or(0) != 0;
+            self.abilities.is_flying = ab.get_byte("is_flying").unwrap_or(0) != 0;
             self.abilities.can_fly = ab.get_byte("mayfly").unwrap_or(0) != 0;
-            self.abilities.instabuild = ab.get_byte("instabuild").unwrap_or(0) != 0;
+            self.abilities.is_instabuild = ab.get_byte("is_instabuild").unwrap_or(0) != 0;
             if let Some(fs) = ab.get_float("flySpeed") {
                 self.abilities.fly_speed = fs;
             }
@@ -402,8 +402,8 @@ impl ServerPlayer {
         nbt.put_float("Health", self.health);
         nbt.put_int("foodLevel", self.food_level);
         nbt.put_float("foodSaturationLevel", self.food_saturation);
-        nbt.put_byte("OnGround", u8::from(self.on_ground) as i8);
-        nbt.put_byte("Sneaking", u8::from(self.sneaking) as i8);
+        nbt.put_byte("OnGround", u8::from(self.is_on_ground) as i8);
+        nbt.put_byte("Sneaking", u8::from(self.is_sneaking) as i8);
 
         // Spawn position
         nbt.put_int("SpawnX", self.spawn_pos.x);
@@ -447,10 +447,10 @@ impl ServerPlayer {
 
         // Abilities compound
         let mut ab = NbtCompound::new();
-        ab.put_byte("invulnerable", i8::from(self.abilities.invulnerable));
-        ab.put_byte("flying", i8::from(self.abilities.flying));
+        ab.put_byte("is_invulnerable", i8::from(self.abilities.is_invulnerable));
+        ab.put_byte("is_flying", i8::from(self.abilities.is_flying));
         ab.put_byte("mayfly", i8::from(self.abilities.can_fly));
-        ab.put_byte("instabuild", i8::from(self.abilities.instabuild));
+        ab.put_byte("is_instabuild", i8::from(self.abilities.is_instabuild));
         ab.put_float("flySpeed", self.abilities.fly_speed);
         ab.put_float("walkSpeed", self.abilities.walk_speed);
         nbt.put("abilities", NbtTag::Compound(ab));
@@ -581,7 +581,7 @@ mod tests {
         assert!((player.health - 15.0).abs() < f32::EPSILON);
         assert_eq!(player.food_level, 18);
         assert!((player.food_saturation - 3.5).abs() < f32::EPSILON);
-        assert!(player.on_ground);
+        assert!(player.is_on_ground);
         assert_eq!(player.spawn_pos, BlockPos::new(10, 65, -20));
     }
 
@@ -608,7 +608,7 @@ mod tests {
         player.previous_game_mode = Some(GameMode::Survival);
         player.health = 15.0;
         player.food_level = 18;
-        player.on_ground = true;
+        player.is_on_ground = true;
         player.spawn_pos = BlockPos::new(10, 65, -20);
 
         let nbt = player.save_to_nbt();
@@ -622,7 +622,7 @@ mod tests {
         assert_eq!(player2.previous_game_mode, Some(GameMode::Survival));
         assert!((player2.health - 15.0).abs() < f32::EPSILON);
         assert_eq!(player2.food_level, 18);
-        assert!(player2.on_ground);
+        assert!(player2.is_on_ground);
         assert_eq!(player2.spawn_pos, BlockPos::new(10, 65, -20));
     }
 
@@ -634,9 +634,9 @@ mod tests {
             ResourceLocation::minecraft("overworld"),
             GameMode::Creative,
         );
-        assert!(player.abilities.invulnerable);
+        assert!(player.abilities.is_invulnerable);
         assert!(player.abilities.can_fly);
-        assert!(player.abilities.instabuild);
+        assert!(player.abilities.is_instabuild);
     }
 
     #[test]
@@ -825,7 +825,7 @@ mod tests {
     #[test]
     fn test_abilities_roundtrip_preserves_custom_values() {
         let mut player = make_test_player(1, "Test");
-        player.abilities.flying = true;
+        player.abilities.is_flying = true;
         player.abilities.can_fly = true;
         player.abilities.fly_speed = 0.10;
         player.abilities.walk_speed = 0.15;
@@ -834,7 +834,7 @@ mod tests {
         let mut player2 = make_test_player(2, "Test2");
         player2.load_from_nbt(&nbt);
 
-        assert!(player2.abilities.flying);
+        assert!(player2.abilities.is_flying);
         assert!(player2.abilities.can_fly);
         assert!((player2.abilities.fly_speed - 0.10).abs() < f32::EPSILON);
         assert!((player2.abilities.walk_speed - 0.15).abs() < f32::EPSILON);

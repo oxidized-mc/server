@@ -50,7 +50,7 @@ pub struct ClientboundEntityPositionSyncPacket {
     /// Pitch rotation in degrees.
     pub pitch: f32,
     /// Whether the entity is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
 }
 
 impl Packet for ClientboundEntityPositionSyncPacket {
@@ -66,7 +66,7 @@ impl Packet for ClientboundEntityPositionSyncPacket {
         let vz = types::read_f64(&mut data)?;
         let yaw = types::read_f32(&mut data)?;
         let pitch = types::read_f32(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
+        let is_on_ground = types::read_bool(&mut data)?;
         Ok(Self {
             entity_id,
             x,
@@ -77,7 +77,7 @@ impl Packet for ClientboundEntityPositionSyncPacket {
             vz,
             yaw,
             pitch,
-            on_ground,
+            is_on_ground,
         })
     }
 
@@ -92,7 +92,7 @@ impl Packet for ClientboundEntityPositionSyncPacket {
         types::write_f64(&mut buf, self.vz);
         types::write_f32(&mut buf, self.yaw);
         types::write_f32(&mut buf, self.pitch);
-        types::write_bool(&mut buf, self.on_ground);
+        types::write_bool(&mut buf, self.is_on_ground);
         buf
     }
 }
@@ -114,7 +114,7 @@ mod tests {
             vz: 0.0,
             yaw: 90.0,
             pitch: -15.0,
-            on_ground: false,
+            is_on_ground: false,
         };
         let encoded = pkt.encode();
         // VarInt(1)=1 byte + 6×f64=48 bytes + 2×f32=8 bytes + bool=1 byte = 58 bytes
@@ -143,7 +143,7 @@ mod tests {
             vz: 0.3,
             yaw: 0.0,
             pitch: 0.0,
-            on_ground: true,
+            is_on_ground: true,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundEntityPositionSyncPacket::decode(encoded.freeze()).unwrap();

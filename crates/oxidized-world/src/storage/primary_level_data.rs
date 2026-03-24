@@ -46,17 +46,17 @@ pub struct PrimaryLevelData {
     /// Ticks of guaranteed clear weather remaining (overrides rain/thunder when > 0).
     pub clear_weather_time: i32,
     /// Whether this is a hardcore world.
-    pub hardcore: bool,
+    pub is_hardcore: bool,
     /// Difficulty as numeric ID (0=Peaceful, 1=Easy, 2=Normal, 3=Hard).
     pub difficulty: i32,
     /// Whether commands are allowed.
-    pub allow_commands: bool,
+    pub is_commands_allowed: bool,
     /// Whether the world has been initialized (initial chunks generated).
-    pub initialized: bool,
+    pub is_initialized: bool,
     /// Sea level height (default 63).
     pub sea_level: i32,
     /// Whether the difficulty is locked (prevents players from changing it).
-    pub difficulty_locked: bool,
+    pub is_difficulty_locked: bool,
     /// World generation seed.
     pub world_seed: i64,
 }
@@ -85,12 +85,12 @@ impl PrimaryLevelData {
             rain_time: data.get_int("rainTime").unwrap_or(0),
             thunder_time: data.get_int("thunderTime").unwrap_or(0),
             clear_weather_time: data.get_int("clearWeatherTime").unwrap_or(0),
-            hardcore: data.get_byte("hardcore").unwrap_or(0) != 0,
+            is_hardcore: data.get_byte("hardcore").unwrap_or(0) != 0,
             difficulty: data.get_byte("Difficulty").unwrap_or(2) as i32,
-            allow_commands: data.get_byte("allowCommands").unwrap_or(0) != 0,
-            initialized: data.get_byte("initialized").unwrap_or(1) != 0,
+            is_commands_allowed: data.get_byte("allowCommands").unwrap_or(0) != 0,
+            is_initialized: data.get_byte("initialized").unwrap_or(1) != 0,
             sea_level: data.get_int("SeaLevel").unwrap_or(63),
-            difficulty_locked: data.get_byte("DifficultyLocked").unwrap_or(0) != 0,
+            is_difficulty_locked: data.get_byte("DifficultyLocked").unwrap_or(0) != 0,
             world_seed: data
                 .get_compound("WorldGenSettings")
                 .and_then(|wgs| wgs.get_long("seed"))
@@ -141,13 +141,13 @@ impl PrimaryLevelData {
         data.put_int("rainTime", self.rain_time);
         data.put_int("thunderTime", self.thunder_time);
         data.put_int("clearWeatherTime", self.clear_weather_time);
-        data.put_byte("hardcore", i8::from(self.hardcore));
+        data.put_byte("hardcore", i8::from(self.is_hardcore));
         #[allow(clippy::cast_possible_truncation)]
         data.put_byte("Difficulty", self.difficulty as i8);
-        data.put_byte("allowCommands", i8::from(self.allow_commands));
-        data.put_byte("initialized", i8::from(self.initialized));
+        data.put_byte("allowCommands", i8::from(self.is_commands_allowed));
+        data.put_byte("initialized", i8::from(self.is_initialized));
         data.put_int("SeaLevel", self.sea_level);
-        data.put_byte("DifficultyLocked", i8::from(self.difficulty_locked));
+        data.put_byte("DifficultyLocked", i8::from(self.is_difficulty_locked));
 
         // WorldGenSettings/seed
         let mut wgs = NbtCompound::new();
@@ -252,11 +252,11 @@ mod tests {
         assert_eq!(level.rain_time, 5000);
         assert_eq!(level.thunder_time, 0);
         assert_eq!(level.clear_weather_time, 0);
-        assert!(!level.hardcore);
+        assert!(!level.is_hardcore);
         assert_eq!(level.difficulty, 2);
-        assert!(level.allow_commands);
-        assert!(level.initialized);
-        assert!(level.difficulty_locked);
+        assert!(level.is_commands_allowed);
+        assert!(level.is_initialized);
+        assert!(level.is_difficulty_locked);
         assert_eq!(level.world_seed, 123_456_789);
     }
 
@@ -272,11 +272,11 @@ mod tests {
         assert_eq!(level.spawn_y, 64);
         assert_eq!(level.spawn_z, 0);
         assert!(!level.is_raining);
-        assert!(!level.hardcore);
+        assert!(!level.is_hardcore);
         assert_eq!(level.difficulty, 2); // Normal default
-        assert!(!level.allow_commands);
-        assert!(level.initialized); // Default true
-        assert!(!level.difficulty_locked);
+        assert!(!level.is_commands_allowed);
+        assert!(level.is_initialized); // Default true
+        assert!(!level.is_difficulty_locked);
         assert_eq!(level.world_seed, 0);
     }
 
@@ -340,12 +340,12 @@ mod tests {
         assert_eq!(level2.rain_time, level.rain_time);
         assert_eq!(level2.thunder_time, level.thunder_time);
         assert_eq!(level2.clear_weather_time, level.clear_weather_time);
-        assert_eq!(level2.hardcore, level.hardcore);
+        assert_eq!(level2.is_hardcore, level.is_hardcore);
         assert_eq!(level2.difficulty, level.difficulty);
-        assert_eq!(level2.allow_commands, level.allow_commands);
-        assert_eq!(level2.initialized, level.initialized);
+        assert_eq!(level2.is_commands_allowed, level.is_commands_allowed);
+        assert_eq!(level2.is_initialized, level.is_initialized);
         assert_eq!(level2.sea_level, level.sea_level);
-        assert_eq!(level2.difficulty_locked, level.difficulty_locked);
+        assert_eq!(level2.is_difficulty_locked, level.is_difficulty_locked);
         assert_eq!(level2.world_seed, level.world_seed);
     }
 
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(level2.level_name, "Unnamed");
         assert_eq!(level2.spawn_y, 64);
         assert_eq!(level2.difficulty, 2);
-        assert!(level2.initialized);
+        assert!(level2.is_initialized);
     }
 
     #[test]

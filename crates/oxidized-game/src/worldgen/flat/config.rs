@@ -79,9 +79,9 @@ pub struct FlatWorldConfig {
     /// Biome resource key (e.g. `"minecraft:plains"`).
     pub biome: String,
     /// Whether to place structures and decorations.
-    pub features: bool,
+    pub has_features: bool,
     /// Whether to generate lakes.
-    pub lakes: bool,
+    pub has_lakes: bool,
 }
 
 /// Builds the pre-flattened layer array from layer definitions, clamped to
@@ -134,8 +134,8 @@ impl Default for FlatWorldConfig {
             layers,
             flattened,
             biome: "minecraft:plains".into(),
-            features: false,
-            lakes: false,
+            has_features: false,
+            has_lakes: false,
         }
     }
 }
@@ -157,8 +157,8 @@ impl FlatWorldConfig {
             layers,
             flattened,
             biome: "minecraft:plains".to_owned(),
-            features: false,
-            lakes: false,
+            has_features: false,
+            has_lakes: false,
         }
     }
 
@@ -249,8 +249,8 @@ impl FlatWorldConfig {
             layers,
             flattened,
             biome: "minecraft:plains".to_owned(),
-            features: false,
-            lakes: false,
+            has_features: false,
+            has_lakes: false,
         })
     }
 }
@@ -375,8 +375,8 @@ mod tests {
                 },
             ]),
             biome: "minecraft:plains".into(),
-            features: false,
-            lakes: false,
+            has_features: false,
+            has_lakes: false,
         };
         assert_eq!(config.total_height(), 55);
     }

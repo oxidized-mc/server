@@ -26,8 +26,8 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             .then(
                 literal("query").executes(|ctx: &CommandContext<CommandSourceStack>| {
                     let rate = ctx.source.server.tick_rate();
-                    let frozen = ctx.source.server.is_tick_frozen();
-                    let status = if frozen { "frozen" } else { "running" };
+                    let is_frozen = ctx.source.server.is_tick_frozen();
+                    let status = if is_frozen { "frozen" } else { "running" };
                     ctx.source.send_success(
                         &Component::text(format!("Tick rate: {rate:.1} TPS ({status})")),
                         false,

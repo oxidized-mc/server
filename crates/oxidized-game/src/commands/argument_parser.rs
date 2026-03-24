@@ -212,13 +212,13 @@ fn parse_angle_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, Comm
         };
         Ok(ArgumentResult::Angle {
             value,
-            relative: true,
+            is_relative: true,
         })
     } else {
         let value = reader.read_float()?;
         Ok(ArgumentResult::Angle {
             value,
-            relative: false,
+            is_relative: false,
         })
     }
 }

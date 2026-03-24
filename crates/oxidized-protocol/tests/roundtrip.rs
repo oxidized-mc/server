@@ -383,7 +383,7 @@ fn roundtrip_move_entity_pos() {
         dx: 100,
         dy: -50,
         dz: 200,
-        on_ground: true,
+        is_on_ground: true,
     });
 }
 
@@ -396,7 +396,7 @@ fn roundtrip_move_entity_pos_rot() {
         dz: 200,
         yaw: 128,
         pitch: 64,
-        on_ground: false,
+        is_on_ground: false,
     });
 }
 
@@ -406,7 +406,7 @@ fn roundtrip_move_entity_rot() {
         entity_id: 42,
         yaw: 200,
         pitch: 30,
-        on_ground: true,
+        is_on_ground: true,
     });
 }
 
@@ -423,13 +423,13 @@ fn roundtrip_player_command() {
 fn roundtrip_player_input() {
     assert_roundtrip(&ServerboundPlayerInputPacket {
         input: PlayerInput {
-            forward: true,
-            backward: false,
-            left: false,
-            right: true,
-            jump: true,
-            shift: false,
-            sprint: true,
+            is_forward: true,
+            is_backward: false,
+            is_left: false,
+            is_right: true,
+            is_jumping: true,
+            is_shifting: false,
+            is_sprinting: true,
         },
     });
 }
@@ -476,7 +476,7 @@ use oxidized_protocol::packets::play::{
 fn roundtrip_system_chat() {
     assert_roundtrip(&ClientboundSystemChatPacket {
         content: Component::text("Hello, world!"),
-        overlay: false,
+        is_overlay: false,
     });
 }
 
@@ -484,7 +484,7 @@ fn roundtrip_system_chat() {
 fn roundtrip_system_chat_overlay() {
     assert_roundtrip(&ClientboundSystemChatPacket {
         content: Component::text("Action bar text"),
-        overlay: true,
+        is_overlay: true,
     });
 }
 
@@ -628,9 +628,9 @@ proptest! {
     /// Generic roundtrip for `ClientboundMoveEntityPosPacket` via `Packet` trait.
     #[test]
     fn proptest_move_entity_pos_trait_roundtrip(
-        entity_id: i32, dx: i16, dy: i16, dz: i16, on_ground: bool,
+        entity_id: i32, dx: i16, dy: i16, dz: i16, is_on_ground: bool,
     ) {
-        let pkt = ClientboundMoveEntityPosPacket { entity_id, dx, dy, dz, on_ground };
+        let pkt = ClientboundMoveEntityPosPacket { entity_id, dx, dy, dz, is_on_ground };
         assert_roundtrip(&pkt);
     }
 
@@ -638,10 +638,10 @@ proptest! {
     #[test]
     fn proptest_move_entity_pos_rot_trait_roundtrip(
         entity_id: i32, dx: i16, dy: i16, dz: i16,
-        yaw: u8, pitch: u8, on_ground: bool,
+        yaw: u8, pitch: u8, is_on_ground: bool,
     ) {
         let pkt = ClientboundMoveEntityPosRotPacket {
-            entity_id, dx, dy, dz, yaw, pitch, on_ground,
+            entity_id, dx, dy, dz, yaw, pitch, is_on_ground,
         };
         assert_roundtrip(&pkt);
     }
@@ -649,9 +649,9 @@ proptest! {
     /// Generic roundtrip for `ClientboundMoveEntityRotPacket` via `Packet` trait.
     #[test]
     fn proptest_move_entity_rot_trait_roundtrip(
-        entity_id: i32, yaw: u8, pitch: u8, on_ground: bool,
+        entity_id: i32, yaw: u8, pitch: u8, is_on_ground: bool,
     ) {
-        let pkt = ClientboundMoveEntityRotPacket { entity_id, yaw, pitch, on_ground };
+        let pkt = ClientboundMoveEntityRotPacket { entity_id, yaw, pitch, is_on_ground };
         assert_roundtrip(&pkt);
     }
 

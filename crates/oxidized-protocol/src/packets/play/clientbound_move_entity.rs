@@ -37,7 +37,7 @@ pub struct ClientboundMoveEntityPosPacket {
     /// Delta Z in 1/4096 block units.
     pub dz: i16,
     /// Whether the entity is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
 }
 
 impl Packet for ClientboundMoveEntityPosPacket {
@@ -48,13 +48,13 @@ impl Packet for ClientboundMoveEntityPosPacket {
         let dx = types::read_i16(&mut data)?;
         let dy = types::read_i16(&mut data)?;
         let dz = types::read_i16(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
+        let is_on_ground = types::read_bool(&mut data)?;
         Ok(Self {
             entity_id,
             dx,
             dy,
             dz,
-            on_ground,
+            is_on_ground,
         })
     }
 
@@ -64,7 +64,7 @@ impl Packet for ClientboundMoveEntityPosPacket {
         types::write_i16(&mut buf, self.dx);
         types::write_i16(&mut buf, self.dy);
         types::write_i16(&mut buf, self.dz);
-        types::write_bool(&mut buf, self.on_ground);
+        types::write_bool(&mut buf, self.is_on_ground);
         buf
     }
 }
@@ -97,7 +97,7 @@ pub struct ClientboundMoveEntityPosRotPacket {
     /// Packed pitch (0–255 → 0–360°).
     pub pitch: u8,
     /// Whether the entity is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
 }
 
 impl Packet for ClientboundMoveEntityPosRotPacket {
@@ -110,7 +110,7 @@ impl Packet for ClientboundMoveEntityPosRotPacket {
         let dz = types::read_i16(&mut data)?;
         let yaw = types::read_u8(&mut data)?;
         let pitch = types::read_u8(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
+        let is_on_ground = types::read_bool(&mut data)?;
         Ok(Self {
             entity_id,
             dx,
@@ -118,7 +118,7 @@ impl Packet for ClientboundMoveEntityPosRotPacket {
             dz,
             yaw,
             pitch,
-            on_ground,
+            is_on_ground,
         })
     }
 
@@ -130,7 +130,7 @@ impl Packet for ClientboundMoveEntityPosRotPacket {
         types::write_i16(&mut buf, self.dz);
         types::write_u8(&mut buf, self.yaw);
         types::write_u8(&mut buf, self.pitch);
-        types::write_bool(&mut buf, self.on_ground);
+        types::write_bool(&mut buf, self.is_on_ground);
         buf
     }
 }
@@ -154,7 +154,7 @@ pub struct ClientboundMoveEntityRotPacket {
     /// Packed pitch (0–255 → 0–360°).
     pub pitch: u8,
     /// Whether the entity is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
 }
 
 impl Packet for ClientboundMoveEntityRotPacket {
@@ -164,12 +164,12 @@ impl Packet for ClientboundMoveEntityRotPacket {
         let entity_id = varint::read_varint_buf(&mut data)?;
         let yaw = types::read_u8(&mut data)?;
         let pitch = types::read_u8(&mut data)?;
-        let on_ground = types::read_bool(&mut data)?;
+        let is_on_ground = types::read_bool(&mut data)?;
         Ok(Self {
             entity_id,
             yaw,
             pitch,
-            on_ground,
+            is_on_ground,
         })
     }
 
@@ -178,7 +178,7 @@ impl Packet for ClientboundMoveEntityRotPacket {
         varint::write_varint_buf(self.entity_id, &mut buf);
         types::write_u8(&mut buf, self.yaw);
         types::write_u8(&mut buf, self.pitch);
-        types::write_bool(&mut buf, self.on_ground);
+        types::write_bool(&mut buf, self.is_on_ground);
         buf
     }
 }
@@ -195,7 +195,7 @@ mod tests {
             dx: 4096,
             dy: 0,
             dz: -4096,
-            on_ground: true,
+            is_on_ground: true,
         };
         let encoded = pkt.encode();
         // entity_id=1 (1 byte varint) + 3×i16 (6 bytes) + bool (1 byte) = 8 bytes
@@ -213,7 +213,7 @@ mod tests {
             dz: -100,
             yaw: 128,
             pitch: 64,
-            on_ground: false,
+            is_on_ground: false,
         };
         let encoded = pkt.encode();
         // entity_id=1 (1 byte) + 3×i16 (6 bytes) + 2×u8 (2 bytes) + bool (1 byte) = 10 bytes
@@ -228,7 +228,7 @@ mod tests {
             entity_id: 42,
             yaw: 0,
             pitch: 255,
-            on_ground: true,
+            is_on_ground: true,
         };
         let encoded = pkt.encode();
         // entity_id=42 (1 byte) + 2×u8 (2 bytes) + bool (1 byte) = 4 bytes

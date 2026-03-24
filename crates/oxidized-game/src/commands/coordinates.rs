@@ -17,7 +17,7 @@ pub struct WorldCoordinate {
     /// The numeric value (offset if relative/local, absolute otherwise).
     pub value: f64,
     /// Whether this coordinate is relative to the source position.
-    pub relative: bool,
+    pub is_relative: bool,
 }
 
 /// The kind of coordinate system used.
@@ -59,7 +59,7 @@ impl Coordinates {
         match self.kind {
             CoordinateKind::World => {
                 let resolve_axis = |coord: &WorldCoordinate, base: f64| -> f64 {
-                    if coord.relative {
+                    if coord.is_relative {
                         base + coord.value
                     } else {
                         coord.value
@@ -122,7 +122,7 @@ impl Coordinates {
 
     /// Returns `true` if any component is relative or local.
     pub fn has_relative(&self) -> bool {
-        self.kind == CoordinateKind::Local || self.x.relative || self.y.relative || self.z.relative
+        self.kind == CoordinateKind::Local || self.x.is_relative || self.y.is_relative || self.z.is_relative
     }
 }
 
@@ -151,7 +151,7 @@ fn parse_single_coord(
             return Ok((
                 WorldCoordinate {
                     value,
-                    relative: false,
+                    is_relative: false,
                 },
                 false,
             ));
@@ -167,7 +167,7 @@ fn parse_single_coord(
     Ok((
         WorldCoordinate {
             value,
-            relative: true,
+            is_relative: true,
         },
         is_local,
     ))
@@ -221,7 +221,7 @@ pub fn parse_coordinates2(reader: &mut StringReader<'_>) -> Result<Coordinates, 
         x,
         y: WorldCoordinate {
             value: 0.0,
-            relative: false,
+            is_relative: false,
         },
         z,
         kind,
@@ -238,15 +238,15 @@ mod tests {
         let coords = Coordinates {
             x: WorldCoordinate {
                 value: 100.0,
-                relative: false,
+                is_relative: false,
             },
             y: WorldCoordinate {
                 value: 64.0,
-                relative: false,
+                is_relative: false,
             },
             z: WorldCoordinate {
                 value: -200.0,
-                relative: false,
+                is_relative: false,
             },
             kind: CoordinateKind::World,
         };
@@ -261,15 +261,15 @@ mod tests {
         let coords = Coordinates {
             x: WorldCoordinate {
                 value: 10.0,
-                relative: true,
+                is_relative: true,
             },
             y: WorldCoordinate {
                 value: 0.0,
-                relative: true,
+                is_relative: true,
             },
             z: WorldCoordinate {
                 value: -5.0,
-                relative: true,
+                is_relative: true,
             },
             kind: CoordinateKind::World,
         };
@@ -284,15 +284,15 @@ mod tests {
         let coords = Coordinates {
             x: WorldCoordinate {
                 value: 100.0,
-                relative: false,
+                is_relative: false,
             },
             y: WorldCoordinate {
                 value: 5.0,
-                relative: true,
+                is_relative: true,
             },
             z: WorldCoordinate {
                 value: -200.0,
-                relative: false,
+                is_relative: false,
             },
             kind: CoordinateKind::World,
         };
@@ -307,15 +307,15 @@ mod tests {
         let coords = Coordinates {
             x: WorldCoordinate {
                 value: 10.7,
-                relative: false,
+                is_relative: false,
             },
             y: WorldCoordinate {
                 value: -0.3,
-                relative: false,
+                is_relative: false,
             },
             z: WorldCoordinate {
                 value: 5.9,
-                relative: false,
+                is_relative: false,
             },
             kind: CoordinateKind::World,
         };
@@ -328,15 +328,15 @@ mod tests {
         let coords = Coordinates {
             x: WorldCoordinate {
                 value: 1.0,
-                relative: false,
+                is_relative: false,
             },
             y: WorldCoordinate {
                 value: 2.0,
-                relative: false,
+                is_relative: false,
             },
             z: WorldCoordinate {
                 value: 3.0,
-                relative: false,
+                is_relative: false,
             },
             kind: CoordinateKind::World,
         };
@@ -348,15 +348,15 @@ mod tests {
         let coords = Coordinates {
             x: WorldCoordinate {
                 value: 1.0,
-                relative: true,
+                is_relative: true,
             },
             y: WorldCoordinate {
                 value: 2.0,
-                relative: false,
+                is_relative: false,
             },
             z: WorldCoordinate {
                 value: 3.0,
-                relative: false,
+                is_relative: false,
             },
             kind: CoordinateKind::World,
         };
@@ -368,11 +368,11 @@ mod tests {
         let mut reader = StringReader::new("~10 ~ ~-5", 0);
         let coords = parse_coordinates3(&mut reader).unwrap();
         assert_eq!(coords.kind, CoordinateKind::World);
-        assert!(coords.x.relative);
+        assert!(coords.x.is_relative);
         assert!((coords.x.value - 10.0).abs() < f64::EPSILON);
-        assert!(coords.y.relative);
+        assert!(coords.y.is_relative);
         assert!((coords.y.value).abs() < f64::EPSILON);
-        assert!(coords.z.relative);
+        assert!(coords.z.is_relative);
         assert!((coords.z.value - -5.0).abs() < f64::EPSILON);
     }
 
@@ -396,16 +396,16 @@ mod tests {
     fn test_parse_coordinates3_bare_tilde() {
         let mut reader = StringReader::new("~ ~ ~", 0);
         let coords = parse_coordinates3(&mut reader).unwrap();
-        assert!(coords.x.relative);
-        assert!(coords.y.relative);
-        assert!(coords.z.relative);
+        assert!(coords.x.is_relative);
+        assert!(coords.y.is_relative);
+        assert!(coords.z.is_relative);
     }
 
     #[test]
     fn test_parse_int_coordinates3_relative() {
         let mut reader = StringReader::new("~5 ~0 ~-3", 0);
         let coords = parse_int_coordinates3(&mut reader).unwrap();
-        assert!(coords.x.relative);
+        assert!(coords.x.is_relative);
         assert!((coords.x.value - 5.0).abs() < f64::EPSILON);
     }
 
@@ -413,7 +413,7 @@ mod tests {
     fn test_parse_coordinates2_relative() {
         let mut reader = StringReader::new("~10 ~0", 0);
         let coords = parse_coordinates2(&mut reader).unwrap();
-        assert!(coords.x.relative);
+        assert!(coords.x.is_relative);
         assert!((coords.x.value - 10.0).abs() < f64::EPSILON);
     }
 }

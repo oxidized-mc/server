@@ -1,7 +1,7 @@
 //! Serverbound player input packet.
 //!
 //! Sent every tick with the player's current movement input state.
-//! In 26.1-pre-3, this is how sneak (shift) is communicated — not via
+//! In 26.1-pre-3, this is how sneak (is_shifting) is communicated — not via
 //! [`ServerboundPlayerCommandPacket`](super::serverbound_player_command::ServerboundPlayerCommandPacket).
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -17,29 +17,29 @@ use crate::codec::packet::PacketDecodeError;
 /// # Wire Format
 ///
 /// Single byte with bit flags:
-/// - Bit 0 (0x01): forward (W)
-/// - Bit 1 (0x02): backward (S)
-/// - Bit 2 (0x04): left (A)
-/// - Bit 3 (0x08): right (D)
-/// - Bit 4 (0x10): jump (Space)
-/// - Bit 5 (0x20): shift/sneak (Shift)
-/// - Bit 6 (0x40): sprint (Ctrl)
+/// - Bit 0 (0x01): is_forward (W)
+/// - Bit 1 (0x02): is_backward (S)
+/// - Bit 2 (0x04): is_left (A)
+/// - Bit 3 (0x08): is_right (D)
+/// - Bit 4 (0x10): is_jumping (Space)
+/// - Bit 5 (0x20): is_shifting/sneak (Shift)
+/// - Bit 6 (0x40): sprinting (Ctrl)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct PlayerInput {
     /// W key held.
-    pub forward: bool,
+    pub is_forward: bool,
     /// S key held.
-    pub backward: bool,
+    pub is_backward: bool,
     /// A key held.
-    pub left: bool,
+    pub is_left: bool,
     /// D key held.
-    pub right: bool,
+    pub is_right: bool,
     /// Space bar held.
-    pub jump: bool,
+    pub is_jumping: bool,
     /// Shift key held (sneak).
-    pub shift: bool,
+    pub is_shifting: bool,
     /// Sprint key held (Ctrl).
-    pub sprint: bool,
+    pub is_sprinting: bool,
 }
 
 impl PlayerInput {
@@ -54,38 +54,38 @@ impl PlayerInput {
     /// Decodes from a single byte of packed flags.
     pub fn from_byte(flags: u8) -> Self {
         Self {
-            forward: flags & Self::FLAG_FORWARD != 0,
-            backward: flags & Self::FLAG_BACKWARD != 0,
-            left: flags & Self::FLAG_LEFT != 0,
-            right: flags & Self::FLAG_RIGHT != 0,
-            jump: flags & Self::FLAG_JUMP != 0,
-            shift: flags & Self::FLAG_SHIFT != 0,
-            sprint: flags & Self::FLAG_SPRINT != 0,
+            is_forward: flags & Self::FLAG_FORWARD != 0,
+            is_backward: flags & Self::FLAG_BACKWARD != 0,
+            is_left: flags & Self::FLAG_LEFT != 0,
+            is_right: flags & Self::FLAG_RIGHT != 0,
+            is_jumping: flags & Self::FLAG_JUMP != 0,
+            is_shifting: flags & Self::FLAG_SHIFT != 0,
+            is_sprinting: flags & Self::FLAG_SPRINT != 0,
         }
     }
 
     /// Encodes to a single byte of packed flags.
     pub fn to_byte(self) -> u8 {
         let mut flags: u8 = 0;
-        if self.forward {
+        if self.is_forward {
             flags |= Self::FLAG_FORWARD;
         }
-        if self.backward {
+        if self.is_backward {
             flags |= Self::FLAG_BACKWARD;
         }
-        if self.left {
+        if self.is_left {
             flags |= Self::FLAG_LEFT;
         }
-        if self.right {
+        if self.is_right {
             flags |= Self::FLAG_RIGHT;
         }
-        if self.jump {
+        if self.is_jumping {
             flags |= Self::FLAG_JUMP;
         }
-        if self.shift {
+        if self.is_shifting {
             flags |= Self::FLAG_SHIFT;
         }
-        if self.sprint {
+        if self.is_sprinting {
             flags |= Self::FLAG_SPRINT;
         }
         flags
@@ -129,45 +129,45 @@ mod tests {
     #[test]
     fn test_empty_input() {
         let input = PlayerInput::from_byte(0x00);
-        assert!(!input.forward);
-        assert!(!input.shift);
-        assert!(!input.sprint);
+        assert!(!input.is_forward);
+        assert!(!input.is_shifting);
+        assert!(!input.is_sprinting);
         assert_eq!(input.to_byte(), 0x00);
     }
 
     #[test]
     fn test_all_flags() {
         let input = PlayerInput::from_byte(0x7F); // all 7 bits set
-        assert!(input.forward);
-        assert!(input.backward);
-        assert!(input.left);
-        assert!(input.right);
-        assert!(input.jump);
-        assert!(input.shift);
-        assert!(input.sprint);
+        assert!(input.is_forward);
+        assert!(input.is_backward);
+        assert!(input.is_left);
+        assert!(input.is_right);
+        assert!(input.is_jumping);
+        assert!(input.is_shifting);
+        assert!(input.is_sprinting);
         assert_eq!(input.to_byte(), 0x7F);
     }
 
     #[test]
     fn test_sneak_only() {
         let input = PlayerInput::from_byte(0x20);
-        assert!(!input.forward);
-        assert!(input.shift);
-        assert!(!input.sprint);
+        assert!(!input.is_forward);
+        assert!(input.is_shifting);
+        assert!(!input.is_sprinting);
     }
 
     #[test]
     fn test_sprint_only() {
         let input = PlayerInput::from_byte(0x40);
-        assert!(!input.shift);
-        assert!(input.sprint);
+        assert!(!input.is_shifting);
+        assert!(input.is_sprinting);
     }
 
     #[test]
     fn test_forward_and_sneak() {
         let input = PlayerInput {
-            forward: true,
-            shift: true,
+            is_forward: true,
+            is_shifting: true,
             ..Default::default()
         };
         assert_eq!(input.to_byte(), 0x21); // 0x01 | 0x20
@@ -177,13 +177,13 @@ mod tests {
     fn test_roundtrip() {
         let original = ServerboundPlayerInputPacket {
             input: PlayerInput {
-                forward: true,
-                backward: false,
-                left: true,
-                right: false,
-                jump: true,
-                shift: true,
-                sprint: false,
+                is_forward: true,
+                is_backward: false,
+                is_left: true,
+                is_right: false,
+                is_jumping: true,
+                is_shifting: true,
+                is_sprinting: false,
             },
         };
         let encoded = original.encode();

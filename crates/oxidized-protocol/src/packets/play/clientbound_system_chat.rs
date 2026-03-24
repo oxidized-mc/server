@@ -12,7 +12,7 @@ pub struct ClientboundSystemChatPacket {
     /// The message content.
     pub content: Component,
     /// If `true`, display on the action bar; if `false`, in the chat window.
-    pub overlay: bool,
+    pub is_overlay: bool,
 }
 
 impl Packet for ClientboundSystemChatPacket {
@@ -20,18 +20,18 @@ impl Packet for ClientboundSystemChatPacket {
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let content = read_component_nbt(&mut data)?;
-        let overlay = if data.has_remaining() {
+        let is_overlay = if data.has_remaining() {
             data.get_u8() != 0
         } else {
             false
         };
-        Ok(Self { content, overlay })
+        Ok(Self { content, is_overlay })
     }
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(256);
         write_component_nbt(&mut buf, &self.content);
-        buf.put_u8(u8::from(self.overlay));
+        buf.put_u8(u8::from(self.is_overlay));
         buf
     }
 }
@@ -87,24 +87,24 @@ mod tests {
     fn test_roundtrip_chat_message() {
         let pkt = ClientboundSystemChatPacket {
             content: Component::text("Hello world"),
-            overlay: false,
+            is_overlay: false,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundSystemChatPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.content, Component::text("Hello world"));
-        assert!(!decoded.overlay);
+        assert!(!decoded.is_overlay);
     }
 
     #[test]
     fn test_roundtrip_action_bar() {
         let pkt = ClientboundSystemChatPacket {
             content: Component::text("Action bar!"),
-            overlay: true,
+            is_overlay: true,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundSystemChatPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.content, Component::text("Action bar!"));
-        assert!(decoded.overlay);
+        assert!(decoded.is_overlay);
     }
 
     #[test]
@@ -115,7 +115,7 @@ mod tests {
             content: Component::text("Warning!")
                 .color(TextColor::Named(ChatFormatting::Red))
                 .bold(),
-            overlay: false,
+            is_overlay: false,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundSystemChatPacket::decode(encoded.freeze()).unwrap();

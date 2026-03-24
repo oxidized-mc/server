@@ -73,7 +73,7 @@ pub async fn handle_status(
                 },
                 description: base.description.clone(),
                 favicon: base.favicon.clone(),
-                enforces_secure_chat: base.enforces_secure_chat,
+                is_secure_chat_enforced: base.is_secure_chat_enforced,
             };
 
             let response = ClientboundStatusResponsePacket {

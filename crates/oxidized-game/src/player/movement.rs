@@ -40,9 +40,9 @@ pub const MAX_VERTICAL_COORDINATE: f64 = 2.0e7;
 #[derive(Debug, Clone)]
 pub struct MovementResult {
     /// Whether the movement was accepted.
-    pub accepted: bool,
+    pub is_accepted: bool,
     /// Whether the server should send a position correction to the client.
-    pub needs_correction: bool,
+    pub is_correction_needed: bool,
     /// Whether the proposed values contained NaN or Infinity.
     ///
     /// Creative/spectator mode skips the speed check but must still reject
@@ -81,7 +81,7 @@ pub struct MovementResult {
 ///     Some(1.0), Some(0.0), Some(0.0), None, None,
 ///     false,
 /// );
-/// assert!(result.accepted);
+/// assert!(result.is_accepted);
 ///
 /// // Too fast — needs correction
 /// let result = validate_movement(
@@ -89,7 +89,7 @@ pub struct MovementResult {
 ///     Some(200.0), Some(0.0), Some(0.0), None, None,
 ///     false,
 /// );
-/// assert!(result.needs_correction);
+/// assert!(result.is_correction_needed);
 /// ```
 #[allow(clippy::too_many_arguments)]
 pub fn validate_movement(
@@ -117,8 +117,8 @@ pub fn validate_movement(
 
     if has_invalid {
         return MovementResult {
-            accepted: false,
-            needs_correction: true,
+            is_accepted: false,
+            is_correction_needed: true,
             has_invalid_values: true,
             new_pos: current_pos,
             new_yaw: normalize_angle(current_yaw),
@@ -146,11 +146,11 @@ pub fn validate_movement(
     } else {
         MAX_MOVEMENT_PER_TICK
     };
-    let needs_correction = dist_sq > max_dist * max_dist;
+    let is_correction_needed = dist_sq > max_dist * max_dist;
 
     MovementResult {
-        accepted: !needs_correction,
-        needs_correction,
+        is_accepted: !is_correction_needed,
+        is_correction_needed,
         has_invalid_values: false,
         new_pos,
         new_yaw: normalize_angle(resolved_yaw),
@@ -176,8 +176,8 @@ mod tests {
             None,
             false,
         );
-        assert!(result.accepted);
-        assert!(!result.needs_correction);
+        assert!(result.is_accepted);
+        assert!(!result.is_correction_needed);
         assert!((result.new_pos.x - 0.1).abs() < f64::EPSILON);
     }
 
@@ -194,8 +194,8 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
     }
 
     #[test]
@@ -212,7 +212,7 @@ mod tests {
             false,
         );
         // 100^2 = 10000 which equals MAX^2, so NOT greater — accepted
-        assert!(result.accepted);
+        assert!(result.is_accepted);
     }
 
     #[test]
@@ -228,8 +228,8 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
     }
 
     #[test]
@@ -246,7 +246,7 @@ mod tests {
             Some(45.0),
             false,
         );
-        assert!(result.accepted);
+        assert!(result.is_accepted);
         assert!((result.new_pos.x - 50.0).abs() < f64::EPSILON);
         assert!((result.new_pos.y - 64.0).abs() < f64::EPSILON);
         assert!((result.new_pos.z + 30.0).abs() < f64::EPSILON);
@@ -333,8 +333,8 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
     }
 
     #[test]
@@ -351,7 +351,7 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
+        assert!(!result.is_accepted);
     }
 
     #[test]
@@ -400,8 +400,8 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
         // Should return current position
         assert!((result.new_pos.x).abs() < f64::EPSILON);
 
@@ -417,8 +417,8 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
 
         // NaN in Z
         let result = validate_movement(
@@ -432,8 +432,8 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
     }
 
     #[test]
@@ -449,8 +449,8 @@ mod tests {
             None,
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
 
         let result = validate_movement(
             Vec3::ZERO,
@@ -463,8 +463,8 @@ mod tests {
             Some(f32::NEG_INFINITY),
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
     }
 
     #[test]
@@ -481,8 +481,8 @@ mod tests {
             Some(10.0),
             false,
         );
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
         // Should return current (zero) position, not the proposed one
         assert!((result.new_pos.x).abs() < f64::EPSILON);
     }
@@ -522,7 +522,7 @@ mod tests {
             None,
             false,
         );
-        assert!(result.accepted);
+        assert!(result.is_accepted);
         assert!((result.new_yaw - (-10.0)).abs() < f32::EPSILON);
     }
 
@@ -542,8 +542,8 @@ mod tests {
             false,
         );
         assert!(result.has_invalid_values);
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
     }
 
     #[test]
@@ -592,7 +592,7 @@ mod tests {
             false,
         );
         assert!(!result.has_invalid_values);
-        assert!(!result.accepted);
-        assert!(result.needs_correction);
+        assert!(!result.is_accepted);
+        assert!(result.is_correction_needed);
     }
 }

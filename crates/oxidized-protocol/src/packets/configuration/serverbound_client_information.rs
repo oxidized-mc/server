@@ -28,15 +28,15 @@ pub struct ClientInformation {
     /// Which chat messages the client wants to see.
     pub chat_visibility: ChatVisibility,
     /// Whether the client wants coloured chat messages.
-    pub chat_colors: bool,
+    pub has_chat_colors: bool,
     /// Bitmask of displayed skin parts (cape, jacket, sleeves, pants, hat).
     pub model_customisation: u8,
     /// Which hand the player uses as their main hand.
     pub main_hand: HumanoidArm,
     /// Whether the client has text filtering enabled.
-    pub text_filtering: bool,
+    pub has_text_filtering: bool,
     /// Whether the player allows being listed in the server's player list.
-    pub allows_listing: bool,
+    pub is_listing_allowed: bool,
     /// The client's particle rendering level.
     pub particle_status: ParticleStatus,
 }
@@ -50,11 +50,11 @@ impl ClientInformation {
             language: "en_us".to_string(),
             view_distance: 2,
             chat_visibility: ChatVisibility::Full,
-            chat_colors: true,
+            has_chat_colors: true,
             model_customisation: 0,
             main_hand: HumanoidArm::DEFAULT,
-            text_filtering: false,
-            allows_listing: false,
+            has_text_filtering: false,
+            is_listing_allowed: false,
             particle_status: ParticleStatus::All,
         }
     }
@@ -80,7 +80,7 @@ impl ClientInformation {
             PacketDecodeError::InvalidData(format!("invalid chat visibility: {chat_vis_id}"))
         })?;
 
-        let chat_colors = types::read_bool(buf)?;
+        let has_chat_colors = types::read_bool(buf)?;
 
         if buf.remaining() < 1 {
             return Err(PacketDecodeError::InvalidData(
@@ -94,8 +94,8 @@ impl ClientInformation {
             PacketDecodeError::InvalidData(format!("invalid main hand: {main_hand_id}"))
         })?;
 
-        let text_filtering = types::read_bool(buf)?;
-        let allows_listing = types::read_bool(buf)?;
+        let has_text_filtering = types::read_bool(buf)?;
+        let is_listing_allowed = types::read_bool(buf)?;
 
         let particle_id = varint::read_varint_buf(buf)?;
         let particle_status = ParticleStatus::by_id(particle_id).ok_or_else(|| {
@@ -106,11 +106,11 @@ impl ClientInformation {
             language,
             view_distance,
             chat_visibility,
-            chat_colors,
+            has_chat_colors,
             model_customisation,
             main_hand,
-            text_filtering,
-            allows_listing,
+            has_text_filtering,
+            is_listing_allowed,
             particle_status,
         })
     }
@@ -120,11 +120,11 @@ impl ClientInformation {
         types::write_string(buf, &self.language);
         buf.put_i8(self.view_distance);
         self.chat_visibility.write(buf);
-        types::write_bool(buf, self.chat_colors);
+        types::write_bool(buf, self.has_chat_colors);
         buf.put_u8(self.model_customisation);
         self.main_hand.write(buf);
-        types::write_bool(buf, self.text_filtering);
-        types::write_bool(buf, self.allows_listing);
+        types::write_bool(buf, self.has_text_filtering);
+        types::write_bool(buf, self.is_listing_allowed);
         self.particle_status.write(buf);
     }
 }
@@ -171,11 +171,11 @@ mod tests {
             language: "de_de".to_string(),
             view_distance: 16,
             chat_visibility: ChatVisibility::System,
-            chat_colors: false,
+            has_chat_colors: false,
             model_customisation: 0x7F, // all skin parts
             main_hand: HumanoidArm::Left,
-            text_filtering: true,
-            allows_listing: true,
+            has_text_filtering: true,
+            is_listing_allowed: true,
             particle_status: ParticleStatus::Minimal,
         }
     }
@@ -192,11 +192,11 @@ mod tests {
         assert_eq!(decoded.language, "en_us");
         assert_eq!(decoded.view_distance, 2);
         assert_eq!(decoded.chat_visibility, ChatVisibility::Full);
-        assert!(decoded.chat_colors);
+        assert!(decoded.has_chat_colors);
         assert_eq!(decoded.model_customisation, 0);
         assert_eq!(decoded.main_hand, HumanoidArm::Right);
-        assert!(!decoded.text_filtering);
-        assert!(!decoded.allows_listing);
+        assert!(!decoded.has_text_filtering);
+        assert!(!decoded.is_listing_allowed);
         assert_eq!(decoded.particle_status, ParticleStatus::All);
     }
 
@@ -248,11 +248,11 @@ mod tests {
         assert_eq!(info.language, "de_de");
         assert_eq!(info.view_distance, 16);
         assert_eq!(info.chat_visibility, ChatVisibility::System);
-        assert!(!info.chat_colors);
+        assert!(!info.has_chat_colors);
         assert_eq!(info.model_customisation, 0x7F);
         assert_eq!(info.main_hand, HumanoidArm::Left);
-        assert!(info.text_filtering);
-        assert!(info.allows_listing);
+        assert!(info.has_text_filtering);
+        assert!(info.is_listing_allowed);
         assert_eq!(info.particle_status, ParticleStatus::Minimal);
     }
 
@@ -264,11 +264,11 @@ mod tests {
         assert_eq!(info.language, "en_us");
         assert_eq!(info.view_distance, 2);
         assert_eq!(info.chat_visibility, ChatVisibility::Full);
-        assert!(info.chat_colors);
+        assert!(info.has_chat_colors);
         assert_eq!(info.model_customisation, 0);
         assert_eq!(info.main_hand, HumanoidArm::Right);
-        assert!(!info.text_filtering);
-        assert!(!info.allows_listing);
+        assert!(!info.has_text_filtering);
+        assert!(!info.is_listing_allowed);
         assert_eq!(info.particle_status, ParticleStatus::All);
     }
 
@@ -306,11 +306,11 @@ mod tests {
         types::write_string(&mut buf, "en_us");
         buf.put_i8(2); // view_distance
         varint::write_varint_buf(99, &mut buf); // invalid chat visibility
-        types::write_bool(&mut buf, true); // chat_colors
+        types::write_bool(&mut buf, true); // has_chat_colors
         buf.put_u8(0); // model_customisation
         varint::write_varint_buf(1, &mut buf); // main_hand
-        types::write_bool(&mut buf, false); // text_filtering
-        types::write_bool(&mut buf, false); // allows_listing
+        types::write_bool(&mut buf, false); // has_text_filtering
+        types::write_bool(&mut buf, false); // is_listing_allowed
         varint::write_varint_buf(0, &mut buf); // particle_status
         let err = <ServerboundClientInformationPacket as Packet>::decode(buf.freeze()).unwrap_err();
         assert!(

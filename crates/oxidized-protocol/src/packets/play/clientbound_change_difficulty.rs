@@ -12,13 +12,13 @@ use crate::codec::types;
 
 /// Tells the client the current difficulty level and whether it is locked.
 ///
-/// Wire format: `difficulty: u8 | locked: bool`.
+/// Wire format: `difficulty: u8 | is_locked: bool`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientboundChangeDifficultyPacket {
     /// Difficulty level (0 = Peaceful, 1 = Easy, 2 = Normal, 3 = Hard).
     pub difficulty: u8,
     /// Whether the difficulty is locked.
-    pub locked: bool,
+    pub is_locked: bool,
 }
 
 impl Packet for ClientboundChangeDifficultyPacket {
@@ -32,14 +32,14 @@ impl Packet for ClientboundChangeDifficultyPacket {
             )));
         }
         let difficulty = data.get_u8();
-        let locked = types::read_bool(&mut data)?;
-        Ok(Self { difficulty, locked })
+        let is_locked = types::read_bool(&mut data)?;
+        Ok(Self { difficulty, is_locked })
     }
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(2);
         buf.put_u8(self.difficulty);
-        types::write_bool(&mut buf, self.locked);
+        types::write_bool(&mut buf, self.is_locked);
         buf
     }
 }
@@ -53,31 +53,31 @@ mod tests {
     fn test_roundtrip_normal() {
         let pkt = ClientboundChangeDifficultyPacket {
             difficulty: 2,
-            locked: false,
+            is_locked: false,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundChangeDifficultyPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.difficulty, 2);
-        assert!(!decoded.locked);
+        assert!(!decoded.is_locked);
     }
 
     #[test]
     fn test_roundtrip_locked() {
         let pkt = ClientboundChangeDifficultyPacket {
             difficulty: 3,
-            locked: true,
+            is_locked: true,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundChangeDifficultyPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.difficulty, 3);
-        assert!(decoded.locked);
+        assert!(decoded.is_locked);
     }
 
     #[test]
     fn test_roundtrip_peaceful() {
         let pkt = ClientboundChangeDifficultyPacket {
             difficulty: 0,
-            locked: false,
+            is_locked: false,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundChangeDifficultyPacket::decode(encoded.freeze()).unwrap();

@@ -65,7 +65,7 @@ pub struct NameFilter {
     /// The name to match.
     pub name: String,
     /// If `true`, this is an exclusion (`name=!X`).
-    pub negated: bool,
+    pub is_negated: bool,
 }
 
 /// A double-ended range used for `distance`, `level`, `x_rotation`, `y_rotation`.
@@ -212,10 +212,10 @@ fn parse_filters(inner: &str) -> Result<SelectorFilters, CommandError> {
 
         match key {
             "name" => {
-                let (val, negated) = parse_negatable(value);
+                let (val, is_negated) = parse_negatable(value);
                 filters.name.push(NameFilter {
                     name: val.to_string(),
-                    negated,
+                    is_negated,
                 });
             },
             "limit" => {
@@ -241,24 +241,24 @@ fn parse_filters(inner: &str) -> Result<SelectorFilters, CommandError> {
             "dy" => filters.dy = Some(parse_f64(value, "dy")?),
             "dz" => filters.dz = Some(parse_f64(value, "dz")?),
             "type" => {
-                let (val, negated) = parse_negatable(value);
-                filters.entity_type.push((val.to_string(), negated));
+                let (val, is_negated) = parse_negatable(value);
+                filters.entity_type.push((val.to_string(), is_negated));
             },
             "tag" => {
-                let (val, negated) = parse_negatable(value);
-                filters.tag.push((val.to_string(), negated));
+                let (val, is_negated) = parse_negatable(value);
+                filters.tag.push((val.to_string(), is_negated));
             },
             "team" => {
-                let (val, negated) = parse_negatable(value);
-                filters.team.push((val.to_string(), negated));
+                let (val, is_negated) = parse_negatable(value);
+                filters.team.push((val.to_string(), is_negated));
             },
             "gamemode" => {
-                let (val, negated) = parse_negatable(value);
-                filters.gamemode.push((val.to_string(), negated));
+                let (val, is_negated) = parse_negatable(value);
+                filters.gamemode.push((val.to_string(), is_negated));
             },
             "nbt" => {
-                let (val, negated) = parse_negatable(value);
-                filters.nbt.push((val.to_string(), negated));
+                let (val, is_negated) = parse_negatable(value);
+                filters.nbt.push((val.to_string(), is_negated));
             },
             "scores" => filters.scores = Some(value.to_string()),
             "advancements" => filters.advancements = Some(value.to_string()),
@@ -371,7 +371,7 @@ pub fn resolve_selector(
 
     // Apply name filters.
     for nf in &filters.name {
-        if nf.negated {
+        if nf.is_negated {
             targets.retain(|t| t.name != nf.name);
         } else {
             targets.retain(|t| t.name == nf.name);
@@ -515,13 +515,13 @@ mod tests {
         assert_eq!(sel.kind, SelectorKind::AllPlayers);
         assert_eq!(sel.filters.name.len(), 1);
         assert_eq!(sel.filters.name[0].name, "Steve");
-        assert!(!sel.filters.name[0].negated);
+        assert!(!sel.filters.name[0].is_negated);
     }
 
     #[test]
     fn parse_selector_with_negated_name() {
         let sel = parse_selector("@a[name=!Steve]").unwrap();
-        assert!(sel.filters.name[0].negated);
+        assert!(sel.filters.name[0].is_negated);
         assert_eq!(sel.filters.name[0].name, "Steve");
     }
 

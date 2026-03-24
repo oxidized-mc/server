@@ -252,7 +252,7 @@ proptest! {
         }
     }
 
-    /// validate_movement: needs_correction ↔ distance² > MAX².
+    /// validate_movement: is_correction_needed ↔ distance² > MAX².
     #[test]
     fn proptest_validate_movement_correction_invariant(
         dx in -150.0f64..150.0,
@@ -269,9 +269,9 @@ proptest! {
         let dist_sq = dx * dx + dy * dy + dz * dz;
         let expected_correction = dist_sq > MAX_MOVEMENT_PER_TICK * MAX_MOVEMENT_PER_TICK;
         let max_sq = MAX_MOVEMENT_PER_TICK * MAX_MOVEMENT_PER_TICK;
-        prop_assert_eq!(result.needs_correction, expected_correction,
+        prop_assert_eq!(result.is_correction_needed, expected_correction,
             "dist²={}, MAX²={}", dist_sq, max_sq);
-        prop_assert_eq!(result.accepted, !expected_correction);
+        prop_assert_eq!(result.is_accepted, !expected_correction);
     }
 
     /// validate_movement: pitch is always clamped to ±90°.

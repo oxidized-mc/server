@@ -24,7 +24,7 @@ impl PlayerInfoActions {
     pub const INITIALIZE_CHAT: u8 = 1 << 1;
     /// Update game mode.
     pub const UPDATE_GAME_MODE: u8 = 1 << 2;
-    /// Update listed status.
+    /// Update is_listed status.
     pub const UPDATE_LISTED: u8 = 1 << 3;
     /// Update latency.
     pub const UPDATE_LATENCY: u8 = 1 << 4;
@@ -54,14 +54,14 @@ pub struct PlayerInfoEntry {
     pub game_mode: i32,
     /// Latency in ms (only with UPDATE_LATENCY).
     pub latency: i32,
-    /// Whether listed in tab (only with UPDATE_LISTED).
-    pub listed: bool,
+    /// Whether is_listed in tab (only with UPDATE_LISTED).
+    pub is_listed: bool,
     /// Whether player has display name (only with UPDATE_DISPLAY_NAME).
     pub has_display_name: bool,
     /// Custom display name JSON text component (only with UPDATE_DISPLAY_NAME).
     pub display_name: Option<String>,
     /// Whether to show hat model part (only with UPDATE_HAT).
-    pub show_hat: bool,
+    pub is_hat_visible: bool,
     /// Tab list order (only with UPDATE_LIST_ORDER).
     pub list_order: i32,
 }
@@ -97,10 +97,10 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
                 properties: Vec::new(),
                 game_mode: 0,
                 latency: 0,
-                listed: false,
+                is_listed: false,
                 has_display_name: false,
                 display_name: None,
-                show_hat: false,
+                is_hat_visible: false,
                 list_order: 0,
             };
 
@@ -149,7 +149,7 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
             }
 
             if actions.contains(PlayerInfoActions::UPDATE_LISTED) {
-                entry.listed = types::read_bool(&mut data)?;
+                entry.is_listed = types::read_bool(&mut data)?;
             }
 
             if actions.contains(PlayerInfoActions::UPDATE_LATENCY) {
@@ -168,7 +168,7 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
             }
 
             if actions.contains(PlayerInfoActions::UPDATE_HAT) {
-                entry.show_hat = types::read_bool(&mut data)?;
+                entry.is_hat_visible = types::read_bool(&mut data)?;
             }
 
             entries.push(entry);
@@ -212,7 +212,7 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
             }
 
             if self.actions.contains(PlayerInfoActions::UPDATE_LISTED) {
-                types::write_bool(&mut buf, entry.listed);
+                types::write_bool(&mut buf, entry.is_listed);
             }
 
             if self.actions.contains(PlayerInfoActions::UPDATE_LATENCY) {
@@ -236,7 +236,7 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
             }
 
             if self.actions.contains(PlayerInfoActions::UPDATE_HAT) {
-                types::write_bool(&mut buf, entry.show_hat);
+                types::write_bool(&mut buf, entry.is_hat_visible);
             }
         }
 
@@ -266,10 +266,10 @@ mod tests {
                 properties: vec![],
                 game_mode: 0,
                 latency: 50,
-                listed: true,
+                is_listed: true,
                 has_display_name: false,
                 display_name: None,
-                show_hat: false,
+                is_hat_visible: false,
                 list_order: 0,
             }],
         };
@@ -282,7 +282,7 @@ mod tests {
         assert_eq!(decoded.entries[0].name, "TestPlayer");
         assert_eq!(decoded.entries[0].game_mode, 0);
         assert_eq!(decoded.entries[0].latency, 50);
-        assert!(decoded.entries[0].listed);
+        assert!(decoded.entries[0].is_listed);
     }
 
     #[test]
@@ -300,10 +300,10 @@ mod tests {
                     properties: vec![],
                     game_mode: 0,
                     latency: 0,
-                    listed: false,
+                    is_listed: false,
                     has_display_name: false,
                     display_name: None,
-                    show_hat: false,
+                    is_hat_visible: false,
                     list_order: 0,
                 },
                 PlayerInfoEntry {
@@ -312,10 +312,10 @@ mod tests {
                     properties: vec![],
                     game_mode: 1,
                     latency: 0,
-                    listed: false,
+                    is_listed: false,
                     has_display_name: false,
                     display_name: None,
-                    show_hat: false,
+                    is_hat_visible: false,
                     list_order: 0,
                 },
             ],
@@ -346,10 +346,10 @@ mod tests {
                 )],
                 game_mode: 0,
                 latency: 0,
-                listed: false,
+                is_listed: false,
                 has_display_name: false,
                 display_name: None,
-                show_hat: false,
+                is_hat_visible: false,
                 list_order: 0,
             }],
         };
@@ -380,10 +380,10 @@ mod tests {
                 properties: vec![],
                 game_mode: 0,
                 latency: 0,
-                listed: false,
+                is_listed: false,
                 has_display_name: true,
                 display_name: Some(display.into()),
-                show_hat: false,
+                is_hat_visible: false,
                 list_order: 0,
             }],
         };

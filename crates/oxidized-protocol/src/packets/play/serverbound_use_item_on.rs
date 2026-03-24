@@ -57,7 +57,7 @@ pub struct BlockHitResult {
     /// Cursor Z within the block face (0.0–1.0).
     pub cursor_z: f32,
     /// Whether the player's head is inside the target block.
-    pub inside: bool,
+    pub is_inside: bool,
 }
 
 /// Serverbound packet for right-clicking a block face.
@@ -94,7 +94,7 @@ impl Packet for ServerboundUseItemOnPacket {
         let cursor_x = types::read_f32(&mut data)?;
         let cursor_y = types::read_f32(&mut data)?;
         let cursor_z = types::read_f32(&mut data)?;
-        let inside = types::read_bool(&mut data)?;
+        let is_inside = types::read_bool(&mut data)?;
         let sequence = varint::read_varint_buf(&mut data)?;
         Ok(Self {
             hand,
@@ -104,7 +104,7 @@ impl Packet for ServerboundUseItemOnPacket {
                 cursor_x,
                 cursor_y,
                 cursor_z,
-                inside,
+                is_inside,
             },
             sequence,
         })
@@ -118,7 +118,7 @@ impl Packet for ServerboundUseItemOnPacket {
         buf.put_f32(self.hit_result.cursor_x);
         buf.put_f32(self.hit_result.cursor_y);
         buf.put_f32(self.hit_result.cursor_z);
-        types::write_bool(&mut buf, self.hit_result.inside);
+        types::write_bool(&mut buf, self.hit_result.is_inside);
         varint::write_varint_buf(self.sequence, &mut buf);
         buf
     }
@@ -163,7 +163,7 @@ mod tests {
                 cursor_x: 0.5,
                 cursor_y: 1.0,
                 cursor_z: 0.5,
-                inside: false,
+                is_inside: false,
             },
             sequence: 7,
         };
@@ -175,7 +175,7 @@ mod tests {
         assert!((decoded.hit_result.cursor_x - 0.5).abs() < 1e-5);
         assert!((decoded.hit_result.cursor_y - 1.0).abs() < 1e-5);
         assert!((decoded.hit_result.cursor_z - 0.5).abs() < 1e-5);
-        assert!(!decoded.hit_result.inside);
+        assert!(!decoded.hit_result.is_inside);
         assert_eq!(decoded.sequence, 7);
     }
 
@@ -189,13 +189,13 @@ mod tests {
                 cursor_x: 0.0,
                 cursor_y: 0.0,
                 cursor_z: 0.0,
-                inside: true,
+                is_inside: true,
             },
             sequence: 0,
         };
         let encoded = original.encode();
         let decoded = ServerboundUseItemOnPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.hand, InteractionHand::OffHand);
-        assert!(decoded.hit_result.inside);
+        assert!(decoded.hit_result.is_inside);
     }
 }

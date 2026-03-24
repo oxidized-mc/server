@@ -25,8 +25,8 @@ pub struct Args {
     pub universe: PathBuf,
 
     /// Disable GUI (always headless — this flag exists for vanilla compatibility).
-    #[arg(long)]
-    pub nogui: bool,
+    #[arg(long = "nogui")]
+    pub is_nogui: bool,
 
     /// Set the minimum log level.
     #[arg(long, default_value = "info")]
@@ -37,24 +37,24 @@ pub struct Args {
     pub config: PathBuf,
 
     /// Force upgrade world data on startup.
-    #[arg(long)]
-    pub force_upgrade: bool,
+    #[arg(long = "force-upgrade")]
+    pub is_force_upgrade: bool,
 
     /// Initialize oxidized.toml and exit.
-    #[arg(long)]
-    pub init_settings: bool,
+    #[arg(long = "init-settings")]
+    pub is_init_settings: bool,
 
     /// Run in demo mode.
-    #[arg(long)]
-    pub demo: bool,
+    #[arg(long = "demo")]
+    pub is_demo: bool,
 
     /// Erase cached world data.
-    #[arg(long)]
-    pub erase_cache: bool,
+    #[arg(long = "erase-cache")]
+    pub is_erase_cache: bool,
 
     /// Load with vanilla datapack only (safe mode).
-    #[arg(long)]
-    pub safe_mode: bool,
+    #[arg(long = "safe-mode")]
+    pub is_safe_mode: bool,
 }
 
 #[cfg(test)]
@@ -68,14 +68,14 @@ mod tests {
         assert_eq!(args.port, None);
         assert_eq!(args.world, None);
         assert_eq!(args.universe, PathBuf::from("."));
-        assert!(!args.nogui);
+        assert!(!args.is_nogui);
         assert_eq!(args.log_level, "info");
         assert_eq!(args.config, PathBuf::from("oxidized.toml"));
-        assert!(!args.force_upgrade);
-        assert!(!args.init_settings);
-        assert!(!args.demo);
-        assert!(!args.erase_cache);
-        assert!(!args.safe_mode);
+        assert!(!args.is_force_upgrade);
+        assert!(!args.is_init_settings);
+        assert!(!args.is_demo);
+        assert!(!args.is_erase_cache);
+        assert!(!args.is_safe_mode);
     }
 
     #[test]
@@ -104,14 +104,14 @@ mod tests {
         assert_eq!(args.port, Some(25565));
         assert_eq!(args.world.as_deref(), Some("survival"));
         assert_eq!(args.universe, PathBuf::from("/data/worlds"));
-        assert!(args.nogui);
+        assert!(args.is_nogui);
         assert_eq!(args.log_level, "debug");
         assert_eq!(args.config, PathBuf::from("/etc/oxidized/oxidized.toml"));
-        assert!(args.force_upgrade);
-        assert!(args.init_settings);
-        assert!(args.demo);
-        assert!(args.erase_cache);
-        assert!(args.safe_mode);
+        assert!(args.is_force_upgrade);
+        assert!(args.is_init_settings);
+        assert!(args.is_demo);
+        assert!(args.is_erase_cache);
+        assert!(args.is_safe_mode);
     }
 
     #[test]

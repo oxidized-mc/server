@@ -1,47 +1,47 @@
 ---
 source: crates/oxidized-server/src/config/mod.rs
-assertion_line: 433
+assertion_line: 571
 expression: toml_str
 ---
 [network]
 port = 25565
 ip = ""
-online_mode = true
-prevent_proxy_connections = false
+is_online_mode = true
+is_preventing_proxy_connections = false
 compression_threshold = 256
-use_native_transport = true
+is_native_transport_enabled = true
 rate_limit = 0
-accepts_transfers = false
+is_accepting_transfers = false
 
 [gameplay]
 gamemode = "survival"
 difficulty = "easy"
-hardcore = false
-force_gamemode = false
+is_hardcore = false
+is_force_gamemode = false
 max_players = 20
 spawn_protection = 16
 max_world_size = 29999984
-allow_flight = false
-spawn_npcs = true
-spawn_animals = true
-spawn_monsters = true
-allow_nether = true
+is_flight_allowed = false
+is_spawning_npcs = true
+is_spawning_animals = true
+is_spawning_monsters = true
+is_nether_allowed = true
 max_chained_neighbor_updates = 1000000
-pvp = true
+is_pvp_enabled = true
 
 [world]
 name = "world"
 seed = ""
-generate_structures = true
+is_generating_structures = true
 view_distance = 10
 simulation_distance = 10
-sync_chunk_writes = true
+is_sync_chunk_writes = true
 region_file_compression = "deflate"
 
 [display]
 motd = "An Oxidized Minecraft Server"
-enable_status = true
-hide_online_players = false
+is_status_enabled = true
+is_hiding_online_players = false
 entity_broadcast_range_percentage = 100
 status_heartbeat_interval = 5
 
@@ -49,47 +49,47 @@ status_heartbeat_interval = 5
 color_char = "&"
 
 [admin]
-white_list = false
-enforce_whitelist = false
+is_whitelist_enabled = false
+is_whitelist_enforced = false
 op_permission_level = 4
 function_permission_level = 2
-enforce_secure_profile = true
-log_ips = true
+is_secure_profile_enforced = true
+is_logging_ips = true
 max_tick_time = 60000
 player_idle_timeout = 0
-broadcast_console_to_ops = true
-broadcast_rcon_to_ops = true
+is_broadcasting_console_to_ops = true
+is_broadcasting_rcon_to_ops = true
 pause_when_empty_seconds = 60
 
 [rcon]
-enabled = false
+is_enabled = false
 port = 25575
 password = ""
 
 [query]
-enabled = false
+is_enabled = false
 port = 25565
 
 [resource_pack]
 url = ""
 sha1 = ""
 prompt = ""
-required = false
+is_required = false
 
 [management]
-enabled = false
+is_enabled = false
 host = ""
 port = 0
 secret = ""
-tls_enabled = false
+is_tls_enabled = false
 
 [packs]
 initial_enabled = "vanilla"
 initial_disabled = ""
 
 [advanced]
-enable_jmx_monitoring = false
+is_jmx_monitoring_enabled = false
 text_filtering_config = ""
 text_filtering_version = 0
-enable_code_of_conduct = false
+is_code_of_conduct_enabled = false
 bug_report_link = ""

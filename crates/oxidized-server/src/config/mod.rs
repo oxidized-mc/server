@@ -119,10 +119,10 @@ impl ServerConfig {
         if self.network.port == 0 {
             return Err(ConfigError::InvalidPort(self.network.port));
         }
-        if self.rcon.port == 0 && self.rcon.enabled {
+        if self.rcon.port == 0 && self.rcon.is_enabled {
             return Err(ConfigError::InvalidPort(self.rcon.port));
         }
-        if self.query.port == 0 && self.query.enabled {
+        if self.query.port == 0 && self.query.is_enabled {
             return Err(ConfigError::InvalidPort(self.query.port));
         }
         if !(2..=32).contains(&self.world.view_distance) {
@@ -189,42 +189,42 @@ impl ServerConfig {
         // [network]
         env_override!(self, network.port, u16);
         env_override!(self, network.ip, String);
-        env_override!(self, network.online_mode, bool);
-        env_override!(self, network.prevent_proxy_connections, bool);
+        env_override!(self, network.is_online_mode, bool);
+        env_override!(self, network.is_preventing_proxy_connections, bool);
         env_override!(self, network.compression_threshold, i32);
-        env_override!(self, network.use_native_transport, bool);
+        env_override!(self, network.is_native_transport_enabled, bool);
         env_override!(self, network.rate_limit, i32);
-        env_override!(self, network.accepts_transfers, bool);
+        env_override!(self, network.is_accepting_transfers, bool);
 
         // [gameplay]
         env_override!(self, gameplay.gamemode, String);
         env_override!(self, gameplay.difficulty, String);
-        env_override!(self, gameplay.hardcore, bool);
-        env_override!(self, gameplay.force_gamemode, bool);
+        env_override!(self, gameplay.is_hardcore, bool);
+        env_override!(self, gameplay.is_force_gamemode, bool);
         env_override!(self, gameplay.max_players, u32);
         env_override!(self, gameplay.spawn_protection, u32);
         env_override!(self, gameplay.max_world_size, i32);
-        env_override!(self, gameplay.allow_flight, bool);
-        env_override!(self, gameplay.spawn_npcs, bool);
-        env_override!(self, gameplay.spawn_animals, bool);
-        env_override!(self, gameplay.spawn_monsters, bool);
-        env_override!(self, gameplay.allow_nether, bool);
+        env_override!(self, gameplay.is_flight_allowed, bool);
+        env_override!(self, gameplay.is_spawning_npcs, bool);
+        env_override!(self, gameplay.is_spawning_animals, bool);
+        env_override!(self, gameplay.is_spawning_monsters, bool);
+        env_override!(self, gameplay.is_nether_allowed, bool);
         env_override!(self, gameplay.max_chained_neighbor_updates, i32);
-        env_override!(self, gameplay.pvp, bool);
+        env_override!(self, gameplay.is_pvp_enabled, bool);
 
         // [world]
         env_override!(self, world.name, String);
         env_override!(self, world.seed, String);
-        env_override!(self, world.generate_structures, bool);
+        env_override!(self, world.is_generating_structures, bool);
         env_override!(self, world.view_distance, u32);
         env_override!(self, world.simulation_distance, u32);
-        env_override!(self, world.sync_chunk_writes, bool);
+        env_override!(self, world.is_sync_chunk_writes, bool);
         env_override!(self, world.region_file_compression, String);
 
         // [display]
         env_override!(self, display.motd, String);
-        env_override!(self, display.enable_status, bool);
-        env_override!(self, display.hide_online_players, bool);
+        env_override!(self, display.is_status_enabled, bool);
+        env_override!(self, display.is_hiding_online_players, bool);
         env_override!(self, display.entity_broadcast_range_percentage, i32);
         env_override!(self, display.status_heartbeat_interval, i32);
 
@@ -232,49 +232,49 @@ impl ServerConfig {
         env_override!(self, chat.color_char, String);
 
         // [admin]
-        env_override!(self, admin.white_list, bool);
-        env_override!(self, admin.enforce_whitelist, bool);
+        env_override!(self, admin.is_whitelist_enabled, bool);
+        env_override!(self, admin.is_whitelist_enforced, bool);
         env_override!(self, admin.op_permission_level, i32);
         env_override!(self, admin.function_permission_level, i32);
-        env_override!(self, admin.enforce_secure_profile, bool);
-        env_override!(self, admin.log_ips, bool);
+        env_override!(self, admin.is_secure_profile_enforced, bool);
+        env_override!(self, admin.is_logging_ips, bool);
         env_override!(self, admin.max_tick_time, i64);
         env_override!(self, admin.player_idle_timeout, i32);
-        env_override!(self, admin.broadcast_console_to_ops, bool);
-        env_override!(self, admin.broadcast_rcon_to_ops, bool);
+        env_override!(self, admin.is_broadcasting_console_to_ops, bool);
+        env_override!(self, admin.is_broadcasting_rcon_to_ops, bool);
         env_override!(self, admin.pause_when_empty_seconds, i32);
 
         // [rcon]
-        env_override!(self, rcon.enabled, bool);
+        env_override!(self, rcon.is_enabled, bool);
         env_override!(self, rcon.port, u16);
         env_override!(self, rcon.password, String);
 
         // [query]
-        env_override!(self, query.enabled, bool);
+        env_override!(self, query.is_enabled, bool);
         env_override!(self, query.port, u16);
 
         // [resource_pack]
         env_override!(self, resource_pack.url, String);
         env_override!(self, resource_pack.sha1, String);
         env_override!(self, resource_pack.prompt, String);
-        env_override!(self, resource_pack.required, bool);
+        env_override!(self, resource_pack.is_required, bool);
 
         // [management]
-        env_override!(self, management.enabled, bool);
+        env_override!(self, management.is_enabled, bool);
         env_override!(self, management.host, String);
         env_override!(self, management.port, u16);
         env_override!(self, management.secret, String);
-        env_override!(self, management.tls_enabled, bool);
+        env_override!(self, management.is_tls_enabled, bool);
 
         // [packs]
         env_override!(self, packs.initial_enabled, String);
         env_override!(self, packs.initial_disabled, String);
 
         // [advanced]
-        env_override!(self, advanced.enable_jmx_monitoring, bool);
+        env_override!(self, advanced.is_jmx_monitoring_enabled, bool);
         env_override!(self, advanced.text_filtering_config, String);
         env_override!(self, advanced.text_filtering_version, i32);
-        env_override!(self, advanced.enable_code_of_conduct, bool);
+        env_override!(self, advanced.is_code_of_conduct_enabled, bool);
         env_override!(self, advanced.bug_report_link, String);
     }
 }
@@ -379,42 +379,42 @@ mod tests {
             network: NetworkConfig {
                 port: 19132,
                 ip: "192.168.1.1".to_string(),
-                online_mode: false,
-                prevent_proxy_connections: true,
+                is_online_mode: false,
+                is_preventing_proxy_connections: true,
                 compression_threshold: 512,
-                use_native_transport: false,
+                is_native_transport_enabled: false,
                 rate_limit: 10,
-                accepts_transfers: true,
+                is_accepting_transfers: true,
             },
             gameplay: GameplayConfig {
                 gamemode: "creative".to_string(),
                 difficulty: "hard".to_string(),
-                hardcore: true,
-                force_gamemode: true,
+                is_hardcore: true,
+                is_force_gamemode: true,
                 max_players: 100,
                 spawn_protection: 32,
                 max_world_size: 10000,
-                allow_flight: true,
-                spawn_npcs: false,
-                spawn_animals: false,
-                spawn_monsters: false,
-                allow_nether: false,
+                is_flight_allowed: true,
+                is_spawning_npcs: false,
+                is_spawning_animals: false,
+                is_spawning_monsters: false,
+                is_nether_allowed: false,
                 max_chained_neighbor_updates: 500_000,
-                pvp: false,
+                is_pvp_enabled: false,
             },
             world: WorldConfig {
                 name: "custom_world".to_string(),
                 seed: "12345".to_string(),
-                generate_structures: false,
+                is_generating_structures: false,
                 view_distance: 16,
                 simulation_distance: 8,
-                sync_chunk_writes: false,
+                is_sync_chunk_writes: false,
                 region_file_compression: "none".to_string(),
             },
             display: DisplayConfig {
                 motd: "Full Roundtrip Test".to_string(),
-                enable_status: false,
-                hide_online_players: true,
+                is_status_enabled: false,
+                is_hiding_online_players: true,
                 entity_broadcast_range_percentage: 200,
                 status_heartbeat_interval: 15,
             },
@@ -422,49 +422,49 @@ mod tests {
                 color_char: "&".to_string(),
             },
             admin: AdminConfig {
-                white_list: true,
-                enforce_whitelist: true,
+                is_whitelist_enabled: true,
+                is_whitelist_enforced: true,
                 op_permission_level: 3,
                 function_permission_level: 3,
-                enforce_secure_profile: false,
-                log_ips: false,
+                is_secure_profile_enforced: false,
+                is_logging_ips: false,
                 max_tick_time: 120_000,
                 player_idle_timeout: 30,
-                broadcast_console_to_ops: false,
-                broadcast_rcon_to_ops: false,
+                is_broadcasting_console_to_ops: false,
+                is_broadcasting_rcon_to_ops: false,
                 pause_when_empty_seconds: 120,
             },
             rcon: RconConfig {
-                enabled: true,
+                is_enabled: true,
                 port: 25576,
                 password: "secret123".to_string(),
             },
             query: QueryConfig {
-                enabled: true,
+                is_enabled: true,
                 port: 25566,
             },
             resource_pack: ResourcePackConfig {
                 url: "https://example.com/pack.zip".to_string(),
                 sha1: "abc123def456".to_string(),
                 prompt: "Please install".to_string(),
-                required: true,
+                is_required: true,
             },
             management: ManagementConfig {
-                enabled: true,
+                is_enabled: true,
                 host: "mgmt.example.com".to_string(),
                 port: 8443,
                 secret: "mgmt-secret".to_string(),
-                tls_enabled: true,
+                is_tls_enabled: true,
             },
             packs: PacksConfig {
                 initial_enabled: "vanilla,fabric".to_string(),
                 initial_disabled: "experimental".to_string(),
             },
             advanced: AdvancedConfig {
-                enable_jmx_monitoring: true,
+                is_jmx_monitoring_enabled: true,
                 text_filtering_config: "filter.json".to_string(),
                 text_filtering_version: 2,
-                enable_code_of_conduct: true,
+                is_code_of_conduct_enabled: true,
                 bug_report_link: "https://bugs.example.com".to_string(),
             },
             extra: BTreeMap::new(),
@@ -483,13 +483,13 @@ mod tests {
         #[test]
         fn test_roundtrip_invariant_for_network_config(
             port in 1u16..=65535u16,
-            online_mode in proptest::bool::ANY,
+            is_online_mode in proptest::bool::ANY,
             compression in -1i32..1024i32,
             rate_limit in 0i32..1000i32,
         ) {
             let mut config = ServerConfig::default();
             config.network.port = port;
-            config.network.online_mode = online_mode;
+            config.network.is_online_mode = is_online_mode;
             config.network.compression_threshold = compression;
             config.network.rate_limit = rate_limit;
 
@@ -497,7 +497,7 @@ mod tests {
             let loaded: ServerConfig = toml::from_str(&toml_str).unwrap();
 
             assert_eq!(config.network.port, loaded.network.port);
-            assert_eq!(config.network.online_mode, loaded.network.online_mode);
+            assert_eq!(config.network.is_online_mode, loaded.network.is_online_mode);
             assert_eq!(
                 config.network.compression_threshold,
                 loaded.network.compression_threshold
@@ -512,14 +512,14 @@ mod tests {
             max_players in 1u32..1000u32,
             view_distance in 2u32..=32u32,
             simulation_distance in 2u32..=32u32,
-            hardcore in proptest::bool::ANY,
+            is_hardcore in proptest::bool::ANY,
             spawn_protection in 0u32..100u32,
         ) {
             let mut config = ServerConfig::default();
             config.gameplay.max_players = max_players;
             config.world.view_distance = view_distance;
             config.world.simulation_distance = simulation_distance;
-            config.gameplay.hardcore = hardcore;
+            config.gameplay.is_hardcore = is_hardcore;
             config.gameplay.spawn_protection = spawn_protection;
 
             let toml_str = toml::to_string_pretty(&config).unwrap();
@@ -531,7 +531,7 @@ mod tests {
                 config.world.simulation_distance,
                 loaded.world.simulation_distance
             );
-            assert_eq!(config.gameplay.hardcore, loaded.gameplay.hardcore);
+            assert_eq!(config.gameplay.is_hardcore, loaded.gameplay.is_hardcore);
             assert_eq!(
                 config.gameplay.spawn_protection,
                 loaded.gameplay.spawn_protection
@@ -611,7 +611,7 @@ mod tests {
     #[test]
     fn test_validate_rejects_rcon_port_zero_when_enabled() {
         let mut config = ServerConfig::default();
-        config.rcon.enabled = true;
+        config.rcon.is_enabled = true;
         config.rcon.port = 0;
         assert!(
             matches!(config.validate(), Err(ConfigError::InvalidPort(0))),
@@ -622,7 +622,7 @@ mod tests {
     #[test]
     fn test_validate_allows_rcon_port_zero_when_disabled() {
         let mut config = ServerConfig::default();
-        config.rcon.enabled = false;
+        config.rcon.is_enabled = false;
         config.rcon.port = 0;
         assert!(
             config.validate().is_ok(),
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn test_validate_rejects_query_port_zero_when_enabled() {
         let mut config = ServerConfig::default();
-        config.query.enabled = true;
+        config.query.is_enabled = true;
         config.query.port = 0;
         assert!(
             matches!(config.validate(), Err(ConfigError::InvalidPort(0))),
@@ -644,7 +644,7 @@ mod tests {
     #[test]
     fn test_validate_allows_query_port_zero_when_disabled() {
         let mut config = ServerConfig::default();
-        config.query.enabled = false;
+        config.query.is_enabled = false;
         config.query.port = 0;
         assert!(
             config.validate().is_ok(),
@@ -668,7 +668,7 @@ port = 19132
         assert_eq!(config.gameplay.max_players, 20);
         assert_eq!(config.world.name, "world");
         assert_eq!(config.display.motd, "An Oxidized Minecraft Server");
-        assert!(!config.rcon.enabled);
+        assert!(!config.rcon.is_enabled);
     }
 
     #[test]
@@ -714,11 +714,11 @@ key = "value"
 # Server configuration
 [network]
 port = 25565 # Standard MC port
-online_mode = true
+is_online_mode = true
 "#;
         let config: ServerConfig = toml::from_str(input).unwrap();
         assert_eq!(config.network.port, 25565);
-        assert!(config.network.online_mode);
+        assert!(config.network.is_online_mode);
     }
 
     #[test]
@@ -726,11 +726,11 @@ online_mode = true
         let input = r#"
 [network]
 port   =   19132
-online_mode   =   false
+is_online_mode   =   false
 "#;
         let config: ServerConfig = toml::from_str(input).unwrap();
         assert_eq!(config.network.port, 19132);
-        assert!(!config.network.online_mode);
+        assert!(!config.network.is_online_mode);
     }
 
     // -----------------------------------------------------------------------
@@ -746,7 +746,7 @@ online_mode   =   false
         config.network.port = 19132;
         config.gameplay.max_players = 100;
         config.display.motd = "Test Server".to_string();
-        config.rcon.enabled = true;
+        config.rcon.is_enabled = true;
         config.rcon.password = "secret".to_string();
 
         config.save(&path).unwrap();
@@ -893,13 +893,13 @@ online_mode   =   false
     #[test]
     #[serial_test::serial]
     fn test_env_override_bool_true() {
-        let vars = ["OXIDIZED_GAMEPLAY_HARDCORE"];
-        unsafe { std::env::set_var("OXIDIZED_GAMEPLAY_HARDCORE", "true") };
+        let vars = ["OXIDIZED_GAMEPLAY_IS_HARDCORE"];
+        unsafe { std::env::set_var("OXIDIZED_GAMEPLAY_IS_HARDCORE", "true") };
 
         let mut config = ServerConfig::default();
-        assert!(!config.gameplay.hardcore);
+        assert!(!config.gameplay.is_hardcore);
         config.apply_env_overrides();
-        assert!(config.gameplay.hardcore);
+        assert!(config.gameplay.is_hardcore);
 
         remove_env_vars(&vars);
     }
@@ -907,13 +907,13 @@ online_mode   =   false
     #[test]
     #[serial_test::serial]
     fn test_env_override_bool_false() {
-        let vars = ["OXIDIZED_NETWORK_ONLINE_MODE"];
-        unsafe { std::env::set_var("OXIDIZED_NETWORK_ONLINE_MODE", "false") };
+        let vars = ["OXIDIZED_NETWORK_IS_ONLINE_MODE"];
+        unsafe { std::env::set_var("OXIDIZED_NETWORK_IS_ONLINE_MODE", "false") };
 
         let mut config = ServerConfig::default();
-        assert!(config.network.online_mode);
+        assert!(config.network.is_online_mode);
         config.apply_env_overrides();
-        assert!(!config.network.online_mode);
+        assert!(!config.network.is_online_mode);
 
         remove_env_vars(&vars);
     }
@@ -989,12 +989,12 @@ online_mode   =   false
     #[test]
     #[serial_test::serial]
     fn test_env_override_invalid_bool_is_ignored() {
-        let vars = ["OXIDIZED_GAMEPLAY_HARDCORE"];
-        unsafe { std::env::set_var("OXIDIZED_GAMEPLAY_HARDCORE", "yes") };
+        let vars = ["OXIDIZED_GAMEPLAY_IS_HARDCORE"];
+        unsafe { std::env::set_var("OXIDIZED_GAMEPLAY_IS_HARDCORE", "yes") };
 
         let mut config = ServerConfig::default();
         config.apply_env_overrides();
-        assert!(!config.gameplay.hardcore, "invalid bool should be ignored");
+        assert!(!config.gameplay.is_hardcore, "invalid bool should be ignored");
 
         remove_env_vars(&vars);
     }
@@ -1038,7 +1038,7 @@ online_mode   =   false
 
         assert_eq!(config.network.port, 19132);
         // All other fields unchanged
-        assert_eq!(config.network.online_mode, default.network.online_mode);
+        assert_eq!(config.network.is_online_mode, default.network.is_online_mode);
         assert_eq!(config.gameplay, default.gameplay);
         assert_eq!(config.world, default.world);
 
@@ -1075,17 +1075,17 @@ online_mode   =   false
     #[serial_test::serial]
     fn test_env_override_advanced_fields() {
         let vars = [
-            "OXIDIZED_ADVANCED_ENABLE_JMX_MONITORING",
+            "OXIDIZED_ADVANCED_IS_JMX_MONITORING_ENABLED",
             "OXIDIZED_ADVANCED_TEXT_FILTERING_VERSION",
         ];
         unsafe {
-            std::env::set_var("OXIDIZED_ADVANCED_ENABLE_JMX_MONITORING", "true");
+            std::env::set_var("OXIDIZED_ADVANCED_IS_JMX_MONITORING_ENABLED", "true");
             std::env::set_var("OXIDIZED_ADVANCED_TEXT_FILTERING_VERSION", "3");
         }
 
         let mut config = ServerConfig::default();
         config.apply_env_overrides();
-        assert!(config.advanced.enable_jmx_monitoring);
+        assert!(config.advanced.is_jmx_monitoring_enabled);
         assert_eq!(config.advanced.text_filtering_version, 3);
 
         remove_env_vars(&vars);

@@ -74,9 +74,9 @@ pub struct Entity {
     pub vz: f64,
 
     /// Whether the entity is on the ground.
-    pub on_ground: bool,
+    pub is_on_ground: bool,
     /// Whether the entity has been removed from the world.
-    pub removed: bool,
+    pub is_removed: bool,
 
     /// Collision bounding box.
     pub bounding_box: Aabb,
@@ -130,8 +130,8 @@ impl Entity {
             vx: 0.0,
             vy: 0.0,
             vz: 0.0,
-            on_ground: false,
-            removed: false,
+            is_on_ground: false,
+            is_removed: false,
             bounding_box: Aabb::from_center(0.0, 0.0, 0.0, f64::from(width), f64::from(height)),
             synched_data,
             width,

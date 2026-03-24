@@ -123,14 +123,14 @@ fn build_login_packet(
 ) -> EncodedPacket {
     let login = ClientboundLoginPacket {
         player_id: player.entity_id,
-        hardcore: level_data.hardcore,
+        is_hardcore: level_data.is_hardcore,
         dimensions: dimensions.to_vec(),
         max_players: all_players.max_players() as i32,
         chunk_radius: player.view_distance,
         simulation_distance: player.simulation_distance,
-        reduced_debug_info: game_rules.get_bool(GameRuleKey::ReducedDebugInfo),
-        show_death_screen: !game_rules.get_bool(GameRuleKey::ImmediateRespawn),
-        do_limited_crafting: game_rules.get_bool(GameRuleKey::LimitedCrafting),
+        has_reduced_debug_info: game_rules.get_bool(GameRuleKey::ReducedDebugInfo),
+        is_showing_death_screen: !game_rules.get_bool(GameRuleKey::ImmediateRespawn),
+        is_limited_crafting: game_rules.get_bool(GameRuleKey::LimitedCrafting),
         common_spawn_info: CommonPlayerSpawnInfo {
             dimension_type_id,
             dimension: player.dimension.clone(),
@@ -143,7 +143,7 @@ fn build_login_packet(
             portal_cooldown: 0,
             sea_level: level_data.sea_level,
         },
-        enforces_secure_chat: false,
+        is_secure_chat_enforced: false,
     };
     EncodedPacket {
         id: ClientboundLoginPacket::PACKET_ID,
@@ -154,7 +154,7 @@ fn build_login_packet(
 fn build_difficulty_packet(level_data: &PrimaryLevelData) -> EncodedPacket {
     let pkt = ClientboundChangeDifficultyPacket {
         difficulty: level_data.difficulty.clamp(0, 3) as u8,
-        locked: level_data.difficulty_locked,
+        is_locked: level_data.is_difficulty_locked,
     };
     EncodedPacket {
         id: ClientboundChangeDifficultyPacket::PACKET_ID,
@@ -206,10 +206,10 @@ fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
                 properties: p.profile.properties().to_vec(),
                 game_mode: p.game_mode.id(),
                 latency: 0,
-                listed: true,
+                is_listed: true,
                 has_display_name: false,
                 display_name: None,
-                show_hat: false,
+                is_hat_visible: false,
                 list_order: 0,
             }
         })
@@ -461,7 +461,7 @@ mod tests {
         let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
         assert_eq!(login.player_id, 42);
-        assert!(!login.hardcore);
+        assert!(!login.is_hardcore);
         assert_eq!(login.dimensions.len(), 1);
         assert_eq!(login.max_players, 20);
         assert_eq!(login.chunk_radius, 10);
@@ -686,7 +686,7 @@ mod tests {
     fn hardcore_world_reflected_in_login_packet() {
         let player = make_player(1, "Test");
         let mut level_data = make_level_data();
-        level_data.hardcore = true;
+        level_data.is_hardcore = true;
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
@@ -702,7 +702,7 @@ mod tests {
         );
         let login = ClientboundLoginPacket::decode(packets[0].body.clone().freeze()).unwrap();
 
-        assert!(login.hardcore);
+        assert!(login.is_hardcore);
     }
 
     #[test]
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     fn difficulty_packet_respects_lock() {
         let mut level_data = make_level_data();
-        level_data.difficulty_locked = true;
+        level_data.is_difficulty_locked = true;
         let player = make_player(1, "Test");
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
@@ -768,6 +768,6 @@ mod tests {
         );
         let diff =
             ClientboundChangeDifficultyPacket::decode(packets[1].body.clone().freeze()).unwrap();
-        assert!(diff.locked);
+        assert!(diff.is_locked);
     }
 }

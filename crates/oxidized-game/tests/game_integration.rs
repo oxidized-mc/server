@@ -438,8 +438,8 @@ fn test_movement_validation_normal_walk() {
         Some(0.0),
         false,
     );
-    assert!(result.accepted, "normal walk should be accepted");
-    assert!(!result.needs_correction);
+    assert!(result.is_accepted, "normal walk should be is_accepted");
+    assert!(!result.is_correction_needed);
     assert!((result.new_pos.x - 100.1).abs() < f64::EPSILON);
     assert!((result.new_yaw - 91.0).abs() < f32::EPSILON);
 }
@@ -461,8 +461,8 @@ fn test_movement_validation_too_fast_triggers_correction() {
         None,
         false,
     );
-    assert!(!result.accepted, "200-block jump must be rejected");
-    assert!(result.needs_correction);
+    assert!(!result.is_accepted, "200-block jump must be rejected");
+    assert!(result.is_correction_needed);
 }
 
 #[test]
@@ -483,7 +483,7 @@ fn test_movement_validation_preserves_unchanged_fields() {
         Some(30.0),
         false,
     );
-    assert!(result.accepted);
+    assert!(result.is_accepted);
     assert!((result.new_pos.x - 42.0).abs() < f64::EPSILON);
     assert!((result.new_pos.y - 100.0).abs() < f64::EPSILON);
     assert!((result.new_pos.z + 7.5).abs() < f64::EPSILON);

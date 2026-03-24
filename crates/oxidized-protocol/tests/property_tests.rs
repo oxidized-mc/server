@@ -309,8 +309,8 @@ proptest! {
         prop_assert_eq!(raw.x.to_bits(), x.to_bits());
         prop_assert_eq!(raw.y.to_bits(), y.to_bits());
         prop_assert_eq!(raw.z.to_bits(), z.to_bits());
-        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
-        prop_assert_eq!(raw.horizontal_collision, flags & 0x02 != 0);
+        prop_assert_eq!(raw.is_on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(raw.has_horizontal_collision, flags & 0x02 != 0);
         let pkt: ServerboundMovePlayerPacket = raw.into();
         prop_assert!(pkt.has_pos());
         prop_assert!(!pkt.has_rot());
@@ -330,8 +330,8 @@ proptest! {
         prop_assert_eq!(raw.z.to_bits(), z.to_bits());
         prop_assert_eq!(raw.yaw.to_bits(), yaw.to_bits());
         prop_assert_eq!(raw.pitch.to_bits(), pitch.to_bits());
-        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
-        prop_assert_eq!(raw.horizontal_collision, flags & 0x02 != 0);
+        prop_assert_eq!(raw.is_on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(raw.has_horizontal_collision, flags & 0x02 != 0);
         let pkt: ServerboundMovePlayerPacket = raw.into();
         prop_assert!(pkt.has_pos());
         prop_assert!(pkt.has_rot());
@@ -347,7 +347,7 @@ proptest! {
         let raw = ServerboundMovePlayerRotPacket::decode(data).unwrap();
         prop_assert_eq!(raw.yaw.to_bits(), yaw.to_bits());
         prop_assert_eq!(raw.pitch.to_bits(), pitch.to_bits());
-        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(raw.is_on_ground, flags & 0x01 != 0);
     }
 
     /// ServerboundMovePlayerStatusOnlyPacket: byte → decode → verify flags.
@@ -355,8 +355,8 @@ proptest! {
     fn proptest_move_player_status_only_roundtrip(flags in 0u8..=3) {
         let data = Bytes::from(vec![flags]);
         let raw = ServerboundMovePlayerStatusOnlyPacket::decode(data).unwrap();
-        prop_assert_eq!(raw.on_ground, flags & 0x01 != 0);
-        prop_assert_eq!(raw.horizontal_collision, flags & 0x02 != 0);
+        prop_assert_eq!(raw.is_on_ground, flags & 0x01 != 0);
+        prop_assert_eq!(raw.has_horizontal_collision, flags & 0x02 != 0);
         let pkt: ServerboundMovePlayerPacket = raw.into();
         prop_assert!(pkt.x.is_none());
         prop_assert!(pkt.yaw.is_none());
@@ -427,9 +427,9 @@ proptest! {
     /// ClientboundMoveEntityPosPacket encode → decode roundtrip.
     #[test]
     fn proptest_move_entity_pos_roundtrip(
-        entity_id: i32, dx: i16, dy: i16, dz: i16, on_ground: bool,
+        entity_id: i32, dx: i16, dy: i16, dz: i16, is_on_ground: bool,
     ) {
-        let pkt = ClientboundMoveEntityPosPacket { entity_id, dx, dy, dz, on_ground };
+        let pkt = ClientboundMoveEntityPosPacket { entity_id, dx, dy, dz, is_on_ground };
         let encoded = pkt.encode();
         let decoded = ClientboundMoveEntityPosPacket::decode(encoded.freeze()).unwrap();
         prop_assert_eq!(decoded, pkt);
@@ -439,10 +439,10 @@ proptest! {
     #[test]
     fn proptest_move_entity_pos_rot_roundtrip(
         entity_id: i32, dx: i16, dy: i16, dz: i16,
-        yaw: u8, pitch: u8, on_ground: bool,
+        yaw: u8, pitch: u8, is_on_ground: bool,
     ) {
         let pkt = ClientboundMoveEntityPosRotPacket {
-            entity_id, dx, dy, dz, yaw, pitch, on_ground,
+            entity_id, dx, dy, dz, yaw, pitch, is_on_ground,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundMoveEntityPosRotPacket::decode(encoded.freeze()).unwrap();
@@ -452,9 +452,9 @@ proptest! {
     /// ClientboundMoveEntityRotPacket encode → decode roundtrip.
     #[test]
     fn proptest_move_entity_rot_roundtrip(
-        entity_id: i32, yaw: u8, pitch: u8, on_ground: bool,
+        entity_id: i32, yaw: u8, pitch: u8, is_on_ground: bool,
     ) {
-        let pkt = ClientboundMoveEntityRotPacket { entity_id, yaw, pitch, on_ground };
+        let pkt = ClientboundMoveEntityRotPacket { entity_id, yaw, pitch, is_on_ground };
         let encoded = pkt.encode();
         let decoded = ClientboundMoveEntityRotPacket::decode(encoded.freeze()).unwrap();
         prop_assert_eq!(decoded, pkt);
@@ -467,10 +467,10 @@ proptest! {
         x in finite_f64(), y in finite_f64(), z in finite_f64(),
         vx in finite_f64(), vy in finite_f64(), vz in finite_f64(),
         yaw in finite_f32(), pitch in finite_f32(),
-        on_ground: bool,
+        is_on_ground: bool,
     ) {
         let pkt = ClientboundEntityPositionSyncPacket {
-            entity_id, x, y, z, vx, vy, vz, yaw, pitch, on_ground,
+            entity_id, x, y, z, vx, vy, vz, yaw, pitch, is_on_ground,
         };
         let encoded = pkt.encode();
         let decoded = ClientboundEntityPositionSyncPacket::decode(encoded.freeze()).unwrap();
@@ -483,7 +483,7 @@ proptest! {
         prop_assert_eq!(decoded.vz.to_bits(), vz.to_bits());
         prop_assert_eq!(decoded.yaw.to_bits(), yaw.to_bits());
         prop_assert_eq!(decoded.pitch.to_bits(), pitch.to_bits());
-        prop_assert_eq!(decoded.on_ground, on_ground);
+        prop_assert_eq!(decoded.is_on_ground, is_on_ground);
     }
 
     /// ClientboundRotateHeadPacket encode → decode roundtrip.

@@ -30,7 +30,7 @@ pub struct ServerStatus {
     pub favicon: Option<String>,
     /// Whether the server enforces secure chat signing.
     #[serde(rename = "enforcesSecureChat")]
-    pub enforces_secure_chat: bool,
+    pub is_secure_chat_enforced: bool,
 }
 
 /// Version block within the server status.
@@ -94,7 +94,7 @@ mod tests {
             },
             description: Component::text("An Oxidized Minecraft Server"),
             favicon: None,
-            enforces_secure_chat: false,
+            is_secure_chat_enforced: false,
         }
     }
 

@@ -76,7 +76,7 @@ fn main() -> anyhow::Result<()> {
     config.validate().map_err(|e| anyhow::anyhow!("{e}"))?;
 
     // If --init-settings was passed, save defaults and exit.
-    if args.init_settings {
+    if args.is_init_settings {
         config.save(&args.config)?;
         info!(path = %args.config.display(), "Initialized settings — exiting");
         return Ok(());
@@ -84,7 +84,7 @@ fn main() -> anyhow::Result<()> {
 
     info!(
         port = config.network.port,
-        online_mode = config.network.online_mode,
+        is_online_mode = config.network.is_online_mode,
         max_players = config.gameplay.max_players,
         "Server configuration",
     );
@@ -133,7 +133,7 @@ fn main() -> anyhow::Result<()> {
             },
             description: motd_component,
             favicon: None, // Favicon loading deferred to Phase 18
-            enforces_secure_chat: false,
+            is_secure_chat_enforced: false,
         });
 
         // Generate the RSA-1024 keypair for online-mode encryption.
@@ -224,9 +224,9 @@ fn main() -> anyhow::Result<()> {
         let login_ctx = Arc::new(LoginContext {
             server_status,
             keypair: Arc::new(keypair),
-            online_mode: config.network.online_mode,
+            is_online_mode: config.network.is_online_mode,
             compression_threshold: config.network.compression_threshold,
-            prevent_proxy_connections: config.network.prevent_proxy_connections,
+            is_preventing_proxy_connections: config.network.is_preventing_proxy_connections,
             http_client: reqwest::Client::new(),
             server_ctx,
         });

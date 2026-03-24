@@ -483,12 +483,12 @@ pub async fn handle_play_entry(
                                     pkt.data, addr, &player_name, "PlayerAbilities",
                                 ) {
                                     let mut p = play_ctx.player.write();
-                                    p.abilities.flying =
+                                    p.abilities.is_flying =
                                         abilities_pkt.is_flying() && p.abilities.can_fly;
                                     debug!(
                                         peer = %addr,
                                         name = %player_name,
-                                        flying = p.abilities.flying,
+                                        is_flying = p.abilities.is_flying,
                                         "Player abilities update",
                                     );
                                 }
@@ -621,7 +621,7 @@ pub async fn handle_play_entry(
                 "multiplayer.player.left",
                 vec![Component::text(player_name.clone())],
             ),
-            overlay: false,
+            is_overlay: false,
         };
         let encoded = leave_msg.encode();
         server_ctx.broadcast(BroadcastMessage {

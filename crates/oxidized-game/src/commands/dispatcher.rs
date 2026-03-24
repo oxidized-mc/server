@@ -394,7 +394,7 @@ mod tests {
             display_name: "Console".to_string(),
             server: Arc::new(MockServer),
             feedback_sender: Arc::new(|_| {}),
-            silent: false,
+            is_silent: false,
         }
     }
 

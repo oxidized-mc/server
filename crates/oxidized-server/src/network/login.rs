@@ -76,7 +76,7 @@ pub async fn handle_login(
     }
 
     // 3. Authenticate (online) or generate offline UUID.
-    let profile = if ctx.online_mode {
+    let profile = if ctx.is_online_mode {
         authenticate_online(conn, &hello, ctx).await?
     } else {
         let uuid = offline_uuid(&hello.name);
@@ -224,7 +224,7 @@ async fn authenticate_online(
     let server_hash = minecraft_digest("", &shared_secret, ctx.keypair.public_key_der());
 
     // h. Authenticate with Mojang session servers.
-    let client_ip = if ctx.prevent_proxy_connections {
+    let client_ip = if ctx.is_preventing_proxy_connections {
         Some(addr.ip().to_string())
     } else {
         None

@@ -88,7 +88,7 @@ pub fn physics_tick(
     );
 
     // 5. Detect on_ground: downward movement was reduced by collision.
-    entity.on_ground = dy < 0.0 && (actual_dy - dy).abs() > COLLISION_EPSILON;
+    entity.is_on_ground = dy < 0.0 && (actual_dy - dy).abs() > COLLISION_EPSILON;
 
     // 6. Zero velocity on collision axes, with slime bounce for Y.
     if (actual_dx - dx).abs() > COLLISION_EPSILON {
@@ -96,7 +96,7 @@ pub fn physics_tick(
     }
     if (actual_dy - dy).abs() > COLLISION_EPSILON {
         // Check for slime bounce: if landing on a slime block, negate Y velocity.
-        if entity.on_ground && is_on_slime(level, entity, block_physics) {
+        if entity.is_on_ground && is_on_slime(level, entity, block_physics) {
             entity.vy = -entity.vy;
         } else {
             entity.vy = 0.0;
@@ -107,7 +107,7 @@ pub fn physics_tick(
     }
 
     // 7. Apply drag.
-    let h_drag = if entity.on_ground {
+    let h_drag = if entity.is_on_ground {
         block_friction * HORIZONTAL_DRAG
     } else {
         HORIZONTAL_DRAG
@@ -118,10 +118,10 @@ pub fn physics_tick(
     entity.vz *= h_drag;
 
     // 8. Fall distance tracking.
-    if !entity.on_ground && actual_dy < 0.0 {
+    if !entity.is_on_ground && actual_dy < 0.0 {
         // Accumulate downward distance (actual_dy is negative, so negate).
         entity.fall_distance -= actual_dy as f32;
-    } else if entity.on_ground {
+    } else if entity.is_on_ground {
         // Reset on landing (damage would be calculated before this reset
         // in a full implementation).
         entity.fall_distance = 0.0;
@@ -137,7 +137,7 @@ fn get_block_friction(
     entity: &Entity,
     block_physics: &PhysicsBlockProperties,
 ) -> f64 {
-    if !entity.on_ground {
+    if !entity.is_on_ground {
         return 1.0;
     }
 
@@ -322,7 +322,7 @@ mod tests {
 
         physics_tick(&mut entity, &FloorLevel, &shapes, &bp, false, false);
 
-        assert!(entity.on_ground, "Entity should be on ground");
+        assert!(entity.is_on_ground, "Entity should be on ground");
         assert!(
             entity.vy.abs() < 0.001,
             "vy should be zeroed: {}",
@@ -382,7 +382,7 @@ mod tests {
 
         physics_tick(&mut entity, &FloorLevel, &shapes, &bp, false, false);
 
-        assert!(entity.on_ground, "Entity should land");
+        assert!(entity.is_on_ground, "Entity should land");
         assert!(
             (entity.fall_distance).abs() < 0.001,
             "Fall distance should reset on landing: {}",
@@ -411,7 +411,7 @@ mod tests {
         let shapes = FullCubeShapeProvider::new();
         let bp = default_physics();
         let mut entity = make_entity_above_floor(0.0);
-        entity.on_ground = true;
+        entity.is_on_ground = true;
         entity.vx = 0.0;
         entity.vy = 0.0;
         entity.vz = 0.0;
@@ -420,7 +420,7 @@ mod tests {
         physics_tick(&mut entity, &FloorLevel, &shapes, &bp, false, false);
 
         // Entity should stay on ground (gravity pulls down, floor stops it).
-        assert!(entity.on_ground, "Entity should remain on ground");
+        assert!(entity.is_on_ground, "Entity should remain on ground");
         assert!(
             (entity.y - y_before).abs() < 0.01,
             "Entity should stay near same Y: before={y_before}, after={}",
@@ -461,7 +461,7 @@ mod tests {
 
         physics_tick(&mut entity, &level, &shapes, &bp, false, false);
 
-        assert!(entity.on_ground, "Entity should land on single block");
+        assert!(entity.is_on_ground, "Entity should land on single block");
         assert!(
             entity.y >= 1.0 - 0.001,
             "Entity should not pass through block: y={}",
@@ -480,7 +480,7 @@ mod tests {
         };
 
         let mut entity = make_entity_above_floor(0.0);
-        entity.on_ground = true;
+        entity.is_on_ground = true;
         entity.vx = 1.0;
         entity.vy = 0.0;
         entity.vz = 0.0;
@@ -498,7 +498,7 @@ mod tests {
 
         // Compare with stone floor.
         let mut entity2 = make_entity_above_floor(0.0);
-        entity2.on_ground = true;
+        entity2.is_on_ground = true;
         entity2.vx = 1.0;
         entity2.vy = 0.0;
         entity2.vz = 0.0;
@@ -530,7 +530,7 @@ mod tests {
         // Entity should bounce: vy negated then drag applied.
         // Pre-bounce vy was some negative value after gravity.
         // After negate, it should be positive. After * VERTICAL_DRAG, still positive.
-        assert!(entity.on_ground, "Entity should land on slime");
+        assert!(entity.is_on_ground, "Entity should land on slime");
         assert!(
             entity.vy > 0.0,
             "Slime should bounce entity upward: vy={}",
@@ -549,7 +549,7 @@ mod tests {
         };
 
         let mut entity = make_entity_above_floor(0.0);
-        entity.on_ground = true;
+        entity.is_on_ground = true;
         entity.vx = 1.0;
         entity.vy = 0.0;
         entity.vz = 0.0;
@@ -559,7 +559,7 @@ mod tests {
 
         // Compare with normal floor.
         let mut entity2 = make_entity_above_floor(0.0);
-        entity2.on_ground = true;
+        entity2.is_on_ground = true;
         entity2.vx = 1.0;
         entity2.vy = 0.0;
         entity2.vz = 0.0;
@@ -584,7 +584,7 @@ mod tests {
         };
 
         let mut entity = make_entity_above_floor(0.0);
-        entity.on_ground = true;
+        entity.is_on_ground = true;
         entity.vx = 1.0;
         entity.vy = 0.0;
         entity.vz = 0.0;
@@ -594,7 +594,7 @@ mod tests {
 
         // Compare with normal floor.
         let mut entity2 = make_entity_above_floor(0.0);
-        entity2.on_ground = true;
+        entity2.is_on_ground = true;
         entity2.vx = 1.0;
         entity2.vy = 0.0;
         entity2.vz = 0.0;

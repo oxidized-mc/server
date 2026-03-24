@@ -45,11 +45,11 @@ pub struct LoginContext {
     /// RSA-1024 keypair used for encryption handshake.
     pub keypair: Arc<ServerKeyPair>,
     /// Whether the server authenticates players against Mojang session servers.
-    pub online_mode: bool,
+    pub is_online_mode: bool,
     /// Minimum packet size (in bytes) before compression is applied. `-1` disables compression.
     pub compression_threshold: i32,
     /// Whether to block connections through proxies by verifying the client IP.
-    pub prevent_proxy_connections: bool,
+    pub is_preventing_proxy_connections: bool,
     /// Reusable HTTP client for Mojang session server requests.
     pub http_client: reqwest::Client,
     /// Shared game server state for PLAY-state operations.
@@ -215,7 +215,7 @@ impl ServerHandle for ServerContext {
 
         let pkt = ClientboundSystemChatPacket {
             content: message.clone(),
-            overlay: false,
+            is_overlay: false,
         };
         let encoded = pkt.encode();
         let broadcast = BroadcastMessage {
@@ -312,11 +312,11 @@ impl ServerHandle for ServerContext {
     }
 
     fn is_tick_frozen(&self) -> bool {
-        self.tick_rate_manager.read().frozen
+        self.tick_rate_manager.read().is_frozen
     }
 
-    fn set_tick_frozen(&self, frozen: bool) {
-        self.tick_rate_manager.write().frozen = frozen;
+    fn set_tick_frozen(&self, is_frozen: bool) {
+        self.tick_rate_manager.write().is_frozen = is_frozen;
     }
 
     fn tick_step(&self, steps: u32) {
@@ -332,7 +332,7 @@ impl ServerHandle for ServerContext {
     }
 
     fn is_tick_sprinting(&self) -> bool {
-        self.tick_rate_manager.read().sprinting
+        self.tick_rate_manager.read().is_sprinting
     }
 
     fn broadcast_tick_state(&self) {
@@ -342,7 +342,7 @@ impl ServerHandle for ServerContext {
         let mgr = self.tick_rate_manager.read();
         let pkt = ClientboundTickingStatePacket {
             tick_rate: mgr.tick_rate,
-            is_frozen: mgr.frozen,
+            is_frozen: mgr.is_frozen,
         };
         drop(mgr);
         let encoded = pkt.encode();
@@ -425,10 +425,10 @@ impl ServerHandle for ServerContext {
                 properties: vec![],
                 game_mode: mode.id(),
                 latency: 0,
-                listed: true,
+                is_listed: true,
                 has_display_name: false,
                 display_name: None,
-                show_hat: false,
+                is_hat_visible: false,
                 list_order: 0,
             }],
         };
@@ -457,7 +457,7 @@ impl ServerHandle for ServerContext {
 
         let pkt = ClientboundSystemChatPacket {
             content: message.clone(),
-            overlay: false,
+            is_overlay: false,
         };
         let encoded = pkt.encode();
         self.broadcast(BroadcastMessage {
@@ -779,7 +779,7 @@ mod tests {
             },
             description: Component::text("Test Server"),
             favicon: None,
-            enforces_secure_chat: false,
+            is_secure_chat_enforced: false,
         }
     }
 
@@ -787,9 +787,9 @@ mod tests {
         Arc::new(LoginContext {
             server_status: Arc::new(test_server_status()),
             keypair: Arc::new(ServerKeyPair::generate().unwrap()),
-            online_mode: false,
+            is_online_mode: false,
             compression_threshold: -1,
-            prevent_proxy_connections: false,
+            is_preventing_proxy_connections: false,
             http_client: reqwest::Client::new(),
             server_ctx: Arc::new(ServerContext {
                 player_list: RwLock::new(PlayerList::new(20)),

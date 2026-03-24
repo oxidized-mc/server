@@ -942,7 +942,7 @@ mod tests {
         level: i32,
         name: String,
         position: Vec<f64>,
-        on_ground: bool,
+        is_on_ground: bool,
     }
 
     #[test]
@@ -952,7 +952,7 @@ mod tests {
             level: 5,
             name: "Steve".into(),
             position: vec![1.0, 64.0, 1.0],
-            on_ground: true,
+            is_on_ground: true,
         };
         let compound = to_compound(&player).unwrap();
         assert_eq!(compound.get_float("health"), Some(20.0));

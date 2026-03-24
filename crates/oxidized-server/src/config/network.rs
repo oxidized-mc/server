@@ -11,17 +11,17 @@ pub struct NetworkConfig {
     /// IP address to bind to (default `""` — all interfaces).
     pub ip: String,
     /// Whether the server authenticates players with Mojang (default `true`).
-    pub online_mode: bool,
+    pub is_online_mode: bool,
     /// Block proxy / VPN connections (default `false`).
-    pub prevent_proxy_connections: bool,
+    pub is_preventing_proxy_connections: bool,
     /// Byte threshold for packet compression; `-1` disables (default `256`).
     pub compression_threshold: i32,
     /// Use epoll/kqueue native transport (default `true`).
-    pub use_native_transport: bool,
+    pub is_native_transport_enabled: bool,
     /// Maximum packets per second before kicking; `0` disables (default `0`).
     pub rate_limit: i32,
     /// Accept transfer packets from other servers (default `false`).
-    pub accepts_transfers: bool,
+    pub is_accepting_transfers: bool,
 }
 
 impl Default for NetworkConfig {
@@ -29,12 +29,12 @@ impl Default for NetworkConfig {
         Self {
             port: 25565,
             ip: String::new(),
-            online_mode: true,
-            prevent_proxy_connections: false,
+            is_online_mode: true,
+            is_preventing_proxy_connections: false,
             compression_threshold: 256,
-            use_native_transport: true,
+            is_native_transport_enabled: true,
             rate_limit: 0,
-            accepts_transfers: false,
+            is_accepting_transfers: false,
         }
     }
 }

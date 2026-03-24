@@ -108,7 +108,7 @@ pub fn make_command_source(
         display_name: player_name.to_string(),
         server: server_ctx.clone(),
         feedback_sender: Arc::new(|_| {}),
-        silent: false,
+        is_silent: false,
     }
 }
 
@@ -139,7 +139,7 @@ pub fn make_command_source_for_player(
             let _ = feedback_tx.send(component.clone());
             debug!(player = %name, "Command feedback queued");
         }),
-        silent: false,
+        is_silent: false,
     }
 }
 
