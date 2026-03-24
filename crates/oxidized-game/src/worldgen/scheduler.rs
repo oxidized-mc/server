@@ -14,9 +14,9 @@ use oxidized_world::chunk::ChunkPos;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 
+use super::ChunkStatus;
 use super::priority::ChunkGenPriority;
 use super::status_requirements;
-use super::ChunkStatus;
 
 /// Default maximum number of concurrently generating chunks.
 ///

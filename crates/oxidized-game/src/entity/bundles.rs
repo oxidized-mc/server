@@ -205,7 +205,9 @@ mod tests {
     #[test]
     fn test_base_bundle_creates_all_components() {
         let mut world = World::new();
-        let entity = world.spawn(BaseEntityBundle::new(DVec3::new(1.0, 2.0, 3.0))).id();
+        let entity = world
+            .spawn(BaseEntityBundle::new(DVec3::new(1.0, 2.0, 3.0)))
+            .id();
 
         assert!(world.get::<Position>(entity).is_some());
         assert!(world.get::<Velocity>(entity).is_some());
@@ -241,7 +243,9 @@ mod tests {
     #[test]
     fn test_zombie_bundle_has_marker_and_living_components() {
         let mut world = World::new();
-        let entity = world.spawn(ZombieBundle::new(DVec3::new(10.0, 64.0, 10.0))).id();
+        let entity = world
+            .spawn(ZombieBundle::new(DVec3::new(10.0, 64.0, 10.0)))
+            .id();
 
         assert!(world.get::<ZombieMarker>(entity).is_some());
         assert!(world.get::<Position>(entity).is_some());

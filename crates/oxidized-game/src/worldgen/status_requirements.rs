@@ -294,8 +294,7 @@ mod tests {
             }
             Some(ChunkStatus::Full)
         };
-        let _ =
-            dependencies_satisfied(ChunkPos::new(0, 0), ChunkStatus::Features, counter);
+        let _ = dependencies_satisfied(ChunkPos::new(0, 0), ChunkStatus::Features, counter);
         // Radius 1 Chebyshev → 3×3 - 1 = 8 neighbors
         assert_eq!(checked.load(std::sync::atomic::Ordering::Relaxed), 8);
     }

@@ -415,7 +415,7 @@ proptest! {
 // Worldgen pipeline property tests (R3.8 — ADR-016)
 // ---------------------------------------------------------------------------
 
-use oxidized_game::worldgen::{ChunkGenPriority, ChunkStatus, CHUNK_STATUS_COUNT};
+use oxidized_game::worldgen::{CHUNK_STATUS_COUNT, ChunkGenPriority, ChunkStatus};
 
 fn arb_chunk_status() -> impl Strategy<Value = ChunkStatus> {
     (0u8..CHUNK_STATUS_COUNT as u8).prop_map(|v| ChunkStatus::from_u8(v).unwrap())
