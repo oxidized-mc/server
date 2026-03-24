@@ -1,10 +1,11 @@
 # Phase R3 — ADR Compliance & Code Quality Refactoring
 
-**Status:** ✅ Complete  
+**Status:** 🔄 In Progress  
 **Crates:** all  
 **Reward:** Every crate fully complies with its governing ADRs. Lint violations are
 zero. Naming, documentation, and architectural patterns match the documented
-decisions. The codebase is audit-clean and ready to scale to Phase 38.
+decisions. Foundational types for worldgen, lighting, and entity systems are
+scaffolded with tests. The codebase is audit-clean and ready to scale to Phase 38.
 
 ---
 
@@ -26,6 +27,12 @@ Before implementing this phase, review:
   `OXIDIZED_*` environment variable overrides
 - [ADR-035: Module Structure](../adr/adr-035-module-structure.md) —
   800 LOC hard limit
+- [ADR-016: World Generation Pipeline](../adr/adr-016-worldgen-pipeline.md) —
+  Rayon thread pool, chunk status state machine, dependency-aware scheduler
+- [ADR-017: Lighting Engine](../adr/adr-017-lighting.md) —
+  Batched BFS, parallel section processing, NibbleArray storage
+- [ADR-018: Entity System Architecture](../adr/adr-018-entity-system.md) —
+  bevy_ecs components, systems, marker-based composition
 
 ---
 
@@ -36,7 +43,7 @@ fixes every deviation discovered during the comprehensive audit performed after
 Phase R2. It is a **pure compliance refactoring** — no new features, no protocol
 changes.
 
-The audit found **7 categories** of ADR violations:
+The audit found **10 categories** of ADR violations:
 
 1. Lint & error handling strictness (ADR-002, ADR-004)
 2. Tick loop architecture (ADR-019)
@@ -45,6 +52,9 @@ The audit found **7 categories** of ADR violations:
 5. File size violations (ADR-035)
 6. Boolean naming convention violations (project style rules)
 7. Missing documentation (project style rules)
+8. Worldgen pipeline missing scaffolding (ADR-016)
+9. Lighting engine missing scaffolding (ADR-017)
+10. Entity system missing ECS foundation (ADR-018)
 
 ---
 
@@ -67,9 +77,15 @@ Fixing these now prevents compounding drift as Phases 19–38 add ~100K LOC.
   change that should be its own phase; the current single-task model works
   correctly. Consider superseding ADR-006 or scheduling a dedicated network
   refactoring phase instead.
-- **No ECS migration (ADR-018/020)** — the `Arc<RwLock<ServerPlayer>>` model
-  works for the current player count. Full ECS migration (bevy_ecs) is a Phase
-  15+ concern and far too large for a compliance-only refactoring.
+- **No full algorithm implementation (ADR-016/017/018)** — R3.8–R3.10 add
+  foundational types, module structure, and compliance tests for worldgen,
+  lighting, and entity systems. Full algorithm implementation (noise generation,
+  BFS light propagation, ECS migration of existing entity logic) remains in
+  their respective feature phases (P23/P26/P36, P13/P19, P15/P24/P25/P27).
+- **No ECS migration of existing code (ADR-018)** — the current
+  `Arc<RwLock<ServerPlayer>>` model is not replaced. R3.10 defines the ECS
+  component types and bundles alongside the existing code so that the feature
+  phase can incrementally migrate.
 
 ---
 
@@ -199,9 +215,9 @@ and re-added when their respective phases are implemented.
 **Verification:** `cargo deny check` passes. `cargo tree` shows no unused
 dependencies.
 
-**Note:** When Phase 38 (Performance) or a worldgen phase is implemented, these
-dependencies should be re-added with actual usage. Update ADR-029 and ADR-016
-notes accordingly.
+**Note:** `bumpalo` should be re-added when Phase 38 (Performance) is
+implemented. `rayon` is re-added in R3.8 below, where the worldgen scheduler
+scaffolding provides actual usage.
 
 ---
 
@@ -416,6 +432,361 @@ Count of `missing_docs` warnings decreases from current baseline to zero.
 
 ---
 
+### R3.8: Worldgen Pipeline Structural Compliance (ADR-016)
+
+**Targets:** `crates/oxidized-game/src/worldgen/`,
+`crates/oxidized-world/Cargo.toml`, workspace `Cargo.toml`
+
+**Current state:**
+
+| Existing | Location | Status |
+|----------|----------|--------|
+| `ChunkStatus` enum (12 statuses) | `oxidized-game/src/worldgen/mod.rs` | ✅ Present |
+| `ChunkGenerator` trait (Send + Sync) | `oxidized-game/src/worldgen/mod.rs` | ✅ Present |
+| Flat world generator | `oxidized-game/src/worldgen/flat/` | ✅ Present |
+| `WorldgenScheduler` | — | ❌ Missing |
+| `ChunkGenPriority` / priority system | — | ❌ Missing |
+| `StatusRequirement` / neighbor deps | — | ❌ Missing |
+| `CancellationToken` integration | — | ❌ Missing |
+| `rayon` dependency | — | ❌ Removed in R3.3 |
+
+**What R3.8 adds (scaffolding only — no algorithm implementation):**
+
+1. **Re-add `rayon` to workspace dependencies:**
+   - Was removed in R3.3 because nothing used it. Now justified by the
+     scheduler skeleton below.
+
+2. **Create `worldgen/scheduler.rs` — scheduler types:**
+   ```rust
+   pub struct WorldgenScheduler {
+       pending: DashMap<ChunkPos, ChunkGenTask>,
+       in_progress: DashMap<ChunkPos, ChunkStatus>,
+       rayon_pool: rayon::ThreadPool,
+       max_concurrent: usize,
+       semaphore: Arc<Semaphore>,
+   }
+
+   pub struct ChunkGenTask {
+       pub target_status: ChunkStatus,
+       pub current_status: ChunkStatus,
+       pub priority: ChunkGenPriority,
+       pub cancel_token: CancellationToken,
+   }
+   ```
+
+3. **Create `worldgen/priority.rs` — priority enum:**
+   ```rust
+   #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+   pub enum ChunkGenPriority {
+       Low = 0,
+       Normal = 1,
+       High = 2,
+       Urgent = 3,
+   }
+   ```
+
+4. **Create `worldgen/status_requirements.rs` — neighbor requirement table:**
+   ```rust
+   pub struct StatusRequirement {
+       pub radius: u8,
+       pub min_neighbor_status: ChunkStatus,
+   }
+   ```
+   Plus a `const fn requirements(status: ChunkStatus) -> StatusRequirement`
+   function encoding the vanilla neighbor table from ADR-016.
+
+5. **Add unit tests:**
+   - `ChunkStatus` ordering matches vanilla pipeline
+   - `ChunkGenPriority` ordering (Urgent > High > Normal > Low)
+   - `StatusRequirement` table is consistent (no status requires neighbors at
+     a higher status than itself)
+   - Scheduler `dependencies_satisfied()` logic with mock chunk statuses
+
+6. **Add property tests:**
+   - `ChunkStatus::is_or_after()` is a total order
+   - Priority sort is stable and deterministic
+
+**What remains for feature phases (P23/P26/P36):**
+- Noise density function evaluation (Perlin/Simplex)
+- SIMD-optimized noise pipeline
+- Biome placement
+- Structure generation (villages, temples, strongholds)
+- Feature decoration (trees, ores, vegetation)
+- Cave carving
+- Full scheduler dispatch loop with real chunk generation
+- Cancellation integration with running tasks
+
+**Verification:** `cargo test -p oxidized-game` — new scheduler/priority/status
+tests pass. `cargo check --workspace` — rayon compiles without warnings.
+
+---
+
+### R3.9: Lighting Engine Structural Compliance (ADR-017)
+
+**Targets:** `crates/oxidized-game/src/lighting/` (new module),
+`crates/oxidized-world/src/chunk/data_layer.rs`
+
+**Current state:**
+
+| Existing | Location | Status |
+|----------|----------|--------|
+| `DataLayer` (NibbleArray equivalent) | `oxidized-world/src/chunk/data_layer.rs` | ✅ Present |
+| `sky_light` / `block_light` in `LevelChunk` | `oxidized-world/src/chunk/level_chunk.rs` | ✅ Present |
+| Light serializer for packets | `oxidized-game/src/net/light_serializer.rs` | ✅ Present |
+| `LightEngine` struct | — | ❌ Missing |
+| BFS propagation logic | — | ❌ Missing |
+| `LightUpdateQueue` / batched processing | — | ❌ Missing |
+| Sky light initialization (heightmap) | — | ❌ Missing |
+| Block light propagation | — | ❌ Missing |
+| Incremental update system | — | ❌ Missing |
+
+**What R3.9 adds (scaffolding only — no BFS implementation):**
+
+1. **Create `oxidized-game/src/lighting/mod.rs` — module skeleton:**
+   ```rust
+   //! Lighting engine for sky light and block light propagation.
+   //!
+   //! Implements batched BFS with parallel section processing per ADR-017.
+
+   pub mod engine;
+   pub mod queue;
+   ```
+
+2. **Create `lighting/queue.rs` — update queue types:**
+   ```rust
+   pub struct LightUpdateQueue {
+       pending: Vec<LightUpdate>,
+   }
+
+   pub struct LightUpdate {
+       pub pos: BlockPos,
+       pub old_emission: u8,
+       pub new_emission: u8,
+       pub old_opacity: u8,
+       pub new_opacity: u8,
+   }
+   ```
+
+3. **Create `lighting/engine.rs` — engine skeleton:**
+   ```rust
+   pub struct LightEngine {
+       queue: LightUpdateQueue,
+   }
+
+   impl LightEngine {
+       /// Process all pending light updates for this tick.
+       ///
+       /// Groups updates by section, processes each section, and propagates
+       /// cross-section changes. See ADR-017 for the batched BFS algorithm.
+       ///
+       /// # Errors
+       ///
+       /// Returns `LightingError` if a referenced chunk section is unavailable.
+       pub fn process_updates(&mut self, chunk_map: &ChunkMap)
+           -> Result<Vec<SectionPos>, LightingError> {
+           todo!("ADR-017: BFS propagation — implemented in Phase P13")
+       }
+
+       /// Compute full sky + block light for a newly generated chunk.
+       ///
+       /// Called by the worldgen pipeline at the Light status (ADR-016).
+       pub fn light_chunk(&mut self, chunk: &LevelChunk)
+           -> Result<(), LightingError> {
+           todo!("ADR-017: Full chunk lighting — implemented in Phase P13")
+       }
+   }
+   ```
+
+4. **Harden `DataLayer` with property tests (ADR-034 compliance):**
+   - `proptest`: `get(x,y,z)` returns the value previously `set(x,y,z)` for
+     all valid coordinates (x,z ∈ 0..16, y ∈ 0..16)
+   - `proptest`: adjacent nibbles are never corrupted by a `set()` call
+   - `proptest`: `from_bytes(layer.as_bytes())` roundtrips perfectly
+   - Snapshot tests for `DataLayer::filled(15)` byte pattern
+
+5. **Add light packet compliance tests:**
+   - Serialize `LightUpdateData` and verify wire format matches vanilla
+   - Verify BitSet mask encoding for various section patterns
+   - Roundtrip test: build → serialize → deserialize → compare
+
+**What remains for feature phases (P13/P19):**
+- BFS sky light initialization from heightmap
+- BFS block light propagation from emitters
+- Incremental update processing (block place/break → light recalc)
+- Cross-chunk boundary propagation
+- Parallel section processing (even/odd Y-layer passes)
+- Integration with block state opacity values
+- Performance: < 1 ms per chunk full lighting, < 50 µs incremental
+
+**Verification:** `cargo test -p oxidized-game` — DataLayer property tests pass.
+`cargo test -p oxidized-game` — light packet compliance tests pass.
+`cargo check --workspace` — new lighting module compiles.
+
+---
+
+### R3.10: Entity System Structural Compliance (ADR-018)
+
+**Targets:** `crates/oxidized-game/src/entity/`,
+`crates/oxidized-game/Cargo.toml`
+
+**Current state:**
+
+| Existing | Location | Status |
+|----------|----------|--------|
+| `bevy_ecs = "0.18"` dependency | Workspace + oxidized-game | ✅ Present |
+| Monolithic `Entity` struct | `oxidized-game/src/entity/mod.rs` | ✅ Present (not ECS) |
+| `SynchedEntityData` dirty tracking | `oxidized-game/src/entity/synched_data.rs` | ✅ Present |
+| `EntityTracker` visibility | `oxidized-game/src/entity/tracker.rs` | ✅ Present |
+| Entity ID allocator | `oxidized-game/src/entity/id.rs` | ✅ Present |
+| ECS `Component` types | — | ❌ Missing |
+| ECS `System` functions | — | ❌ Missing |
+| Marker components | — | ❌ Missing |
+| Spawn template bundles | — | ❌ Missing |
+| System scheduling phases | — | ❌ Missing |
+
+**What R3.10 adds (type definitions only — no migration of existing code):**
+
+1. **Create `entity/components.rs` — core ECS component types from ADR-018:**
+   ```rust
+   use bevy_ecs::prelude::*;
+
+   // --- Entity base (vanilla Entity.java fields) ---
+   #[derive(Component)]
+   pub struct Position(pub DVec3);
+
+   #[derive(Component)]
+   pub struct Velocity(pub DVec3);
+
+   #[derive(Component)]
+   pub struct Rotation { pub yaw: f32, pub pitch: f32 }
+
+   #[derive(Component)]
+   pub struct OnGround(pub bool);
+
+   #[derive(Component)]
+   pub struct FallDistance(pub f32);
+
+   #[derive(Component)]
+   pub struct EntityFlags(pub u8);
+
+   #[derive(Component)]
+   pub struct NoGravity;
+
+   #[derive(Component)]
+   pub struct Silent;
+
+   // --- LivingEntity fields ---
+   #[derive(Component)]
+   pub struct Health { pub current: f32, pub max: f32 }
+
+   #[derive(Component)]
+   pub struct Equipment(pub EquipmentSlots);
+
+   #[derive(Component)]
+   pub struct ArmorValue(pub f32);
+
+   #[derive(Component)]
+   pub struct AbsorptionAmount(pub f32);
+
+   // --- Player-specific ---
+   #[derive(Component)]
+   pub struct PlayerMarker;
+
+   #[derive(Component)]
+   pub struct SelectedSlot(pub u8);
+
+   #[derive(Component)]
+   pub struct ExperienceData {
+       pub level: i32,
+       pub progress: f32,
+       pub total: i32,
+   }
+   ```
+
+2. **Create `entity/markers.rs` — entity-type marker components:**
+   ```rust
+   use bevy_ecs::prelude::*;
+
+   #[derive(Component)] pub struct ZombieMarker;
+   #[derive(Component)] pub struct SkeletonMarker;
+   #[derive(Component)] pub struct CreeperMarker;
+   #[derive(Component)] pub struct SpiderMarker;
+   #[derive(Component)] pub struct VillagerMarker;
+   #[derive(Component)] pub struct ChickenMarker;
+   #[derive(Component)] pub struct CowMarker;
+   #[derive(Component)] pub struct PigMarker;
+   #[derive(Component)] pub struct SheepMarker;
+   // ... one marker per vanilla entity type
+   ```
+
+3. **Create `entity/phases.rs` — tick phase enum (ADR-018 §System Scheduling):**
+   ```rust
+   #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+   pub enum TickPhase {
+       PreTick,
+       Physics,
+       Ai,
+       EntityBehavior,
+       StatusEffects,
+       PostTick,
+       NetworkSync,
+   }
+   ```
+
+4. **Create `entity/bundles.rs` — spawn template bundles:**
+   ```rust
+   use bevy_ecs::prelude::*;
+
+   #[derive(Bundle)]
+   pub struct BaseEntityBundle {
+       pub position: Position,
+       pub velocity: Velocity,
+       pub rotation: Rotation,
+       pub on_ground: OnGround,
+       pub fall_distance: FallDistance,
+       pub flags: EntityFlags,
+   }
+
+   #[derive(Bundle)]
+   pub struct LivingEntityBundle {
+       pub base: BaseEntityBundle,
+       pub health: Health,
+       pub armor: ArmorValue,
+       pub absorption: AbsorptionAmount,
+   }
+
+   #[derive(Bundle)]
+   pub struct ZombieBundle {
+       pub living: LivingEntityBundle,
+       pub marker: ZombieMarker,
+   }
+   ```
+
+5. **Add unit tests:**
+   - Component types can be inserted into and queried from a bevy_ecs `World`
+   - Marker queries return correct entity subsets
+   - Bundle spawning creates entities with all expected components
+   - `TickPhase` ordering matches ADR-018 phase order
+
+6. **Add vanilla mapping stub:**
+   - Create `docs/entity-mapping.md` skeleton with the table headers from
+     ADR-018 (vanilla class → Oxidized components). Populated incrementally
+     during feature phases.
+
+**What remains for feature phases (P15/P24/P25/P27):**
+- Migrate `Entity` struct fields to ECS components (incremental, per-system)
+- Implement ECS systems for physics, AI, status effects, network sync
+- Replace `Arc<RwLock<ServerPlayer>>` with ECS player entity
+- Implement `SynchedEntityData` as ECS change detection
+- Automatic parallel system scheduling via bevy_ecs
+- Full vanilla behavior parity tests per entity type
+
+**Verification:** `cargo test -p oxidized-game` — component/bundle/phase tests
+pass. `cargo check --workspace` — bevy_ecs components compile. No existing
+tests broken (monolithic Entity struct is unchanged).
+
+---
+
 ## Acceptance Criteria
 
 - [x] `unwrap_used`, `expect_used`, `panic` clippy lints are "deny" in workspace
@@ -423,7 +794,7 @@ Count of `missing_docs` warnings decreases from current baseline to zero.
 - [x] `anyhow` removed from `oxidized-protocol` dependencies
 - [x] All error enums have `#[non_exhaustive]`
 - [x] Tick loop runs on dedicated OS thread (not Tokio task)
-- [x] `bumpalo` and `rayon` removed from workspace (re-add when used)
+- [x] `bumpalo` removed from workspace (re-add when used)
 - [x] `OXIDIZED_*` environment variable overrides work for all config fields
 - [x] No file exceeds 800 LOC (excluding tests) per ADR-035
 - [x] `play/mod.rs` split into ≥3 submodules
@@ -431,6 +802,15 @@ Count of `missing_docs` warnings decreases from current baseline to zero.
 - [x] Boolean fields use `is_`/`has_`/`can_` prefix (with serde renames)
 - [x] Zero `missing_docs` warnings on cross-crate public APIs
 - [x] All public `Result`-returning functions have `# Errors` doc section
+- [ ] `rayon` re-added to workspace with scheduler scaffolding (R3.8)
+- [ ] `WorldgenScheduler`, `ChunkGenPriority`, `StatusRequirement` types exist with tests
+- [ ] `LightEngine`, `LightUpdateQueue` module skeleton exists (R3.9)
+- [ ] `DataLayer` has property-based roundtrip tests
+- [ ] Light packet compliance tests pass
+- [ ] ECS component types defined with `#[derive(Component)]` (R3.10)
+- [ ] Marker components and spawn bundles compile and pass query tests
+- [ ] `TickPhase` enum matches ADR-018 phase order
+- [ ] `docs/entity-mapping.md` skeleton created
 - [x] `cargo test --workspace` passes with zero failures
 - [x] `cargo clippy --workspace -- -D warnings` produces zero warnings
 - [x] `cargo doc --workspace --no-deps` builds cleanly
@@ -447,6 +827,9 @@ R3.4 (env var overrides) ────── independent
 R3.5 (file splits) ─────────── depends on R3.1 (lint fixes may touch same files)
 R3.6 (bool naming) ─────────── depends on R3.1 (serde changes may conflict)
 R3.7 (docs) ────────────────── do last (after all renames/moves are settled)
+R3.8 (worldgen scaffold) ───── depends on R3.3 (rayon re-added)
+R3.9 (lighting scaffold) ───── independent (new module, no conflicts)
+R3.10 (entity ECS scaffold) ── independent (new files alongside existing code)
 ```
 
 **Critical path:** R3.1 → R3.5 → R3.6 → R3.7
@@ -458,7 +841,10 @@ R3.7 (docs) ────────────────── do last (afte
 4. R3.4 (1 session — env var overrides)
 5. R3.5 (1 session — file splits)
 6. R3.6 (2-3 sessions — bool naming, largest by volume)
-7. R3.7 (ongoing — documentation)
+7. R3.8 (1 session — worldgen types + rayon re-add + tests)
+8. R3.9 (1 session — lighting module skeleton + DataLayer prop tests)
+9. R3.10 (1-2 sessions — ECS component types + bundles + phase enum)
+10. R3.7 (ongoing — documentation, including entity-mapping.md)
 
 ---
 
@@ -472,6 +858,10 @@ R3.7 (docs) ────────────────── do last (afte
 | Bool renames break config file loading | Either rename TOML keys too (pre-1.0) or add serde aliases |
 | File splits break module visibility | Audit `pub(crate)` items; re-export from parent mod.rs |
 | Env var override type parsing fails silently | Log warnings for malformed env vars; test all types |
+| Worldgen scheduler types diverge from ADR-016 | Review ADR-016 before coding; types must match ADR signatures |
+| Lighting skeleton `todo!()` panics in tests | Gate `todo!()` behind feature-phase code paths; unit tests use scaffolded types only |
+| bevy_ecs version upgrade breaks components | Pin to 0.18; wrap key APIs behind project traits where needed |
+| ECS components conflict with existing Entity struct | Coexistence by design — new types in separate files, no migration in R3 |
 
 ---
 
@@ -496,9 +886,9 @@ Summary of all 39 ADRs vs. current codebase status:
 | 013 | Coordinate Types | ✅ Compliant | Newtype wrappers with full conversions |
 | 014 | Chunk Storage | ✅ Compliant | Anvil format + atomic writes |
 | 015 | Disk I/O | ✅ Compliant | spawn_blocking for all file I/O |
-| 016 | Worldgen Pipeline | 🟡 Future phase | rayon declared but unused |
-| 017 | Lighting Engine | 🟡 Future phase | Not yet implemented |
-| 018 | Entity System | 🟡 Future phase | bevy_ecs not yet integrated |
+| 016 | Worldgen Pipeline | ⚠️ Scaffolding | ChunkStatus + trait exist; scheduler/priority types added in R3.8 |
+| 017 | Lighting Engine | ⚠️ Scaffolding | DataLayer + serializer exist; engine skeleton added in R3.9 |
+| 018 | Entity System | ⚠️ Scaffolding | bevy_ecs dep exists; component types + bundles added in R3.10 |
 | 019 | Tick Loop | ✅ Compliant | Dedicated OS thread "tick" |
 | 020 | Player Session | 🟡 Future phase | Arc<RwLock> model, not channel-based |
 | 021 | Physics | ✅ Compliant | Per-axis sweep implemented |
@@ -523,6 +913,6 @@ Summary of all 39 ADRs vs. current codebase status:
 
 **Legend:**
 - ✅ = Fully compliant
-- ⚠️ = Violation found, fixed in this phase
+- ⚠️ = Partial — scaffolding added in this phase, full implementation in feature phase
 - ❌ = Major violation, fixed in this phase
 - 🟡 = Future phase (ADR accepted but implementation deferred to its phase)
