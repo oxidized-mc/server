@@ -895,7 +895,7 @@ Summary of all 39 ADRs vs. current codebase status:
 | 003 | Crate Architecture | ✅ Compliant | Dependency DAG correct |
 | 004 | Logging | ✅ Compliant | print_stdout/print_stderr denied |
 | 005 | Configuration | ✅ Compliant | env var overrides implemented |
-| 006 | Network I/O | 🟡 Deferred | Single-task model works; consider superseding ADR |
+| 006 | Network I/O | 🟡 Deferred | Single-task model works; refactoring to task pair in Phase R4 |
 | 007 | Packet Codec | ✅ Compliant | All 87 packets have PACKET_ID + Packet trait |
 | 008 | Connection State | ✅ Compliant | Pragmatic amendment in ADR-036 |
 | 009 | Encryption/Compression | ✅ Compliant | AES-CFB8 + zlib pipeline |
