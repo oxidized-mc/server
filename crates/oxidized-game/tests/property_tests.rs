@@ -410,3 +410,101 @@ proptest! {
             "setting same value {value} should not dirty");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Worldgen pipeline property tests (R3.8 — ADR-016)
+// ---------------------------------------------------------------------------
+
+use oxidized_game::worldgen::{ChunkGenPriority, ChunkStatus, CHUNK_STATUS_COUNT};
+
+fn arb_chunk_status() -> impl Strategy<Value = ChunkStatus> {
+    (0u8..CHUNK_STATUS_COUNT as u8).prop_map(|v| ChunkStatus::from_u8(v).unwrap())
+}
+
+fn arb_priority() -> impl Strategy<Value = ChunkGenPriority> {
+    prop_oneof![
+        Just(ChunkGenPriority::Low),
+        Just(ChunkGenPriority::Normal),
+        Just(ChunkGenPriority::High),
+        Just(ChunkGenPriority::Urgent),
+    ]
+}
+
+proptest! {
+    /// ChunkStatus::is_or_after is reflexive: s.is_or_after(s) is always true.
+    #[test]
+    fn proptest_chunk_status_is_or_after_reflexive(s in arb_chunk_status()) {
+        prop_assert!(s.is_or_after(s), "{s:?} should be at or after itself");
+    }
+
+    /// ChunkStatus::is_or_after is antisymmetric: if a.is_or_after(b) && b.is_or_after(a)
+    /// then a == b.
+    #[test]
+    fn proptest_chunk_status_is_or_after_antisymmetric(
+        a in arb_chunk_status(),
+        b in arb_chunk_status(),
+    ) {
+        if a.is_or_after(b) && b.is_or_after(a) {
+            prop_assert_eq!(a, b, "antisymmetry violated for {:?} and {:?}", a, b);
+        }
+    }
+
+    /// ChunkStatus::is_or_after is transitive: if a >= b >= c then a >= c.
+    #[test]
+    fn proptest_chunk_status_is_or_after_transitive(
+        a in arb_chunk_status(),
+        b in arb_chunk_status(),
+        c in arb_chunk_status(),
+    ) {
+        if a.is_or_after(b) && b.is_or_after(c) {
+            prop_assert!(a.is_or_after(c),
+                "transitivity violated: {a:?} >= {b:?} >= {c:?} but not {a:?} >= {c:?}");
+        }
+    }
+
+    /// ChunkStatus::is_or_after is total: for any two statuses, at least one
+    /// direction holds (a >= b or b >= a).
+    #[test]
+    fn proptest_chunk_status_is_or_after_total(
+        a in arb_chunk_status(),
+        b in arb_chunk_status(),
+    ) {
+        prop_assert!(
+            a.is_or_after(b) || b.is_or_after(a),
+            "total order violated for {a:?} and {b:?}",
+        );
+    }
+
+    /// ChunkStatus::from_u8 roundtrip: from_u8(s as u8) == Some(s).
+    #[test]
+    fn proptest_chunk_status_from_u8_roundtrip(s in arb_chunk_status()) {
+        prop_assert_eq!(ChunkStatus::from_u8(s as u8), Some(s));
+    }
+
+    /// ChunkGenPriority sort is stable and deterministic: sorting the same
+    /// vec twice produces identical results.
+    #[test]
+    fn proptest_priority_sort_deterministic(
+        priorities in prop::collection::vec(arb_priority(), 0..50),
+    ) {
+        let mut a = priorities.clone();
+        let mut b = priorities;
+        a.sort();
+        b.sort();
+        prop_assert_eq!(a, b, "sorting the same priorities must be deterministic");
+    }
+
+    /// ChunkGenPriority ordering: Urgent is always the maximum.
+    #[test]
+    fn proptest_priority_urgent_is_max(p in arb_priority()) {
+        prop_assert!(p <= ChunkGenPriority::Urgent,
+            "{p:?} should be <= Urgent");
+    }
+
+    /// ChunkGenPriority ordering: Low is always the minimum.
+    #[test]
+    fn proptest_priority_low_is_min(p in arb_priority()) {
+        prop_assert!(p >= ChunkGenPriority::Low,
+            "{p:?} should be >= Low");
+    }
+}

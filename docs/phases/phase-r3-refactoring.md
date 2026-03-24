@@ -20,17 +20,15 @@ scaffolded with tests. The codebase is audit-clean and ready to scale to Phase 3
 | R3.5 | File Size Violations (ADR-035) | ✅ Done |
 | R3.6 | Boolean Naming Convention (Project Style Rules) | ✅ Done |
 | R3.7 | Documentation Gaps (Project Style Rules) | ✅ Done |
-| R3.8 | Worldgen Pipeline Structural Compliance (ADR-016) | ❌ Not Started |
+| R3.8 | Worldgen Pipeline Structural Compliance (ADR-016) | ✅ Done |
 | R3.9 | Lighting Engine Structural Compliance (ADR-017) | ❌ Not Started |
 | R3.10 | Entity System Structural Compliance (ADR-018) | ❌ Not Started |
 
-**Remaining work:** R3.8–R3.10 add scaffolding types and tests for worldgen
-scheduling, lighting engine, and ECS entity system. These are type definitions
+**Remaining work:** R3.9–R3.10 add scaffolding types and tests for
+lighting engine and ECS entity system. These are type definitions
 and module skeletons only — no feature implementation. See detailed plans below.
 
-**Codebase verification (R3.8–R3.10 gaps):**
-- `worldgen/scheduler.rs`, `priority.rs`, `status_requirements.rs` — do not exist
-- `rayon` — not in workspace deps (removed in R3.3, needs re-adding)
+**Codebase verification (R3.9–R3.10 gaps):**
 - `lighting/` module — does not exist
 - `DataLayer` proptest coverage — missing (only unit tests exist)
 - `entity/components.rs`, `markers.rs`, `phases.rs`, `bundles.rs` — do not exist
@@ -832,8 +830,8 @@ tests broken (monolithic Entity struct is unchanged).
 - [x] Boolean fields use `is_`/`has_`/`can_` prefix (with serde renames)
 - [x] Zero `missing_docs` warnings on cross-crate public APIs
 - [x] All public `Result`-returning functions have `# Errors` doc section
-- [ ] `rayon` re-added to workspace with scheduler scaffolding (R3.8)
-- [ ] `WorldgenScheduler`, `ChunkGenPriority`, `StatusRequirement` types exist with tests
+- [x] `rayon` re-added to workspace with scheduler scaffolding (R3.8)
+- [x] `WorldgenScheduler`, `ChunkGenPriority`, `StatusRequirement` types exist with tests
 - [ ] `LightEngine`, `LightUpdateQueue` module skeleton exists (R3.9)
 - [ ] `DataLayer` has property-based roundtrip tests
 - [ ] Light packet compliance tests pass

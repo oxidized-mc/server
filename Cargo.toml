@@ -55,6 +55,9 @@ uuid           = { version = "1", features = ["v3", "v4", "serde"] }
 thiserror      = "2"
 anyhow         = "1"
 
+# Parallelism
+rayon          = "1"
+
 # Data structures
 indexmap       = "2"
 ahash          = "0.8"

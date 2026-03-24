@@ -1,18 +1,33 @@
 //! World generation framework.
 //!
-//! Provides the [`ChunkGenerator`] trait and generation status types.
-//! The [`flat`] module implements a flat world generator that produces
-//! uniform layer-based terrain.
+//! Provides the [`ChunkGenerator`] trait, generation status types, and
+//! scheduling infrastructure for parallel chunk generation per ADR-016.
+//!
+//! - [`flat`] — flat world generator (uniform layer-based terrain)
+//! - [`priority`] — generation priority levels
+//! - [`scheduler`] — dependency-aware scheduler with Rayon thread pool
+//! - [`status_requirements`] — vanilla neighbor requirement table
 
 pub mod flat;
+pub mod priority;
+pub mod scheduler;
+pub mod status_requirements;
 
 use oxidized_world::chunk::{ChunkPos, LevelChunk};
 
+pub use priority::ChunkGenPriority;
+pub use scheduler::{ChunkGenTask, WorldgenScheduler};
+pub use status_requirements::StatusRequirement;
+
+/// Total number of generation statuses in the pipeline.
+pub const CHUNK_STATUS_COUNT: usize = 12;
+
 /// Generation status of a chunk, matching vanilla's pipeline.
 ///
-/// Chunks progress through these statuses during generation. For flat
-/// worlds, most intermediate statuses are skipped since the terrain is
-/// trivially computed.
+/// Chunks progress through these statuses during generation. Each status
+/// has neighbor requirements defined in [`status_requirements::requirements`].
+/// For flat worlds, most intermediate statuses are skipped since the terrain
+/// is trivially computed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum ChunkStatus {
@@ -43,6 +58,22 @@ pub enum ChunkStatus {
 }
 
 impl ChunkStatus {
+    /// All statuses in pipeline order.
+    pub const ALL: [Self; CHUNK_STATUS_COUNT] = [
+        Self::Empty,
+        Self::StructureStarts,
+        Self::StructureReferences,
+        Self::Biomes,
+        Self::Noise,
+        Self::Surface,
+        Self::Carvers,
+        Self::Features,
+        Self::InitializeLight,
+        Self::Light,
+        Self::Spawn,
+        Self::Full,
+    ];
+
     /// Returns the vanilla resource key for this status.
     #[must_use]
     pub const fn name(self) -> &'static str {
@@ -62,7 +93,29 @@ impl ChunkStatus {
         }
     }
 
-    /// Returns true if this status is at or past the given status.
+    /// Creates a `ChunkStatus` from its `u8` discriminant.
+    ///
+    /// Returns `None` if the value does not correspond to a valid status.
+    #[must_use]
+    pub const fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Empty),
+            1 => Some(Self::StructureStarts),
+            2 => Some(Self::StructureReferences),
+            3 => Some(Self::Biomes),
+            4 => Some(Self::Noise),
+            5 => Some(Self::Surface),
+            6 => Some(Self::Carvers),
+            7 => Some(Self::Features),
+            8 => Some(Self::InitializeLight),
+            9 => Some(Self::Light),
+            10 => Some(Self::Spawn),
+            11 => Some(Self::Full),
+            _ => None,
+        }
+    }
+
+    /// Returns `true` if this status is at or past the given status.
     #[must_use]
     pub const fn is_or_after(self, other: Self) -> bool {
         (self as u8) >= (other as u8)
@@ -108,12 +161,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn chunk_status_ordering() {
+    fn chunk_status_ordering_matches_vanilla_pipeline() {
         assert!(ChunkStatus::Full > ChunkStatus::Empty);
         assert!(ChunkStatus::Noise > ChunkStatus::Biomes);
         assert!(ChunkStatus::Full.is_or_after(ChunkStatus::Full));
         assert!(ChunkStatus::Full.is_or_after(ChunkStatus::Empty));
         assert!(!ChunkStatus::Empty.is_or_after(ChunkStatus::Full));
+
+        // Verify total ordering across all statuses.
+        for (i, &a) in ChunkStatus::ALL.iter().enumerate() {
+            for (j, &b) in ChunkStatus::ALL.iter().enumerate() {
+                if i < j {
+                    assert!(a < b, "{a:?} should be less than {b:?}");
+                } else if i > j {
+                    assert!(a > b, "{a:?} should be greater than {b:?}");
+                } else {
+                    assert_eq!(a, b);
+                }
+            }
+        }
     }
 
     #[test]
@@ -125,5 +191,23 @@ mod tests {
             ChunkStatus::StructureReferences.name(),
             "minecraft:structure_references"
         );
+    }
+
+    #[test]
+    fn chunk_status_from_u8_roundtrip() {
+        for &status in &ChunkStatus::ALL {
+            assert_eq!(ChunkStatus::from_u8(status as u8), Some(status));
+        }
+        assert_eq!(ChunkStatus::from_u8(12), None);
+        assert_eq!(ChunkStatus::from_u8(255), None);
+    }
+
+    #[test]
+    fn chunk_status_all_is_complete() {
+        assert_eq!(ChunkStatus::ALL.len(), CHUNK_STATUS_COUNT);
+        // Verify ALL is in ascending order.
+        for pair in ChunkStatus::ALL.windows(2) {
+            assert!(pair[0] < pair[1]);
+        }
     }
 }
