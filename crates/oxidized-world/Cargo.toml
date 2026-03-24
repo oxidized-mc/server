@@ -28,7 +28,6 @@ parking_lot  = { workspace = true }
 bitflags     = { workspace = true }
 glam         = { workspace = true }
 dashmap      = { workspace = true }
-rayon        = { workspace = true }
 
 [build-dependencies]
 serde_json = { workspace = true }

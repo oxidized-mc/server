@@ -66,11 +66,7 @@ lru            = "0.16"
 # ECS
 bevy_ecs       = "0.18"
 
-# Concurrency / parallelism
-rayon          = "1.10"
-
 # Memory management
-bumpalo        = "3"
 mimalloc       = { version = "0.1", default-features = false }
 
 # Proc-macro support
