@@ -428,11 +428,11 @@ Count of `missing_docs` warnings decreases from current baseline to zero.
 - [ ] `play/mod.rs` split into ≥3 submodules
 - [ ] `block_interaction.rs` split into ≥3 submodules
 - [ ] Boolean fields use `is_`/`has_`/`can_` prefix (with serde renames)
-- [ ] Zero `missing_docs` warnings on cross-crate public APIs
-- [ ] All public `Result`-returning functions have `# Errors` doc section
+- [x] Zero `missing_docs` warnings on cross-crate public APIs
+- [x] All public `Result`-returning functions have `# Errors` doc section
 - [ ] `cargo test --workspace` passes with zero failures
 - [ ] `cargo clippy --workspace -- -D warnings` produces zero warnings
-- [ ] `cargo doc --workspace --no-deps` builds cleanly
+- [x] `cargo doc --workspace --no-deps` builds cleanly
 
 ---
 
