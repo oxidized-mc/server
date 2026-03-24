@@ -381,8 +381,7 @@ pub async fn handle_use_item_on(
     );
     const CURSOR_EPSILON: f32 = 0.0000001;
     let valid_range = -CURSOR_EPSILON..=1.0 + CURSOR_EPSILON;
-    if !valid_range.contains(&cx) || !valid_range.contains(&cy) || !valid_range.contains(&cz)
-    {
+    if !valid_range.contains(&cx) || !valid_range.contains(&cy) || !valid_range.contains(&cz) {
         debug!(
             peer = %play_ctx.addr,
             name = %play_ctx.player_name,
