@@ -230,17 +230,25 @@ impl AnvilChunkLoader {
     /// The compound contains:
     /// - `palette`: List<String> of biome resource names
     /// - `data`: LongArray of packed palette indices (absent if palette has 1 entry)
+    ///
+    /// Biome names are resolved to their registry IDs using the alphabetically
+    /// sorted vanilla biome list. Unknown biomes fall back to plains (ID 40).
     fn deserialize_biomes(&self, nbt: &NbtCompound) -> Result<PalettedContainer, AnvilError> {
         let palette_list = nbt
             .get_list("palette")
             .ok_or(AnvilError::MissingField { field: "palette" })?;
 
-        // For now, use sequential IDs for biomes — actual biome registry
-        // mapping will be implemented when biome registries are available.
         let mut palette_ids = Vec::with_capacity(palette_list.len());
-        for (i, _tag) in palette_list.iter().enumerate() {
-            #[allow(clippy::cast_possible_truncation)]
-            palette_ids.push(i as u32);
+        for tag in palette_list.iter() {
+            let biome_name = match tag {
+                oxidized_nbt::NbtTag::String(s) => s.as_str(),
+                _ => "minecraft:plains",
+            };
+            let biome_id = super::chunk_serializer::BIOME_NAMES
+                .iter()
+                .position(|&name| name == biome_name)
+                .unwrap_or(40) as u32; // 40 = plains
+            palette_ids.push(biome_id);
         }
 
         let data_longs = nbt.get_long_array("data").unwrap_or(&[]);

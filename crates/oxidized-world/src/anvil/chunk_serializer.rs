@@ -224,7 +224,7 @@ impl ChunkSerializer {
 
 /// All 65 vanilla biome registry names, sorted alphabetically.
 /// Index = protocol ID (data-driven registries assign IDs in alphabetical order).
-static BIOME_NAMES: &[&str] = &[
+pub(super) static BIOME_NAMES: &[&str] = &[
     "minecraft:badlands",
     "minecraft:bamboo_jungle",
     "minecraft:basalt_deltas",

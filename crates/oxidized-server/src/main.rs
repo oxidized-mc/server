@@ -186,13 +186,29 @@ fn main() -> anyhow::Result<()> {
         let chunk_loader = Arc::new(AsyncChunkLoader::new(anvil_loader));
         let chunk_serializer = Arc::new(ChunkSerializer::new(Arc::clone(&block_registry)));
 
-        // Set spawn position to the generator's recommended Y for new worlds.
+        // Initialize seed and spawn position for new worlds.
         let is_new_world = !level_dat_path.exists();
         if is_new_world {
             level_data.spawn_y = chunk_generator.find_spawn_y();
+
+            // Derive world seed from config: parse as i64, hash string seeds,
+            // or generate a random seed if empty.
+            level_data.world_seed = if config.world.seed.is_empty() {
+                rand::random::<i64>()
+            } else if let Ok(numeric) = config.world.seed.parse::<i64>() {
+                numeric
+            } else {
+                // Hash non-numeric seed strings (same as vanilla).
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                config.world.seed.hash(&mut hasher);
+                hasher.finish() as i64
+            };
+
             info!(
                 spawn_y = level_data.spawn_y,
-                "Set spawn Y from chunk generator"
+                world_seed = level_data.world_seed,
+                "New world initialized"
             );
         }
 

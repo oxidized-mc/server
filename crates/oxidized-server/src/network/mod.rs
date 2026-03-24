@@ -135,7 +135,7 @@ impl ServerHandle for ServerContext {
     }
 
     fn seed(&self) -> i64 {
-        0 // TODO: expose world seed from PrimaryLevelData
+        self.level_data.read().world_seed
     }
 
     fn online_player_names(&self) -> Vec<String> {
