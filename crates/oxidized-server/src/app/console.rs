@@ -3,6 +3,7 @@
 //! Uses `rustyline` to provide a readline-style interface with command
 //! name and argument completion powered by the Brigadier command tree.
 
+use std::io::Write;
 use std::sync::Arc;
 
 use oxidized_game::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
@@ -116,7 +117,13 @@ pub fn run_console_loop(server_ctx: Arc<ServerContext>) {
                     display_name: "Server".to_string(),
                     server: server_ctx.clone(),
                     feedback_sender: Arc::new(|component: &Component| {
-                        println!("{component}");
+                        // Console output goes directly to stdout — not a logging
+                        // concern, so write! is the correct choice (ADR-004).
+                        #[allow(clippy::print_stdout)]
+                        {
+                            let mut out = std::io::stdout().lock();
+                            let _ = writeln!(out, "{component}");
+                        }
                     }),
                     silent: false,
                 };
@@ -126,7 +133,7 @@ pub fn run_console_loop(server_ctx: Arc<ServerContext>) {
                         debug!(command = %line, "Console command executed");
                     },
                     Err(e) => {
-                        eprintln!("Error: {e}");
+                        tracing::error!(error = %e, "Console command failed");
                     },
                 }
             },

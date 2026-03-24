@@ -13,6 +13,7 @@ use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS
 
 /// Errors that can occur when parsing a flat world layer string.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum FlatConfigError {
     /// The layer string was empty or contained no valid layers.
     #[error("flat world must have at least one layer")]

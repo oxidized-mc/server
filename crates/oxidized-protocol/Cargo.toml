@@ -23,7 +23,6 @@ serde_json   = { workspace = true }
 uuid         = { workspace = true }
 thiserror    = { workspace = true }
 tracing      = { workspace = true }
-anyhow       = { workspace = true }
 aes          = { workspace = true }
 md-5         = { workspace = true }
 rsa          = { workspace = true }

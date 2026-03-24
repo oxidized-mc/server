@@ -93,6 +93,7 @@ impl Default for Commands {
 
 /// Errors from command parsing or execution.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum CommandError {
     /// The command could not be parsed (unknown command, bad syntax).
     #[error("{0}")]
