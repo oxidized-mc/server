@@ -97,6 +97,9 @@ P01──P07 Core Types
 | [36](phase-36-structures.md) | Structures | `world`+`game` | Villages generate |
 | [37](phase-37-jsonrpc.md) | JSON-RPC Management | `server` | WebSocket API (26.1) |
 | [38](phase-38-performance.md) | Performance Hardening | all | 100-player scale |
+| [R1](phase-r1-refactoring.md) | Architectural Refactoring | `server`, `protocol`, `game` | Modular & extensible |
+| [R2](phase-r2-refactoring.md) | Packet Trait & Unified Codec | `protocol`, `server` | Generic send/receive |
+| [R3](phase-r3-refactoring.md) | ADR Compliance & Code Quality | all | Audit-clean codebase |
 
 ---
 
