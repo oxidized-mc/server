@@ -6,7 +6,8 @@ use std::time::Instant;
 use oxidized_protocol::auth;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::{Connection, ConnectionError};
+use oxidized_protocol::connection::ConnectionError;
+use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
     ClientboundAddEntityPacket, ClientboundEntityEventPacket, ClientboundGameEventPacket,
@@ -59,12 +60,12 @@ pub(super) struct JoinState {
 ///
 /// Returns a [`ConnectionError`] if any I/O or protocol step fails.
 pub(super) async fn send_join_sequence(
-    conn: &mut Connection,
+    conn_handle: &ConnectionHandle,
     profile: auth::GameProfile,
     client_info: ClientInformation,
     server_ctx: &Arc<ServerContext>,
 ) -> Result<JoinState, ConnectionError> {
-    let addr = conn.remote_addr();
+    let addr = conn_handle.remote_addr();
 
     let uuid = profile.uuid().ok_or_else(|| {
         ConnectionError::Io(std::io::Error::new(
@@ -80,7 +81,9 @@ pub(super) async fn send_join_sequence(
     };
     if is_server_full {
         warn!(peer = %addr, uuid = %uuid, "Server full — rejecting login");
-        return Err(crate::network::helpers::disconnect_err(conn, "Server is full!").await);
+        return Err(
+            crate::network::helpers::disconnect_handle(conn_handle, "Server is full!").await,
+        );
     }
 
     // Create ServerPlayer with entity ID from the player list.
@@ -157,16 +160,17 @@ pub(super) async fn send_join_sequence(
     // Send all login packets before adding player to the list.
     // This prevents a "ghost" player entry if sending fails.
     for pkt in &packets {
-        conn.send_raw(pkt.id, &pkt.body).await?;
+        conn_handle
+            .send_raw(pkt.id, bytes::Bytes::copy_from_slice(&pkt.body))
+            .await?;
     }
-    conn.flush().await?;
 
-    send_level_info(conn, &player, &player_name, uuid, entity_id, server_ctx).await?;
+    send_level_info(conn_handle, &player, &player_name, uuid, entity_id, server_ctx).await?;
 
     // Send initial chunk batch using the world generator.
     let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
     let chunk_count = helpers::send_initial_chunks(
-        conn,
+        conn_handle,
         chunk_center,
         player_view_distance,
         &server_ctx.chunks,
@@ -177,7 +181,9 @@ pub(super) async fn send_join_sequence(
     // Send inventory last, after chunks (vanilla: initInventoryMenu).
     {
         let inv_pkt = build_container_set_content_packet(&player);
-        conn.send_raw(inv_pkt.id, &inv_pkt.body).await?;
+        conn_handle
+            .send_raw(inv_pkt.id, bytes::Bytes::copy_from_slice(&inv_pkt.body))
+            .await?;
     }
 
     info!(
@@ -219,7 +225,8 @@ pub(super) async fn send_join_sequence(
         });
     }
 
-    broadcast_player_join(conn, &player_arc, &player_name, uuid, entity_id, server_ctx).await?;
+    broadcast_player_join(conn_handle, &player_arc, &player_name, uuid, entity_id, server_ctx)
+        .await?;
 
     info!(
         peer = %addr,
@@ -244,24 +251,25 @@ pub(super) async fn send_join_sequence(
 /// Sends level-info packets: permissions, commands, world border, time, spawn,
 /// weather, and the chunk-load-start signal.
 async fn send_level_info(
-    conn: &mut Connection,
+    conn_handle: &ConnectionHandle,
     player: &ServerPlayer,
     player_name: &str,
     uuid: Uuid,
     entity_id: i32,
     server_ctx: &Arc<ServerContext>,
 ) -> Result<(), ConnectionError> {
-    let addr = conn.remote_addr();
+    let addr = conn_handle.remote_addr();
 
     // Send EntityEvent with the player's permission level (vanilla sends
     // this via sendPlayerPermissionLevel — event IDs 24–28).
     {
         let perm_level = server_ctx.op_permission_level.clamp(0, 4) as u8;
-        conn.send_packet(&ClientboundEntityEventPacket {
-            entity_id,
-            event_id: ClientboundEntityEventPacket::PERMISSION_LEVEL_BASE + perm_level,
-        })
-        .await?;
+        conn_handle
+            .send_packet(&ClientboundEntityEventPacket {
+                entity_id,
+                event_id: ClientboundEntityEventPacket::PERMISSION_LEVEL_BASE + perm_level,
+            })
+            .await?;
     }
 
     // Send the command tree so the client can offer tab-completion.
@@ -269,21 +277,22 @@ async fn send_level_info(
         let cmd_source = commands::make_command_source(player_name, uuid, player, server_ctx);
         let tree = server_ctx.commands.serialize_tree(&cmd_source);
         let cmd_pkt = commands::commands_packet_from_tree(&tree);
-        conn.send_packet(&cmd_pkt).await?;
+        conn_handle.send_packet(&cmd_pkt).await?;
     }
 
     // Send default world border state (vanilla: sendLevelInfo).
-    conn.send_packet(&ClientboundInitializeBorderPacket {
-        new_center_x: 0.0,
-        new_center_z: 0.0,
-        old_size: 59_999_968.0,
-        new_size: 59_999_968.0,
-        lerp_time: 0,
-        new_absolute_max_size: 29_999_984,
-        warning_blocks: 5,
-        warning_time: 15,
-    })
-    .await?;
+    conn_handle
+        .send_packet(&ClientboundInitializeBorderPacket {
+            new_center_x: 0.0,
+            new_center_z: 0.0,
+            old_size: 59_999_968.0,
+            new_size: 59_999_968.0,
+            lerp_time: 0,
+            new_absolute_max_size: 29_999_984,
+            warning_blocks: 5,
+            warning_time: 15,
+        })
+        .await?;
 
     // Send time sync with overworld clock data (vanilla: sendLevelInfo).
     {
@@ -301,7 +310,7 @@ async fn send_level_info(
                 }],
             }
         };
-        conn.send_packet(&time_pkt).await?;
+        conn_handle.send_packet(&time_pkt).await?;
     }
 
     // Send spawn position (vanilla: sendLevelInfo → respawnData).
@@ -310,7 +319,9 @@ async fn send_level_info(
             let ld = server_ctx.level_data.read();
             build_spawn_position_packet(player, &ld)
         };
-        conn.send_raw(spawn_pkt.id, &spawn_pkt.body).await?;
+        conn_handle
+            .send_raw(spawn_pkt.id, bytes::Bytes::copy_from_slice(&spawn_pkt.body))
+            .await?;
     }
 
     // Send weather state if it is currently raining (vanilla: sendLevelInfo).
@@ -319,32 +330,36 @@ async fn send_level_info(
         (ld.is_raining, ld.is_thundering)
     };
     if is_raining {
-        conn.send_packet(&ClientboundGameEventPacket {
-            event: GameEventType::StartRaining,
-            param: 0.0,
-        })
-        .await?;
-        conn.send_packet(&ClientboundGameEventPacket {
-            event: GameEventType::RainLevelChange,
-            param: 1.0,
-        })
-        .await?;
-        if is_thundering {
-            conn.send_packet(&ClientboundGameEventPacket {
-                event: GameEventType::ThunderLevelChange,
+        conn_handle
+            .send_packet(&ClientboundGameEventPacket {
+                event: GameEventType::StartRaining,
+                param: 0.0,
+            })
+            .await?;
+        conn_handle
+            .send_packet(&ClientboundGameEventPacket {
+                event: GameEventType::RainLevelChange,
                 param: 1.0,
             })
             .await?;
+        if is_thundering {
+            conn_handle
+                .send_packet(&ClientboundGameEventPacket {
+                    event: GameEventType::ThunderLevelChange,
+                    param: 1.0,
+                })
+                .await?;
         }
     }
 
     // Signal the client that chunk loading is about to begin (must be
     // BEFORE chunks are sent — vanilla ordering requirement).
-    conn.send_packet(&ClientboundGameEventPacket {
-        event: GameEventType::LevelChunksLoadStart,
-        param: 0.0,
-    })
-    .await?;
+    conn_handle
+        .send_packet(&ClientboundGameEventPacket {
+            event: GameEventType::LevelChunksLoadStart,
+            param: 0.0,
+        })
+        .await?;
 
     debug!(peer = %addr, uuid = %uuid, "Level info sent");
     Ok(())
@@ -353,7 +368,7 @@ async fn send_level_info(
 /// Broadcasts the new player to all existing players' tab-lists and entities,
 /// and sends all existing players' entities to the joining player.
 async fn broadcast_player_join(
-    conn: &mut Connection,
+    conn_handle: &ConnectionHandle,
     player_arc: &Arc<RwLock<ServerPlayer>>,
     player_name: &str,
     uuid: Uuid,
@@ -390,7 +405,7 @@ async fn broadcast_player_join(
                 }],
             }
         };
-        conn.send_packet(&self_info).await?;
+        conn_handle.send_packet(&self_info).await?;
     }
 
     // Broadcast the new player to all existing players' tab lists.
@@ -538,9 +553,9 @@ async fn broadcast_player_join(
 
         // Send existing player entities + equipment + skin to the joining player.
         for (add_pkt, equip_pkt, skin_pkt) in &other_entities {
-            conn.send_packet(add_pkt).await?;
-            conn.send_packet(equip_pkt).await?;
-            conn.send_packet(skin_pkt).await?;
+            conn_handle.send_packet(add_pkt).await?;
+            conn_handle.send_packet(equip_pkt).await?;
+            conn_handle.send_packet(skin_pkt).await?;
         }
     }
 

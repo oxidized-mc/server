@@ -169,7 +169,7 @@ pub async fn handle_movement(
                 relative_flags: RelativeFlags::empty(),
             }
         };
-        ctx.conn.send_packet(&correction).await?;
+        ctx.conn_handle.send_packet(&correction).await?;
         debug!(peer = %ctx.addr, name = %ctx.player_name, "Position correction sent");
     } else {
         {
@@ -384,10 +384,10 @@ pub(super) async fn send_chunk_updates(
         chunk_x: new_center.x,
         chunk_z: new_center.z,
     };
-    ctx.conn
+    ctx.conn_handle
         .send_raw(
             ClientboundSetChunkCacheCenterPacket::PACKET_ID,
-            &center_pkt.encode(),
+            center_pkt.encode().freeze(),
         )
         .await?;
 
@@ -396,19 +396,19 @@ pub(super) async fn send_chunk_updates(
             chunk_x: pos.x,
             chunk_z: pos.z,
         };
-        ctx.conn
+        ctx.conn_handle
             .send_raw(
                 ClientboundForgetLevelChunkPacket::PACKET_ID,
-                &forget.encode(),
+                forget.encode().freeze(),
             )
             .await?;
     }
 
     if !to_load.is_empty() {
-        ctx.conn
+        ctx.conn_handle
             .send_raw(
                 ClientboundChunkBatchStartPacket::PACKET_ID,
-                &ClientboundChunkBatchStartPacket.encode(),
+                ClientboundChunkBatchStartPacket.encode().freeze(),
             )
             .await?;
 
@@ -426,10 +426,10 @@ pub(super) async fn send_chunk_updates(
                 .clone();
 
             let chunk_pkt = build_chunk_packet(&chunk_ref.read());
-            ctx.conn
+            ctx.conn_handle
                 .send_raw(
                     ClientboundLevelChunkWithLightPacket::PACKET_ID,
-                    &chunk_pkt.encode(),
+                    chunk_pkt.encode().freeze(),
                 )
                 .await?;
         }
@@ -437,15 +437,13 @@ pub(super) async fn send_chunk_updates(
         let batch_finished = ClientboundChunkBatchFinishedPacket {
             batch_size: to_load.len() as i32,
         };
-        ctx.conn
+        ctx.conn_handle
             .send_raw(
                 ClientboundChunkBatchFinishedPacket::PACKET_ID,
-                &batch_finished.encode(),
+                batch_finished.encode().freeze(),
             )
             .await?;
     }
-
-    ctx.conn.flush().await?;
 
     debug!(
         peer = %ctx.addr,

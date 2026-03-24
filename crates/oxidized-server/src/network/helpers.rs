@@ -6,6 +6,7 @@
 
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::connection::{Connection, ConnectionError};
+use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_protocol::packets::login::ClientboundDisconnectPacket;
 use tracing::debug;
 
@@ -60,4 +61,21 @@ pub async fn disconnect_err(conn: &mut Connection, reason: &str) -> ConnectionEr
 /// Always returns a [`ConnectionError`] wrapping the disconnect reason.
 pub async fn disconnect(conn: &mut Connection, reason: &str) -> Result<(), ConnectionError> {
     Err(disconnect_err(conn, reason).await)
+}
+
+/// Like [`disconnect_err`] but works with a [`ConnectionHandle`] (play-state
+/// reader/writer model). Sends a disconnect packet through the outbound
+/// channel and returns a [`ConnectionError`] for the caller to propagate.
+pub async fn disconnect_handle(
+    handle: &ConnectionHandle,
+    reason: &str,
+) -> ConnectionError {
+    let pkt = ClientboundDisconnectPacket {
+        reason: reason.to_string(),
+    };
+    let _ = handle.send_packet(&pkt).await;
+    ConnectionError::Io(std::io::Error::new(
+        std::io::ErrorKind::ConnectionAborted,
+        reason.to_string(),
+    ))
 }

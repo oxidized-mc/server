@@ -8,13 +8,14 @@ use std::sync::Arc;
 
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::{Connection, ConnectionError};
+use oxidized_protocol::connection::ConnectionError;
+use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
 use tracing::{debug, info, warn};
 
 use super::PlayContext;
 use super::commands::make_command_source_for_player;
-use crate::network::helpers::disconnect_err;
+use crate::network::helpers::disconnect_handle;
 use crate::network::{BroadcastMessage, ServerContext};
 
 /// Maximum number of characters in a single chat message (vanilla
@@ -60,7 +61,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
             len = message.len(),
             "Chat message too long — disconnecting",
         );
-        return Err(disconnect_err(ctx.conn, "chat_validation_failed").await);
+        return Err(disconnect_handle(ctx.conn_handle, "chat_validation_failed").await);
     }
 
     // Reject messages containing illegal characters.
@@ -70,12 +71,12 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
             name = %ctx.player_name,
             "Illegal characters in chat message — disconnecting",
         );
-        return Err(disconnect_err(ctx.conn, "multiplayer.disconnect.illegal_characters").await);
+        return Err(disconnect_handle(ctx.conn_handle, "multiplayer.disconnect.illegal_characters").await);
     }
 
     if !ctx.rate_limiter.try_acquire() {
         warn!(peer = %ctx.addr, name = %ctx.player_name, "Chat rate-limited — disconnecting");
-        return Err(disconnect_err(ctx.conn, "disconnect.spam").await);
+        return Err(disconnect_handle(ctx.conn_handle, "disconnect.spam").await);
     }
 
     let message_component = match ctx.server_ctx.color_char {
@@ -110,7 +111,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
 
 /// Handles a `/command` from a player using the Brigadier dispatcher.
 pub async fn handle_chat_command(
-    conn: &mut Connection,
+    conn_handle: &ConnectionHandle,
     command: &str,
     player_name: &str,
     player_uuid: uuid::Uuid,
@@ -140,11 +141,10 @@ pub async fn handle_chat_command(
             content: component,
             is_overlay: false,
         };
-        let _ = conn
-            .send_raw(ClientboundSystemChatPacket::PACKET_ID, &pkt.encode())
+        let _ = conn_handle
+            .send_raw(ClientboundSystemChatPacket::PACKET_ID, pkt.encode().freeze())
             .await;
     }
-    let _ = conn.flush().await;
 
     match result {
         Ok(r) => {
@@ -160,7 +160,7 @@ pub async fn handle_chat_command(
                 content: Component::text(format!("{e}")),
                 is_overlay: false,
             };
-            let _ = conn.send_packet(&err_msg).await;
+            let _ = conn_handle.send_packet(&err_msg).await;
             debug!(player = %player_name, command = %command, error = %e, "Command failed");
         },
     }

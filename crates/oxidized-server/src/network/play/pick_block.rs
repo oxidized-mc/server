@@ -84,7 +84,7 @@ pub async fn handle_pick_item_from_block(
             slot: i32::from(selected),
             contents: slot_data,
         };
-        play_ctx.conn.send_packet(&set_slot).await?;
+        play_ctx.conn_handle.send_packet(&set_slot).await?;
     } else {
         // Survival: search inventory for a matching item and move it to hotbar.
         let (found_slot, selected) = {
@@ -119,7 +119,7 @@ pub async fn handle_pick_item_from_block(
                 let held_pkt = oxidized_protocol::packets::play::ClientboundSetHeldSlotPacket {
                     slot: slot as i32,
                 };
-                play_ctx.conn.send_packet(&held_pkt).await?;
+                play_ctx.conn_handle.send_packet(&held_pkt).await?;
             },
             Some(slot) => {
                 // Item is in main inventory — swap with selected hotbar slot.

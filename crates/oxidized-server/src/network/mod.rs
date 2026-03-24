@@ -726,7 +726,7 @@ async fn handle_connection(
                             tokio::time::sleep(Duration::from_millis(100)).await;
                         }
 
-                        play::handle_play_entry(&mut conn, profile, client_info, ctx).await?;
+                        play::handle_play_split(conn, profile, client_info, ctx).await?;
                         info!(peer = %addr, "Player session ended");
                         return Ok(());
                     },

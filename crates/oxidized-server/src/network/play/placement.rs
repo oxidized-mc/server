@@ -236,7 +236,7 @@ pub async fn handle_use_item_on(
             slot: slot_idx as i32,
             contents: slot_data,
         };
-        play_ctx.conn.send_packet(&sync_pkt).await?;
+        play_ctx.conn_handle.send_packet(&sync_pkt).await?;
     }
 
     // Broadcast block change to all players (including the acting player).
@@ -249,7 +249,7 @@ pub async fn handle_use_item_on(
             pos: place_pos,
             is_front_text: true,
         };
-        play_ctx.conn.send_packet(&sign_editor).await?;
+        play_ctx.conn_handle.send_packet(&sign_editor).await?;
     }
 
     // Acknowledge the sequence.

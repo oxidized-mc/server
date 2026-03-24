@@ -19,6 +19,7 @@ use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
 use super::compression::{CompressionError, CompressionState, Compressor, Decompressor};
 use super::crypto::{CipherState, DecryptCipher, EncryptCipher};
+use super::handle::HandleError;
 use crate::codec::frame::{self, FrameError, MAX_PACKET_SIZE};
 use crate::codec::packet::{Packet, PacketDecodeError};
 use crate::codec::varint::{self, VarIntError};
@@ -101,6 +102,10 @@ pub enum ConnectionError {
     /// The client exceeded the packet rate limit (ADR-006).
     #[error("rate limited: client exceeded {0} packets per tick window")]
     RateLimited(u32),
+
+    /// The outbound channel is closed or full (writer task exited or slow client).
+    #[error("outbound channel closed")]
+    ChannelClosed(#[from] HandleError),
 }
 
 // ---------------------------------------------------------------------------

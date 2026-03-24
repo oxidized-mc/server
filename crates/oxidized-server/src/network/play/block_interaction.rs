@@ -157,7 +157,7 @@ pub(super) async fn resync_block(
 ) -> Result<(), ConnectionError> {
     let block_state = get_block(play_ctx.server_ctx, pos).unwrap_or(u32::from(AIR.0)) as i32;
     let pkt = ClientboundBlockUpdatePacket { pos, block_state };
-    play_ctx.conn.send_packet(&pkt).await?;
+    play_ctx.conn_handle.send_packet(&pkt).await?;
 
     // Also resync the adjacent face block (vanilla sends both).
     if let Some(dir) = direction {
@@ -167,7 +167,7 @@ pub(super) async fn resync_block(
             pos: adjacent,
             block_state: adj_state,
         };
-        play_ctx.conn.send_packet(&adj_pkt).await?;
+        play_ctx.conn_handle.send_packet(&adj_pkt).await?;
     }
 
     Ok(())
@@ -179,7 +179,7 @@ pub(super) async fn send_ack(
     sequence: i32,
 ) -> Result<(), ConnectionError> {
     let pkt = ClientboundBlockChangedAckPacket { sequence };
-    play_ctx.conn.send_packet(&pkt).await?;
+    play_ctx.conn_handle.send_packet(&pkt).await?;
     Ok(())
 }
 
@@ -194,8 +194,8 @@ pub(super) async fn send_actionbar(
         is_overlay: true,
     };
     play_ctx
-        .conn
-        .send_raw(ClientboundSystemChatPacket::PACKET_ID, &pkt.encode())
+        .conn_handle
+        .send_raw(ClientboundSystemChatPacket::PACKET_ID, pkt.encode().freeze())
         .await?;
     Ok(())
 }
@@ -226,7 +226,7 @@ pub(super) async fn sync_inventory_slot(
         slot: internal_slot as i32,
         contents,
     };
-    play_ctx.conn.send_packet(&pkt).await?;
+    play_ctx.conn_handle.send_packet(&pkt).await?;
     Ok(())
 }
 

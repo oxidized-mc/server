@@ -17,10 +17,10 @@ unbounded buffers, and clean cancellation. ADR-006 compliance is complete.
 | R4.2 | Split Connection into reader/writer halves | ✅ Complete |
 | R4.3 | Implement writer task with batch flushing | ✅ Complete |
 | R4.4 | Implement reader task with rate limiting | ✅ Complete |
-| R4.5 | Migrate pre-play states (Handshake/Status/Login/Config) | ❌ Not Started |
-| R4.6 | Migrate play state — inbound path | ❌ Not Started |
-| R4.7 | Migrate play state — outbound path (direct sends) | ❌ Not Started |
-| R4.8 | Migrate play state — broadcast path | ❌ Not Started |
+| R4.5 | Migrate pre-play states (Handshake/Status/Login/Config) | ✅ Complete |
+| R4.6 | Migrate play state — inbound path | ✅ Complete |
+| R4.7 | Migrate play state — outbound path (direct sends) | ✅ Complete |
+| R4.8 | Migrate play state — broadcast path | ✅ Complete |
 | R4.9 | Per-connection memory budget and slow-client detection | ❌ Not Started |
 | R4.10 | Compliance tests and benchmarks | ❌ Not Started |
 
@@ -797,18 +797,50 @@ reset, clean shutdown on receiver drop, TCP close handling, backpressure
 blocking, encrypted packets, compressed packets, encrypted+compressed
 combined, and packet ordering preservation.
 
-### Phase 4: Integration (R4.5 + R4.6 + R4.7 + R4.8) — the big switch
+### Phase 4: Integration (R4.5 + R4.6 + R4.7 + R4.8) — ✅ Complete
 
-This is the riskiest phase. The play state handler switches from
-`&mut Connection` to `ConnectionHandle` + inbound channel. All play
-handler files are touched. Do this in one commit to avoid a
-half-migrated state.
+Switched the play state from single-task `&mut Connection` to the
+reader/writer task pair model. Pre-play states (Handshake, Status, Login,
+Config) remain on the single-task `Connection` — the split happens at the
+Config→Play transition in `handle_connection()`.
 
-**Risk mitigation:**
-- Keep `Connection` for pre-play states (minimal change surface)
-- Compile check after each file migration
-- Run full test suite after migration
-- Manual testing: join server, move, chat, break/place blocks, disconnect
+**R4.5 — Pre-play states:** `handle_connection()` now passes `conn:
+Connection` (by value) to `handle_play_split()` instead of `&mut conn` to
+`handle_play_entry()`. Pre-play callers (`handshake.rs`, `login.rs`,
+`configuration.rs`) are unchanged.
+
+**R4.6 — Play inbound path:** New `handle_play_split()` in `play/mod.rs`
+calls `conn.into_split()`, spawns `reader_loop` and `writer_loop` tasks,
+and reads inbound packets from `mpsc::Receiver<InboundPacket>` instead of
+`conn.read_raw_packet()`. Clean shutdown drops the `ConnectionHandle` and
+`outbound_tx` to signal the writer, then awaits both task handles.
+
+**R4.7 — Play outbound path:** `PlayContext.conn` field changed from
+`&'a mut Connection` to `conn_handle: &'a ConnectionHandle`. All 13 play
+handler files updated: `send_packet(&pkt)` and `send_raw(id, data)` go
+through the handle's outbound channel. All manual `flush().await` calls
+removed — the writer task handles batching and flushing. Added
+`disconnect_handle()` in `helpers.rs` for play-state disconnects.
+
+**R4.8 — Broadcast path:** The `select!` broadcast branch now uses
+`conn_handle.try_send_raw()` (non-blocking). If the outbound channel is
+full, the slow client is disconnected immediately rather than blocking
+the play loop.
+
+**Files changed:**
+- `oxidized-protocol/src/transport/connection.rs` — `ChannelClosed` error variant
+- `oxidized-server/src/network/mod.rs` — `handle_play_split` call
+- `oxidized-server/src/network/helpers.rs` — `disconnect_handle()` added
+- `oxidized-server/src/network/play/mod.rs` — `PlayContext`, `handle_play_split`
+- `oxidized-server/src/network/play/join.rs` — `ConnectionHandle` API
+- `oxidized-server/src/network/play/helpers.rs` — `ConnectionHandle`, no flush
+- `oxidized-server/src/network/play/movement.rs` — `conn_handle` sends
+- `oxidized-server/src/network/play/chat.rs` — `ConnectionHandle`, `disconnect_handle`
+- `oxidized-server/src/network/play/commands.rs` — `conn_handle` send
+- `oxidized-server/src/network/play/block_interaction.rs` — `conn_handle` sends
+- `oxidized-server/src/network/play/inventory.rs` — `conn_handle` sends
+- `oxidized-server/src/network/play/placement.rs` — `conn_handle` sends
+- `oxidized-server/src/network/play/pick_block.rs` — `conn_handle` sends
 
 ### Phase 5: Hardening (R4.9 + R4.10) — safety nets
 
@@ -890,22 +922,22 @@ R4.10 (compliance)       ── depends on all above
 
 ## Acceptance Criteria
 
-- [ ] `Connection::into_split()` produces `ConnectionReader` + `ConnectionWriter`
-- [ ] Reader task dispatches packets through bounded inbound channel (128)
-- [ ] Writer task batch-flushes from bounded outbound channel (512)
-- [ ] Rate limiter disconnects clients sending >500 packets per 50ms
+- [x] `Connection::into_split()` produces `ConnectionReader` + `ConnectionWriter`
+- [x] Reader task dispatches packets through bounded inbound channel (128)
+- [x] Writer task batch-flushes from bounded outbound channel (512)
+- [x] Rate limiter disconnects clients sending >500 packets per 50ms
 - [ ] Per-connection memory stays below 256 KB under normal load
 - [ ] Slow-client detection disconnects unresponsive writers within 30s
-- [ ] Pre-play states (Handshake/Status/Login/Config) still use single-task model
-- [ ] All play handler `send_packet` calls go through `ConnectionHandle`
-- [ ] No manual `flush()` calls in play handlers
-- [ ] Broadcast messages route through outbound channel
-- [ ] TCP_NODELAY set on all connections
-- [ ] Keepalive timing unaffected (15s interval, 30s timeout)
-- [ ] Clean shutdown: dropping senders causes both tasks to exit
+- [x] Pre-play states (Handshake/Status/Login/Config) still use single-task model
+- [x] All play handler `send_packet` calls go through `ConnectionHandle`
+- [x] No manual `flush()` calls in play handlers
+- [x] Broadcast messages route through outbound channel
+- [x] TCP_NODELAY set on all connections
+- [x] Keepalive timing unaffected (15s interval, 30s timeout)
+- [x] Clean shutdown: dropping senders causes both tasks to exit
 - [ ] Throughput benchmark: >5000 packets/sec per connection
-- [ ] `cargo test --workspace` passes with zero failures
-- [ ] `cargo clippy --workspace -- -D warnings` produces zero warnings
+- [x] `cargo test --workspace` passes with zero failures
+- [x] `cargo clippy --workspace -- -D warnings` produces zero warnings
 
 ---
 
@@ -913,9 +945,9 @@ R4.10 (compliance)       ── depends on all above
 
 | ADR | Requirement | Status |
 |-----|-------------|--------|
-| 006 | Per-connection reader/writer task pair | ❌ → target |
+| 006 | Per-connection reader/writer task pair | ✅ Complete |
 | 006 | Bounded inbound channel (128) | ✅ Complete |
-| 006 | Bounded outbound channel (512) | ❌ → target |
+| 006 | Bounded outbound channel (512) | ✅ Complete |
 | 006 | Writer batch flushing | ✅ Complete |
 | 006 | TCP_NODELAY | ✅ Already compliant |
 | 006 | Rate limiting (500/tick) | ✅ Complete |

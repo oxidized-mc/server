@@ -83,7 +83,7 @@ pub async fn handle_command_suggestion(
             })
             .collect(),
     };
-    let _ = ctx.conn.send_packet(&response).await;
+    let _ = ctx.conn_handle.send_packet(&response).await;
 
     Ok(())
 }

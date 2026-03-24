@@ -35,10 +35,12 @@ use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::player::{ServerPlayer, handle_accept_teleportation};
 use oxidized_protocol::auth;
+use oxidized_protocol::channel::{INBOUND_CHANNEL_CAPACITY, OUTBOUND_CHANNEL_CAPACITY};
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::SlotData;
 use oxidized_protocol::connection::{Connection, ConnectionError};
+use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
     ClientboundAnimatePacket, ClientboundKeepAlivePacket, ClientboundPlayerInfoRemovePacket,
@@ -58,17 +60,19 @@ use oxidized_protocol::packets::play::{
 };
 use oxidized_world::chunk::ChunkPos;
 use parking_lot::RwLock;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, info, warn};
 
 use crate::network::{BroadcastMessage, LoginContext, MAX_SERVERBOUND_PLAY_ID, ServerContext};
+use crate::network::reader::reader_loop;
+use crate::network::writer::writer_loop;
 
 use crate::network::helpers::decode_packet;
 
 /// Shared context passed to all play-state packet handlers.
 pub struct PlayContext<'a> {
-    /// The connection to the client.
-    pub conn: &'a mut Connection,
+    /// Handle to the connection's outbound channel (task pair model).
+    pub conn_handle: &'a ConnectionHandle,
     /// The player entity (thread-safe via interior mutability).
     pub player: &'a Arc<RwLock<ServerPlayer>>,
     /// Shared server state.
@@ -141,28 +145,44 @@ fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacke
 
 /// Handles the PLAY-state login sequence for a newly joined player.
 ///
-/// Creates a [`ServerPlayer`], loads saved player data (if available),
-/// builds the 11-packet login sequence via [`build_login_sequence`](oxidized_game::player::login::build_login_sequence), and
-/// sends them to the client. Then enters the main play loop to process
-/// incoming PLAY packets.
+/// Splits the [`Connection`] into reader/writer task pair (ADR-006),
+/// creates bounded inbound/outbound channels, spawns the reader and
+/// writer tasks, sends the join sequence through the outbound channel,
+/// and enters the main play loop to process inbound packets.
 ///
 /// # Errors
 ///
 /// Returns a [`ConnectionError`] if any I/O or protocol step fails.
-pub async fn handle_play_entry(
-    conn: &mut Connection,
+pub async fn handle_play_split(
+    conn: Connection,
     profile: auth::GameProfile,
     client_info: ClientInformation,
     ctx: &LoginContext,
 ) -> Result<(), ConnectionError> {
     let server_ctx = &ctx.server_ctx;
+    let addr = conn.remote_addr();
 
-    let join_state = join::send_join_sequence(conn, profile, client_info, server_ctx).await?;
+    // Split connection into reader/writer halves (ADR-006).
+    let (reader, writer) = conn.into_split();
+
+    // Create bounded channels (ADR-006: inbound=128, outbound=512).
+    let (inbound_tx, mut inbound_rx) = mpsc::channel(INBOUND_CHANNEL_CAPACITY);
+    let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_CHANNEL_CAPACITY);
+
+    // Spawn reader and writer tasks.
+    let reader_handle = tokio::spawn(reader_loop(reader, inbound_tx));
+    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx));
+
+    // Create the connection handle for sending packets.
+    let conn_handle = ConnectionHandle::new(outbound_tx, addr);
+
+    // Send join sequence through the outbound channel.
+    let join_state =
+        join::send_join_sequence(&conn_handle, profile, client_info, server_ctx).await?;
     let player_arc = join_state.player;
     let player_name = join_state.name;
     let uuid = join_state.uuid;
     let entity_id = join_state.entity_id;
-    let addr = conn.remote_addr();
 
     // Track which chunks the player has loaded.
     let initial_chunk =
@@ -196,7 +216,7 @@ pub async fn handle_play_entry(
 
     // Build the play context for handler dispatch.
     let mut play_ctx = PlayContext {
-        conn,
+        conn_handle: &conn_handle,
         player: &player_arc,
         server_ctx,
         player_name: &player_name,
@@ -206,15 +226,15 @@ pub async fn handle_play_entry(
         rate_limiter: &mut rate_limiter,
     };
 
-    // PLAY read loop — dispatches packets to handler functions.
+    // PLAY read loop — reads from inbound channel instead of socket (ADR-006).
     loop {
         tokio::select! {
             // Kick signal from another task (e.g., duplicate login replacement).
             reason = kick_rx.recv() => {
                 let reason = reason.unwrap_or_else(|| "Kicked".to_string());
                 info!(peer = %addr, name = %player_name, %reason, "Player kicked");
-                let _ = crate::network::helpers::disconnect_err(
-                    play_ctx.conn, &reason,
+                let _ = crate::network::helpers::disconnect_handle(
+                    play_ctx.conn_handle, &reason,
                 ).await;
                 break;
             },
@@ -234,7 +254,7 @@ pub async fn handle_play_entry(
                     keepalive_pending = true;
                     keepalive_sent_at = Instant::now();
                     let pkt = ClientboundKeepAlivePacket { id: keepalive_challenge };
-                    if let Err(e) = play_ctx.conn.send_packet(&pkt).await {
+                    if let Err(e) = play_ctx.conn_handle.send_packet(&pkt).await {
                         debug!(peer = %addr, name = %player_name, error = %e, "Failed to send keepalive");
                         break;
                     }
@@ -273,7 +293,7 @@ pub async fn handle_play_entry(
                         pitch: *pitch,
                         relative_flags: RelativeFlags::empty(),
                     };
-                    if let Err(e) = play_ctx.conn.send_packet(&pkt).await {
+                    if let Err(e) = play_ctx.conn_handle.send_packet(&pkt).await {
                         debug!(peer = %addr, name = %player_name, error = %e, "Failed to resend teleport");
                         resend_failed = true;
                         break;
@@ -301,12 +321,9 @@ pub async fn handle_play_entry(
                                 continue;
                             }
                         }
-                        if let Err(e) = play_ctx.conn.send_raw(msg.packet_id, &msg.data).await {
-                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to send broadcast");
-                            break;
-                        }
-                        if let Err(e) = play_ctx.conn.flush().await {
-                            debug!(peer = %addr, name = %player_name, error = %e, "Failed to flush broadcast");
+                        // Queue on outbound channel — writer batches with other packets.
+                        if conn_handle.try_send_raw(msg.packet_id, msg.data).is_err() {
+                            warn!(peer = %addr, name = %player_name, "Outbound channel full on broadcast");
                             break;
                         }
                     },
@@ -319,10 +336,10 @@ pub async fn handle_play_entry(
                     },
                 }
             },
-            // Read incoming packets from this client.
-            packet_result = play_ctx.conn.read_raw_packet() => {
-                match packet_result {
-                    Ok(pkt) => {
+            // Read incoming packets from inbound channel (ADR-006: reader task dispatches here).
+            inbound = inbound_rx.recv() => {
+                match inbound {
+                    Some(pkt) => {
                         match pkt.id {
                             ServerboundKeepAlivePacket::PACKET_ID => {
                                 match keepalive::handle_keepalive(
@@ -395,7 +412,7 @@ pub async fn handle_play_entry(
                                             ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
                                         };
                                         chat::handle_chat_command(
-                                            play_ctx.conn,
+                                            play_ctx.conn_handle,
                                             &cmd_pkt.command,
                                             &player_name,
                                             uuid,
@@ -421,7 +438,7 @@ pub async fn handle_play_entry(
                                             ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
                                         };
                                         chat::handle_chat_command(
-                                            play_ctx.conn,
+                                            play_ctx.conn_handle,
                                             &cmd_pkt.command,
                                             &player_name,
                                             uuid,
@@ -579,12 +596,9 @@ pub async fn handle_play_entry(
                             },
                         }
                     },
-                    Err(ConnectionError::Io(ref e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                        info!(peer = %addr, name = %player_name, "Player disconnected");
-                        break;
-                    },
-                    Err(e) => {
-                        warn!(peer = %addr, name = %player_name, error = %e, "PLAY connection error");
+                    // Inbound channel closed — reader task exited (client disconnect or error).
+                    None => {
+                        info!(peer = %addr, name = %player_name, "Player disconnected (reader closed)");
                         break;
                     },
                 }
@@ -655,6 +669,13 @@ pub async fn handle_play_entry(
         server_ctx.broadcast(broadcast);
     }
     info!(peer = %addr, uuid = %uuid, name = %player_name, "Player removed from player list");
+
+    // Drop outbound sender → writer task sees channel closed → exits.
+    drop(conn_handle);
+
+    // Wait for reader and writer tasks to finish.
+    let _ = reader_handle.await;
+    let _ = writer_handle.await;
 
     Ok(())
 }

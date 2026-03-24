@@ -215,7 +215,7 @@ pub async fn send_full_inventory(
         carried_item: None,
     };
 
-    play_ctx.conn.send_packet(&pkt).await?;
+    play_ctx.conn_handle.send_packet(&pkt).await?;
     Ok(())
 }
 
@@ -226,7 +226,7 @@ pub async fn send_held_slot(
     slot: u8,
 ) -> Result<(), ConnectionError> {
     let pkt = ClientboundSetHeldSlotPacket { slot: slot as i32 };
-    play_ctx.conn.send_packet(&pkt).await?;
+    play_ctx.conn_handle.send_packet(&pkt).await?;
     Ok(())
 }
 
