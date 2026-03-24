@@ -255,25 +255,25 @@ impl AnvilChunkLoader {
         name: &str,
         properties: Option<&NbtCompound>,
     ) -> Result<u32, AnvilError> {
-        // First find the block by name
-        let block = self
+        let def = self
             .block_registry
-            .get_block(name)
+            .get_block_def(name)
             .ok_or_else(|| AnvilError::UnknownBlock(name.to_owned()))?;
 
-        // If no properties, return the default state
+        // If no properties or block has only one state, return the default
         let props = match properties {
-            Some(p) if block.states.len() > 1 => p,
-            _ => return Ok(block.default_state.0 as u32),
+            Some(p) if def.state_count > 1 => p,
+            _ => return Ok(def.default_state as u32),
         };
 
-        // Find the matching state by looking up each state ID in the registry
-        for &state_id in &block.states {
-            if let Some(state) = self.block_registry.get_state(state_id) {
-                if self.state_matches_properties(state, props) {
-                    return Ok(state.id.0 as u32);
-                }
-            }
+        // Build (&str, &str) pairs from the NBT compound and use find_state
+        let pairs: Vec<(&str, &str)> = props
+            .iter()
+            .filter_map(|(k, v)| v.as_str().map(|s| (k.as_str(), s)))
+            .collect();
+
+        if let Some(id) = self.block_registry.find_state(name, &pairs) {
+            return Ok(id.0 as u32);
         }
 
         // Fallback to default state if no exact match
@@ -281,29 +281,7 @@ impl AnvilChunkLoader {
             block = name,
             "no exact state match found, using default state"
         );
-        Ok(block.default_state.0 as u32)
-    }
-
-    /// Checks if a block state's properties match the NBT properties compound.
-    fn state_matches_properties(
-        &self,
-        state: &crate::registry::BlockState,
-        nbt_props: &NbtCompound,
-    ) -> bool {
-        if state.properties.len() != nbt_props.len() {
-            return false;
-        }
-
-        for (key, state_value) in &state.properties {
-            if let Some(nbt_value) = nbt_props.get_string(key) {
-                if state_value != nbt_value {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-        true
+        Ok(def.default_state as u32)
     }
 
     /// Loads heightmap data from the Heightmaps NBT compound.
@@ -426,10 +404,9 @@ mod tests {
         // Stone default state ID
         let stone_id = loader
             .block_registry
-            .get_block("minecraft:stone")
+            .get_block_def("minecraft:stone")
             .unwrap()
-            .default_state
-            .0 as u32;
+            .default_state as u32;
 
         assert_eq!(section.get_block_state(0, 0, 0).unwrap(), stone_id);
         assert_eq!(section.get_block_state(15, 15, 15).unwrap(), stone_id);

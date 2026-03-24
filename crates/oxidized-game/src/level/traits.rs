@@ -5,11 +5,11 @@
 //! and any future snapshot or test stubs.
 //!
 //! Block states are represented as `u32` IDs matching the vanilla flat
-//! state ID space (0 = air, 1 = stone, etc.). The block registry can
-//! be used to look up full [`BlockState`] metadata from these IDs.
+//! state ID space (0 = air, 1 = stone, etc.). Use [`BlockStateId`] for
+//! O(1) access to block metadata and property transitions.
 //!
 //! [`ServerLevel`]: super::ServerLevel
-//! [`BlockState`]: oxidized_world::registry::BlockState
+//! [`BlockStateId`]: oxidized_world::registry::BlockStateId
 
 use oxidized_protocol::types::BlockPos;
 

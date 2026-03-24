@@ -26,15 +26,13 @@ fn test_chunk_save_roundtrip_through_region_file() {
     // Build a chunk with some blocks.
     let mut chunk = LevelChunk::new(ChunkPos::new(3, 7));
     let stone_id = registry
-        .get_block("minecraft:stone")
+        .get_block_def("minecraft:stone")
         .unwrap()
-        .default_state
-        .0 as u32;
+        .default_state as u32;
     let dirt_id = registry
-        .get_block("minecraft:dirt")
+        .get_block_def("minecraft:dirt")
         .unwrap()
-        .default_state
-        .0 as u32;
+        .default_state as u32;
 
     // Place blocks at various heights.
     for x in 0..16 {
@@ -100,10 +98,9 @@ fn test_multiple_chunks_in_region() {
     let region_path = dir.path().join("r.0.0.mca");
 
     let stone_id = registry
-        .get_block("minecraft:stone")
+        .get_block_def("minecraft:stone")
         .unwrap()
-        .default_state
-        .0 as u32;
+        .default_state as u32;
 
     let coords: [(i32, i32); 4] = [(0, 0), (1, 0), (0, 1), (15, 15)];
 

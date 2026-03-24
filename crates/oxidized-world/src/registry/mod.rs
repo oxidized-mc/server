@@ -1,17 +1,18 @@
 //! Block and item registry system.
 //!
-//! Provides O(1) lookup of block states by numeric ID and blocks/items by name.
-//! Data is loaded from embedded gzipped JSON files extracted from vanilla
-//! 26.1-pre-3.
+//! Block data is generated at compile time from embedded vanilla JSON
+//! (see [`generated`]).  Provides O(1) lookup of block states by numeric ID
+//! and blocks/items by name.
 
 mod block;
 mod block_registry;
 mod constants;
 mod error;
+pub(crate) mod generated;
 mod item;
 mod item_registry;
 
-pub use block::{Block, BlockProperty, BlockState, BlockStateId};
+pub use block::{BlockDef, BlockStateEntry, BlockStateFlags, BlockStateId, PropertyDef};
 pub use block_registry::BlockRegistry;
 pub use constants::*;
 pub use error::RegistryError;

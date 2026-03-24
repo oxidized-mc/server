@@ -856,19 +856,15 @@ fn is_replaceable_block(ctx: &Arc<ServerContext>, state_id: u32) -> bool {
         return true;
     }
 
-    let block_name = match ctx
-        .block_registry
-        .get_state(oxidized_world::registry::BlockStateId(state_id as u16))
-    {
-        Some(state) => match ctx.block_registry.get_block_by_index(state.block_index) {
-            Some(block) => &block.name,
-            None => return false,
-        },
-        None => return false,
+    let bsid = oxidized_world::registry::BlockStateId(state_id as u16);
+    let block_name = if (bsid.0 as usize) < ctx.block_registry.state_count() {
+        bsid.block_name()
+    } else {
+        return false;
     };
 
     matches!(
-        block_name.as_str(),
+        block_name,
         "minecraft:air"
             | "minecraft:cave_air"
             | "minecraft:void_air"

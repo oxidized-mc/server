@@ -146,20 +146,19 @@ impl ChunkSerializer {
         #[allow(clippy::cast_possible_truncation)]
         let bsid = BlockStateId(state_id as u16);
 
-        if let Some(state) = self.block_registry.get_state(bsid) {
-            if let Some(block) = self.block_registry.get_block_by_index(state.block_index) {
-                entry.put_string("Name", &block.name);
+        if (bsid.0 as usize) < self.block_registry.state_count() {
+            entry.put_string("Name", bsid.block_name());
 
-                if !state.properties.is_empty() {
-                    let mut props = NbtCompound::new();
-                    for (key, value) in &state.properties {
-                        props.put_string(key, value);
-                    }
-                    entry.put("Properties", NbtTag::Compound(props));
+            let props = bsid.properties();
+            if !props.is_empty() {
+                let mut nbt_props = NbtCompound::new();
+                for (key, value) in &props {
+                    nbt_props.put_string(*key, *value);
                 }
-
-                return entry;
+                entry.put("Properties", NbtTag::Compound(nbt_props));
             }
+
+            return entry;
         }
 
         // Fallback for unknown state IDs
@@ -332,10 +331,9 @@ mod tests {
 
         // Get stone state ID
         let stone_id = registry
-            .get_block("minecraft:stone")
+            .get_block_def("minecraft:stone")
             .unwrap()
-            .default_state
-            .0 as u32;
+            .default_state as u32;
 
         // Set some blocks at y=0 (section index 4)
         chunk.set_block_state(0, 0, 0, stone_id).unwrap();
@@ -370,10 +368,9 @@ mod tests {
 
         // Put a stone block at y=0 (section 4)
         let stone_id = registry
-            .get_block("minecraft:stone")
+            .get_block_def("minecraft:stone")
             .unwrap()
-            .default_state
-            .0 as u32;
+            .default_state as u32;
         chunk.set_block_state(5, 0, 5, stone_id).unwrap();
 
         // Serialize to NBT

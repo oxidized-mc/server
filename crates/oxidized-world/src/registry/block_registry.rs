@@ -1,223 +1,120 @@
-//! Block registry: O(1) lookup of block states by numeric ID and blocks by name.
+//! Block registry: O(1) lookup of block states and blocks backed by compile-time
+//! generated static data.
 
-use std::io::Read;
-
-use ahash::AHashMap;
-use flate2::read::GzDecoder;
-
-use super::block::{Block, BlockProperty, BlockState, BlockStateId};
+use super::block::{BlockDef, BlockStateId};
 use super::error::RegistryError;
-
-/// The compressed `blocks.json` data, embedded at compile time.
-const BLOCKS_DATA_GZ: &[u8] = include_bytes!("../data/blocks.json.gz");
+use super::generated;
 
 /// Registry of all block types and block states.
 ///
-/// Provides O(1) lookup of block states by [`BlockStateId`] and block
-/// definitions by name.
-pub struct BlockRegistry {
-    /// O(1) lookup: `state_id` → [`BlockState`]. Indexed by `state_id` as `usize`.
-    states: Vec<Option<BlockState>>,
-    /// All blocks in registration order.
-    blocks: Vec<Block>,
-    /// Name → block index lookup.
-    by_name: AHashMap<String, u16>,
-}
+/// All data is generated at compile time in [`super::generated`].  This struct
+/// is zero-sized and acts as a convenient handle with the same API surface that
+/// consumers already use.  Passing `Arc<BlockRegistry>` around is cheap (it
+/// holds no data) and avoids changing call-sites.
+pub struct BlockRegistry;
 
 impl BlockRegistry {
-    /// Load the block registry from the embedded compressed JSON data.
+    /// Create a new block registry.
+    ///
+    /// This is a no-op — all data is static.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Backward-compatible load method.
+    ///
+    /// Always succeeds since data is compiled-in.
     ///
     /// # Errors
     ///
-    /// Returns [`RegistryError::Decompress`] if decompression fails, or
-    /// [`RegistryError::Json`] if the JSON is malformed.
+    /// Never fails. Signature is kept for API compatibility.
     pub fn load() -> Result<Self, RegistryError> {
-        let mut decoder = GzDecoder::new(BLOCKS_DATA_GZ);
-        let mut json_str = String::new();
-        decoder.read_to_string(&mut json_str)?;
-
-        let root: serde_json::Value = serde_json::from_str(&json_str)?;
-        let empty_map = serde_json::Map::new();
-        let obj = root.as_object().unwrap_or(&empty_map);
-
-        // First pass: determine max state ID for pre-allocation.
-        let mut max_id: u16 = 0;
-        for block_value in obj.values() {
-            if let Some(states_arr) = block_value.get("states").and_then(|s| s.as_array()) {
-                for state_val in states_arr {
-                    if let Some(id) = state_val.get("id").and_then(|v| v.as_u64()) {
-                        let id16 =
-                            u16::try_from(id).map_err(|_| RegistryError::InvalidStateId(id))?;
-                        if id16 > max_id {
-                            max_id = id16;
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut states: Vec<Option<BlockState>> = vec![None; (max_id as usize) + 1];
-        let mut blocks: Vec<Block> = Vec::with_capacity(obj.len());
-        let mut by_name: AHashMap<String, u16> = AHashMap::with_capacity(obj.len());
-
-        for (block_name, block_value) in obj {
-            let block_index = u16::try_from(blocks.len())
-                .map_err(|_| RegistryError::InvalidStateId(blocks.len() as u64))?;
-
-            // Parse properties.
-            let properties = parse_properties(block_value);
-
-            // Parse states.
-            let mut block_state_ids = Vec::new();
-            let mut default_state = BlockStateId(0);
-
-            if let Some(states_arr) = block_value.get("states").and_then(|s| s.as_array()) {
-                for state_val in states_arr {
-                    let raw_id = state_val
-                        .get("id")
-                        .and_then(|v| v.as_u64())
-                        .ok_or_else(|| RegistryError::MissingStateId(block_name.clone()))?;
-                    let id =
-                        u16::try_from(raw_id).map_err(|_| RegistryError::InvalidStateId(raw_id))?;
-                    let is_default = state_val
-                        .get("default")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-
-                    let state_props = parse_state_properties(state_val);
-
-                    let state_id = BlockStateId(id);
-                    block_state_ids.push(state_id);
-
-                    if is_default {
-                        default_state = state_id;
-                    }
-
-                    let block_state = BlockState {
-                        id: state_id,
-                        block_index,
-                        is_default,
-                        properties: state_props,
-                    };
-
-                    let idx = id as usize;
-                    if idx >= states.len() {
-                        return Err(RegistryError::InvalidStateId(id as u64));
-                    }
-                    states[idx] = Some(block_state);
-                }
-            }
-
-            by_name.insert(block_name.clone(), block_index);
-
-            blocks.push(Block {
-                name: block_name.clone(),
-                index: block_index,
-                properties,
-                default_state,
-                states: block_state_ids,
-            });
-        }
-
-        // Count actual populated states.
-        Ok(Self {
-            states,
-            blocks,
-            by_name,
-        })
+        Ok(Self)
     }
 
-    /// Get a block state by its flat numeric ID.
-    pub fn get_state(&self, id: BlockStateId) -> Option<&BlockState> {
-        self.states.get(id.0 as usize).and_then(|s| s.as_ref())
+    /// Returns the block definition for the given name, using binary search.
+    pub fn get_block_def(&self, name: &str) -> Option<&'static BlockDef> {
+        lookup_by_name(name)
     }
 
-    /// Get a block definition by its registry name (e.g., `"minecraft:stone"`).
-    pub fn get_block(&self, name: &str) -> Option<&Block> {
-        self.by_name
-            .get(name)
-            .map(|&idx| &self.blocks[idx as usize])
-    }
-
-    /// Get the default state ID for a block by its registry name.
+    /// Returns the default state ID for a block by its registry name.
     pub fn default_state(&self, name: &str) -> Option<BlockStateId> {
-        self.get_block(name).map(|b| b.default_state)
+        lookup_by_name(name).map(|b| BlockStateId(b.default_state))
+    }
+
+    /// Returns the block name for a given state ID.
+    pub fn block_name_from_state_id(&self, state_id: u32) -> Option<&'static str> {
+        let entry = generated::BLOCK_STATE_DATA.get(state_id as usize)?;
+        let block = generated::BLOCK_DEFS.get(entry.block_type as usize)?;
+        Some(block.name)
     }
 
     /// Total number of block types in the registry.
     pub fn block_count(&self) -> usize {
-        self.blocks.len()
+        generated::BLOCK_COUNT
     }
 
     /// Total number of block states in the registry.
     pub fn state_count(&self) -> usize {
-        self.states.iter().filter(|s| s.is_some()).count()
+        generated::STATE_COUNT
     }
 
     /// Length of the internal state array.
     ///
-    /// Use this to allocate dense arrays indexed by state ID
-    /// (e.g., collision shape caches, physics property tables).
+    /// Use this to allocate dense arrays indexed by state ID.
     pub fn state_array_size(&self) -> usize {
-        self.states.len()
+        generated::STATE_COUNT
     }
 
-    /// Gets a block definition by its internal index.
-    pub fn get_block_by_index(&self, index: u16) -> Option<&Block> {
-        self.blocks.get(index as usize)
+    /// Gets a block definition by its type index.
+    pub fn get_block_def_by_index(&self, index: u16) -> Option<&'static BlockDef> {
+        generated::BLOCK_DEFS.get(index as usize)
     }
 
-    /// Returns the block name for a given state ID (e.g., `"minecraft:stone"`).
+    /// Computes property key-value pairs for a state (on the fly via strides).
+    pub fn state_properties(&self, id: BlockStateId) -> Vec<(&'static str, &'static str)> {
+        id.properties()
+    }
+
+    /// Finds a state by block name and property key-value pairs.
     ///
-    /// Looks up the state, finds its parent block, and returns the block name.
-    pub fn block_name_from_state_id(&self, state_id: u32) -> Option<&str> {
-        let state = self.states.get(state_id as usize)?.as_ref()?;
-        let block = self.blocks.get(state.block_index as usize)?;
-        Some(&block.name)
+    /// Returns the default state if properties is empty or the block has no
+    /// properties.  Returns `None` if the block name is unknown or no state
+    /// matches all the given properties.
+    pub fn find_state(&self, name: &str, properties: &[(&str, &str)]) -> Option<BlockStateId> {
+        let def = lookup_by_name(name)?;
+        if properties.is_empty() || def.prop_count == 0 {
+            return Some(BlockStateId(def.default_state));
+        }
+        // Start from default and apply each property
+        let mut state = BlockStateId(def.default_state);
+        for &(key, value) in properties {
+            state = state.with_property(key, value)?;
+        }
+        Some(state)
     }
 }
 
-/// Parse property definitions from a block JSON value.
-fn parse_properties(block_value: &serde_json::Value) -> Vec<BlockProperty> {
-    let Some(props_obj) = block_value.get("properties").and_then(|p| p.as_object()) else {
-        return Vec::new();
-    };
-
-    props_obj
-        .iter()
-        .map(|(name, values)| {
-            let vals = values
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                })
-                .unwrap_or_default();
-            BlockProperty {
-                name: name.clone(),
-                values: vals,
-            }
-        })
-        .collect()
+impl Default for BlockRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-/// Parse property values from a state JSON value.
-fn parse_state_properties(state_val: &serde_json::Value) -> Vec<(String, String)> {
-    let Some(props_obj) = state_val.get("properties").and_then(|p| p.as_object()) else {
-        return Vec::new();
-    };
-
-    props_obj
-        .iter()
-        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or_default().to_owned()))
-        .collect()
+/// Binary search the sorted name table for a block definition.
+fn lookup_by_name(name: &str) -> Option<&'static BlockDef> {
+    let idx = generated::BLOCK_NAMES_SORTED
+        .binary_search_by_key(&name, |&(n, _)| n)
+        .ok()?;
+    let type_idx = generated::BLOCK_NAMES_SORTED[idx].1;
+    generated::BLOCK_DEFS.get(type_idx as usize)
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+    use crate::registry::generated;
 
     fn registry() -> BlockRegistry {
         BlockRegistry::load().expect("failed to load block registry")
@@ -242,29 +139,26 @@ mod tests {
 
     #[test]
     fn test_air_is_state_zero() {
-        let reg = registry();
-        let state = reg.get_state(BlockStateId(0)).expect("state 0 missing");
-        let block = &reg.blocks[state.block_index as usize];
-        assert_eq!(block.name, "minecraft:air");
-        assert!(state.is_default);
+        let id = BlockStateId(0);
+        assert_eq!(id.block_name(), "minecraft:air");
+        assert!(id.is_default());
+        assert!(id.is_air());
     }
 
     #[test]
     fn test_stone_is_state_one() {
-        let reg = registry();
-        let state = reg.get_state(BlockStateId(1)).expect("state 1 missing");
-        let block = &reg.blocks[state.block_index as usize];
-        assert_eq!(block.name, "minecraft:stone");
+        let id = BlockStateId(1);
+        assert_eq!(id.block_name(), "minecraft:stone");
     }
 
     #[test]
     fn test_get_block_by_name() {
         let reg = registry();
-        let block = reg
-            .get_block("minecraft:grass_block")
+        let def = reg
+            .get_block_def("minecraft:grass_block")
             .expect("grass_block missing");
-        assert_eq!(block.name, "minecraft:grass_block");
-        assert!(!block.properties.is_empty());
+        assert_eq!(def.name, "minecraft:grass_block");
+        assert!(def.prop_count > 0);
     }
 
     #[test]
@@ -273,71 +167,150 @@ mod tests {
         let default = reg
             .default_state("minecraft:grass_block")
             .expect("grass_block default missing");
-        let state = reg.get_state(default).expect("default state missing");
-        assert!(state.is_default);
+        assert!(default.is_default());
     }
 
     #[test]
     fn test_grass_block_has_snowy_property() {
-        let reg = registry();
-        let block = reg
-            .get_block("minecraft:grass_block")
+        let def = BlockRegistry
+            .get_block_def("minecraft:grass_block")
             .expect("grass_block missing");
-        let snowy = block
-            .properties
+        let props_start = def.props_offset as usize;
+        let props_end = props_start + def.prop_count as usize;
+        let props = &generated::PROPERTY_DEFS[props_start..props_end];
+        let snowy = props
             .iter()
             .find(|p| p.name == "snowy")
-            .expect("snowy property missing");
-        assert!(snowy.values.contains(&"false".to_owned()));
-        assert!(snowy.values.contains(&"true".to_owned()));
+            .expect("snowy missing");
+        let vals_start = snowy.values_offset as usize;
+        let vals = &generated::PROPERTY_VALUES[vals_start..vals_start + snowy.num_values as usize];
+        assert!(vals.contains(&"false"));
+        assert!(vals.contains(&"true"));
     }
 
     #[test]
     fn test_oak_log_states() {
-        let reg = registry();
-        let block = reg.get_block("minecraft:oak_log").expect("oak_log missing");
-        // oak_log has "axis" property with values ["x", "y", "z"] = 3 states
-        assert_eq!(block.states.len(), 3);
-        let axis = block
-            .properties
-            .iter()
-            .find(|p| p.name == "axis")
-            .expect("axis property missing");
-        assert_eq!(axis.values.len(), 3);
+        let def = BlockRegistry
+            .get_block_def("minecraft:oak_log")
+            .expect("oak_log missing");
+        assert_eq!(def.state_count, 3);
     }
 
     #[test]
     fn test_unknown_block_returns_none() {
         let reg = registry();
-        assert!(reg.get_block("minecraft:not_a_block").is_none());
+        assert!(reg.get_block_def("minecraft:not_a_block").is_none());
     }
 
     #[test]
     fn test_state_roundtrip() {
-        let reg = registry();
-        for (i, slot) in reg.states.iter().enumerate() {
-            if let Some(state) = slot {
-                assert_eq!(
-                    state.id.0 as usize, i,
-                    "state at index {i} has mismatched id {}",
-                    state.id.0
-                );
-            }
+        for (i, entry) in generated::BLOCK_STATE_DATA.iter().enumerate() {
+            let def = &generated::BLOCK_DEFS[entry.block_type as usize];
+            let first = def.first_state as usize;
+            let last = first + def.state_count as usize;
+            assert!(
+                i >= first && i < last,
+                "state {i} claims block_type={} ({}) but is outside range {}..{}",
+                entry.block_type,
+                def.name,
+                first,
+                last,
+            );
         }
     }
 
     #[test]
     fn test_all_blocks_have_default_state() {
-        let reg = registry();
-        for block in &reg.blocks {
-            let state = reg
-                .get_state(block.default_state)
-                .unwrap_or_else(|| panic!("block {} has invalid default state", block.name));
+        for def in &generated::BLOCK_DEFS {
+            let id = BlockStateId(def.default_state);
             assert!(
-                state.is_default,
-                "block {} default state is not marked as default",
-                block.name
+                id.is_default(),
+                "block {} default state {} not marked as default",
+                def.name,
+                def.default_state,
             );
         }
+    }
+
+    #[test]
+    fn test_state_properties_roundtrip() {
+        let reg = registry();
+        // Verify a known block's property values
+        let def = reg
+            .get_block_def("minecraft:oak_stairs")
+            .expect("oak_stairs missing");
+        let default_id = BlockStateId(def.default_state);
+        let props = default_id.properties();
+        assert!(!props.is_empty(), "oak_stairs should have properties");
+        // Should have facing, half, shape, waterlogged
+        let keys: Vec<&str> = props.iter().map(|&(k, _)| k).collect();
+        assert!(keys.contains(&"facing"));
+        assert!(keys.contains(&"half"));
+        assert!(keys.contains(&"shape"));
+        assert!(keys.contains(&"waterlogged"));
+    }
+
+    #[test]
+    fn test_with_property() {
+        let def = BlockRegistry
+            .get_block_def("minecraft:oak_stairs")
+            .expect("oak_stairs missing");
+        let default_id = BlockStateId(def.default_state);
+
+        // Change facing to south
+        let south = default_id
+            .with_property("facing", "south")
+            .expect("failed to set facing=south");
+        let south_props = south.properties();
+        let facing = south_props
+            .iter()
+            .find(|&&(k, _)| k == "facing")
+            .expect("facing missing");
+        assert_eq!(facing.1, "south");
+
+        // Verify other properties unchanged
+        let default_props = default_id.properties();
+        for &(key, val) in &south_props {
+            if key != "facing" {
+                let original = default_props
+                    .iter()
+                    .find(|&&(k, _)| k == key)
+                    .expect("property missing");
+                assert_eq!(val, original.1, "property {key} changed unexpectedly");
+            }
+        }
+    }
+
+    #[test]
+    fn test_with_property_invalid() {
+        let id = BlockStateId(1); // stone, no properties
+        assert!(id.with_property("facing", "north").is_none());
+    }
+
+    #[test]
+    fn test_find_state() {
+        let reg = registry();
+        let state = reg
+            .find_state(
+                "minecraft:oak_stairs",
+                &[("facing", "south"), ("half", "bottom")],
+            )
+            .expect("find_state failed");
+        let props = state.properties();
+        assert_eq!(
+            props.iter().find(|&&(k, _)| k == "facing").unwrap().1,
+            "south"
+        );
+        assert_eq!(
+            props.iter().find(|&&(k, _)| k == "half").unwrap().1,
+            "bottom"
+        );
+    }
+
+    #[test]
+    fn test_block_name_from_state_id() {
+        let reg = registry();
+        assert_eq!(reg.block_name_from_state_id(0), Some("minecraft:air"));
+        assert_eq!(reg.block_name_from_state_id(1), Some("minecraft:stone"));
     }
 }

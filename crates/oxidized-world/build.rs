@@ -1,0 +1,473 @@
+//! Build script: generates static block state data from vanilla `blocks.json.gz`.
+//!
+//! Reads the embedded compressed JSON, parses all block types and states,
+//! computes property strides for O(1) state transitions, and writes a Rust
+//! source file into `$OUT_DIR/block_states_generated.rs`.
+
+// Build scripts run at compile time; expect/panic are the standard error
+// reporting mechanism and are not reachable at runtime.
+#![allow(clippy::expect_used, clippy::panic)]
+
+use std::collections::HashMap;
+use std::env;
+use std::fmt::Write as FmtWrite;
+use std::fs;
+use std::io::Read;
+use std::path::Path;
+
+fn main() {
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+    let data_path = Path::new(&manifest_dir).join("src/data/blocks.json.gz");
+
+    println!("cargo::rerun-if-changed=build.rs");
+    println!("cargo::rerun-if-changed={}", data_path.display());
+
+    let compressed = fs::read(&data_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", data_path.display()));
+    let mut decoder = flate2::read::GzDecoder::new(&compressed[..]);
+    let mut json_str = String::new();
+    decoder
+        .read_to_string(&mut json_str)
+        .expect("Failed to decompress blocks.json.gz");
+
+    let root: serde_json::Value = serde_json::from_str(&json_str).expect("Invalid blocks.json");
+    let obj = root
+        .as_object()
+        .expect("blocks.json root must be an object");
+
+    // ── Parse all blocks ────────────────────────────────────────────────
+    let mut blocks: Vec<BlockData> = Vec::with_capacity(obj.len());
+    for (name, value) in obj {
+        blocks.push(parse_block(name, value));
+    }
+
+    // Sort by first state ID → vanilla registration order
+    blocks.sort_by_key(|b| b.first_state_id);
+    for (i, block) in blocks.iter_mut().enumerate() {
+        block.type_index = i as u16;
+    }
+
+    let state_count = blocks
+        .iter()
+        .flat_map(|b| &b.states)
+        .map(|s| s.id as usize + 1)
+        .max()
+        .unwrap_or(0);
+
+    // ── Build per-state data ────────────────────────────────────────────
+    let mut state_block_type = vec![0u16; state_count];
+    let mut state_flags = vec![0u8; state_count];
+
+    for block in &blocks {
+        let base_flags = base_flags_for(&block.definition_type);
+        for state in &block.states {
+            let idx = state.id as usize;
+            state_block_type[idx] = block.type_index;
+            state_flags[idx] = base_flags | if state.is_default { 0x02 } else { 0 };
+        }
+    }
+
+    // ── Build property tables ───────────────────────────────────────────
+    let mut prop_defs: Vec<PropDefOut> = Vec::new();
+    let mut prop_values: Vec<String> = Vec::new();
+
+    for block in &mut blocks {
+        block.props_offset = prop_defs.len() as u16;
+        let strides = compute_strides(block);
+        for (i, prop) in block.properties.iter().enumerate() {
+            let values_offset = prop_values.len() as u16;
+            prop_values.extend(prop.values.iter().cloned());
+            prop_defs.push(PropDefOut {
+                name: prop.name.clone(),
+                num_values: prop.values.len() as u8,
+                values_offset,
+                stride: strides[i],
+            });
+        }
+    }
+
+    // ── Verify stride computation matches actual state IDs ──────────────
+    for block in &blocks {
+        let props_start = block.props_offset as usize;
+        let strides: Vec<u16> = prop_defs[props_start..props_start + block.properties.len()]
+            .iter()
+            .map(|p| p.stride)
+            .collect();
+        for state in &block.states {
+            let expected_offset: u16 = state
+                .value_indices
+                .iter()
+                .zip(&strides)
+                .map(|(&vi, &s)| vi as u16 * s)
+                .sum();
+            let expected_id = block.first_state_id + expected_offset;
+            assert_eq!(
+                state.id, expected_id,
+                "State ID mismatch for {}: expected {} (first={} + offset={}), got {}",
+                block.name, expected_id, block.first_state_id, expected_offset, state.id,
+            );
+        }
+    }
+
+    // ── Sorted name lookup ──────────────────────────────────────────────
+    let mut name_lookup: Vec<(&str, u16)> = blocks
+        .iter()
+        .map(|b| (b.name.as_str(), b.type_index))
+        .collect();
+    name_lookup.sort_by_key(|&(n, _)| n);
+
+    // ── Generate code ───────────────────────────────────────────────────
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
+    let dest = Path::new(&out_dir).join("block_states_generated.rs");
+    let mut code = String::with_capacity(4 * 1024 * 1024);
+
+    write_generated(
+        &mut code,
+        &blocks,
+        state_count,
+        &state_block_type,
+        &state_flags,
+        &prop_defs,
+        &prop_values,
+        &name_lookup,
+    );
+
+    fs::write(&dest, &code).expect("Failed to write generated code");
+}
+
+// ─── Data structures ────────────────────────────────────────────────────────
+
+struct BlockData {
+    name: String,
+    definition_type: String,
+    properties: Vec<PropData>,
+    states: Vec<StateData>,
+    first_state_id: u16,
+    default_state_id: u16,
+    type_index: u16,
+    props_offset: u16,
+}
+
+struct PropData {
+    name: String,
+    values: Vec<String>,
+}
+
+struct StateData {
+    id: u16,
+    is_default: bool,
+    /// Property values in definition order (indices into parent block's property value lists).
+    value_indices: Vec<u8>,
+}
+
+struct PropDefOut {
+    name: String,
+    num_values: u8,
+    values_offset: u16,
+    stride: u16,
+}
+
+// ─── Parsing ────────────────────────────────────────────────────────────────
+
+fn parse_block(name: &str, value: &serde_json::Value) -> BlockData {
+    let definition_type = value
+        .get("definition")
+        .and_then(|d| d.get("type"))
+        .and_then(|t| t.as_str())
+        .unwrap_or("minecraft:block")
+        .to_owned();
+
+    // Properties in JSON definition order (preserve_order feature keeps insertion order).
+    let properties: Vec<PropData> = value
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .map(|obj| {
+            obj.iter()
+                .map(|(k, v)| PropData {
+                    name: k.clone(),
+                    values: v
+                        .as_array()
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|x| x.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let states: Vec<StateData> = value
+        .get("states")
+        .and_then(|s| s.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|s| {
+                    let id = s.get("id")?.as_u64()? as u16;
+                    let is_default = s.get("default").and_then(|d| d.as_bool()).unwrap_or(false);
+
+                    // Resolve value indices by matching state property values to block property
+                    // value lists, in definition order.
+                    let state_props = s.get("properties").and_then(|p| p.as_object());
+                    let value_indices: Vec<u8> = properties
+                        .iter()
+                        .map(|prop| {
+                            let val = state_props
+                                .and_then(|sp| sp.get(&prop.name))
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("");
+                            prop.values.iter().position(|v| v == val).unwrap_or(0) as u8
+                        })
+                        .collect();
+
+                    Some(StateData {
+                        id,
+                        is_default,
+                        value_indices,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let first_state_id = states.iter().map(|s| s.id).min().unwrap_or(0);
+    let default_state_id = states
+        .iter()
+        .find(|s| s.is_default)
+        .map(|s| s.id)
+        .unwrap_or(first_state_id);
+
+    BlockData {
+        name: name.to_owned(),
+        definition_type,
+        properties,
+        states,
+        first_state_id,
+        default_state_id,
+        type_index: 0,
+        props_offset: 0,
+    }
+}
+
+fn base_flags_for(definition_type: &str) -> u8 {
+    let mut f = 0u8;
+    if definition_type == "minecraft:air" {
+        f |= 0x01; // IS_AIR
+    }
+    if definition_type == "minecraft:liquid" {
+        f |= 0x04; // IS_LIQUID
+    }
+    f
+}
+
+/// Compute the stride for each property by examining actual state data.
+///
+/// The stride of a property is the number of consecutive states (by ascending
+/// ID) before that property's value first changes from its initial value.
+fn compute_strides(block: &BlockData) -> Vec<u16> {
+    let n = block.properties.len();
+    if n == 0 {
+        return Vec::new();
+    }
+
+    // States sorted by ID (should already be, but be safe).
+    let mut sorted: Vec<&StateData> = block.states.iter().collect();
+    sorted.sort_by_key(|s| s.id);
+
+    let mut strides = vec![0u16; n];
+    for (prop_idx, _) in block.properties.iter().enumerate() {
+        let first_val = sorted[0].value_indices[prop_idx];
+        let mut found = false;
+        for (offset, state) in sorted.iter().enumerate().skip(1) {
+            if state.value_indices[prop_idx] != first_val {
+                strides[prop_idx] = offset as u16;
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            // Property has only one distinct value → stride is total states.
+            strides[prop_idx] = block.states.len() as u16;
+        }
+    }
+
+    strides
+}
+
+// ─── Code generation ────────────────────────────────────────────────────────
+
+fn write_generated(
+    out: &mut String,
+    blocks: &[BlockData],
+    state_count: usize,
+    state_block_type: &[u16],
+    state_flags: &[u8],
+    prop_defs: &[PropDefOut],
+    prop_values: &[String],
+    name_lookup: &[(&str, u16)],
+) {
+    let _ = writeln!(out, "// @generated by build.rs — do not edit\n");
+    let _ = writeln!(out, "/// Total number of block types.");
+    let _ = writeln!(out, "pub const BLOCK_COUNT: usize = {};\n", blocks.len());
+    let _ = writeln!(out, "/// Total number of block states.");
+    let _ = writeln!(out, "pub const STATE_COUNT: usize = {state_count};\n");
+
+    // ── BLOCK_STATE_DATA ────────────────────────────────────────────────
+    let _ = writeln!(
+        out,
+        "/// Block state data indexed by state ID (dense, no gaps)."
+    );
+    let _ = writeln!(
+        out,
+        "pub static BLOCK_STATE_DATA: [BlockStateEntry; STATE_COUNT] = ["
+    );
+    for i in 0..state_count {
+        let _ = writeln!(
+            out,
+            "    BlockStateEntry {{ block_type: {}, flags: BlockStateFlags::from_bits_truncate({}) }},",
+            state_block_type[i], state_flags[i],
+        );
+    }
+    let _ = writeln!(out, "];\n");
+
+    // ── BLOCK_DEFS ──────────────────────────────────────────────────────
+    let _ = writeln!(out, "/// Block definitions indexed by block type index.");
+    let _ = writeln!(out, "pub static BLOCK_DEFS: [BlockDef; BLOCK_COUNT] = [");
+    for b in blocks {
+        let _ = writeln!(
+            out,
+            "    BlockDef {{ name: {:?}, first_state: {}, state_count: {}, default_state: {}, \
+             prop_count: {}, props_offset: {} }},",
+            b.name,
+            b.first_state_id,
+            b.states.len(),
+            b.default_state_id,
+            b.properties.len(),
+            b.props_offset,
+        );
+    }
+    let _ = writeln!(out, "];\n");
+
+    // ── PROPERTY_DEFS ───────────────────────────────────────────────────
+    let _ = writeln!(
+        out,
+        "/// Property definitions (flat array, referenced by BlockDef)."
+    );
+    let _ = writeln!(
+        out,
+        "pub static PROPERTY_DEFS: [PropertyDef; {}] = [",
+        prop_defs.len()
+    );
+    for p in prop_defs {
+        let _ = writeln!(
+            out,
+            "    PropertyDef {{ name: {:?}, num_values: {}, values_offset: {}, stride: {} }},",
+            p.name, p.num_values, p.values_offset, p.stride,
+        );
+    }
+    let _ = writeln!(out, "];\n");
+
+    // ── PROPERTY_VALUES ─────────────────────────────────────────────────
+    let _ = writeln!(
+        out,
+        "/// Property value strings (flat array, referenced by PropertyDef)."
+    );
+    let _ = writeln!(
+        out,
+        "pub static PROPERTY_VALUES: [&str; {}] = [",
+        prop_values.len()
+    );
+    for v in prop_values {
+        let _ = writeln!(out, "    {:?},", v);
+    }
+    let _ = writeln!(out, "];\n");
+
+    // ── BLOCK_NAMES_SORTED ──────────────────────────────────────────────
+    let _ = writeln!(
+        out,
+        "/// Block names sorted alphabetically for binary search lookup."
+    );
+    let _ = writeln!(
+        out,
+        "pub static BLOCK_NAMES_SORTED: [(&str, u16); BLOCK_COUNT] = ["
+    );
+    for &(name, idx) in name_lookup {
+        let _ = writeln!(out, "    ({:?}, {idx}),", name);
+    }
+    let _ = writeln!(out, "];\n");
+
+    // ── Well-known constants ────────────────────────────────────────────
+    let _ = writeln!(out, "// Well-known block state constants (default states).");
+    let well_known: HashMap<&str, &str> = [
+        ("minecraft:air", "AIR"),
+        ("minecraft:stone", "STONE"),
+        ("minecraft:granite", "GRANITE"),
+        ("minecraft:diorite", "DIORITE"),
+        ("minecraft:andesite", "ANDESITE"),
+        ("minecraft:grass_block", "GRASS_BLOCK"),
+        ("minecraft:dirt", "DIRT"),
+        ("minecraft:cobblestone", "COBBLESTONE"),
+        ("minecraft:oak_planks", "OAK_PLANKS"),
+        ("minecraft:bedrock", "BEDROCK"),
+        ("minecraft:water", "WATER"),
+        ("minecraft:lava", "LAVA"),
+        ("minecraft:sand", "SAND"),
+        ("minecraft:gravel", "GRAVEL"),
+        ("minecraft:oak_log", "OAK_LOG"),
+        ("minecraft:oak_leaves", "OAK_LEAVES"),
+        ("minecraft:glass", "GLASS"),
+        ("minecraft:iron_block", "IRON_BLOCK"),
+        ("minecraft:gold_block", "GOLD_BLOCK"),
+        ("minecraft:obsidian", "OBSIDIAN"),
+        ("minecraft:torch", "TORCH"),
+        ("minecraft:spawner", "SPAWNER"),
+        ("minecraft:oak_stairs", "OAK_STAIRS"),
+        ("minecraft:chest", "CHEST"),
+        ("minecraft:diamond_ore", "DIAMOND_ORE"),
+        ("minecraft:diamond_block", "DIAMOND_BLOCK"),
+        ("minecraft:crafting_table", "CRAFTING_TABLE"),
+        ("minecraft:furnace", "FURNACE"),
+        ("minecraft:redstone_wire", "REDSTONE_WIRE"),
+        ("minecraft:oak_door", "OAK_DOOR"),
+        ("minecraft:ladder", "LADDER"),
+        ("minecraft:rail", "RAIL"),
+        ("minecraft:lever", "LEVER"),
+        ("minecraft:stone_pressure_plate", "STONE_PRESSURE_PLATE"),
+        ("minecraft:redstone_torch", "REDSTONE_TORCH"),
+        ("minecraft:stone_button", "STONE_BUTTON"),
+        ("minecraft:ice", "ICE"),
+        ("minecraft:snow_block", "SNOW_BLOCK"),
+        ("minecraft:cactus", "CACTUS"),
+        ("minecraft:netherrack", "NETHERRACK"),
+        ("minecraft:glowstone", "GLOWSTONE"),
+        ("minecraft:end_stone", "END_STONE"),
+        ("minecraft:emerald_block", "EMERALD_BLOCK"),
+        ("minecraft:command_block", "COMMAND_BLOCK"),
+        ("minecraft:barrier", "BARRIER"),
+        ("minecraft:iron_trapdoor", "IRON_TRAPDOOR"),
+        ("minecraft:cobweb", "COBWEB"),
+        ("minecraft:soul_sand", "SOUL_SAND"),
+        ("minecraft:slime_block", "SLIME_BLOCK"),
+        ("minecraft:packed_ice", "PACKED_ICE"),
+        ("minecraft:frosted_ice", "FROSTED_ICE"),
+        ("minecraft:blue_ice", "BLUE_ICE"),
+        ("minecraft:bubble_column", "BUBBLE_COLUMN"),
+        ("minecraft:sweet_berry_bush", "SWEET_BERRY_BUSH"),
+        ("minecraft:honey_block", "HONEY_BLOCK"),
+        ("minecraft:powder_snow", "POWDER_SNOW"),
+    ]
+    .into_iter()
+    .collect();
+
+    for b in blocks {
+        if let Some(const_name) = well_known.get(b.name.as_str()) {
+            let _ = writeln!(out, "/// `{}` default state.", b.name);
+            let _ = writeln!(
+                out,
+                "pub const {const_name}: BlockStateId = BlockStateId({});",
+                b.default_state_id,
+            );
+        }
+    }
+}

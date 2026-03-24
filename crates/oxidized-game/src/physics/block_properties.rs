@@ -135,9 +135,10 @@ impl PhysicsBlockProperties {
         let mut is_slime = vec![false; size];
 
         for entry in PHYSICS_OVERRIDES {
-            if let Some(block) = registry.get_block(entry.name) {
-                for &state_id in &block.states {
-                    let idx = state_id.0 as usize;
+            if let Some(def) = registry.get_block_def(entry.name) {
+                let first = def.first_state as usize;
+                let last = first + def.state_count as usize;
+                for idx in first..last {
                     friction[idx] = entry.friction;
                     speed_factor[idx] = entry.speed_factor;
                     jump_factor[idx] = entry.jump_factor;
@@ -333,14 +334,15 @@ mod tests {
     fn test_frosted_ice_all_states() {
         let p = physics();
         let reg = registry();
-        let block = reg.get_block("minecraft:frosted_ice").unwrap();
+        let def = reg.get_block_def("minecraft:frosted_ice").unwrap();
         // Frosted ice has 4 states (age=0..3). All should have ice friction.
-        assert_eq!(block.states.len(), 4);
-        for &state_id in &block.states {
+        assert_eq!(def.state_count, 4);
+        let first = def.first_state as u32;
+        for state_id in first..first + def.state_count as u32 {
             assert!(
-                (p.friction(state_id.0 as u32) - ICE_FRICTION).abs() < 1e-10,
+                (p.friction(state_id) - ICE_FRICTION).abs() < 1e-10,
                 "Frosted ice state {} should have friction {}",
-                state_id.0,
+                state_id,
                 ICE_FRICTION
             );
         }
