@@ -41,6 +41,7 @@ reqwest           = { workspace = true }
 proptest  = { workspace = true }
 insta     = { workspace = true }
 tempfile  = { workspace = true }
+serial_test = { workspace = true }
 
 [lints]
 workspace = true

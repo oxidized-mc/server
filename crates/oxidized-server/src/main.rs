@@ -61,7 +61,10 @@ fn main() -> anyhow::Result<()> {
     // Load (or create) oxidized.toml.
     let mut config = ServerConfig::load_or_create(&args.config)?;
 
-    // CLI overrides take precedence over oxidized.toml.
+    // Environment variable overrides (ADR-005/033 precedence: CLI > env > file > defaults).
+    config.apply_env_overrides();
+
+    // CLI overrides take precedence over environment variables and oxidized.toml.
     if let Some(port) = args.port {
         config.network.port = port;
     }

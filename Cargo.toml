@@ -85,6 +85,7 @@ rustyline      = "17"
 proptest       = "1"
 insta          = { version = "1", features = ["toml"] }
 tempfile       = "3"
+serial_test    = "3"
 
 # Internal workspace crates
 oxidized-protocol = { path = "crates/oxidized-protocol" }
