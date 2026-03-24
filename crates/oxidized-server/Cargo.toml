@@ -9,6 +9,10 @@ repository.workspace  = true
 rust-version.workspace = true
 publish     = false
 
+[lib]
+name = "oxidized_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "oxidized"
 path = "src/main.rs"
@@ -42,6 +46,7 @@ proptest  = { workspace = true }
 insta     = { workspace = true }
 tempfile  = { workspace = true }
 serial_test = { workspace = true }
+tokio     = { workspace = true, features = ["test-util"] }
 
 [lints]
 workspace = true

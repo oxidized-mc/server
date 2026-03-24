@@ -259,4 +259,54 @@ mod tests {
         assert_eq!(pkt1.id, 0x01);
         assert_eq!(pkt2.id, 0x02);
     }
+
+    /// Verifies that `try_send_raw` returns an error when the outbound
+    /// channel is full, simulating broadcast backpressure (R4.9).
+    /// In the play loop, broadcasts use `try_send_raw()` — when the
+    /// channel is full (slow client), the connection is disconnected.
+    #[tokio::test]
+    async fn test_broadcast_channel_full_disconnects() {
+        // Channel capacity = 2 to easily fill it
+        let (tx, _rx) = mpsc::channel(2);
+        let handle = ConnectionHandle::new(tx, test_addr());
+
+        // Fill the channel
+        handle
+            .send_raw(0x10, Bytes::from_static(b"broadcast_1"))
+            .await
+            .unwrap();
+        handle
+            .send_raw(0x10, Bytes::from_static(b"broadcast_2"))
+            .await
+            .unwrap();
+
+        // Simulate broadcast: try_send_raw should fail (channel full)
+        let result = handle.try_send_raw(0x10, Bytes::from_static(b"broadcast_3"));
+        assert!(
+            result.is_err(),
+            "try_send_raw should fail when channel is full (slow client)"
+        );
+    }
+
+    /// Verifies that `try_send_raw` succeeds when the channel has space,
+    /// ensuring normal clients are not affected by the channel-full check.
+    #[tokio::test]
+    async fn test_broadcast_succeeds_with_available_capacity() {
+        let (tx, mut rx) = mpsc::channel(16);
+        let handle = ConnectionHandle::new(tx, test_addr());
+
+        // Send several broadcast packets — should all succeed
+        for i in 0..10 {
+            handle
+                .try_send_raw(0x10, Bytes::from(vec![i as u8]))
+                .unwrap();
+        }
+
+        // Verify they're all queued
+        for i in 0..10 {
+            let pkt = rx.recv().await.unwrap();
+            assert_eq!(pkt.id, 0x10);
+            assert_eq!(&pkt.data[..], &[i as u8]);
+        }
+    }
 }

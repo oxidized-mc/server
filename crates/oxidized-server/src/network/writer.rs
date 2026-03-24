@@ -429,6 +429,89 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_writer_slow_client_write_timeout() {
+        // Create a TCP pair where the client never reads, simulating a slow client.
+        // The writer should hit the WRITE_TIMEOUT and return an error.
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let client_handle = tokio::spawn(async move { TcpStream::connect(addr).await.unwrap() });
+        let (server_stream, peer_addr) = listener.accept().await.unwrap();
+        let _client_stream = client_handle.await.unwrap();
+
+        let server = Connection::new(server_stream, peer_addr).unwrap();
+        let (_reader, writer) = server.into_split();
+        let (tx, rx) = mpsc::channel(4096);
+
+        // Override WRITE_TIMEOUT for test speed: use tokio::time::pause()
+        // to advance time without waiting the full 30 seconds.
+        tokio::time::pause();
+
+        let handle = tokio::spawn(writer_loop(writer, rx));
+
+        // Fill the TCP send buffer to force write_all to block.
+        // TCP send buffer is typically ~128 KB, so we send large payloads.
+        let big_payload = Bytes::from(vec![0xAAu8; 32 * 1024]);
+        for _ in 0..200 {
+            if tx
+                .send(OutboundPacket {
+                    id: 0x01,
+                    data: big_payload.clone(),
+                })
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+
+        // Advance time past the write timeout
+        tokio::time::advance(Duration::from_secs(31)).await;
+
+        let result = tokio::time::timeout(Duration::from_secs(5), handle)
+            .await
+            .expect("writer task should exit within timeout")
+            .unwrap();
+
+        assert!(result.is_err(), "Writer should error on slow client");
+        let err_str = result.unwrap_err().to_string();
+        assert!(
+            err_str.contains("timed out") || err_str.contains("memory budget"),
+            "Expected timeout or memory error, got: {err_str}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_normal_traffic_not_affected_by_budget() {
+        let (writer, mut client) = writer_pair().await;
+        let (tx, rx) = mpsc::channel(256);
+
+        let handle = tokio::spawn(writer_loop(writer, rx));
+
+        // Send 200 small packets (~100 bytes each) — well under 256 KB budget.
+        // This verifies normal traffic isn't affected by the memory check.
+        for i in 0..200 {
+            tx.send(OutboundPacket {
+                id: i % 64,
+                data: Bytes::from(vec![0xBBu8; 100]),
+            })
+            .await
+            .unwrap();
+        }
+
+        // Read them all back to confirm they arrived
+        for _ in 0..200 {
+            let pkt = client.read_raw_packet().await.unwrap();
+            assert_eq!(&pkt.data[..], &[0xBBu8; 100]);
+        }
+
+        // Clean shutdown
+        drop(tx);
+        let result = handle.await.unwrap();
+        assert!(result.is_ok(), "Normal traffic should not trigger budget error");
+    }
+
+    #[tokio::test]
     async fn test_writer_preserves_packet_order() {
         let (writer, mut client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(256);

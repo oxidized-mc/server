@@ -4,11 +4,6 @@
 //! parses CLI arguments, initialises tracing, loads configuration, and
 //! launches the Tokio async runtime with the TCP listener.
 
-mod app;
-mod config;
-mod network;
-mod tick;
-
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -31,9 +26,10 @@ use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
-use crate::app::cli::Args;
-use crate::config::ServerConfig;
-use crate::network::{LoginContext, ServerContext};
+use oxidized_server::app::cli::Args;
+use oxidized_server::config::ServerConfig;
+use oxidized_server::network::{LoginContext, ServerContext};
+use oxidized_server::{app, network, tick};
 
 /// Use mimalloc as the global allocator for improved throughput and
 /// reduced fragmentation under the server's allocation patterns.

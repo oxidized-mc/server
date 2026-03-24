@@ -1,0 +1,95 @@
+---
+source: crates/oxidized-server/src/config/mod.rs
+assertion_line: 571
+expression: toml_str
+---
+[network]
+port = 25565
+ip = ""
+is_online_mode = true
+is_preventing_proxy_connections = false
+compression_threshold = 256
+is_native_transport_enabled = true
+rate_limit = 0
+is_accepting_transfers = false
+
+[gameplay]
+gamemode = "survival"
+difficulty = "easy"
+is_hardcore = false
+is_force_gamemode = false
+max_players = 20
+spawn_protection = 16
+max_world_size = 29999984
+is_flight_allowed = false
+is_spawning_npcs = true
+is_spawning_animals = true
+is_spawning_monsters = true
+is_nether_allowed = true
+max_chained_neighbor_updates = 1000000
+is_pvp_enabled = true
+
+[world]
+name = "world"
+seed = ""
+is_generating_structures = true
+view_distance = 10
+simulation_distance = 10
+is_sync_chunk_writes = true
+region_file_compression = "deflate"
+
+[display]
+motd = "An Oxidized Minecraft Server"
+is_status_enabled = true
+is_hiding_online_players = false
+entity_broadcast_range_percentage = 100
+status_heartbeat_interval = 5
+
+[chat]
+color_char = "&"
+
+[admin]
+is_whitelist_enabled = false
+is_whitelist_enforced = false
+op_permission_level = 4
+function_permission_level = 2
+is_secure_profile_enforced = true
+is_logging_ips = true
+max_tick_time = 60000
+player_idle_timeout = 0
+is_broadcasting_console_to_ops = true
+is_broadcasting_rcon_to_ops = true
+pause_when_empty_seconds = 60
+
+[rcon]
+is_enabled = false
+port = 25575
+password = ""
+
+[query]
+is_enabled = false
+port = 25565
+
+[resource_pack]
+url = ""
+sha1 = ""
+prompt = ""
+is_required = false
+
+[management]
+is_enabled = false
+host = ""
+port = 0
+secret = ""
+is_tls_enabled = false
+
+[packs]
+initial_enabled = "vanilla"
+initial_disabled = ""
+
+[advanced]
+is_jmx_monitoring_enabled = false
+text_filtering_config = ""
+text_filtering_version = 0
+is_code_of_conduct_enabled = false
+bug_report_link = ""

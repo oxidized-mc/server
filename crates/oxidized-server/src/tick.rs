@@ -366,7 +366,7 @@ fn save_level_dat_blocking(ctx: &ServerContext) -> Result<(), Box<dyn std::error
 /// on a blocking thread. Returns `Ok(())` on success or the error.
 ///
 /// Used by the shutdown save path (which runs in async context).
-pub(crate) async fn save_level_dat(
+pub async fn save_level_dat(
     ctx: &ServerContext,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
     let level_data = ctx.level_data.read().clone();

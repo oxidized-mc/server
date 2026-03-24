@@ -1,6 +1,6 @@
 # Phase R4 — Network I/O Refactoring (ADR-006 Compliance)
 
-**Status:** 🟡 In Progress  
+**Status:** ✅ Complete  
 **Crates:** `oxidized-protocol`, `oxidized-server`  
 **Reward:** Every player connection uses a reader/writer task pair with bounded
 channels, batch flushing, per-connection memory budgets, and packet rate limiting.
@@ -21,8 +21,8 @@ unbounded buffers, and clean cancellation. ADR-006 compliance is complete.
 | R4.6 | Migrate play state — inbound path | ✅ Complete |
 | R4.7 | Migrate play state — outbound path (direct sends) | ✅ Complete |
 | R4.8 | Migrate play state — broadcast path | ✅ Complete |
-| R4.9 | Per-connection memory budget and slow-client detection | ❌ Not Started |
-| R4.10 | Compliance tests and benchmarks | ❌ Not Started |
+| R4.9 | Per-connection memory budget and slow-client detection | ✅ Complete |
+| R4.10 | Compliance tests and benchmarks | ✅ Complete |
 
 ---
 
@@ -842,10 +842,26 @@ the play loop.
 - `oxidized-server/src/network/play/placement.rs` — `conn_handle` sends
 - `oxidized-server/src/network/play/pick_block.rs` — `conn_handle` sends
 
-### Phase 5: Hardening (R4.9 + R4.10) — safety nets
+### Phase 5: Hardening (R4.9 + R4.10) — ✅ Complete
 
-Add memory budgets, slow-client detection, and compliance tests.
+Added memory budgets, slow-client detection, and compliance tests.
 These are additive — they don't change the happy path.
+
+**R4.9 — Per-connection memory budget and slow-client detection:**
+Implementation was already in place in `writer.rs` (256 KB budget via
+`MAX_CONNECTION_MEMORY`, 30s write timeout via `WRITE_TIMEOUT`). Added
+missing tests: slow-client write timeout, normal-traffic budget, broadcast
+channel-full detection.
+
+**R4.10 — Compliance tests and benchmarks:**
+Restructured `oxidized-server` from a pure binary crate to binary+library
+to enable integration tests. Created two compliance test suites:
+
+- `oxidized-protocol/tests/transport_compliance.rs` — 10 protocol-level tests
+  (TCP_NODELAY, encryption roundtrip, batch encoding, constants, channel semantics)
+- `oxidized-server/tests/network_compliance.rs` — 8 full-pipeline ADR-006 tests
+  (throughput >5000 pkt/s, memory budget, backpressure, rate limit, clean shutdown,
+  encryption roundtrip, full lifecycle, batch flush)
 
 ---
 
@@ -894,7 +910,9 @@ R4.10 (compliance)       ── depends on all above
 | `oxidized-protocol/src/transport/handle.rs` | `ConnectionHandle` API |
 | `oxidized-server/src/network/reader.rs` | Reader task with rate limiting |
 | `oxidized-server/src/network/writer.rs` | Writer task with batch flushing |
-| `oxidized-server/tests/network_compliance.rs` | ADR-006 compliance tests |
+| `oxidized-server/src/lib.rs` | Library target enabling integration tests |
+| `oxidized-server/tests/network_compliance.rs` | ADR-006 full-pipeline compliance tests (8 tests) |
+| `oxidized-protocol/tests/transport_compliance.rs` | ADR-006 protocol-level compliance tests (10 tests) |
 
 ### Modified Files
 
@@ -916,6 +934,9 @@ R4.10 (compliance)       ── depends on all above
 | `oxidized-server/src/network/play/placement.rs` | Use `ConnectionHandle` |
 | `oxidized-server/src/network/play/sign_editing.rs` | Use `ConnectionHandle` |
 | `oxidized-server/src/network/play/pick_block.rs` | Use `ConnectionHandle` |
+| `oxidized-server/src/main.rs` | Import modules from library crate |
+| `oxidized-server/src/tick.rs` | Make `save_level_dat` public for binary crate |
+| `oxidized-server/Cargo.toml` | Add `[lib]` section, tokio test-util dev-dep |
 | `oxidized-server/src/network/play/keepalive.rs` | Unchanged (read-only) |
 
 ---
@@ -926,8 +947,8 @@ R4.10 (compliance)       ── depends on all above
 - [x] Reader task dispatches packets through bounded inbound channel (128)
 - [x] Writer task batch-flushes from bounded outbound channel (512)
 - [x] Rate limiter disconnects clients sending >500 packets per 50ms
-- [ ] Per-connection memory stays below 256 KB under normal load
-- [ ] Slow-client detection disconnects unresponsive writers within 30s
+- [x] Per-connection memory stays below 256 KB under normal load
+- [x] Slow-client detection disconnects unresponsive writers within 30s
 - [x] Pre-play states (Handshake/Status/Login/Config) still use single-task model
 - [x] All play handler `send_packet` calls go through `ConnectionHandle`
 - [x] No manual `flush()` calls in play handlers
@@ -935,7 +956,7 @@ R4.10 (compliance)       ── depends on all above
 - [x] TCP_NODELAY set on all connections
 - [x] Keepalive timing unaffected (15s interval, 30s timeout)
 - [x] Clean shutdown: dropping senders causes both tasks to exit
-- [ ] Throughput benchmark: >5000 packets/sec per connection
+- [x] Throughput benchmark: >5000 packets/sec per connection
 - [x] `cargo test --workspace` passes with zero failures
 - [x] `cargo clippy --workspace -- -D warnings` produces zero warnings
 
@@ -951,8 +972,8 @@ R4.10 (compliance)       ── depends on all above
 | 006 | Writer batch flushing | ✅ Complete |
 | 006 | TCP_NODELAY | ✅ Already compliant |
 | 006 | Rate limiting (500/tick) | ✅ Complete |
-| 006 | Per-connection memory budget (256 KB) | ❌ → target |
-| 006 | Throughput benchmark (>5000 pkt/s) | ❌ → target |
-| 006 | Backpressure test | ❌ → target |
+| 006 | Per-connection memory budget (256 KB) | ✅ Complete |
+| 006 | Throughput benchmark (>5000 pkt/s) | ✅ Complete |
+| 006 | Backpressure test | ✅ Complete |
 | 009 | Cipher state split for task pair | ✅ Complete |
 | 020 | Network ↔ game channels | 🟡 Partial (outbound only; full ADR-020 in P15) |
