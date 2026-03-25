@@ -139,9 +139,20 @@ pub struct ServerContext {
     pub tick_rate_manager: RwLock<ServerTickRateManager>,
     /// Per-player operator permissions loaded from `ops.json`.
     pub ops: SharedOpsStore,
+    /// Weak self-reference for obtaining `Arc<dyn ServerHandle>` inside
+    /// trait methods (which only receive `&self`). Call [`init_self_ref`]
+    /// once after wrapping in `Arc`.
+    pub self_ref: std::sync::OnceLock<std::sync::Weak<Self>>,
 }
 
 impl ServerContext {
+    /// Initialises the weak self-reference. Must be called once, immediately
+    /// after wrapping in `Arc`.
+    pub fn init_self_ref(self: &Arc<Self>) {
+        self.self_ref
+            .set(Arc::downgrade(self))
+            .expect("init_self_ref called twice");
+    }
     /// Sends a broadcast message to all connected players, logging a warning
     /// if no receivers are active.
     pub fn broadcast(&self, msg: BroadcastMessage) {
@@ -197,6 +208,11 @@ impl ServerContext {
         };
 
         let perm_level = self.ops.get_permission_level(&uuid).clamp(0, 4) as u32;
+        let server: Arc<dyn ServerHandle> = self
+            .self_ref
+            .get()
+            .and_then(std::sync::Weak::upgrade)
+            .expect("ServerContext dropped or init_self_ref not called");
         let source = oxidized_game::commands::CommandSourceStack {
             source: oxidized_game::commands::CommandSourceKind::Player {
                 name: player_name.clone(),
@@ -206,7 +222,7 @@ impl ServerContext {
             rotation: (0.0, 0.0),
             permission_level: perm_level,
             display_name: player_name,
-            server: Arc::new(NoopServerHandle),
+            server,
             feedback_sender: Arc::new(|_| {}),
             is_silent: true,
         };
@@ -702,27 +718,6 @@ pub struct BroadcastMessage {
     pub target_entity: Option<i32>,
 }
 
-/// Minimal no-op [`ServerHandle`] used when serializing the command tree
-/// for permission-level updates (no server methods are actually called).
-struct NoopServerHandle;
-
-impl ServerHandle for NoopServerHandle {
-    fn broadcast_to_ops(&self, _: &Component, _: u32) {}
-    fn request_shutdown(&self) {}
-    fn seed(&self) -> i64 { 0 }
-    fn online_player_names(&self) -> Vec<String> { vec![] }
-    fn online_player_count(&self) -> usize { 0 }
-    fn max_players(&self) -> usize { 0 }
-    fn difficulty(&self) -> i32 { 0 }
-    fn game_time(&self) -> i64 { 0 }
-    fn day_time(&self) -> i64 { 0 }
-    fn is_raining(&self) -> bool { false }
-    fn is_thundering(&self) -> bool { false }
-    fn kick_player(&self, _: &str, _: &str) -> bool { false }
-    fn find_player_uuid(&self, _: &str) -> Option<uuid::Uuid> { None }
-    fn command_descriptions(&self) -> Vec<(String, Option<String>)> { vec![] }
-}
-
 /// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.
 /// There are 69 registered serverbound packets (IDs 0x00–0x44).
 const MAX_SERVERBOUND_PLAY_ID: i32 = 0x44;
@@ -1026,6 +1021,7 @@ mod tests {
                     oxidized_game::level::ServerTickRateManager::default(),
                 ),
                 ops: Arc::new(crate::ops::OpsStore::load("/dev/null/nonexistent", 4)),
+                self_ref: std::sync::OnceLock::new(),
             }),
         })
     }

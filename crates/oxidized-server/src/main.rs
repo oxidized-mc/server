@@ -268,7 +268,9 @@ fn main() -> anyhow::Result<()> {
                 oxidized_game::level::ServerTickRateManager::default(),
             ),
             ops: ops_store,
+            self_ref: std::sync::OnceLock::new(),
         });
+        server_ctx.init_self_ref();
 
         // Build the shared login context.
         let login_ctx = Arc::new(LoginContext {

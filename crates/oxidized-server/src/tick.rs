@@ -648,6 +648,7 @@ mod tests {
             event_bus: oxidized_game::event::EventBus::new(),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
             ops: Arc::new(crate::ops::OpsStore::load("/dev/null/nonexistent", 4)),
+            self_ref: std::sync::OnceLock::new(),
         })
     }
 
