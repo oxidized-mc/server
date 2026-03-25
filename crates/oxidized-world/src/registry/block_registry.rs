@@ -383,10 +383,7 @@ mod tests {
             let state = BlockRegistry
                 .default_state(name)
                 .unwrap_or_else(|| panic!("{name} missing"));
-            assert!(
-                state.is_interactable(),
-                "{name} should be interactable"
-            );
+            assert!(state.is_interactable(), "{name} should be interactable");
         }
     }
 
@@ -425,10 +422,7 @@ mod tests {
             let state = BlockRegistry
                 .default_state(name)
                 .unwrap_or_else(|| panic!("{name} missing"));
-            assert!(
-                state.has_block_entity(),
-                "{name} should have block entity"
-            );
+            assert!(state.has_block_entity(), "{name} should have block entity");
         }
     }
 
@@ -465,10 +459,7 @@ mod tests {
             let state = BlockRegistry
                 .default_state(name)
                 .unwrap_or_else(|| panic!("{name} missing"));
-            assert!(
-                state.is_replaceable(),
-                "{name} should be replaceable"
-            );
+            assert!(state.is_replaceable(), "{name} should be replaceable");
         }
     }
 
@@ -483,10 +474,7 @@ mod tests {
             let state = BlockRegistry
                 .default_state(name)
                 .unwrap_or_else(|| panic!("{name} missing"));
-            assert!(
-                state.is_flammable(),
-                "{name} should be flammable"
-            );
+            assert!(state.is_flammable(), "{name} should be flammable");
         }
 
         // Stone and iron should not be flammable
@@ -496,18 +484,12 @@ mod tests {
 
     #[test]
     fn test_random_ticking_blocks() {
-        let ticking = [
-            "minecraft:grass_block",
-            "minecraft:ice",
-        ];
+        let ticking = ["minecraft:grass_block", "minecraft:ice"];
         for name in &ticking {
             let state = BlockRegistry
                 .default_state(name)
                 .unwrap_or_else(|| panic!("{name} missing"));
-            assert!(
-                state.ticks_randomly(),
-                "{name} should tick randomly"
-            );
+            assert!(state.ticks_randomly(), "{name} should tick randomly");
         }
 
         // Stone should not tick randomly
@@ -601,7 +583,11 @@ mod tests {
         let s = default("minecraft:obsidian");
         assert_approx(s.hardness(), 50.0, "obsidian hardness");
         // Explosion resistance 1200.0 exceeds u16×100 range (max 655.35), clamped.
-        assert_approx(s.explosion_resistance(), 655.35, "obsidian resistance (clamped)");
+        assert_approx(
+            s.explosion_resistance(),
+            655.35,
+            "obsidian resistance (clamped)",
+        );
     }
 
     #[test]
@@ -708,11 +694,23 @@ mod tests {
             "moving_piston push=BLOCK"
         );
         // Torch is destroyed when pushed
-        assert_eq!(default("minecraft:torch").push_reaction(), 1, "torch push=DESTROY");
+        assert_eq!(
+            default("minecraft:torch").push_reaction(),
+            1,
+            "torch push=DESTROY"
+        );
         // Stone is pushable normally
-        assert_eq!(default("minecraft:stone").push_reaction(), 0, "stone push=NORMAL");
+        assert_eq!(
+            default("minecraft:stone").push_reaction(),
+            0,
+            "stone push=NORMAL"
+        );
         // Obsidian uses default NORMAL (piston code prevents pushing via hardness)
-        assert_eq!(default("minecraft:obsidian").push_reaction(), 0, "obsidian push=NORMAL");
+        assert_eq!(
+            default("minecraft:obsidian").push_reaction(),
+            0,
+            "obsidian push=NORMAL"
+        );
     }
 
     #[test]
@@ -736,41 +734,69 @@ mod tests {
                 &format!("{name} resistance roundtrip"),
             );
             assert_approx_fine(s.friction(), *fric, &format!("{name} friction roundtrip"));
-            assert_approx_fine(
-                s.speed_factor(),
-                *speed,
-                &format!("{name} speed roundtrip"),
-            );
-            assert_approx_fine(
-                s.jump_factor(),
-                *jump,
-                &format!("{name} jump roundtrip"),
-            );
+            assert_approx_fine(s.speed_factor(), *speed, &format!("{name} speed roundtrip"));
+            assert_approx_fine(s.jump_factor(), *jump, &format!("{name} jump roundtrip"));
         }
     }
 
     #[test]
     fn test_map_color_values() {
         assert_eq!(default("minecraft:stone").map_color(), 11, "stone=STONE");
-        assert_eq!(default("minecraft:grass_block").map_color(), 1, "grass=GRASS");
+        assert_eq!(
+            default("minecraft:grass_block").map_color(),
+            1,
+            "grass=GRASS"
+        );
         assert_eq!(default("minecraft:dirt").map_color(), 10, "dirt=DIRT");
-        assert_eq!(default("minecraft:oak_planks").map_color(), 13, "oak_planks=WOOD");
+        assert_eq!(
+            default("minecraft:oak_planks").map_color(),
+            13,
+            "oak_planks=WOOD"
+        );
         assert_eq!(default("minecraft:water").map_color(), 12, "water=WATER");
-        assert_eq!(default("minecraft:obsidian").map_color(), 29, "obsidian=COLOR_BLACK");
-        assert_eq!(default("minecraft:white_wool").map_color(), 8, "white_wool=SNOW");
-        assert_eq!(default("minecraft:gold_block").map_color(), 30, "gold_block=GOLD");
+        assert_eq!(
+            default("minecraft:obsidian").map_color(),
+            29,
+            "obsidian=COLOR_BLACK"
+        );
+        assert_eq!(
+            default("minecraft:white_wool").map_color(),
+            8,
+            "white_wool=SNOW"
+        );
+        assert_eq!(
+            default("minecraft:gold_block").map_color(),
+            30,
+            "gold_block=GOLD"
+        );
     }
 
     #[test]
     fn test_light_opacity_heuristic() {
         // Full opaque solid blocks → 15
-        assert_eq!(default("minecraft:stone").light_opacity(), 15, "stone=opaque");
+        assert_eq!(
+            default("minecraft:stone").light_opacity(),
+            15,
+            "stone=opaque"
+        );
         assert_eq!(default("minecraft:dirt").light_opacity(), 15, "dirt=opaque");
         // Transparent blocks → 0
-        assert_eq!(default("minecraft:glass").light_opacity(), 0, "glass=transparent");
-        assert_eq!(default("minecraft:air").light_opacity(), 0, "air=transparent");
+        assert_eq!(
+            default("minecraft:glass").light_opacity(),
+            0,
+            "glass=transparent"
+        );
+        assert_eq!(
+            default("minecraft:air").light_opacity(),
+            0,
+            "air=transparent"
+        );
         // Liquids → 1
-        assert_eq!(default("minecraft:water").light_opacity(), 1, "water=liquid");
+        assert_eq!(
+            default("minecraft:water").light_opacity(),
+            1,
+            "water=liquid"
+        );
         assert_eq!(default("minecraft:lava").light_opacity(), 1, "lava=liquid");
     }
 }

@@ -78,7 +78,9 @@ impl BlockStateId {
     /// Returns `true` if this block has a block entity (tile entity).
     #[inline]
     pub fn has_block_entity(self) -> bool {
-        self.data().flags.contains(BlockStateFlags::HAS_BLOCK_ENTITY)
+        self.data()
+            .flags
+            .contains(BlockStateFlags::HAS_BLOCK_ENTITY)
     }
 
     /// Returns `true` if this block ticks randomly.

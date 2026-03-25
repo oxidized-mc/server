@@ -411,10 +411,7 @@ mod tests {
         use tokio::sync::broadcast;
 
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader = AnvilChunkLoader::new(
-            std::path::Path::new(""),
-            block_registry.clone(),
-        );
+        let loader = AnvilChunkLoader::new(std::path::Path::new(""), block_registry.clone());
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
             level_data: RwLock::new(
@@ -458,10 +455,7 @@ mod tests {
         use tokio::sync::broadcast;
 
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader = AnvilChunkLoader::new(
-            std::path::Path::new(""),
-            block_registry.clone(),
-        );
+        let loader = AnvilChunkLoader::new(std::path::Path::new(""), block_registry.clone());
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
             level_data: RwLock::new(

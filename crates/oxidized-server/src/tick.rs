@@ -530,40 +530,43 @@ pub async fn save_dirty_chunks(
 
     // Track which positions we successfully serialized so we can
     // remove them from dirty_chunks after the disk write.
-    let serialized_positions: Vec<ChunkPos> =
-        chunk_data.iter().map(|(pos, _)| *pos).collect();
+    let serialized_positions: Vec<ChunkPos> = chunk_data.iter().map(|(pos, _)| *pos).collect();
 
-    let result = tokio::task::spawn_blocking(move || -> Result<usize, Box<dyn std::error::Error + Send>> {
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as u32)
-            .unwrap_or(0);
+    let result = tokio::task::spawn_blocking(
+        move || -> Result<usize, Box<dyn std::error::Error + Send>> {
+            let timestamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as u32)
+                .unwrap_or(0);
 
-        let mut by_region: HashMap<(i32, i32), Vec<(ChunkPos, Vec<u8>)>> = HashMap::new();
-        for (pos, data) in chunk_data {
-            let rx = pos.x.div_euclid(32);
-            let rz = pos.z.div_euclid(32);
-            by_region.entry((rx, rz)).or_default().push((pos, data));
-        }
-
-        let mut saved = 0usize;
-        for ((rx, rz), chunks) in &by_region {
-            let region_path = region_dir.join(format!("r.{rx}.{rz}.mca"));
-            let mut region = if region_path.exists() {
-                RegionFile::open_rw(&region_path)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
-            } else {
-                RegionFile::create(&region_path)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
-            };
-            for (pos, compressed) in chunks {
-                region.write_chunk_data(pos.x, pos.z, compressed, timestamp)
-                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
-                saved += 1;
+            type RegionChunks = HashMap<(i32, i32), Vec<(ChunkPos, Vec<u8>)>>;
+            let mut by_region: RegionChunks = HashMap::new();
+            for (pos, data) in chunk_data {
+                let rx = pos.x.div_euclid(32);
+                let rz = pos.z.div_euclid(32);
+                by_region.entry((rx, rz)).or_default().push((pos, data));
             }
-        }
-        Ok(saved)
-    })
+
+            let mut saved = 0usize;
+            for ((rx, rz), chunks) in &by_region {
+                let region_path = region_dir.join(format!("r.{rx}.{rz}.mca"));
+                let mut region = if region_path.exists() {
+                    RegionFile::open_rw(&region_path)
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
+                } else {
+                    RegionFile::create(&region_path)
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
+                };
+                for (pos, compressed) in chunks {
+                    region
+                        .write_chunk_data(pos.x, pos.z, compressed, timestamp)
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+                    saved += 1;
+                }
+            }
+            Ok(saved)
+        },
+    )
     .await
     .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)??;
 
@@ -595,10 +598,7 @@ mod tests {
         use tokio::sync::broadcast;
 
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader = AnvilChunkLoader::new(
-            std::path::Path::new(""),
-            block_registry.clone(),
-        );
+        let loader = AnvilChunkLoader::new(std::path::Path::new(""), block_registry.clone());
         Arc::new(ServerContext {
             player_list: RwLock::new(PlayerList::new(20)),
             level_data: RwLock::new(

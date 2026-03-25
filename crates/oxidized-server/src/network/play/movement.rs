@@ -412,8 +412,7 @@ pub(super) async fn send_chunk_updates(
 
         for pos in to_load {
             // Load from disk or generate, preserving in-memory block changes.
-            let chunk_ref =
-                super::helpers::get_or_create_chunk(ctx.server_ctx, *pos).await;
+            let chunk_ref = super::helpers::get_or_create_chunk(ctx.server_ctx, *pos).await;
 
             let chunk_pkt = build_chunk_packet(&chunk_ref.read());
             ctx.conn_handle

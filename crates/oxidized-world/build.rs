@@ -92,7 +92,7 @@ fn main() {
         let props = block_props
             .get(&block.name)
             .cloned()
-            .unwrap_or_else(|| BlockProperties {
+            .unwrap_or(BlockProperties {
                 has_collision: true,
                 is_air: false,
                 is_liquid: false,
@@ -108,9 +108,9 @@ fn main() {
                 light_opacity: 0,
                 hardness: 0,
                 explosion_resistance: 0,
-                friction: 6000, // 0.6 * 10000
+                friction: 6000,      // 0.6 * 10000
                 speed_factor: 10000, // 1.0 * 10000
-                jump_factor: 10000, // 1.0 * 10000
+                jump_factor: 10000,  // 1.0 * 10000
                 map_color: 0,
                 push_reaction: 0,
             });
@@ -381,8 +381,7 @@ fn compute_flags(
     f
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct BlockProperties {
     has_collision: bool,
     is_air: bool,
@@ -501,6 +500,7 @@ fn compute_strides(block: &BlockData) -> Vec<u16> {
 
 // ─── Code generation ────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn write_generated(
     out: &mut String,
     blocks: &[BlockData],
@@ -541,11 +541,17 @@ fn write_generated(
             "    BlockStateEntry {{ block_type: {}, flags: BlockStateFlags::from_bits_truncate({}), \
              light_emission: {}, light_opacity: {}, hardness: {}, explosion_resistance: {}, \
              friction: {}, speed_factor: {}, jump_factor: {}, map_color: {}, push_reaction: {} }},",
-            state_block_type[i], state_flags[i],
-            state_light_emission[i], state_light_opacity[i],
-            state_hardness[i], state_explosion_resistance[i],
-            state_friction[i], state_speed_factor[i], state_jump_factor[i],
-            state_map_color[i], state_push_reaction[i],
+            state_block_type[i],
+            state_flags[i],
+            state_light_emission[i],
+            state_light_opacity[i],
+            state_hardness[i],
+            state_explosion_resistance[i],
+            state_friction[i],
+            state_speed_factor[i],
+            state_jump_factor[i],
+            state_map_color[i],
+            state_push_reaction[i],
         );
     }
     let _ = writeln!(out, "];\n");
@@ -711,8 +717,7 @@ fn generate_block_tags(
     // ── Load vanilla block tags ─────────────────────────────────────────
     let tags_json = fs::read_to_string(tags_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", tags_path.display()));
-    let tags_root: serde_json::Value =
-        serde_json::from_str(&tags_json).expect("Invalid tags.json");
+    let tags_root: serde_json::Value = serde_json::from_str(&tags_json).expect("Invalid tags.json");
     let block_tags = tags_root
         .get("minecraft:block")
         .and_then(|v| v.as_object())
@@ -739,11 +744,7 @@ fn generate_block_tags(
         let mut entries: Vec<_> = fs::read_dir(custom_tags_dir)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", custom_tags_dir.display()))
             .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .is_some_and(|ext| ext == "json")
-            })
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .collect();
         entries.sort_by_key(|e| e.file_name());
 
@@ -758,10 +759,9 @@ fn generate_block_tags(
 
             let json_str = fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
-            let tag_data: serde_json::Value =
-                serde_json::from_str(&json_str).unwrap_or_else(|e| {
-                    panic!("Invalid JSON in {}: {e}", path.display());
-                });
+            let tag_data: serde_json::Value = serde_json::from_str(&json_str).unwrap_or_else(|e| {
+                panic!("Invalid JSON in {}: {e}", path.display());
+            });
             let values = tag_data
                 .get("values")
                 .and_then(|v| v.as_array())
@@ -770,15 +770,11 @@ fn generate_block_tags(
             let ids: Vec<u16> = values
                 .iter()
                 .map(|v| {
-                    let block_name = v.as_str().unwrap_or_else(|| {
-                        panic!("{}: entries must be strings", path.display())
-                    });
+                    let block_name = v
+                        .as_str()
+                        .unwrap_or_else(|| panic!("{}: entries must be strings", path.display()));
                     *name_to_type_id.get(block_name).unwrap_or_else(|| {
-                        panic!(
-                            "{}: unknown block name {:?}",
-                            path.display(),
-                            block_name
-                        )
+                        panic!("{}: unknown block name {:?}", path.display(), block_name)
                     })
                 })
                 .collect();
@@ -810,25 +806,15 @@ fn generate_block_tags(
     let _ = writeln!(out, "// @generated by build.rs — do not edit\n");
 
     // TAG_NAMES
-    let _ = writeln!(
-        out,
-        "/// Sorted tag names for binary search lookup."
-    );
-    let _ = writeln!(
-        out,
-        "pub static TAG_NAMES: [&str; {}] = [",
-        all_tags.len()
-    );
+    let _ = writeln!(out, "/// Sorted tag names for binary search lookup.");
+    let _ = writeln!(out, "pub static TAG_NAMES: [&str; {}] = [", all_tags.len());
     for (name, _) in &all_tags {
         let _ = writeln!(out, "    {name:?},");
     }
     let _ = writeln!(out, "];\n");
 
     // TAG_RANGES
-    let _ = writeln!(
-        out,
-        "/// (start, len) pairs into TAG_MEMBERS for each tag."
-    );
+    let _ = writeln!(out, "/// (start, len) pairs into TAG_MEMBERS for each tag.");
     let _ = writeln!(
         out,
         "pub static TAG_RANGES: [(u32, u32); {}] = [",
@@ -840,10 +826,7 @@ fn generate_block_tags(
     let _ = writeln!(out, "];\n");
 
     // TAG_MEMBERS
-    let _ = writeln!(
-        out,
-        "/// Flat array of sorted block type IDs for all tags."
-    );
+    let _ = writeln!(out, "/// Flat array of sorted block type IDs for all tags.");
     let _ = writeln!(
         out,
         "pub static TAG_MEMBERS: [u16; {}] = [",

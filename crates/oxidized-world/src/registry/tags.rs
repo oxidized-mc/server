@@ -80,7 +80,7 @@ impl BlockTags {
     #[inline]
     pub fn contains(&self, tag: &str, block_type_id: u16) -> bool {
         self.get(tag)
-            .map_or(false, |set| set.contains(block_type_id))
+            .is_some_and(|set| set.contains(block_type_id))
     }
 
     /// Returns the [`TagSet`] for the given tag name, or `None` if unknown.
@@ -95,9 +95,7 @@ impl BlockTags {
     /// assert!(!doors.is_empty());
     /// ```
     pub fn get(&self, tag: &str) -> Option<TagSet> {
-        let idx = generated::TAG_NAMES
-            .binary_search(&tag)
-            .ok()?;
+        let idx = generated::TAG_NAMES.binary_search(&tag).ok()?;
         let (start, len) = generated::TAG_RANGES[idx];
         let start = start as usize;
         let end = start + len as usize;
@@ -163,8 +161,7 @@ mod tests {
             .get_block_def("minecraft:stone")
             .expect("stone should exist");
         let block_type =
-            crate::registry::generated::BLOCK_STATE_DATA[stone_def.first_state as usize]
-                .block_type;
+            crate::registry::generated::BLOCK_STATE_DATA[stone_def.first_state as usize].block_type;
         assert!(
             !tags.contains("minecraft:doors", block_type),
             "stone should not be in minecraft:doors"
@@ -224,9 +221,9 @@ mod tests {
         let sunflower_def = crate::registry::BlockRegistry
             .get_block_def("minecraft:sunflower")
             .expect("sunflower should exist");
-        let block_type =
-            crate::registry::generated::BLOCK_STATE_DATA[sunflower_def.first_state as usize]
-                .block_type;
+        let block_type = crate::registry::generated::BLOCK_STATE_DATA
+            [sunflower_def.first_state as usize]
+            .block_type;
         assert!(
             tall_plants.contains(block_type),
             "sunflower should be in oxidized:tall_plants"
@@ -293,10 +290,7 @@ mod tests {
             let members: Vec<_> = set.iter().collect();
             let mut sorted = members.clone();
             sorted.sort();
-            assert_eq!(
-                members, sorted,
-                "members of tag {name} should be sorted"
-            );
+            assert_eq!(members, sorted, "members of tag {name} should be sorted");
         }
     }
 

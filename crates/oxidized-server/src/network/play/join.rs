@@ -177,13 +177,9 @@ pub(super) async fn send_join_sequence(
 
     // Send initial chunk batch using the world generator.
     let chunk_center = ChunkPos::from_block_coords(player_chunk_x, player_chunk_z);
-    let chunk_count = helpers::send_initial_chunks(
-        conn_handle,
-        chunk_center,
-        player_view_distance,
-        server_ctx,
-    )
-    .await?;
+    let chunk_count =
+        helpers::send_initial_chunks(conn_handle, chunk_center, player_view_distance, server_ctx)
+            .await?;
 
     // Send inventory last, after chunks (vanilla: initInventoryMenu).
     {

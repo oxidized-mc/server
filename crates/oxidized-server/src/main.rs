@@ -181,8 +181,7 @@ fn main() -> anyhow::Result<()> {
 
         // Create the chunk loader and serializer for disk I/O.
         let region_dir = storage.region_dir(oxidized_world::storage::Dimension::Overworld);
-        let anvil_loader =
-            AnvilChunkLoader::new(&region_dir, Arc::clone(&block_registry));
+        let anvil_loader = AnvilChunkLoader::new(&region_dir, Arc::clone(&block_registry));
         let chunk_loader = Arc::new(AsyncChunkLoader::new(anvil_loader));
         let chunk_serializer = Arc::new(ChunkSerializer::new(Arc::clone(&block_registry)));
 
