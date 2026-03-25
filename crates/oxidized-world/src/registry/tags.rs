@@ -79,8 +79,7 @@ impl BlockTags {
     /// ```
     #[inline]
     pub fn contains(&self, tag: &str, block_type_id: u16) -> bool {
-        self.get(tag)
-            .is_some_and(|set| set.contains(block_type_id))
+        self.get(tag).is_some_and(|set| set.contains(block_type_id))
     }
 
     /// Returns the [`TagSet`] for the given tag name, or `None` if unknown.
