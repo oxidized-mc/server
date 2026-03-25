@@ -40,6 +40,7 @@ use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::SlotData;
 use oxidized_protocol::connection::{Connection, ConnectionError};
+use oxidized_protocol::constants::MILLIS_PER_TICK;
 use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
@@ -211,7 +212,7 @@ pub async fn handle_play_split(
     let mut keepalive_sent_at = Instant::now();
 
     // Per-tick timer for chat rate limiter decay (50 ms = 1 game tick).
-    let mut tick_timer = tokio::time::interval(Duration::from_millis(50));
+    let mut tick_timer = tokio::time::interval(Duration::from_millis(MILLIS_PER_TICK));
     tick_timer.tick().await;
 
     // Build the play context for handler dispatch.

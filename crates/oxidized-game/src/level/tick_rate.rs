@@ -5,6 +5,8 @@
 
 use std::time::Duration;
 
+use oxidized_protocol::constants::{MILLIS_PER_TICK, TICKS_PER_SECOND};
+
 /// Controls the server tick rate and supports freeze/step/sprint modes.
 #[derive(Debug, Clone)]
 pub struct ServerTickRateManager {
@@ -25,7 +27,7 @@ pub struct ServerTickRateManager {
 impl Default for ServerTickRateManager {
     fn default() -> Self {
         Self {
-            tick_rate: 20.0,
+            tick_rate: TICKS_PER_SECOND as f32,
             is_frozen: false,
             steps_remaining: 0,
             is_sprinting: false,
@@ -39,7 +41,7 @@ impl ServerTickRateManager {
     /// Returns the interval between ticks for the current rate.
     pub fn tick_interval(&self) -> Duration {
         if self.tick_rate <= 0.0 {
-            return Duration::from_millis(50);
+            return Duration::from_millis(MILLIS_PER_TICK);
         }
         Duration::from_secs_f32(1.0 / self.tick_rate)
     }

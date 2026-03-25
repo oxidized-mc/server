@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 
 use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_protocol::codec::Packet;
+use oxidized_protocol::constants::TICKS_PER_SECOND;
 use oxidized_protocol::packets::play::{
     ClientboundGameEventPacket, ClientboundSetTimePacket, ClientboundTickingStepPacket,
     ClockNetworkState, ClockUpdate, GameEventType,
@@ -51,6 +52,15 @@ const THUNDER_DURATION_MAX: i32 = 15_600;
 
 /// Per-tick delta for rain/thunder visual level interpolation.
 const WEATHER_LEVEL_DELTA: f32 = 0.01;
+
+/// Broadcast time to clients every this many ticks (once per real-time second).
+const TIME_BROADCAST_INTERVAL: u64 = TICKS_PER_SECOND as u64;
+
+/// Autosave interval scale: `tick_rate × AUTOSAVE_RATE_MULTIPLIER` ticks (~5 min).
+const AUTOSAVE_RATE_MULTIPLIER: f32 = 300.0;
+
+/// Floor for the dynamic autosave interval in ticks.
+const AUTOSAVE_MIN_INTERVAL: f32 = 100.0;
 
 /// Tracks interpolated rain/thunder visual intensity levels across ticks.
 struct WeatherLevels {
@@ -181,15 +191,15 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
         tick_weather(ctx, rng, weather);
     }
 
-    // Broadcast time to all clients every 20 ticks (once per second).
-    if tick_count % 20 == 0 {
+    // Broadcast time to all clients every TIME_BROADCAST_INTERVAL ticks.
+    if tick_count % TIME_BROADCAST_INTERVAL == 0 {
         broadcast_time(ctx, do_daylight);
     }
 
     // Autosave level.dat at a dynamic interval: max(100, tps * 300) ticks.
     let autosave_interval = {
         let mgr = ctx.tick_rate_manager.read();
-        (mgr.tick_rate * 300.0).max(100.0) as u64
+        (mgr.tick_rate * AUTOSAVE_RATE_MULTIPLIER).max(AUTOSAVE_MIN_INTERVAL) as u64
     };
     if tick_count > 0 && tick_count % autosave_interval == 0 {
         autosave_level_dat(ctx);

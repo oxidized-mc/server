@@ -148,6 +148,20 @@ pub const DEFAULT_MAX_TICK_TIME_MS: i64 = 60_000;
 /// Seconds the server waits before pausing when no players are online.
 pub const DEFAULT_PAUSE_WHEN_EMPTY_SECS: i32 = 60;
 
+// === Game Time Presets ===
+
+/// Day-time tick at dawn (`/time set day`).
+pub const DAY_START_TICKS: i64 = 1000;
+
+/// Day-time tick at noon (`/time set noon`).
+pub const NOON_TICKS: i64 = 6000;
+
+/// Day-time tick at dusk (`/time set night`).
+pub const NIGHT_START_TICKS: i64 = 13000;
+
+/// Day-time tick at midnight (`/time set midnight`).
+pub const MIDNIGHT_TICKS: i64 = 18000;
+
 // === Misc ===
 
 /// NBT tag key that stores the data version inside saved structures.

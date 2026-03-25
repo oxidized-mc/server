@@ -12,13 +12,14 @@
 
 use std::time::{Duration, Instant};
 
+use oxidized_protocol::constants::MILLIS_PER_TICK;
 use oxidized_protocol::transport::channel::{InboundPacket, MAX_PACKETS_PER_TICK};
 use oxidized_protocol::transport::connection::{ConnectionError, ConnectionReader};
 use tokio::sync::mpsc;
 use tracing::debug;
 
 /// Duration of one rate-limiting window (one server tick).
-const TICK_WINDOW: Duration = Duration::from_millis(50);
+const TICK_WINDOW: Duration = Duration::from_millis(MILLIS_PER_TICK);
 
 /// Runs the reader task for a single client connection.
 ///

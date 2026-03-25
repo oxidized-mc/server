@@ -8,6 +8,7 @@ use crate::commands::coordinates::{
 };
 use crate::commands::string_reader::StringReader;
 use oxidized_protocol::chat::ChatFormatting;
+use oxidized_protocol::constants::{TICKS_PER_GAME_DAY, TICKS_PER_SECOND};
 use oxidized_protocol::types::game_type::GameType;
 use std::fmt::Display;
 use std::str::FromStr;
@@ -159,9 +160,9 @@ fn parse_gamemode_arg(reader: &mut StringReader<'_>) -> Result<ArgumentResult, C
 fn parse_time_arg(reader: &mut StringReader<'_>, min: i32) -> Result<ArgumentResult, CommandError> {
     let word = reader.read_word();
     let (num_str, multiplier) = if let Some(stripped) = word.strip_suffix('d') {
-        (stripped, 24000)
+        (stripped, TICKS_PER_GAME_DAY as i32)
     } else if let Some(stripped) = word.strip_suffix('s') {
-        (stripped, 20)
+        (stripped, TICKS_PER_SECOND as i32)
     } else if let Some(stripped) = word.strip_suffix('t') {
         (stripped, 1)
     } else {

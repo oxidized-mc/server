@@ -11,6 +11,12 @@ pub const DELTA_SCALE: f64 = 4096.0;
 /// Maximum delta representable as an `i16` in blocks (~7.999).
 pub const MAX_DELTA_BLOCKS: f64 = 7.999;
 
+/// Number of discrete steps in one full rotation (byte range 0–255).
+const ROTATION_BYTE_STEPS: f32 = 256.0;
+
+/// Degrees in one full rotation.
+const FULL_ROTATION_DEGREES: f32 = 360.0;
+
 /// Encodes a position delta as a short.
 ///
 /// Returns `None` if the delta exceeds `i16` range (~8 blocks),
@@ -56,7 +62,7 @@ pub fn encode_delta(old: f64, new: f64) -> Option<i16> {
 /// assert_eq!(pack_degrees(360.0), 0); // wraps
 /// ```
 pub fn pack_degrees(angle: f32) -> u8 {
-    ((angle * 256.0 / 360.0) as i32 & 0xFF) as u8
+    ((angle * ROTATION_BYTE_STEPS / FULL_ROTATION_DEGREES) as i32 & 0xFF) as u8
 }
 
 /// Unpacks a byte (0–255) back to degrees (0–360°).
@@ -72,7 +78,7 @@ pub fn pack_degrees(angle: f32) -> u8 {
 /// assert_eq!(unpack_degrees(0), 0.0);
 /// ```
 pub fn unpack_degrees(byte: u8) -> f32 {
-    byte as f32 * 360.0 / 256.0
+    byte as f32 * FULL_ROTATION_DEGREES / ROTATION_BYTE_STEPS
 }
 
 /// Describes how to send an entity's movement to clients.

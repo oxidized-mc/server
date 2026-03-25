@@ -25,7 +25,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.10 | Standardize packet decoder error handling | ✅ Done |
 | R5.11 | Decompose oversized structs | ✅ Complete |
 | R5.12 | Break down long functions & reduce nesting | ✅ Done |
-| R5.13 | Replace magic numbers with named constants | 📋 Planned |
+| R5.13 | Replace magic numbers with named constants | ✅ Done |
 | R5.14 | Benchmark & fuzz testing infrastructure | 📋 Planned |
 | R5.15 | Per-player operator permissions (`ops.json`) | 📋 Planned |
 | R5.16 | Safety hardening & cleanup | 📋 Planned |
@@ -1063,50 +1063,43 @@ semantics across branches. The macro-generated nesting cannot be decomposed furt
 
 ### R5.13: Replace Magic Numbers With Named Constants
 
+**Status:** ✅ Done
+
 **Targets:** Various files across all crates
 
-**Current problems:**
-- Time constants: `1000` (day), `6000` (noon), `13000` (night), `18000`
-  (midnight) used as raw literals in `cmd_time.rs`
-- Data serializer boundary: `255` in `synched_data.rs`
-- Various protocol constants used as raw numbers
-- Tick-related constants (50ms minimum mining, 20 TPS, etc.)
+**What was done:**
 
-**Steps:**
+Game time preset constants added to `oxidized-protocol/src/constants.rs`:
+`DAY_START_TICKS`, `NOON_TICKS`, `NIGHT_START_TICKS`, `MIDNIGHT_TICKS`.
 
-1. **Create time constants** in `oxidized-game/src/level/`:
-   ```rust
-   pub mod time {
-       pub const DAY_START: i64 = 1000;
-       pub const NOON: i64 = 6000;
-       pub const NIGHT_START: i64 = 13000;
-       pub const MIDNIGHT: i64 = 18000;
-       pub const TICKS_PER_DAY: i64 = 24000;
-   }
-   ```
+Existing constants (`TICKS_PER_GAME_DAY`, `TICKS_PER_SECOND`, `MILLIS_PER_TICK`,
+`DEFAULT_VIEW_DISTANCE`, `DEFAULT_SIMULATION_DISTANCE`) were imported and used
+where raw literals previously appeared.
 
-2. **Create protocol constants** in `oxidized-protocol/src/constants.rs` (or
-   the relevant module):
-   ```rust
-   pub const MAX_ENTITY_DATA_SERIALIZER_ID: u32 = 255;
-   ```
+**Files changed:**
 
-3. **Replace all raw literals** with named constants. Use `grep` to find
-   remaining magic numbers:
-   ```bash
-   grep -rn '[^a-zA-Z_][0-9]\{2,\}[^a-zA-Z_0-9xX.]' crates/ --include="*.rs" | \
-     grep -v '#\[cfg(test)\]' | grep -v '/tests/' | grep -v 'generated'
-   ```
-   Review each match — not all numbers are magic (array sizes, protocol IDs in
-   their defining location are fine).
+| File | Change |
+|------|--------|
+| `oxidized-protocol/src/constants.rs` | Added 4 game-time preset constants |
+| `oxidized-game/src/commands/impls/cmd_time.rs` | Replaced 1000/6000/13000/18000/24000 with named constants |
+| `oxidized-game/src/commands/argument_parser.rs` | Replaced `24000`/`20` with `TICKS_PER_GAME_DAY`/`TICKS_PER_SECOND` |
+| `oxidized-game/src/level/tick_rate.rs` | Replaced `20.0`/`50` with `TICKS_PER_SECOND`/`MILLIS_PER_TICK` |
+| `oxidized-game/src/net/entity_movement.rs` | Added `ROTATION_BYTE_STEPS`/`FULL_ROTATION_DEGREES` constants |
+| `oxidized-game/src/player/server_player.rs` | Added `MODEL_ALL_PARTS_VISIBLE`/`DEFAULT_CHUNK_SEND_RATE`; used `DEFAULT_VIEW_DISTANCE`/`DEFAULT_SIMULATION_DISTANCE` |
+| `oxidized-server/src/tick.rs` | Added `TIME_BROADCAST_INTERVAL`/`AUTOSAVE_RATE_MULTIPLIER`/`AUTOSAVE_MIN_INTERVAL`; used `TICKS_PER_SECOND` |
+| `oxidized-server/src/network/play/mod.rs` | Replaced `50` with `MILLIS_PER_TICK` |
+| `oxidized-server/src/network/play/mining.rs` | Replaced `50` with `MILLIS_PER_TICK` |
+| `oxidized-server/src/network/reader.rs` | Replaced `50` with `MILLIS_PER_TICK` |
 
-4. **Document remaining numeric constants** with `///` comments explaining what
-   the value represents.
+**Not changed (already correct):**
+- `DATA_EOF_MARKER` (0xFF) — already a named constant in `clientbound_set_entity_data.rs`
+- Weather constants in `tick.rs` — already named (`RAIN_DELAY_MIN`, etc.)
+- Physics constants — already in `physics/constants.rs`
+- Keepalive/teleport timeouts — already named constants
 
 **Verification:**
 - `cargo test --workspace` — all tests pass
 - `cargo clippy --workspace` — no new warnings
-- Manual review: no unexplained numeric literals in production code
 
 ---
 

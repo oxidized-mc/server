@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use oxidized_nbt::{NbtCompound, NbtList, NbtTag, TAG_COMPOUND, TAG_DOUBLE, TAG_FLOAT};
 use oxidized_protocol::auth::GameProfile;
+use oxidized_protocol::constants::{DEFAULT_SIMULATION_DISTANCE, DEFAULT_VIEW_DISTANCE};
 use oxidized_protocol::types::{BlockPos, ResourceLocation, Vec3};
 use uuid::Uuid;
 
@@ -84,6 +85,12 @@ pub struct SpawnInfo {
     /// Spawn yaw angle.
     pub spawn_angle: f32,
 }
+
+/// All skin model parts visible (all 7 bits set).
+const MODEL_ALL_PARTS_VISIBLE: u8 = 0xFF;
+
+/// Default chunk-send rate (chunks per tick).
+const DEFAULT_CHUNK_SEND_RATE: f32 = 25.0;
 
 /// Client connection parameters and rate limiting.
 #[derive(Debug, Clone)]
@@ -268,11 +275,11 @@ impl ServerPlayer {
                 spawn_angle: 0.0,
             },
             connection: ConnectionInfo {
-                view_distance: 10,
-                simulation_distance: 10,
-                chunk_send_rate: 25.0,
+                view_distance: DEFAULT_VIEW_DISTANCE as i32,
+                simulation_distance: DEFAULT_SIMULATION_DISTANCE as i32,
+                chunk_send_rate: DEFAULT_CHUNK_SEND_RATE,
                 latency: 0,
-                model_customisation: 0xFF, // all parts visible by default
+                model_customisation: MODEL_ALL_PARTS_VISIBLE,
                 movement_rate: (0, Instant::now()),
             },
             teleport: TeleportTracker::new(),

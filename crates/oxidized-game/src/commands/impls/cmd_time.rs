@@ -12,6 +12,9 @@ use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
 use oxidized_protocol::chat::Component;
+use oxidized_protocol::constants::{
+    DAY_START_TICKS, MIDNIGHT_TICKS, NIGHT_START_TICKS, NOON_TICKS, TICKS_PER_GAME_DAY,
+};
 
 /// Registers the `/time` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -22,10 +25,10 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             // /time set ...
             .then(
                 literal("set")
-                    .then(literal("day").executes(set_time_fn(1000)))
-                    .then(literal("noon").executes(set_time_fn(6000)))
-                    .then(literal("night").executes(set_time_fn(13000)))
-                    .then(literal("midnight").executes(set_time_fn(18000)))
+                    .then(literal("day").executes(set_time_fn(DAY_START_TICKS as i32)))
+                    .then(literal("noon").executes(set_time_fn(NOON_TICKS as i32)))
+                    .then(literal("night").executes(set_time_fn(NIGHT_START_TICKS as i32)))
+                    .then(literal("midnight").executes(set_time_fn(MIDNIGHT_TICKS as i32)))
                     .then(argument("time", ArgumentType::Time { min: 0 }).executes(
                         |ctx: &CommandContext<CommandSourceStack>| {
                             let t = get_time(ctx, "time")?;
@@ -60,7 +63,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     .then(literal("daytime").executes(
                         |ctx: &CommandContext<CommandSourceStack>| {
                             let day_time = ctx.source.server.day_time();
-                            let display = (day_time % 24000) as i32;
+                            let display = (day_time % TICKS_PER_GAME_DAY as i64) as i32;
                             ctx.source.send_translatable_success(
                                 "commands.time.query",
                                 vec![Component::text(display.to_string())],
@@ -84,7 +87,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     .then(
                         literal("day").executes(|ctx: &CommandContext<CommandSourceStack>| {
                             let game_time = ctx.source.server.game_time();
-                            let day = (game_time / 24000) as i32;
+                            let day = (game_time / TICKS_PER_GAME_DAY as i64) as i32;
                             ctx.source.send_translatable_success(
                                 "commands.time.query",
                                 vec![Component::text(day.to_string())],

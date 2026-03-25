@@ -11,6 +11,7 @@ use tracing::debug;
 
 use oxidized_game::player::GameMode;
 use oxidized_protocol::codec::Packet;
+use oxidized_protocol::constants::MILLIS_PER_TICK;
 use oxidized_protocol::packets::play::ServerboundPlayerActionPacket;
 use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
 use oxidized_protocol::types::BlockPos;
@@ -33,7 +34,7 @@ use std::sync::Arc;
 /// Blocks with hardness 0 (tall grass, etc.) are instant-break in creative
 /// only; survival always requires at least 1 tick. This is a conservative
 /// lower bound — per-block hardness will tighten it later.
-const MIN_MINING_DURATION: Duration = Duration::from_millis(50);
+const MIN_MINING_DURATION: Duration = Duration::from_millis(MILLIS_PER_TICK);
 
 /// Handles `ServerboundPlayerActionPacket` (0x29) — block digging actions.
 ///
