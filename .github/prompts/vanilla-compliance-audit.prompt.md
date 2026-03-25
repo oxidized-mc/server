@@ -1,5 +1,5 @@
 ---
-agent: 'vanilla-compliance-fixer'
+agent: 'vanilla-compliance-audit'
 description: 'Fix vanilla compliance issues in the Oxidized codebase.'
 ---
 
