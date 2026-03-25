@@ -7,7 +7,7 @@
 
 use std::any::Any;
 
-/// Wire type ID for each `EntityDataSerializer` in 26.1-pre-3.
+/// Wire type ID for each `EntityDataSerializer` in 26.1.
 ///
 /// Registration order from `EntityDataSerializers.java` static block.
 /// The integer value is the serializer ID written on the wire.

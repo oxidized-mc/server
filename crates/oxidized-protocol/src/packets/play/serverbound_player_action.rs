@@ -13,7 +13,7 @@ use crate::types::{BlockPos, Direction};
 /// Player block/item action type.
 ///
 /// Matches the `Action` enum in `ServerboundPlayerActionPacket.java`
-/// for protocol version 26.1-pre-3.
+/// for protocol version 26.1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PlayerAction {

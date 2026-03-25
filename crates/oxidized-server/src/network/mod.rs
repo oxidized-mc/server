@@ -760,7 +760,7 @@ pub struct BroadcastMessage {
     pub target_entity: Option<i32>,
 }
 
-/// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.
+/// Maximum valid serverbound PLAY packet ID for protocol 26.1.
 /// There are 69 registered serverbound packets (IDs 0x00–0x44).
 const MAX_SERVERBOUND_PLAY_ID: i32 = 0x44;
 

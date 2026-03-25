@@ -277,7 +277,7 @@ tagged `notOnMainThread` in the Java source may be handled on the IO thread.
 {
   "started": true,
   "players": [...],
-  "version": { "name": "26.1-pre-3", "protocol": 1073742124 }
+  "version": { "name": "26.1", "protocol": 775 }
 }
 ```
 

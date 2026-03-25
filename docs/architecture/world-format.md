@@ -83,7 +83,7 @@ Java reference: `net.minecraft.world.level.storage.RegionFile`
 Top-level keys in the chunk `CompoundTag`:
 
 ```
-DataVersion: Int           ← 4782 for 26.1
+DataVersion: Int           ← 4786 for 26.1
 xPos: Int
 zPos: Int
 yPos: Int                  ← bottom section Y index (−4 for overworld)
@@ -191,7 +191,7 @@ Top-level: `CompoundTag { Data: CompoundTag { … } }`
 Key fields inside `Data`:
 
 ```
-DataVersion: Int                   ← 4782
+DataVersion: Int                   ← 4786
 Version: Compound { Id: Int, Name: String, Snapshot: Byte }
 LevelName: String
 SpawnX: Int

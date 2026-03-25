@@ -43,7 +43,7 @@ use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket}
 #[test]
 fn roundtrip_client_intention_status() {
     assert_roundtrip(&ClientIntentionPacket {
-        protocol_version: 1_073_742_124,
+        protocol_version: 775,
         server_address: "localhost".to_string(),
         server_port: 25565,
         next_state: ClientIntent::Status,
@@ -53,7 +53,7 @@ fn roundtrip_client_intention_status() {
 #[test]
 fn roundtrip_client_intention_login() {
     assert_roundtrip(&ClientIntentionPacket {
-        protocol_version: 1_073_742_124,
+        protocol_version: 775,
         server_address: "mc.example.com".to_string(),
         server_port: 19132,
         next_state: ClientIntent::Login,
@@ -77,7 +77,7 @@ fn roundtrip_status_request() {
 #[test]
 fn roundtrip_status_response() {
     assert_roundtrip(&ClientboundStatusResponsePacket {
-        status_json: r#"{"version":{"name":"26.1","protocol":1073742124}}"#.to_string(),
+        status_json: r#"{"version":{"name":"26.1","protocol":775}}"#.to_string(),
     });
 }
 
@@ -740,7 +740,7 @@ proptest! {
             ClientIntent::Login
         };
         let pkt = ClientIntentionPacket {
-            protocol_version: 1_073_742_124,
+            protocol_version: 775,
             server_address: addr,
             server_port: port,
             next_state,

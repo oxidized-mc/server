@@ -10,7 +10,7 @@ use super::generated;
 
 /// Opaque block state identifier. Maps 1:1 to vanilla's flat state ID.
 ///
-/// Range: 0..29 872 for 26.1-pre-3.
+/// Range: 0..29 872 for 26.1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct BlockStateId(pub u16);
 

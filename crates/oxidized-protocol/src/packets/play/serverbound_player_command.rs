@@ -1,7 +1,7 @@
 //! Serverbound player command packet.
 //!
 //! Sent when the player starts/stops sprinting, stops sleeping, starts
-//! elytra flight, etc. In 26.1-pre-3, sneak is handled by
+//! elytra flight, etc. In 26.1, sneak is handled by
 //! [`ServerboundPlayerInputPacket`](super::serverbound_player_input::ServerboundPlayerInputPacket)
 //! instead.
 
@@ -14,7 +14,7 @@ use crate::codec::varint;
 /// Actions the client can trigger via player command.
 ///
 /// Matches the `Action` enum in `ServerboundPlayerCommandPacket.java`
-/// for protocol version 26.1-pre-3.
+/// for protocol version 26.1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum PlayerCommandAction {

@@ -131,9 +131,9 @@ pub struct ServerConfig {
 ### 1.4 — Shared Constants (`oxidized-protocol/src/constants.rs`)
 
 ```rust
-pub const PROTOCOL_VERSION: i32     = 1073742124;
-pub const WORLD_VERSION: i32        = 4782;
-pub const GAME_VERSION: &str        = "26.1-pre-3";
+pub const PROTOCOL_VERSION: i32     = 775;
+pub const WORLD_VERSION: i32        = 4786;
+pub const GAME_VERSION: &str        = "26.1";
 pub const DEFAULT_PORT: u16         = 25565;
 pub const TICKS_PER_SECOND: u32     = 20;
 pub const TICK_DURATION_MS: u64     = 50;

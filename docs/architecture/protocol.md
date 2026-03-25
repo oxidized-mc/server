@@ -117,7 +117,7 @@ Java: `net.minecraft.network.protocol.handshake.ClientIntentionPacket`
 
 ```json
 {
-  "version": { "name": "26.1-pre-3", "protocol": 1073742124 },
+  "version": { "name": "26.1", "protocol": 775 },
   "players": { "max": 20, "online": 3, "sample": [{"name":"Alice","id":"..."}] },
   "description": { "text": "An Oxidized Server" },
   "favicon": "data:image/png;base64,<64x64 PNG>",

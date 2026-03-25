@@ -243,7 +243,7 @@ mod tests {
     fn sample_data_compound() -> NbtCompound {
         let mut data = NbtCompound::new();
         data.put_string("LevelName", "TestWorld");
-        data.put_int("DataVersion", 4782);
+        data.put_int("DataVersion", 4786);
         data.put_int("GameType", 1);
         data.put_int("SpawnX", 100);
         data.put_int("SpawnY", 72);
@@ -275,7 +275,7 @@ mod tests {
         let level = PrimaryLevelData::from_nbt(&data).unwrap();
 
         assert_eq!(level.settings.level_name, "TestWorld");
-        assert_eq!(level.settings.data_version, 4782);
+        assert_eq!(level.settings.data_version, 4786);
         assert_eq!(level.settings.game_type, 1);
         assert_eq!(level.spawn.x, 100);
         assert_eq!(level.spawn.y, 72);

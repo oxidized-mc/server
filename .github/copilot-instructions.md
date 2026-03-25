@@ -17,8 +17,8 @@
 
 **Oxidized** — Minecraft Java Edition server in Rust.
 
-- **Protocol:** MC 26.1 (version `1073742124`, world `4782`)
-- **Reference:** `mc-server-ref/decompiled/` — decompiled vanilla 26.1-pre-3 JAR (gitignored)
+- **Protocol:** MC 26.1 (version `775`, world `4786`)
+- **Reference:** `mc-server-ref/decompiled/` — decompiled vanilla 26.1 JAR (gitignored)
 - **Philosophy:** Wire-compatible with vanilla clients, idiomatic Rust internals
 
 ---

@@ -54,7 +54,7 @@ impl ClientIntent {
 /// use oxidized_protocol::codec::Packet;
 ///
 /// let packet = ClientIntentionPacket {
-///     protocol_version: 1_073_742_124,
+///     protocol_version: 775,
 ///     server_address: "localhost".to_string(),
 ///     server_port: 25565,
 ///     next_state: ClientIntent::Status,
@@ -114,7 +114,7 @@ mod tests {
     #[test]
     fn test_decode_status_intent() {
         let pkt = ClientIntentionPacket {
-            protocol_version: 1_073_742_124,
+            protocol_version: 775,
             server_address: "localhost".to_string(),
             server_port: 25565,
             next_state: ClientIntent::Status,
@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn test_decode_login_intent() {
         let pkt = ClientIntentionPacket {
-            protocol_version: 1_073_742_124,
+            protocol_version: 775,
             server_address: "mc.example.com".to_string(),
             server_port: 25565,
             next_state: ClientIntent::Login,
@@ -140,7 +140,7 @@ mod tests {
     #[test]
     fn test_decode_transfer_intent() {
         let pkt = ClientIntentionPacket {
-            protocol_version: 1_073_742_124,
+            protocol_version: 775,
             server_address: "transfer.example.com".to_string(),
             server_port: 25566,
             next_state: ClientIntent::Transfer,
@@ -153,7 +153,7 @@ mod tests {
     #[test]
     fn test_unknown_intent() {
         let mut buf = BytesMut::new();
-        varint::write_varint_buf(1_073_742_124, &mut buf);
+        varint::write_varint_buf(775, &mut buf);
         types::write_string(&mut buf, "localhost");
         types::write_u16(&mut buf, 25565);
         varint::write_varint_buf(99, &mut buf); // invalid intent
@@ -164,10 +164,10 @@ mod tests {
 
     #[test]
     fn test_decode_real_handshake_bytes() {
-        // Bytes captured from a real MC 26.1-pre-3 client (minus packet ID):
+        // Bytes captured from a real MC 26.1 client (minus packet ID):
         // protocol_version as VarInt, "localhost", port 25565, next_state=1 (Status)
         let pkt = ClientIntentionPacket {
-            protocol_version: 1_073_742_124,
+            protocol_version: 775,
             server_address: "localhost".to_string(),
             server_port: 25565,
             next_state: ClientIntent::Status,
@@ -179,7 +179,7 @@ mod tests {
         assert!(encoded.len() < 50); // shouldn't be huge
 
         let decoded = ClientIntentionPacket::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded.protocol_version, 1_073_742_124);
+        assert_eq!(decoded.protocol_version, 775);
         assert_eq!(decoded.server_address, "localhost");
         assert_eq!(decoded.server_port, 25565);
         assert_eq!(decoded.next_state, ClientIntent::Status);
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn test_packet_trait_unknown_intent_maps_to_invalid_data() {
         let mut buf = BytesMut::new();
-        varint::write_varint_buf(1_073_742_124, &mut buf);
+        varint::write_varint_buf(775, &mut buf);
         types::write_string(&mut buf, "localhost");
         types::write_u16(&mut buf, 25565);
         varint::write_varint_buf(99, &mut buf);

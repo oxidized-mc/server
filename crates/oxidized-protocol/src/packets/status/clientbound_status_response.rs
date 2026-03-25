@@ -41,7 +41,7 @@ mod tests {
     #[test]
     fn test_encode_status_response() {
         let pkt = ClientboundStatusResponsePacket {
-            status_json: r#"{"version":{"name":"26.1-pre-3","protocol":1073742124}}"#.to_string(),
+            status_json: r#"{"version":{"name":"26.1","protocol":775}}"#.to_string(),
         };
         let encoded = pkt.encode();
         let mut data = Bytes::from(encoded.to_vec());

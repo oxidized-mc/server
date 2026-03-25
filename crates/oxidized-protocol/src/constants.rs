@@ -1,23 +1,23 @@
-//! Shared protocol and game constants for Minecraft 26.1-pre-3.
+//! Shared protocol and game constants for Minecraft 26.1.
 //!
 //! All values sourced from `net.minecraft.SharedConstants` in the
 //! decompiled vanilla server JAR.
 
 // === Version Info ===
 
-/// The human-readable game version string (e.g. `"26.1-pre-3"`).
-pub const GAME_VERSION: &str = "26.1-pre-3";
+/// The human-readable game version string (e.g. `"26.1"`).
+pub const GAME_VERSION: &str = "26.1";
 
 /// The version name sent in the server status response.
 ///
-/// This is what clients display in the server list (e.g., "26.1-pre-3").
+/// This is what clients display in the server list (e.g., "26.1").
 pub const VERSION_NAME: &str = GAME_VERSION;
 
 /// Wire protocol version negotiated during the handshake.
-pub const PROTOCOL_VERSION: i32 = 1_073_742_124;
+pub const PROTOCOL_VERSION: i32 = 775;
 
 /// Internal world/data version used for save-file migrations.
-pub const WORLD_VERSION: i32 = 4782;
+pub const WORLD_VERSION: i32 = 4786;
 
 /// Version series identifier (`"main"` for mainline releases).
 pub const SERIES: &str = "main";
@@ -26,10 +26,10 @@ pub const SERIES: &str = "main";
 pub const RELEASE_NETWORK_PROTOCOL_VERSION: i32 = 775;
 
 /// Incremental snapshot protocol version layered on top of the release version.
-pub const SNAPSHOT_NETWORK_PROTOCOL_VERSION: i32 = 300;
+pub const SNAPSHOT_NETWORK_PROTOCOL_VERSION: i32 = 303;
 
 /// Whether this build is a development snapshot.
-pub const SNAPSHOT: bool = true;
+pub const SNAPSHOT: bool = false;
 
 /// Major version of the client resource-pack format.
 pub const RESOURCE_PACK_FORMAT_MAJOR: i32 = 84;
@@ -193,10 +193,11 @@ mod tests {
     }
 
     #[test]
-    fn test_protocol_version_has_snapshot_bit_set() {
-        // Snapshot protocol versions have the 30th bit set (0x40000000).
+    fn test_protocol_version_is_release() {
+        // Release protocol versions do NOT have the 30th bit set (0x40000000).
         let version = PROTOCOL_VERSION;
-        assert_ne!(version & 0x4000_0000, 0);
+        assert_eq!(version & 0x4000_0000, 0);
+        assert_eq!(version, RELEASE_NETWORK_PROTOCOL_VERSION);
     }
 
     #[test]

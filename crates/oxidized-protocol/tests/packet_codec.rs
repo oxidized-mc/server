@@ -24,14 +24,14 @@ use oxidized_protocol::packets::status::{
 #[test]
 fn test_client_intention_encode_decode_roundtrip() {
     let pkt = ClientIntentionPacket {
-        protocol_version: 1_073_742_124,
+        protocol_version: 775,
         server_address: "localhost".to_string(),
         server_port: 25565,
         next_state: ClientIntent::Login,
     };
     let encoded = pkt.encode();
     let decoded = ClientIntentionPacket::decode(encoded.freeze()).unwrap();
-    assert_eq!(decoded.protocol_version, 1_073_742_124);
+    assert_eq!(decoded.protocol_version, 775);
     assert_eq!(decoded.server_address, "localhost");
     assert_eq!(decoded.server_port, 25565);
     assert_eq!(decoded.next_state, ClientIntent::Login);
@@ -43,7 +43,7 @@ fn test_client_intention_encode_decode_roundtrip() {
 
 #[test]
 fn test_status_response_encode() {
-    let json = r#"{"version":{"name":"26.1","protocol":1073742124}}"#;
+    let json = r#"{"version":{"name":"26.1","protocol":775}}"#;
     let pkt = ClientboundStatusResponsePacket {
         status_json: json.to_string(),
     };

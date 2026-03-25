@@ -191,7 +191,7 @@ async fn test_handshake_to_status() {
 fn test_status_json_serialization() {
     let status = ServerStatus { version: ..., players: ..., description: ... };
     let json: serde_json::Value = serde_json::from_str(&status.to_json()).unwrap();
-    assert_eq!(json["version"]["protocol"], 1073742124);
+    assert_eq!(json["version"]["protocol"], 775);
 }
 
 #[test]

@@ -32,7 +32,7 @@ fn sample_compound() -> NbtCompound {
 /// Builds a larger compound tag for heavier benchmarks.
 fn large_compound() -> NbtCompound {
     let mut root = NbtCompound::new();
-    root.put_int("DataVersion", 4782);
+    root.put_int("DataVersion", 4786);
 
     let mut level = NbtCompound::new();
     level.put_int("xPos", 0);

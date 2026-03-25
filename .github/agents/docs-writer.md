@@ -56,7 +56,7 @@ Update after phases or when discovering gotchas. Format: append findings with da
 ## Project Context
 
 - **Oxidized** = Minecraft Java Edition server in Rust
-- **Protocol:** MC 26.1 (version `1073742124`, world `4782`)
+- **Protocol:** MC 26.1 (version `775`, world `4786`)
 - **Philosophy:** Wire-compatible with vanilla clients, idiomatic Rust internals
 - **Crates:** types, nbt, macros, protocol, world, game, server
 

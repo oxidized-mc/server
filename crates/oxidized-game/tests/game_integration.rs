@@ -49,7 +49,7 @@ fn make_player(id: i32, name: &str) -> ServerPlayer {
 fn make_level_data() -> PrimaryLevelData {
     let mut nbt = NbtCompound::new();
     nbt.put_string("LevelName", "TestWorld");
-    nbt.put_int("DataVersion", 4782);
+    nbt.put_int("DataVersion", 4786);
     nbt.put_int("GameType", 0);
     nbt.put_int("SpawnX", 100);
     nbt.put_int("SpawnY", 64);

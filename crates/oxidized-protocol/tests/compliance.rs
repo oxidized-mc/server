@@ -124,7 +124,7 @@ fn test_varlong_decode_vectors() {
 #[test]
 fn test_handshake_status_packet_encoding() {
     let pkt = ClientIntentionPacket {
-        protocol_version: 1_073_742_124,
+        protocol_version: 775,
         server_address: "localhost".to_string(),
         server_port: 25565,
         next_state: ClientIntent::Status,
@@ -135,11 +135,11 @@ fn test_handshake_status_packet_encoding() {
     // Decode the first field (protocol_version) as a VarInt and verify.
     let cursor = Bytes::from(raw.to_vec());
     let (proto, _) = decode_varint(&cursor).unwrap();
-    assert_eq!(proto, 1_073_742_124, "protocol version should match");
+    assert_eq!(proto, 775, "protocol version should match");
 
     // Full roundtrip to verify structural correctness.
     let decoded = ClientIntentionPacket::decode(cursor.clone()).unwrap();
-    assert_eq!(decoded.protocol_version, 1_073_742_124);
+    assert_eq!(decoded.protocol_version, 775);
     assert_eq!(decoded.server_address, "localhost");
     assert_eq!(decoded.server_port, 25565);
     assert_eq!(decoded.next_state, ClientIntent::Status);

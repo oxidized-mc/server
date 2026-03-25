@@ -34,7 +34,7 @@ body:
     id: client-version
     attributes:
       label: Minecraft client version (if applicable)
-      placeholder: "e.g. 26.1-pre-3"
+      placeholder: "e.g. 26.1"
 
   - type: textarea
     id: description

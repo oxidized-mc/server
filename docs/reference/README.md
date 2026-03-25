@@ -11,7 +11,7 @@ implementation phases. They are static lookup documents, not design documents.
 |------|-------------|
 | [java-class-map.md](java-class-map.md) | Maps every major Java class in the vanilla server to its planned Rust type and module. Use this to find the authoritative Java implementation of any feature. |
 | [data-formats.md](data-formats.md) | Binary format reference: VarInt/VarLong, NBT, region files, chunk wire format, BlockPos encoding, entity metadata, UUID, login encryption sequence. |
-| [protocol-packets.md](protocol-packets.md) | Complete listing of all Minecraft 26.1-pre-3 packets: handshaking, status, login, configuration, and play (127 clientbound + 58 serverbound). |
+| [protocol-packets.md](protocol-packets.md) | Complete listing of all Minecraft 26.1 packets: handshaking, status, login, configuration, and play (127 clientbound + 58 serverbound). |
 
 ---
 
@@ -36,7 +36,7 @@ It requires **Java 21+**, **curl**, and **jq**.
 <details>
 <summary>Manual steps (if you prefer)</summary>
 
-1. Download the Minecraft 26.1-pre-3 server JAR from the
+1. Download the Minecraft 26.1 server JAR from the
    [Mojang version manifest](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)
 2. Extract the bundled server from `META-INF/versions/`
 3. Decompile with [Vineflower](https://github.com/Vineflower/vineflower):

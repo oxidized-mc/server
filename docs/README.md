@@ -60,12 +60,12 @@ docs/
 
 ## Minecraft Version
 
-All documentation targets **Minecraft 26.1-pre-3**:
+All documentation targets **Minecraft 26.1**:
 
 | Field | Value |
 |---|---|
-| Protocol version | `1073742124` |
-| World (data) version | `4782` |
+| Protocol version | `775` |
+| World (data) version | `4786` |
 | Java version (vanilla) | 25 |
 | Resource pack version | `84.0` |
 | Data pack version | `101.1` |

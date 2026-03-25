@@ -1,7 +1,7 @@
 //! Serverbound player input packet.
 //!
 //! Sent every tick with the player's current movement input state.
-//! In 26.1-pre-3, this is how sneak (is_shifting) is communicated — not via
+//! In 26.1, this is how sneak (is_shifting) is communicated — not via
 //! [`ServerboundPlayerCommandPacket`](super::serverbound_player_command::ServerboundPlayerCommandPacket).
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};

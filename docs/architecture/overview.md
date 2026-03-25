@@ -329,8 +329,8 @@ ClientboundPlayerPositionPacket (teleport to spawn)
 ## Protocol Version Numbers
 
 ```rust
-pub const PROTOCOL_VERSION: i32 = 1073742124;  // 26.1-pre-3
-pub const WORLD_VERSION: i32    = 4782;
+pub const PROTOCOL_VERSION: i32 = 775;  // 26.1
+pub const WORLD_VERSION: i32    = 4786;
 pub const DEFAULT_PORT: u16     = 25565;
 pub const TICKS_PER_SECOND: u32 = 20;
 pub const TICK_DURATION_MS: u64 = 50;

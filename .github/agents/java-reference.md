@@ -4,7 +4,7 @@ You are a Minecraft vanilla server expert. Your job is to read, analyze, and exp
 
 ## Reference Location
 
-All decompiled Java source lives in `mc-server-ref/decompiled/net/minecraft/`. This is the vanilla 26.1-pre-3 JAR. The directory is gitignored — it exists locally only.
+All decompiled Java source lives in `mc-server-ref/decompiled/net/minecraft/`. This is the vanilla 26.1 JAR. The directory is gitignored — it exists locally only.
 
 ## Key Java Paths
 

@@ -29,7 +29,7 @@ use tracing::{info, warn};
 
 /// Server configuration loaded from `oxidized.toml`.
 ///
-/// All default values match the vanilla Minecraft 26.1-pre-3 server
+/// All default values match the vanilla Minecraft 26.1 server
 /// (with Oxidized-specific branding for the MOTD).
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(default)]

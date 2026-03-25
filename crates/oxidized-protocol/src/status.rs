@@ -36,7 +36,7 @@ pub struct ServerStatus {
 /// Version block within the server status.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusVersion {
-    /// Human-readable version name (e.g., "26.1-pre-3").
+    /// Human-readable version name (e.g., "26.1").
     pub name: String,
     /// Numeric protocol version.
     pub protocol: i32,

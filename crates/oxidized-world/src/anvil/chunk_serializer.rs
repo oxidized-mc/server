@@ -15,8 +15,8 @@ use crate::chunk::heightmap::HeightmapType;
 use crate::chunk::level_chunk::OVERWORLD_MIN_Y;
 use crate::registry::{BlockRegistry, BlockStateId};
 
-/// Data version for Minecraft 26.1-pre-3.
-const DATA_VERSION: i32 = 4782;
+/// Data version for Minecraft 26.1.
+const DATA_VERSION: i32 = 4786;
 
 /// Minimum section Y index for the overworld.
 const MIN_SECTION_Y: i32 = OVERWORLD_MIN_Y >> 4;
@@ -244,7 +244,7 @@ mod tests {
         assert_eq!(nbt.get_int("xPos").unwrap(), 5);
         assert_eq!(nbt.get_int("zPos").unwrap(), -3);
         assert_eq!(nbt.get_int("yPos").unwrap(), -4);
-        assert_eq!(nbt.get_int("DataVersion").unwrap(), 4782);
+        assert_eq!(nbt.get_int("DataVersion").unwrap(), 4786);
         assert_eq!(nbt.get_string("Status").unwrap(), "minecraft:full");
 
         let sections = nbt.get_list("sections").unwrap();

@@ -17,7 +17,7 @@
 set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-MC_VERSION="26.1-pre-3"
+MC_VERSION="26.1"
 VINEFLOWER_VERSION="1.11.1"
 VINEFLOWER_URL="https://github.com/Vineflower/vineflower/releases/download/${VINEFLOWER_VERSION}/vineflower-${VINEFLOWER_VERSION}.jar"
 VERSION_MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"

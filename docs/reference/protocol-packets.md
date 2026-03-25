@@ -1,4 +1,4 @@
-# Protocol Packets Reference (26.1-pre-3)
+# Protocol Packets Reference (26.1)
 
 Extracted from the decompiled vanilla server JAR.
 

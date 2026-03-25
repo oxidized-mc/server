@@ -142,7 +142,7 @@ pub struct ClientboundSelectKnownPacksPacket {
 pub struct KnownPack {
     pub namespace: String,   // "minecraft"
     pub id: String,          // "core"
-    pub version: String,     // "26.1-pre-3"
+    pub version: String,     // "26.1"
 }
 ```
 

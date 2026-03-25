@@ -380,7 +380,7 @@ net.minecraft.server equivalent panic:
   thread 'tokio-runtime-worker' panicked at 'index out of bounds', src/...
 
 -- System Details --
-Minecraft Version: 26.1-pre-3 (protocol 1073742124)
+Minecraft Version: 26.1 (protocol 775)
 Operating System: Linux 6.8.0 (amd64)
 CPU: 8 × Intel(R) Core(TM) i7
 Memory: 6144MB used / 16384MB total
