@@ -62,13 +62,57 @@ fn main() {
     // ── Build per-state data ────────────────────────────────────────────
     let mut state_block_type = vec![0u16; state_count];
     let mut state_flags = vec![0u16; state_count];
+    let mut state_light_emission = vec![0u8; state_count];
+    let mut state_light_opacity = vec![0u8; state_count];
+    let mut state_hardness = vec![0u16; state_count];
+    let mut state_explosion_resistance = vec![0u16; state_count];
+    let mut state_friction = vec![0u16; state_count];
+    let mut state_speed_factor = vec![0u16; state_count];
+    let mut state_jump_factor = vec![0u16; state_count];
+    let mut state_map_color = vec![0u8; state_count];
+    let mut state_push_reaction = vec![0u8; state_count];
 
     for block in &blocks {
         let base_flags = compute_flags(&block.name, &block.definition_type, &block_props);
+        let props = block_props
+            .get(&block.name)
+            .cloned()
+            .unwrap_or_else(|| BlockProperties {
+                has_collision: true,
+                is_air: false,
+                is_liquid: false,
+                is_replaceable: false,
+                is_opaque: true,
+                is_flammable: false,
+                requires_tool: false,
+                ticks_randomly: false,
+                has_block_entity: false,
+                is_interactable: false,
+                is_solid: false,
+                light_emission: 0,
+                light_opacity: 0,
+                hardness: 0,
+                explosion_resistance: 0,
+                friction: 6000, // 0.6 * 10000
+                speed_factor: 10000, // 1.0 * 10000
+                jump_factor: 10000, // 1.0 * 10000
+                map_color: 0,
+                push_reaction: 0,
+            });
+
         for state in &block.states {
             let idx = state.id as usize;
             state_block_type[idx] = block.type_index;
             state_flags[idx] = base_flags | if state.is_default { 0x0002 } else { 0 };
+            state_light_emission[idx] = props.light_emission;
+            state_light_opacity[idx] = props.light_opacity;
+            state_hardness[idx] = props.hardness;
+            state_explosion_resistance[idx] = props.explosion_resistance;
+            state_friction[idx] = props.friction;
+            state_speed_factor[idx] = props.speed_factor;
+            state_jump_factor[idx] = props.jump_factor;
+            state_map_color[idx] = props.map_color;
+            state_push_reaction[idx] = props.push_reaction;
         }
     }
 
@@ -132,6 +176,15 @@ fn main() {
         state_count,
         &state_block_type,
         &state_flags,
+        &state_light_emission,
+        &state_light_opacity,
+        &state_hardness,
+        &state_explosion_resistance,
+        &state_friction,
+        &state_speed_factor,
+        &state_jump_factor,
+        &state_map_color,
+        &state_push_reaction,
         &prop_defs,
         &prop_values,
         &name_lookup,
@@ -309,6 +362,7 @@ fn compute_flags(
 }
 
 #[derive(Debug)]
+#[derive(Clone)]
 struct BlockProperties {
     has_collision: bool,
     is_air: bool,
@@ -321,6 +375,15 @@ struct BlockProperties {
     has_block_entity: bool,
     is_interactable: bool,
     is_solid: bool,
+    light_emission: u8,
+    light_opacity: u8,
+    hardness: u16,
+    explosion_resistance: u16,
+    friction: u16,
+    speed_factor: u16,
+    jump_factor: u16,
+    map_color: u8,
+    push_reaction: u8,
 }
 
 fn load_block_properties(path: &Path) -> HashMap<String, BlockProperties> {
@@ -340,6 +403,13 @@ fn load_block_properties(path: &Path) -> HashMap<String, BlockProperties> {
 
     let mut result = HashMap::with_capacity(obj.len());
     for (name, value) in obj {
+        let hardness_raw = value["hardness"].as_f64().unwrap_or(0.0);
+        let hardness = if hardness_raw < 0.0 {
+            0xFFFF // Unbreakable (bedrock)
+        } else {
+            (hardness_raw * 100.0).round().min(0xFFFE as f64) as u16
+        };
+
         let bp = BlockProperties {
             has_collision: value["has_collision"].as_bool().unwrap_or(true),
             is_air: value["is_air"].as_bool().unwrap_or(false),
@@ -352,6 +422,23 @@ fn load_block_properties(path: &Path) -> HashMap<String, BlockProperties> {
             has_block_entity: value["has_block_entity"].as_bool().unwrap_or(false),
             is_interactable: value["is_interactable"].as_bool().unwrap_or(false),
             is_solid: value["is_solid"].as_bool().unwrap_or(false),
+            light_emission: (value["light_emission"].as_u64().unwrap_or(0) & 0xF) as u8,
+            light_opacity: (value["light_opacity"].as_u64().unwrap_or(0) & 0xF) as u8,
+            hardness,
+            explosion_resistance: ((value["explosion_resistance"].as_f64().unwrap_or(0.0) * 100.0)
+                .round()
+                .min(0xFFFF as f64)) as u16,
+            friction: ((value["friction"].as_f64().unwrap_or(0.6) * 10_000.0)
+                .round()
+                .min(0xFFFF as f64)) as u16,
+            speed_factor: ((value["speed_factor"].as_f64().unwrap_or(1.0) * 10_000.0)
+                .round()
+                .min(0xFFFF as f64)) as u16,
+            jump_factor: ((value["jump_factor"].as_f64().unwrap_or(1.0) * 10_000.0)
+                .round()
+                .min(0xFFFF as f64)) as u16,
+            map_color: (value["map_color"].as_u64().unwrap_or(0) & 0x3F) as u8,
+            push_reaction: (value["push_reaction"].as_u64().unwrap_or(0) & 0x3) as u8,
         };
         result.insert(name.clone(), bp);
     }
@@ -400,6 +487,15 @@ fn write_generated(
     state_count: usize,
     state_block_type: &[u16],
     state_flags: &[u16],
+    state_light_emission: &[u8],
+    state_light_opacity: &[u8],
+    state_hardness: &[u16],
+    state_explosion_resistance: &[u16],
+    state_friction: &[u16],
+    state_speed_factor: &[u16],
+    state_jump_factor: &[u16],
+    state_map_color: &[u8],
+    state_push_reaction: &[u8],
     prop_defs: &[PropDefOut],
     prop_values: &[String],
     name_lookup: &[(&str, u16)],
@@ -422,8 +518,14 @@ fn write_generated(
     for i in 0..state_count {
         let _ = writeln!(
             out,
-            "    BlockStateEntry {{ block_type: {}, flags: BlockStateFlags::from_bits_truncate({}) }},",
+            "    BlockStateEntry {{ block_type: {}, flags: BlockStateFlags::from_bits_truncate({}), \
+             light_emission: {}, light_opacity: {}, hardness: {}, explosion_resistance: {}, \
+             friction: {}, speed_factor: {}, jump_factor: {}, map_color: {}, push_reaction: {} }},",
             state_block_type[i], state_flags[i],
+            state_light_emission[i], state_light_opacity[i],
+            state_hardness[i], state_explosion_resistance[i],
+            state_friction[i], state_speed_factor[i], state_jump_factor[i],
+            state_map_color[i], state_push_reaction[i],
         );
     }
     let _ = writeln!(out, "];\n");

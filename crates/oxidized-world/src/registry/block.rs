@@ -105,6 +105,70 @@ impl BlockStateId {
         self.data().flags.contains(BlockStateFlags::IS_INTERACTABLE)
     }
 
+    /// Returns the light level this block emits (0–15).
+    #[inline]
+    pub fn light_emission(self) -> u8 {
+        self.data().light_emission
+    }
+
+    /// Returns how much light this block absorbs (0–15).
+    #[inline]
+    pub fn light_opacity(self) -> u8 {
+        self.data().light_opacity
+    }
+
+    /// Returns the hardness of this block in seconds.
+    /// Returns -1.0 for unbreakable blocks (bedrock).
+    #[inline]
+    pub fn hardness(self) -> f64 {
+        let raw = self.data().hardness;
+        if raw == 0xFFFF {
+            -1.0
+        } else {
+            f64::from(raw) / 100.0
+        }
+    }
+
+    /// Returns the explosion resistance of this block.
+    #[inline]
+    pub fn explosion_resistance(self) -> f64 {
+        f64::from(self.data().explosion_resistance) / 100.0
+    }
+
+    /// Returns the friction (slide speed multiplier) for this block.
+    /// Default (no friction): 0.6.
+    #[inline]
+    pub fn friction(self) -> f64 {
+        f64::from(self.data().friction) / 10_000.0
+    }
+
+    /// Returns the speed factor for movement on this block.
+    /// Default (no slowdown): 1.0.
+    #[inline]
+    pub fn speed_factor(self) -> f64 {
+        f64::from(self.data().speed_factor) / 10_000.0
+    }
+
+    /// Returns the jump height factor for this block.
+    /// Default (no change): 1.0.
+    #[inline]
+    pub fn jump_factor(self) -> f64 {
+        f64::from(self.data().jump_factor) / 10_000.0
+    }
+
+    /// Returns the map color index for this block (0–63).
+    #[inline]
+    pub fn map_color(self) -> u8 {
+        self.data().map_color
+    }
+
+    /// Returns the push reaction for this block.
+    /// 0 = NORMAL, 1 = DESTROY, 2 = BLOCK, 3 = PUSH_ONLY
+    #[inline]
+    pub fn push_reaction(self) -> u8 {
+        self.data().push_reaction
+    }
+
     /// Computes property key-value pairs for this state on the fly
     /// using stride arithmetic.
     ///
@@ -159,16 +223,37 @@ impl BlockStateId {
 
 // ─── Static data types (populated by build.rs) ─────────────────────────────
 
-/// Static data for a single block state, generated at compile time.
+/// Per-state block data: all 18 bytes of immutable properties.
+/// Generated at compile time and stored in a dense static array.
 ///
+/// Size: 18 bytes per entry × 29,873 states ≈ 537 KB (acceptable overhead).
 /// Property values are **not** stored inline — they are computed on demand
 /// from the state's offset within its block using stride arithmetic.
 #[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct BlockStateEntry {
     /// Index into `BLOCK_DEFS`.
     pub block_type: u16,
-    /// Bitflags for commonly queried properties.
+    /// Bitflags for commonly queried properties (11 flags, u16).
     pub flags: BlockStateFlags,
+    /// Light level emission (0–15). From vanilla `luminance`.
+    pub light_emission: u8,
+    /// Light opacity (0–15). How much light this block absorbs.
+    pub light_opacity: u8,
+    /// Hardness in fixed-point ×100. 0xFFFF = unbreakable (bedrock).
+    pub hardness: u16,
+    /// Explosion resistance in fixed-point ×100.
+    pub explosion_resistance: u16,
+    /// Friction (slide speed) in fixed-point ×10000. Vanilla default: 6000.
+    pub friction: u16,
+    /// Speed factor in fixed-point ×10000. Vanilla default: 10000 (no slowdown).
+    pub speed_factor: u16,
+    /// Jump height factor in fixed-point ×10000. Vanilla default: 10000.
+    pub jump_factor: u16,
+    /// Map color index (0–63). Used for filled maps.
+    pub map_color: u8,
+    /// Push reaction: 0=NORMAL, 1=DESTROY, 2=BLOCK, 3=PUSH_ONLY.
+    pub push_reaction: u8,
 }
 
 bitflags! {

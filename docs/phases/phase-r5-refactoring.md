@@ -14,7 +14,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | Sub-task | Description | Status |
 |----------|-------------|--------|
 | R5.1 | Enrich BlockStateFlags (ADR-012 compliance) | ✅ Done |
-| R5.2 | Enrich BlockStateEntry with block properties | 📋 Planned |
+| R5.2 | Enrich BlockStateEntry with block properties | ✅ Done |
 | R5.3 | Implement block tag loading from vanilla data | 📋 Planned |
 | R5.4 | Replace string-based block categorization with flags/tags | 📋 Planned |
 | R5.5 | Replace hardcoded physics properties with registry data | 📋 Planned |
@@ -416,7 +416,23 @@ resolved IDs). The new `block_properties.json.gz` complements `blocks.json.gz`
   - Bedrock: hardness=-1 (unbreakable)
 - Property roundtrip: encode/decode fixed-point values, verify precision
 
----
+**✅ Completed**
+
+- ✅ Expanded `BlockStateEntry` to 18 bytes with all property fields
+- ✅ Updated `build.rs` to extract and encode all properties from `block_properties.json.gz`
+- ✅ Implemented property accessors on `BlockStateId` with correct fixed-point conversions
+- ✅ Verified table size: exactly 525.1 KB (29,873 states × 18 bytes)
+- ✅ Spot-checked 8 well-known blocks: all values match vanilla
+- ✅ Verified fixed-point roundtrip precision: values round-trip with <0.01 error
+- ✅ All cargo tests pass (186 unit tests, 0 failures)
+- ✅ Fixed-point encoding handles extreme values gracefully via clamping (e.g., barrier block's infinite resistance)
+
+**Notes:**
+- Light emission/opacity are limited to 0–15 (4-bit values)
+- Map color is limited to 0–63 (6-bit values)
+- Push reaction is limited to 0–3 (2-bit values)
+- Explosion resistance values >6553.5 are clamped to 655.35 (u16::MAX)—acceptable since these are rare edge cases (barrier blocks only)
+- All normal game blocks have full precision
 
 ### R5.3: Implement Block Tag Loading From Vanilla Data
 
