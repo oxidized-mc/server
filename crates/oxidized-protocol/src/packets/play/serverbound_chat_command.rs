@@ -35,7 +35,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ServerboundChatCommandPacket as Packet>::PACKET_ID, 0x07);
+        assert_packet_id!(ServerboundChatCommandPacket, 0x07);
     }
 
     #[test]

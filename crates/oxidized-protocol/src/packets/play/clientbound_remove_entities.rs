@@ -6,11 +6,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket`.
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use crate::codec::{types, varint};
 
 /// Remove one or more entities (0x4D).
 ///
@@ -37,12 +37,11 @@ impl Packet for ClientboundRemoveEntitiesPacket {
             )));
         }
         let count = count as usize;
-        if count > data.remaining() {
-            return Err(PacketDecodeError::InvalidData(format!(
-                "entity count {count} exceeds available data ({} bytes)",
-                data.remaining()
-            )));
-        }
+        types::ensure_remaining(
+            &data,
+            count,
+            "RemoveEntitiesPacket entity data",
+        )?;
         let mut entity_ids = Vec::with_capacity(count);
         for _ in 0..count {
             entity_ids.push(varint::read_varint_buf(&mut data)?);
@@ -52,10 +51,9 @@ impl Packet for ClientboundRemoveEntitiesPacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        varint::write_varint_buf(self.entity_ids.len() as i32, &mut buf);
-        for &id in &self.entity_ids {
-            varint::write_varint_buf(id, &mut buf);
-        }
+        types::write_list(&mut buf, &self.entity_ids, |b, &id| {
+            varint::write_varint_buf(id, b);
+        });
         buf
     }
 }
@@ -68,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundRemoveEntitiesPacket as Packet>::PACKET_ID, 0x4D);
+        assert_packet_id!(ClientboundRemoveEntitiesPacket, 0x4D);
     }
 
     #[test]
@@ -106,7 +104,7 @@ mod tests {
         varint::write_varint_buf(1_000_000, &mut buf);
         let err = ClientboundRemoveEntitiesPacket::decode(buf.freeze()).unwrap_err();
         assert!(
-            format!("{err:?}").contains("exceeds available data"),
+            matches!(err, PacketDecodeError::InvalidData(ref msg) if msg.contains("need")),
             "expected bounds error, got: {err:?}"
         );
     }

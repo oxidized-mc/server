@@ -5,10 +5,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundTickingStatePacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 
 /// 0x7F — Server tick rate and freeze state.
 #[derive(Debug, Clone, PartialEq)]
@@ -23,14 +24,9 @@ impl Packet for ClientboundTickingStatePacket {
     const PACKET_ID: i32 = 0x7F;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 5 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for TickingStatePacket",
-            )));
-        }
-        let tick_rate = data.get_f32();
-        let is_frozen = data.get_u8() != 0;
+        types::ensure_remaining(&data, 5, "TickingStatePacket")?;
+        let tick_rate = types::read_f32(&mut data)?;
+        let is_frozen = types::read_bool(&mut data)?;
         Ok(Self {
             tick_rate,
             is_frozen,
@@ -85,6 +81,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundTickingStatePacket as Packet>::PACKET_ID, 0x7F);
+        assert_packet_id!(ClientboundTickingStatePacket, 0x7F);
     }
 }

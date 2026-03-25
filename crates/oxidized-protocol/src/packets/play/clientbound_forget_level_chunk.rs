@@ -4,10 +4,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 
 /// Unloads a chunk from the client's cache.
 ///
@@ -24,13 +25,7 @@ impl Packet for ClientboundForgetLevelChunkPacket {
     const PACKET_ID: i32 = 0x25;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 8 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for i64",
-            )));
-        }
-        let packed = data.get_i64();
+        let packed = types::read_i64(&mut data)?;
         let chunk_x = packed as i32;
         let chunk_z = (packed >> 32) as i32;
         Ok(Self { chunk_x, chunk_z })

@@ -135,6 +135,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundLoginFinishedPacket as Packet>::PACKET_ID, 0x02);
+        assert_packet_id!(ClientboundLoginFinishedPacket, 0x02);
     }
 }

@@ -63,6 +63,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ServerboundKeyPacket as Packet>::PACKET_ID, 0x01);
+        assert_packet_id!(ServerboundKeyPacket, 0x01);
     }
 }

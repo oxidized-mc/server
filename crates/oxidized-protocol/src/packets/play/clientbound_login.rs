@@ -6,8 +6,7 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::types;
-use crate::codec::varint;
+use crate::codec::{types, varint};
 use crate::types::resource_location::ResourceLocation;
 
 use crate::codec::Packet;
@@ -63,17 +62,9 @@ impl CommonPlayerSpawnInfo {
         let dimension_type_id = raw_holder_id - 1;
         let dimension = ResourceLocation::read(data)?;
         let seed = types::read_i64(data)?;
-        if data.remaining() < 1 {
-            return Err(PacketDecodeError::InvalidData(
-                "unexpected end of packet data".into(),
-            ));
-        }
+        types::ensure_remaining(data, 1, "CommonPlayerSpawnInfo game_mode")?;
         let game_mode = data.get_u8();
-        if data.remaining() < 1 {
-            return Err(PacketDecodeError::InvalidData(
-                "unexpected end of packet data".into(),
-            ));
-        }
+        types::ensure_remaining(data, 1, "CommonPlayerSpawnInfo previous_game_mode")?;
         let previous_game_mode = data.get_i8();
         let is_debug = types::read_bool(data)?;
         let is_flat = types::read_bool(data)?;
@@ -201,10 +192,7 @@ impl Packet for ClientboundLoginPacket {
         types::write_i32(&mut buf, self.player_id);
         types::write_bool(&mut buf, self.is_hardcore);
 
-        varint::write_varint_buf(self.dimensions.len() as i32, &mut buf);
-        for dim in &self.dimensions {
-            dim.write(&mut buf);
-        }
+        types::write_list(&mut buf, &self.dimensions, |b, d| d.write(b));
 
         varint::write_varint_buf(self.max_players, &mut buf);
         varint::write_varint_buf(self.chunk_radius, &mut buf);

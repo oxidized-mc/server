@@ -57,11 +57,7 @@ impl Packet for ClientboundPlayerChatPacket {
         let index = varint::read_varint_buf(&mut data)?;
         let has_sig = types::read_bool(&mut data)?;
         let message_signature = if has_sig {
-            if data.remaining() < 256 {
-                return Err(PacketDecodeError::InvalidData(
-                    "unexpected end of packet data".into(),
-                ));
-            }
+            types::ensure_remaining(&data, 256, "PlayerChatPacket message signature")?;
             let mut sig = [0u8; 256];
             data.copy_to_slice(&mut sig);
             Some(sig)
@@ -81,11 +77,7 @@ impl Packet for ClientboundPlayerChatPacket {
         for _ in 0..last_seen_count {
             let packed_id = varint::read_varint_buf(&mut data)?;
             if packed_id == 0 {
-                if data.remaining() < 256 {
-                    return Err(PacketDecodeError::InvalidData(
-                        "unexpected end of packet data".into(),
-                    ));
-                }
+                types::ensure_remaining(&data, 256, "PlayerChatPacket last_seen signature")?;
                 data.advance(256);
             }
         }
@@ -111,12 +103,7 @@ impl Packet for ClientboundPlayerChatPacket {
                 }
                 let mut bits = Vec::with_capacity(len as usize);
                 for _ in 0..len {
-                    if data.remaining() < 8 {
-                        return Err(PacketDecodeError::InvalidData(
-                            "unexpected end of packet data".into(),
-                        ));
-                    }
-                    bits.push(data.get_i64());
+                    bits.push(types::read_i64(&mut data)?);
                 }
                 FilterMask::PartiallyFiltered(bits)
             },
@@ -238,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundPlayerChatPacket as Packet>::PACKET_ID, 0x41);
+        assert_packet_id!(ClientboundPlayerChatPacket, 0x41);
     }
 
     #[test]

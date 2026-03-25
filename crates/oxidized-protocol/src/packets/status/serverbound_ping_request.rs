@@ -40,12 +40,9 @@ mod tests {
 
     #[test]
     fn test_roundtrip() {
-        let pkt = ServerboundPingRequestPacket {
+        assert_packet_roundtrip!(ServerboundPingRequestPacket {
             time: 1_719_000_000_000,
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ServerboundPingRequestPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
@@ -64,6 +61,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ServerboundPingRequestPacket as Packet>::PACKET_ID, 0x01);
+        assert_packet_id!(ServerboundPingRequestPacket, 0x01);
     }
 }

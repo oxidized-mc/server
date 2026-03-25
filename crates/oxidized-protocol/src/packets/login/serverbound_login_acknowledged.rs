@@ -25,9 +25,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ServerboundLoginAcknowledgedPacket as Packet>::PACKET_ID,
-            0x03
-        );
+        assert_packet_id!(ServerboundLoginAcknowledgedPacket, 0x03);
     }
 }

@@ -34,10 +34,7 @@ impl Packet for ClientboundPlayerInfoRemovePacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(5 + self.uuids.len() * 16);
-        varint::write_varint_buf(self.uuids.len() as i32, &mut buf);
-        for uuid in &self.uuids {
-            types::write_uuid(&mut buf, uuid);
-        }
+        types::write_list(&mut buf, &self.uuids, |b, u| types::write_uuid(b, u));
         buf
     }
 }
@@ -49,10 +46,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ClientboundPlayerInfoRemovePacket as Packet>::PACKET_ID,
-            0x45
-        );
+        assert_packet_id!(ClientboundPlayerInfoRemovePacket, 0x45);
     }
 
     #[test]

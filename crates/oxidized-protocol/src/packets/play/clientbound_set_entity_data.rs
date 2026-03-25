@@ -147,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundSetEntityDataPacket as Packet>::PACKET_ID, 0x63);
+        assert_packet_id!(ClientboundSetEntityDataPacket, 0x63);
     }
 
     #[test]

@@ -8,7 +8,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use crate::codec::{types, varint};
 
 /// Initialises the client's world border with full state.
 ///
@@ -58,10 +58,9 @@ fn read_varlong(data: &mut Bytes) -> Result<i64, PacketDecodeError> {
     let mut shift = 0u32;
     loop {
         if !data.has_remaining() {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "unexpected end of VarLong",
-            )));
+            return Err(PacketDecodeError::InvalidData(
+                "unexpected end of VarLong".into(),
+            ));
         }
         let byte = data.get_u8();
         result |= ((byte & 0x7F) as i64) << shift;
@@ -81,12 +80,7 @@ impl Packet for ClientboundInitializeBorderPacket {
     const PACKET_ID: i32 = 0x2B;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 32 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for InitializeBorderPacket",
-            )));
-        }
+        types::ensure_remaining(&data, 32, "InitializeBorderPacket")?;
         let new_center_x = data.get_f64();
         let new_center_z = data.get_f64();
         let old_size = data.get_f64();

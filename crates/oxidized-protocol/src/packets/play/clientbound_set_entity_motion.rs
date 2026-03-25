@@ -76,10 +76,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ClientboundSetEntityMotionPacket as Packet>::PACKET_ID,
-            0x65
-        );
+        assert_packet_id!(ClientboundSetEntityMotionPacket, 0x65);
     }
 
     #[test]

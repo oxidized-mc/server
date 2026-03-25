@@ -3,10 +3,11 @@
 //! Sent by the client in response to a [`ClientboundKeepAlivePacket`](crate::packets::play::ClientboundKeepAlivePacket).
 //! The `id` field must match the challenge sent by the server.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 /// 0x1C — Keepalive response from client to server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerboundKeepAlivePacket {
@@ -18,12 +19,8 @@ impl Packet for ServerboundKeepAlivePacket {
     const PACKET_ID: i32 = 0x1C;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 8 {
-            return Err(PacketDecodeError::InvalidData(
-                "KeepAlive packet too short".to_string(),
-            ));
-        }
-        Ok(Self { id: data.get_i64() })
+        let id = types::read_i64(&mut data)?;
+        Ok(Self { id })
     }
 
     fn encode(&self) -> BytesMut {
@@ -40,7 +37,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ServerboundKeepAlivePacket as Packet>::PACKET_ID, 0x1C);
+        assert_packet_id!(ServerboundKeepAlivePacket, 0x1C);
     }
 
     #[test]

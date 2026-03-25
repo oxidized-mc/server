@@ -6,6 +6,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use thiserror::Error;
 
+use super::packet::PacketDecodeError;
 use super::varint;
 
 /// Generate a matched pair of read/write functions for a fixed-size wire primitive.
@@ -313,6 +314,74 @@ pub fn write_byte_array(buf: &mut BytesMut, data: &[u8]) {
     buf.put_slice(data);
 }
 
+/// Checks that `buf` has at least `min` bytes remaining.
+///
+/// Returns a descriptive [`PacketDecodeError::InvalidData`] on failure,
+/// including the `context` label, the required byte count, and the actual
+/// bytes remaining.
+///
+/// # Errors
+///
+/// Returns [`PacketDecodeError::InvalidData`] when `buf.remaining() < min`.
+pub fn ensure_remaining(
+    buf: &impl Buf,
+    min: usize,
+    context: &str,
+) -> Result<(), PacketDecodeError> {
+    if buf.remaining() < min {
+        return Err(PacketDecodeError::InvalidData(format!(
+            "{context}: need {min} bytes, have {}",
+            buf.remaining()
+        )));
+    }
+    Ok(())
+}
+
+/// Reads a VarInt-prefixed list from `buf`.
+///
+/// Reads a VarInt element count, validates it is non-negative, then calls
+/// `read_element` that many times. The element reader receives the same
+/// buffer so it can consume an arbitrary number of bytes per element.
+///
+/// # Errors
+///
+/// Returns [`PacketDecodeError::InvalidData`] if the count is negative,
+/// or propagates any error from `read_element`.
+pub fn read_list<T>(
+    buf: &mut Bytes,
+    read_element: impl Fn(&mut Bytes) -> Result<T, PacketDecodeError>,
+) -> Result<Vec<T>, PacketDecodeError> {
+    let count = varint::read_varint_buf(buf)?;
+    if count < 0 {
+        return Err(PacketDecodeError::InvalidData(format!(
+            "negative list count: {count}"
+        )));
+    }
+    #[allow(clippy::cast_sign_loss)]
+    let count = count as usize;
+    let mut items = Vec::with_capacity(count);
+    for _ in 0..count {
+        items.push(read_element(buf)?);
+    }
+    Ok(items)
+}
+
+/// Writes a VarInt-prefixed list to `buf`.
+///
+/// Writes the element count as a VarInt, then calls `write_element` for
+/// each item.
+pub fn write_list<T>(
+    buf: &mut BytesMut,
+    items: &[T],
+    write_element: impl Fn(&mut BytesMut, &T),
+) {
+    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    varint::write_varint_buf(items.len() as i32, buf);
+    for item in items {
+        write_element(buf, item);
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -506,5 +575,67 @@ mod tests {
             err,
             TypeError::StringTooLong { len: 100, max: 50 }
         ));
+    }
+
+    #[test]
+    fn test_ensure_remaining_ok() {
+        let buf = Bytes::from_static(&[0, 1, 2, 3]);
+        assert!(ensure_remaining(&buf, 4, "test").is_ok());
+        assert!(ensure_remaining(&buf, 0, "test").is_ok());
+    }
+
+    #[test]
+    fn test_ensure_remaining_err() {
+        let buf = Bytes::from_static(&[0, 1]);
+        let err = ensure_remaining(&buf, 4, "MyPacket").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("MyPacket"), "expected context in error: {msg}");
+        assert!(msg.contains("need 4"), "expected byte count in error: {msg}");
+        assert!(msg.contains("have 2"), "expected remaining in error: {msg}");
+    }
+
+    #[test]
+    fn test_read_list_empty() {
+        let mut out = BytesMut::new();
+        varint::write_varint_buf(0, &mut out);
+        let mut input = out.freeze();
+        let items: Vec<i32> =
+            read_list(&mut input, |buf| Ok(varint::read_varint_buf(buf)?)).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_read_list_multiple() {
+        let mut out = BytesMut::new();
+        varint::write_varint_buf(3, &mut out);
+        varint::write_varint_buf(10, &mut out);
+        varint::write_varint_buf(20, &mut out);
+        varint::write_varint_buf(30, &mut out);
+        let mut input = out.freeze();
+        let items: Vec<i32> =
+            read_list(&mut input, |buf| Ok(varint::read_varint_buf(buf)?)).unwrap();
+        assert_eq!(items, vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn test_read_list_negative_count() {
+        let mut out = BytesMut::new();
+        varint::write_varint_buf(-1, &mut out);
+        let mut input = out.freeze();
+        let err = read_list::<i32>(&mut input, |buf| Ok(varint::read_varint_buf(buf)?)).unwrap_err();
+        assert!(err.to_string().contains("negative"));
+    }
+
+    #[test]
+    fn test_write_list_roundtrip() {
+        let values = vec![1i32, 2, 3, 4, 5];
+        let mut out = BytesMut::new();
+        write_list(&mut out, &values, |buf, v| {
+            varint::write_varint_buf(*v, buf);
+        });
+        let mut input = out.freeze();
+        let decoded: Vec<i32> =
+            read_list(&mut input, |buf| Ok(varint::read_varint_buf(buf)?)).unwrap();
+        assert_eq!(decoded, values);
     }
 }

@@ -125,10 +125,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ClientboundEntityPositionSyncPacket as Packet>::PACKET_ID,
-            0x23
-        );
+        assert_packet_id!(ClientboundEntityPositionSyncPacket, 0x23);
     }
 
     #[test]

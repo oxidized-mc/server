@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundAddEntityPacket as Packet>::PACKET_ID, 0x01);
+        assert_packet_id!(ClientboundAddEntityPacket, 0x01);
     }
 
     #[test]

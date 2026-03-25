@@ -4,10 +4,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 use crate::codec::varint;
 use crate::types::BlockPos;
 
@@ -32,12 +33,8 @@ impl Packet for ClientboundBlockDestructionPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let entity_id = varint::read_varint_buf(&mut data)?;
         let pos = BlockPos::read(&mut data)?;
-        if data.remaining() < 1 {
-            return Err(PacketDecodeError::InvalidData(
-                "Missing progress byte".into(),
-            ));
-        }
-        let progress = data.get_u8();
+        types::ensure_remaining(&data, 1, "BlockDestructionPacket progress")?;
+        let progress = types::read_u8(&mut data)?;
         Ok(Self {
             entity_id,
             pos,

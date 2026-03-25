@@ -56,6 +56,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundTickingStepPacket as Packet>::PACKET_ID, 0x80);
+        assert_packet_id!(ClientboundTickingStepPacket, 0x80);
     }
 }

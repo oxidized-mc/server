@@ -4,7 +4,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use crate::codec::{types, varint};
 
 /// 0x1F — Server requests client to delete a chat message.
 ///
@@ -26,11 +26,7 @@ impl Packet for ClientboundDeleteChatPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let id = varint::read_varint_buf(&mut data)?;
         if id == 0 {
-            if data.remaining() < 256 {
-                return Err(PacketDecodeError::InvalidData(
-                    "unexpected end of packet data".into(),
-                ));
-            }
+            types::ensure_remaining(&data, 256, "DeleteChatPacket full signature")?;
             let mut sig = [0u8; 256];
             data.copy_to_slice(&mut sig);
             Ok(Self {
@@ -64,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundDeleteChatPacket as Packet>::PACKET_ID, 0x1F);
+        assert_packet_id!(ClientboundDeleteChatPacket, 0x1F);
     }
 
     #[test]

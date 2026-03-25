@@ -214,24 +214,16 @@ mod tests {
 
     #[test]
     fn test_packet_roundtrip_default() {
-        let pkt = ServerboundClientInformationPacket {
+        assert_packet_roundtrip!(ServerboundClientInformationPacket {
             information: default_info(),
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundClientInformationPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_packet_roundtrip_custom() {
-        let pkt = ServerboundClientInformationPacket {
+        assert_packet_roundtrip!(ServerboundClientInformationPacket {
             information: custom_info(),
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundClientInformationPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     // ── Field-level assertions ──────────────────────────────────────
@@ -276,10 +268,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ServerboundClientInformationPacket as Packet>::PACKET_ID,
-            0x00
-        );
+        assert_packet_id!(ServerboundClientInformationPacket, 0x00);
     }
 
     // ── Error cases ─────────────────────────────────────────────────

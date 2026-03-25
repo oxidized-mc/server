@@ -50,10 +50,7 @@ mod tests {
     }
 
     #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundCommandSuggestionPacket as Packet>::PACKET_ID,
-            0x0F
-        );
+    fn test_packet_id() {
+        assert_packet_id!(ServerboundCommandSuggestionPacket, 0x0F);
     }
 }

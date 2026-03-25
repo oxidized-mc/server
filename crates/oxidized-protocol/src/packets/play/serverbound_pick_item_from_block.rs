@@ -56,10 +56,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ServerboundPickItemFromBlockPacket as Packet>::PACKET_ID,
-            0x24
-        );
+        assert_packet_id!(ServerboundPickItemFromBlockPacket, 0x24);
     }
 
     #[test]

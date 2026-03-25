@@ -4,7 +4,7 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundChangeDifficultyPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
@@ -25,13 +25,7 @@ impl Packet for ClientboundChangeDifficultyPacket {
     const PACKET_ID: i32 = 0x0A;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 1 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for ChangeDifficultyPacket",
-            )));
-        }
-        let difficulty = data.get_u8();
+        let difficulty = types::read_u8(&mut data)?;
         let is_locked = types::read_bool(&mut data)?;
         Ok(Self {
             difficulty,

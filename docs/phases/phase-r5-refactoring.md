@@ -20,7 +20,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.5 | Replace hardcoded physics properties with registry data | ✅ Done |
 | R5.6 | Replace hardcoded biome resolution with registry lookup | ✅ Done |
 | R5.7 | Compile-time item ID codegen (like blocks) | ✅ Done |
-| R5.8 | Extract packet codec helpers & roundtrip test macro | 📋 Planned |
+| R5.8 | Extract packet codec helpers & roundtrip test macro | ✅ Done |
 | R5.9 | Extract command registration helpers | 📋 Planned |
 | R5.10 | Standardize packet decoder error handling | 📋 Planned |
 | R5.11 | Decompose oversized structs | 📋 Planned |
@@ -784,6 +784,8 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 ### R5.8: Extract Packet Codec Helpers & Roundtrip Test Macro
 
+**Status:** ✅ Done
+
 **Targets:** `crates/oxidized-protocol/src/packets/**/*.rs`
 
 **Current problems:**
@@ -793,75 +795,49 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
   use `Io(UnexpectedEof)` for the same "not enough bytes" condition
 - **Varint list reading repeated** 5+ times: read count, loop, read elements
 
-**Steps:**
+**What was done:**
 
-1. **Create `assert_packet_roundtrip!` macro** in
-   `crates/oxidized-protocol/src/test_helpers.rs` (or `tests/common/mod.rs`):
-   ```rust
-   /// Tests that encoding then decoding a packet produces the original.
-   ///
-   /// Also verifies the PACKET_ID constant.
-   macro_rules! assert_packet_roundtrip {
-       ($pkt_type:ty, $pkt:expr, $expected_id:expr) => {
-           #[test]
-           fn test_roundtrip() {
-               let pkt: $pkt_type = $pkt;
-               let encoded = pkt.encode();
-               let decoded = <$pkt_type>::decode(encoded.freeze()).unwrap();
-               assert_eq!(decoded, pkt);
-           }
+1. **Created `ensure_remaining()`, `read_list()`, `write_list()` helpers** in
+   `crates/oxidized-protocol/src/codec/types.rs`:
+   - `ensure_remaining(buf, min, context)` — standardized "not enough bytes" check
+     returning `InvalidData` with descriptive message
+   - `read_list(data, read_element)` — reads VarInt count + loop, validates
+     non-negative count
+   - `write_list(buf, items, write_element)` — writes VarInt count + loop
+   - 6 unit tests covering all helpers
 
-           #[test]
-           fn test_packet_id() {
-               assert_eq!(<$pkt_type>::PACKET_ID, $expected_id);
-           }
-       };
-   }
-   ```
+2. **Created `assert_packet_roundtrip!` and `assert_packet_id!` macros** in
+   `crates/oxidized-protocol/src/codec/mod.rs` (`#[cfg(test)]`):
+   - `assert_packet_roundtrip!(pkt_expr)` — encode→decode→assert_eq assertion
+   - `assert_packet_id!(PacketType, 0xNN)` — packet ID assertion
+   - Designed as test assertions (not test generators) for maximum flexibility
 
-2. **Create `read_list()` helper**:
-   ```rust
-   pub fn read_list<T>(
-       data: &mut Bytes,
-       read_element: impl Fn(&mut Bytes) -> Result<T, PacketDecodeError>,
-   ) -> Result<Vec<T>, PacketDecodeError> {
-       let count = varint::read_varint_buf(data)?;
-       let mut items = Vec::with_capacity(count as usize);
-       for _ in 0..count {
-           items.push(read_element(data)?);
-       }
-       Ok(items)
-   }
-   ```
+3. **Migrated ~25 packet files to use `ensure_remaining()`:**
+   - Replaced all `Io(UnexpectedEof)` patterns with `ensure_remaining()` +
+     `InvalidData` — standardized error type across the crate
+   - Replaced inline `data.remaining() < N` checks in play, login, and
+     configuration packets
+   - Converted raw `data.get_*()` calls to typed helpers (`types::read_u8`,
+     `types::read_i64`, `types::read_f32`, etc.) where possible
 
-3. **Create `ensure_remaining()` helper**:
-   ```rust
-   pub fn ensure_remaining(
-       data: &impl Buf, min: usize, context: &str,
-   ) -> Result<(), PacketDecodeError> {
-       if data.remaining() < min {
-           return Err(PacketDecodeError::InvalidData(
-               format!("{context}: need {min} bytes, have {}", data.remaining()),
-           ));
-       }
-       Ok(())
-   }
-   ```
+4. **Migrated clean candidates to `read_list()` / `write_list()`:**
+   - `clientbound_update_enabled_features` — both read + write
+   - `clientbound_select_known_packs` — both read + write
+   - `clientbound_container_set_content` — both read + write
+   - `clientbound_player_info_remove` — write_list
+   - `clientbound_remove_entities` — write_list
+   - `clientbound_login` — write_list for dimensions
+   - `serverbound_select_known_packs` — write_list
+   - Files with extra validation (max limits, bounds checks) kept manual
+     loops with the extra checks preserved
 
-4. **Migrate packet files** to use the new helpers:
-   - Replace inline `data.remaining() < N` checks with `ensure_remaining()`
-   - Replace inline varint-count loops with `read_list()`
-   - Replace test boilerplate with `assert_packet_roundtrip!`
-   - Migrate incrementally — one packet file per commit is fine
-
-5. **Standardize all insufficient-data errors** to use `PacketDecodeError::InvalidData`
-   (not `Io(UnexpectedEof)`) for consistency.
+5. **Migrated 43 packet files to use `assert_packet_id!` macro** and
+   **18 roundtrip tests to use `assert_packet_roundtrip!` macro**.
 
 **Verification:**
-- `cargo test -p oxidized-protocol` — all 163+ packet tests still pass
-- No functional change — only structural deduplication
-- `grep -c "fn test_roundtrip" crates/oxidized-protocol/` — count should match
-  before and after
+- `cargo test -p oxidized-protocol` — 856 unit tests + 136 integration tests pass
+- `cargo check --workspace` — clean
+- No functional changes — only structural deduplication and error standardization
 
 ---
 

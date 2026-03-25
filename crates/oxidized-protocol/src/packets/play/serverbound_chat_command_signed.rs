@@ -57,10 +57,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ServerboundChatCommandSignedPacket as Packet>::PACKET_ID,
-            0x08
-        );
+        assert_packet_id!(ServerboundChatCommandSignedPacket, 0x08);
     }
 
     #[test]
@@ -107,13 +104,5 @@ mod tests {
         let decoded =
             <ServerboundChatCommandSignedPacket as Packet>::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.command, "help 2");
-    }
-
-    #[test]
-    fn test_packet_trait_id() {
-        assert_eq!(
-            <ServerboundChatCommandSignedPacket as Packet>::PACKET_ID,
-            0x08
-        );
     }
 }

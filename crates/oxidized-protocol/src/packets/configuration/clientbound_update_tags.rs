@@ -126,28 +126,22 @@ mod tests {
 
     #[test]
     fn test_roundtrip_empty() {
-        let pkt = ClientboundUpdateTagsPacket { tags: vec![] };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundUpdateTagsPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        assert_packet_roundtrip!(ClientboundUpdateTagsPacket { tags: vec![] });
     }
 
     #[test]
     fn test_roundtrip_single_registry_empty_tags() {
-        let pkt = ClientboundUpdateTagsPacket {
+        assert_packet_roundtrip!(ClientboundUpdateTagsPacket {
             tags: vec![TagRegistry {
                 registry: ResourceLocation::new("minecraft", "block").unwrap(),
                 tags: vec![],
             }],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundUpdateTagsPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_roundtrip_with_tag_entries() {
-        let pkt = ClientboundUpdateTagsPacket {
+        assert_packet_roundtrip!(ClientboundUpdateTagsPacket {
             tags: vec![TagRegistry {
                 registry: ResourceLocation::new("minecraft", "block").unwrap(),
                 tags: vec![
@@ -161,15 +155,12 @@ mod tests {
                     },
                 ],
             }],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundUpdateTagsPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_roundtrip_multiple_registries() {
-        let pkt = ClientboundUpdateTagsPacket {
+        assert_packet_roundtrip!(ClientboundUpdateTagsPacket {
             tags: vec![
                 TagRegistry {
                     registry: ResourceLocation::new("minecraft", "block").unwrap(),
@@ -193,15 +184,12 @@ mod tests {
                     }],
                 },
             ],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundUpdateTagsPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_roundtrip_tag_with_empty_entries() {
-        let pkt = ClientboundUpdateTagsPacket {
+        assert_packet_roundtrip!(ClientboundUpdateTagsPacket {
             tags: vec![TagRegistry {
                 registry: ResourceLocation::new("minecraft", "block").unwrap(),
                 tags: vec![TagEntry {
@@ -209,14 +197,11 @@ mod tests {
                     entries: vec![],
                 }],
             }],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundUpdateTagsPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundUpdateTagsPacket as Packet>::PACKET_ID, 0x0d);
+        assert_packet_id!(ClientboundUpdateTagsPacket, 0x0d);
     }
 }

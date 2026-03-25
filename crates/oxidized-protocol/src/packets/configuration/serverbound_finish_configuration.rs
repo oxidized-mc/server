@@ -27,9 +27,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ServerboundFinishConfigurationPacket as Packet>::PACKET_ID,
-            0x03
-        );
+        assert_packet_id!(ServerboundFinishConfigurationPacket, 0x03);
     }
 }

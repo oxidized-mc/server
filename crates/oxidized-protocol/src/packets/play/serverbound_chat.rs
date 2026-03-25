@@ -28,11 +28,7 @@ impl LastSeenMessagesUpdate {
     /// invalid data.
     pub fn decode(data: &mut Bytes) -> Result<Self, PacketDecodeError> {
         let offset = varint::read_varint_buf(data)?;
-        if data.remaining() < 4 {
-            return Err(PacketDecodeError::InvalidData(
-                "unexpected end of packet data".into(),
-            ));
-        }
+        types::ensure_remaining(data, 4, "LastSeenMessagesUpdate ack+checksum")?;
         let mut acknowledged = [0u8; 3];
         data.copy_to_slice(&mut acknowledged);
         let checksum = data.get_u8();
@@ -80,11 +76,7 @@ impl Packet for ServerboundChatPacket {
         let salt = types::read_i64(&mut data)?;
         let has_sig = types::read_bool(&mut data)?;
         let signature = if has_sig {
-            if data.remaining() < 256 {
-                return Err(PacketDecodeError::InvalidData(
-                    "unexpected end of packet data".into(),
-                ));
-            }
+            types::ensure_remaining(&data, 256, "ServerboundChatPacket signature")?;
             let mut sig = [0u8; 256];
             data.copy_to_slice(&mut sig);
             Some(sig)
@@ -132,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ServerboundChatPacket as Packet>::PACKET_ID, 0x09);
+        assert_packet_id!(ServerboundChatPacket, 0x09);
     }
 
     #[test]

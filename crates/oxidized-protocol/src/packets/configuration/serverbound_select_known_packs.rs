@@ -48,11 +48,7 @@ impl Packet for ServerboundSelectKnownPacksPacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        varint::write_varint_buf(self.packs.len() as i32, &mut buf);
-        for pack in &self.packs {
-            pack.write(&mut buf);
-        }
+        crate::codec::types::write_list(&mut buf, &self.packs, |b, p| p.write(b));
         buf
     }
 }
@@ -64,26 +60,18 @@ mod tests {
 
     #[test]
     fn test_roundtrip_empty() {
-        let pkt = ServerboundSelectKnownPacksPacket { packs: vec![] };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundSelectKnownPacksPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        assert_packet_roundtrip!(ServerboundSelectKnownPacksPacket { packs: vec![] });
     }
 
     #[test]
     fn test_roundtrip_single_pack() {
-        let pkt = ServerboundSelectKnownPacksPacket {
+        assert_packet_roundtrip!(ServerboundSelectKnownPacksPacket {
             packs: vec![KnownPack {
                 namespace: "minecraft".to_string(),
                 id: "core".to_string(),
                 version: "1.21.5".to_string(),
             }],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ServerboundSelectKnownPacksPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
@@ -119,9 +107,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ServerboundSelectKnownPacksPacket as Packet>::PACKET_ID,
-            0x07
-        );
+        assert_packet_id!(ServerboundSelectKnownPacksPacket, 0x07);
     }
 }

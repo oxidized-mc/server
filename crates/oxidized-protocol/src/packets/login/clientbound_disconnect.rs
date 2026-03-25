@@ -54,6 +54,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundDisconnectPacket as Packet>::PACKET_ID, 0x00);
+        assert_packet_id!(ClientboundDisconnectPacket, 0x00);
     }
 }

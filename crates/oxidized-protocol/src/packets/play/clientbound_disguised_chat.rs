@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundDisguisedChatPacket as Packet>::PACKET_ID, 0x21);
+        assert_packet_id!(ClientboundDisguisedChatPacket, 0x21);
     }
 
     #[test]

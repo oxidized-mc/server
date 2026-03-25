@@ -32,11 +32,7 @@ impl Packet for ClientboundContainerSetContentPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let container_id = crate::codec::types::read_u8(&mut data)?;
         let state_id = varint::read_varint_buf(&mut data)?;
-        let count = varint::read_varint_buf(&mut data)?;
-        let mut items = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            items.push(slot::read_slot(&mut data)?);
-        }
+        let items = crate::codec::types::read_list(&mut data, |d| slot::read_slot(d))?;
         let carried_item = slot::read_slot(&mut data)?;
         Ok(Self {
             container_id,
@@ -50,10 +46,9 @@ impl Packet for ClientboundContainerSetContentPacket {
         let mut buf = BytesMut::new();
         crate::codec::types::write_u8(&mut buf, self.container_id);
         varint::write_varint_buf(self.state_id, &mut buf);
-        varint::write_varint_buf(self.items.len() as i32, &mut buf);
-        for item in &self.items {
-            slot::write_slot(&mut buf, item.as_ref());
-        }
+        crate::codec::types::write_list(&mut buf, &self.items, |b, item| {
+            slot::write_slot(b, item.as_ref());
+        });
         slot::write_slot(&mut buf, self.carried_item.as_ref());
         buf
     }

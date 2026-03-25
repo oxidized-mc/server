@@ -5,10 +5,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ServerboundChunkBatchReceivedPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 
 /// Client response to a chunk batch.
 ///
@@ -23,13 +24,7 @@ impl Packet for ServerboundChunkBatchReceivedPacket {
     const PACKET_ID: i32 = 0x0B;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 4 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for f32",
-            )));
-        }
-        let desired_chunks_per_tick = data.get_f32();
+        let desired_chunks_per_tick = types::read_f32(&mut data)?;
         Ok(Self {
             desired_chunks_per_tick,
         })

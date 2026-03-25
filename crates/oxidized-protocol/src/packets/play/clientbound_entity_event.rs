@@ -5,10 +5,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundEntityEventPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 
 /// Entity event packet (0x22).
 ///
@@ -46,14 +47,9 @@ impl Packet for ClientboundEntityEventPacket {
     const PACKET_ID: i32 = 0x22;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 5 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for EntityEventPacket",
-            )));
-        }
-        let entity_id = data.get_i32();
-        let event_id = data.get_u8();
+        types::ensure_remaining(&data, 5, "EntityEventPacket")?;
+        let entity_id = types::read_i32(&mut data)?;
+        let event_id = types::read_u8(&mut data)?;
         Ok(Self {
             entity_id,
             event_id,
@@ -87,7 +83,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundEntityEventPacket as Packet>::PACKET_ID, 0x22);
+        assert_packet_id!(ClientboundEntityEventPacket, 0x22);
     }
 
     #[test]

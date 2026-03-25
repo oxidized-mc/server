@@ -8,7 +8,6 @@ use bytes::{Bytes, BytesMut};
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
 use crate::codec::types;
-use crate::codec::varint;
 
 /// A known data pack identifier used during configuration negotiation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,26 +59,13 @@ impl Packet for ClientboundSelectKnownPacksPacket {
     const PACKET_ID: i32 = 0x0e;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let count = varint::read_varint_buf(&mut data)?;
-        if count < 0 {
-            return Err(PacketDecodeError::InvalidData(format!(
-                "negative pack count: {count}"
-            )));
-        }
-        let mut packs = Vec::with_capacity(count as usize);
-        for _ in 0..count {
-            packs.push(KnownPack::read(&mut data)?);
-        }
+        let packs = types::read_list(&mut data, KnownPack::read)?;
         Ok(Self { packs })
     }
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-        varint::write_varint_buf(self.packs.len() as i32, &mut buf);
-        for pack in &self.packs {
-            pack.write(&mut buf);
-        }
+        types::write_list(&mut buf, &self.packs, |b, p| p.write(b));
         buf
     }
 }
@@ -91,31 +77,23 @@ mod tests {
 
     #[test]
     fn test_roundtrip_empty() {
-        let pkt = ClientboundSelectKnownPacksPacket { packs: vec![] };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSelectKnownPacksPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        assert_packet_roundtrip!(ClientboundSelectKnownPacksPacket { packs: vec![] });
     }
 
     #[test]
     fn test_roundtrip_single_pack() {
-        let pkt = ClientboundSelectKnownPacksPacket {
+        assert_packet_roundtrip!(ClientboundSelectKnownPacksPacket {
             packs: vec![KnownPack {
                 namespace: "minecraft".to_string(),
                 id: "core".to_string(),
                 version: "1.21.5".to_string(),
             }],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSelectKnownPacksPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_roundtrip_multiple_packs() {
-        let pkt = ClientboundSelectKnownPacksPacket {
+        assert_packet_roundtrip!(ClientboundSelectKnownPacksPacket {
             packs: vec![
                 KnownPack {
                     namespace: "minecraft".to_string(),
@@ -128,18 +106,11 @@ mod tests {
                     version: "1.21.5".to_string(),
                 },
             ],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded =
-            <ClientboundSelectKnownPacksPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(
-            <ClientboundSelectKnownPacksPacket as Packet>::PACKET_ID,
-            0x0e
-        );
+        assert_packet_id!(ClientboundSelectKnownPacksPacket, 0x0e);
     }
 }

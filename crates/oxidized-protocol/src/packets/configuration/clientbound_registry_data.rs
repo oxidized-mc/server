@@ -97,27 +97,21 @@ mod tests {
 
     #[test]
     fn test_roundtrip_empty_entries() {
-        let pkt = ClientboundRegistryDataPacket {
+        assert_packet_roundtrip!(ClientboundRegistryDataPacket {
             registry: ResourceLocation::new("minecraft", "dimension_type").unwrap(),
             entries: vec![],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
     fn test_roundtrip_entry_without_data() {
-        let pkt = ClientboundRegistryDataPacket {
+        assert_packet_roundtrip!(ClientboundRegistryDataPacket {
             registry: ResourceLocation::new("minecraft", "worldgen/biome").unwrap(),
             entries: vec![RegistryEntry {
                 id: ResourceLocation::new("minecraft", "plains").unwrap(),
                 data: None,
             }],
-        };
-        let encoded = Packet::encode(&pkt);
-        let decoded = <ClientboundRegistryDataPacket as Packet>::decode(encoded.freeze()).unwrap();
-        assert_eq!(decoded, pkt);
+        });
     }
 
     #[test]
@@ -167,6 +161,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundRegistryDataPacket as Packet>::PACKET_ID, 0x07);
+        assert_packet_id!(ClientboundRegistryDataPacket, 0x07);
     }
 }

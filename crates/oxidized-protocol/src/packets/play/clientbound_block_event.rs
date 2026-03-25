@@ -4,10 +4,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundBlockEventPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 use crate::codec::varint;
 use crate::types::BlockPos;
 
@@ -32,13 +33,9 @@ impl Packet for ClientboundBlockEventPacket {
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let pos = BlockPos::read(&mut data)?;
-        if data.remaining() < 2 {
-            return Err(PacketDecodeError::InvalidData(
-                "Missing action bytes".into(),
-            ));
-        }
-        let action_type = data.get_u8();
-        let action_param = data.get_u8();
+        types::ensure_remaining(&data, 2, "BlockEventPacket action bytes")?;
+        let action_type = types::read_u8(&mut data)?;
+        let action_param = types::read_u8(&mut data)?;
         let block_type_id = varint::read_varint_buf(&mut data)?;
         Ok(Self {
             pos,

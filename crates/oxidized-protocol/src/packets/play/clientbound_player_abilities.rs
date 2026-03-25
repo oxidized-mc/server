@@ -5,10 +5,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundPlayerAbilitiesPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 
 /// Clientbound packet that sets the player's abilities.
 ///
@@ -27,15 +28,10 @@ impl Packet for ClientboundPlayerAbilitiesPacket {
     const PACKET_ID: i32 = 0x40;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 9 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for PlayerAbilitiesPacket",
-            )));
-        }
-        let flags = data.get_u8();
-        let fly_speed = data.get_f32();
-        let walk_speed = data.get_f32();
+        types::ensure_remaining(&data, 9, "PlayerAbilitiesPacket")?;
+        let flags = types::read_u8(&mut data)?;
+        let fly_speed = types::read_f32(&mut data)?;
+        let walk_speed = types::read_f32(&mut data)?;
         Ok(Self {
             flags,
             fly_speed,

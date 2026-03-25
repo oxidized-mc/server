@@ -8,7 +8,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use crate::codec::{types, varint};
 use crate::types::SectionPos;
 
 /// A single block change within a chunk section.
@@ -42,11 +42,7 @@ impl Packet for ClientboundSectionBlocksUpdatePacket {
     const PACKET_ID: i32 = 0x54;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 8 {
-            return Err(PacketDecodeError::InvalidData(
-                "Missing section position".into(),
-            ));
-        }
+        types::ensure_remaining(&data, 8, "SectionBlocksUpdatePacket section pos")?;
         let packed_section = data.get_i64();
         let section_pos = SectionPos::from_long(packed_section);
 

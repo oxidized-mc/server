@@ -193,6 +193,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ServerboundPlayerInputPacket as Packet>::PACKET_ID, 0x2B);
+        assert_packet_id!(ServerboundPlayerInputPacket, 0x2B);
     }
 }

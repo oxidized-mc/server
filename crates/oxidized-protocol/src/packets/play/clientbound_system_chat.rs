@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundSystemChatPacket as Packet>::PACKET_ID, 0x79);
+        assert_packet_id!(ClientboundSystemChatPacket, 0x79);
     }
 
     #[test]

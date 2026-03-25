@@ -7,7 +7,7 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::types;
 use crate::types::resource_location::ResourceLocation;
@@ -36,13 +36,8 @@ impl Packet for ClientboundSetDefaultSpawnPositionPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let dimension = ResourceLocation::read(&mut data)?;
         let pos = types::read_i64(&mut data)?;
-        if data.remaining() < 8 {
-            return Err(PacketDecodeError::InvalidData(
-                "unexpected end of packet data".into(),
-            ));
-        }
-        let yaw = data.get_f32();
-        let pitch = data.get_f32();
+        let yaw = types::read_f32(&mut data)?;
+        let pitch = types::read_f32(&mut data)?;
         Ok(Self {
             dimension,
             pos,

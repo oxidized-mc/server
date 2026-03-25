@@ -11,7 +11,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use crate::codec::{types, varint};
 
 /// Network state for a single world clock.
 ///
@@ -69,10 +69,9 @@ fn read_varlong(data: &mut Bytes) -> Result<i64, PacketDecodeError> {
     let mut shift = 0u32;
     loop {
         if !data.has_remaining() {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "VarLong truncated",
-            )));
+            return Err(PacketDecodeError::InvalidData(
+                "VarLong truncated".into(),
+            ));
         }
         let byte = data.get_u8();
         result |= i64::from(byte & 0x7F) << shift;
@@ -92,27 +91,15 @@ impl Packet for ClientboundSetTimePacket {
     const PACKET_ID: i32 = 0x71;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 8 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for SetTimePacket game_time",
-            )));
-        }
-        let game_time = data.get_i64();
+        let game_time = types::read_i64(&mut data)?;
 
         let map_size = varint::read_varint_buf(&mut data)?;
         let mut clock_updates = Vec::with_capacity(map_size as usize);
         for _ in 0..map_size {
-            // Holder encoding: VarInt where 0 = inline, N+1 = registry ID N
             let holder_id = varint::read_varint_buf(&mut data)?;
             let clock_id = holder_id - 1;
             let total_ticks = read_varlong(&mut data)?;
-            if data.remaining() < 8 {
-                return Err(PacketDecodeError::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "not enough data for ClockNetworkState floats",
-                )));
-            }
+            types::ensure_remaining(&data, 8, "ClockNetworkState floats")?;
             let partial_tick = data.get_f32();
             let rate = data.get_f32();
             clock_updates.push(ClockUpdate {
@@ -210,6 +197,6 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundSetTimePacket as Packet>::PACKET_ID, 0x71);
+        assert_packet_id!(ClientboundSetTimePacket, 0x71);
     }
 }

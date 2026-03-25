@@ -68,7 +68,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundRotateHeadPacket as Packet>::PACKET_ID, 0x53);
+        assert_packet_id!(ClientboundRotateHeadPacket, 0x53);
     }
 
     #[test]

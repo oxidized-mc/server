@@ -4,11 +4,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundAnimatePacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use crate::codec::{types, varint};
 
 /// Animation type: swing main hand.
 pub const SWING_MAIN_HAND: u8 = 0;
@@ -36,13 +36,8 @@ impl Packet for ClientboundAnimatePacket {
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let entity_id = varint::read_varint_buf(&mut data)?;
-        if data.remaining() < 1 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for ClientboundAnimatePacket action",
-            )));
-        }
-        let action = data.get_u8();
+        types::ensure_remaining(&data, 1, "AnimatePacket action")?;
+        let action = types::read_u8(&mut data)?;
         Ok(Self { entity_id, action })
     }
 

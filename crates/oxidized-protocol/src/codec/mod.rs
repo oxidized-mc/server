@@ -46,3 +46,44 @@ pub mod types;
 pub mod varint;
 
 pub use packet::{Packet, PacketDecodeError};
+
+/// Asserts that encoding then decoding a packet produces the original value.
+///
+/// Invoked inside `#[test]` functions to reduce roundtrip-test boilerplate.
+/// The packet must implement [`Packet`], [`PartialEq`], and [`Debug`].
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// #[test]
+/// fn test_roundtrip() {
+///     assert_packet_roundtrip!(MyPacket { field: 42 });
+/// }
+/// ```
+#[cfg(test)]
+macro_rules! assert_packet_roundtrip {
+    ($pkt:expr) => {{
+        let pkt = $pkt;
+        let encoded = $crate::codec::Packet::encode(&pkt);
+        let decoded =
+            <_ as $crate::codec::Packet>::decode(encoded.freeze()).expect("decode failed");
+        assert_eq!(pkt, decoded);
+    }};
+}
+
+/// Asserts that a packet type's [`Packet::PACKET_ID`] matches the expected value.
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// #[test]
+/// fn test_packet_id() {
+///     assert_packet_id!(MyPacket, 0x2C);
+/// }
+/// ```
+#[cfg(test)]
+macro_rules! assert_packet_id {
+    ($pkt_type:ty, $expected:expr) => {
+        assert_eq!(<$pkt_type as $crate::codec::Packet>::PACKET_ID, $expected);
+    };
+}

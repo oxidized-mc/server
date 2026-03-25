@@ -4,10 +4,11 @@
 //! with [`ServerboundKeepAlivePacket`](crate::packets::play::ServerboundKeepAlivePacket) echoing the same `id`. If no
 //! response arrives within 30 seconds, the server disconnects the client.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 /// 0x2C — Keepalive ping from server to client.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientboundKeepAlivePacket {
@@ -19,12 +20,8 @@ impl Packet for ClientboundKeepAlivePacket {
     const PACKET_ID: i32 = 0x2C;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 8 {
-            return Err(PacketDecodeError::InvalidData(
-                "KeepAlive packet too short".to_string(),
-            ));
-        }
-        Ok(Self { id: data.get_i64() })
+        let id = types::read_i64(&mut data)?;
+        Ok(Self { id })
     }
 
     fn encode(&self) -> BytesMut {
@@ -41,7 +38,7 @@ mod tests {
 
     #[test]
     fn test_packet_id() {
-        assert_eq!(<ClientboundKeepAlivePacket as Packet>::PACKET_ID, 0x2C);
+        assert_packet_id!(ClientboundKeepAlivePacket, 0x2C);
     }
 
     #[test]

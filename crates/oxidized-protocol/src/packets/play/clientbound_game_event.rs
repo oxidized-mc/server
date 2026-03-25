@@ -5,10 +5,11 @@
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundGameEventPacket`.
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
+use crate::codec::types;
 
 /// A game event type ID.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,14 +83,9 @@ impl Packet for ClientboundGameEventPacket {
     const PACKET_ID: i32 = 0x26;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 5 {
-            return Err(PacketDecodeError::Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "not enough data for GameEventPacket",
-            )));
-        }
-        let type_id = data.get_u8();
-        let param = data.get_f32();
+        types::ensure_remaining(&data, 5, "GameEventPacket")?;
+        let type_id = types::read_u8(&mut data)?;
+        let param = types::read_f32(&mut data)?;
         let event = GameEventType::from_id(type_id).ok_or_else(|| {
             PacketDecodeError::InvalidData(format!("unknown game event type: {type_id}"))
         })?;

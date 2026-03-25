@@ -79,12 +79,8 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
     const PACKET_ID: i32 = 0x46;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        if data.remaining() < 1 {
-            return Err(PacketDecodeError::InvalidData(
-                "unexpected end of packet data".into(),
-            ));
-        }
-        let actions = PlayerInfoActions(data.get_u8());
+        let actions = types::read_u8(&mut data)?;
+        let actions = PlayerInfoActions(actions);
 
         let entry_count = varint::read_varint_buf(&mut data)? as usize;
         let mut entries = Vec::with_capacity(entry_count);
@@ -128,18 +124,10 @@ impl Packet for ClientboundPlayerInfoUpdatePacket {
                     let _session_uuid = types::read_uuid(&mut data)?;
                     let _expiry = types::read_i64(&mut data)?;
                     let key_len = varint::read_varint_buf(&mut data)? as usize;
-                    if data.remaining() < key_len {
-                        return Err(PacketDecodeError::InvalidData(
-                            "unexpected end of packet data".into(),
-                        ));
-                    }
+                    types::ensure_remaining(&data, key_len, "PlayerInfoUpdate session key")?;
                     data.advance(key_len);
                     let sig_len = varint::read_varint_buf(&mut data)? as usize;
-                    if data.remaining() < sig_len {
-                        return Err(PacketDecodeError::InvalidData(
-                            "unexpected end of packet data".into(),
-                        ));
-                    }
+                    types::ensure_remaining(&data, sig_len, "PlayerInfoUpdate session sig")?;
                     data.advance(sig_len);
                 }
             }
