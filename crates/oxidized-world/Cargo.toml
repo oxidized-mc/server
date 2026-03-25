@@ -38,6 +38,11 @@ tokio    = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 insta    = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name    = "world_benchmarks"
+harness = false
 
 [lints]
 workspace = true

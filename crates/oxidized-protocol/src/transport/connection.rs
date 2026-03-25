@@ -59,6 +59,134 @@ impl fmt::Display for ConnectionState {
 }
 
 // ---------------------------------------------------------------------------
+// ConnectionStateMachine
+// ---------------------------------------------------------------------------
+
+/// Invalid state transition error.
+///
+/// Returned when [`ConnectionStateMachine::transition`] is called with a
+/// `(from, to)` pair that doesn't match any valid Minecraft protocol
+/// transition.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("invalid state transition: {from} -> {to}")]
+pub struct InvalidTransition {
+    /// The state the connection was in.
+    pub from: ConnectionState,
+    /// The state the caller tried to move to.
+    pub to: ConnectionState,
+}
+
+/// Testable protocol state machine, decoupled from network I/O.
+///
+/// Tracks the current [`ConnectionState`] and validates that transitions
+/// follow the Minecraft protocol:
+///
+/// ```text
+/// Handshaking → Status         (server list ping)
+/// Handshaking → Login          (authentication / protocol mismatch)
+/// Login       → Configuration  (login success)
+/// Configuration → Play         (configuration finished)
+/// ```
+///
+/// # Examples
+///
+/// ```
+/// use oxidized_protocol::transport::connection::{ConnectionState, ConnectionStateMachine};
+///
+/// let mut sm = ConnectionStateMachine::new();
+/// assert_eq!(sm.state(), ConnectionState::Handshaking);
+///
+/// sm.transition(ConnectionState::Login).unwrap();
+/// assert_eq!(sm.state(), ConnectionState::Login);
+///
+/// sm.transition(ConnectionState::Configuration).unwrap();
+/// assert_eq!(sm.state(), ConnectionState::Configuration);
+///
+/// sm.transition(ConnectionState::Play).unwrap();
+/// assert_eq!(sm.state(), ConnectionState::Play);
+/// ```
+#[derive(Debug, Clone)]
+pub struct ConnectionStateMachine {
+    state: ConnectionState,
+    /// Whether encryption has been enabled on this connection.
+    is_encrypted: bool,
+    /// Whether compression has been enabled on this connection.
+    is_compressed: bool,
+}
+
+impl ConnectionStateMachine {
+    /// Creates a new state machine in the [`Handshaking`](ConnectionState::Handshaking)
+    /// state.
+    pub fn new() -> Self {
+        Self {
+            state: ConnectionState::Handshaking,
+            is_encrypted: false,
+            is_compressed: false,
+        }
+    }
+
+    /// Returns the current protocol state.
+    pub fn state(&self) -> ConnectionState {
+        self.state
+    }
+
+    /// Returns whether encryption is enabled.
+    pub fn is_encrypted(&self) -> bool {
+        self.is_encrypted
+    }
+
+    /// Returns whether compression is enabled.
+    pub fn is_compressed(&self) -> bool {
+        self.is_compressed
+    }
+
+    /// Records that encryption has been enabled.
+    pub fn set_encrypted(&mut self) {
+        self.is_encrypted = true;
+    }
+
+    /// Records that compression has been enabled.
+    pub fn set_compressed(&mut self) {
+        self.is_compressed = true;
+    }
+
+    /// Attempts to transition to the given state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidTransition`] if the `(current, target)` pair is
+    /// not a valid protocol transition.
+    pub fn transition(&mut self, to: ConnectionState) -> Result<(), InvalidTransition> {
+        if Self::is_valid_transition(self.state, to) {
+            self.state = to;
+            Ok(())
+        } else {
+            Err(InvalidTransition {
+                from: self.state,
+                to,
+            })
+        }
+    }
+
+    /// Returns `true` if `from → to` is a valid protocol transition.
+    pub fn is_valid_transition(from: ConnectionState, to: ConnectionState) -> bool {
+        matches!(
+            (from, to),
+            (ConnectionState::Handshaking, ConnectionState::Status)
+                | (ConnectionState::Handshaking, ConnectionState::Login)
+                | (ConnectionState::Login, ConnectionState::Configuration)
+                | (ConnectionState::Configuration, ConnectionState::Play)
+        )
+    }
+}
+
+impl Default for ConnectionStateMachine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // RawPacket
 // ---------------------------------------------------------------------------
 
@@ -1537,5 +1665,157 @@ mod tests {
         let pkt3 = client_conn.read_raw_packet().await.unwrap();
         assert_eq!(pkt3.id, 0x03);
         assert_eq!(&pkt3.data[..], b"cycle2b");
+    }
+
+    // -------------------------------------------------------------------
+    // ConnectionStateMachine tests (no network I/O required)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn test_state_machine_initial_state() {
+        let sm = ConnectionStateMachine::new();
+        assert_eq!(sm.state(), ConnectionState::Handshaking);
+        assert!(!sm.is_encrypted());
+        assert!(!sm.is_compressed());
+    }
+
+    #[test]
+    fn test_state_machine_default() {
+        let sm = ConnectionStateMachine::default();
+        assert_eq!(sm.state(), ConnectionState::Handshaking);
+    }
+
+    #[test]
+    fn test_state_machine_handshaking_to_status() {
+        let mut sm = ConnectionStateMachine::new();
+        sm.transition(ConnectionState::Status).unwrap();
+        assert_eq!(sm.state(), ConnectionState::Status);
+    }
+
+    #[test]
+    fn test_state_machine_handshaking_to_login() {
+        let mut sm = ConnectionStateMachine::new();
+        sm.transition(ConnectionState::Login).unwrap();
+        assert_eq!(sm.state(), ConnectionState::Login);
+    }
+
+    #[test]
+    fn test_state_machine_full_login_flow() {
+        let mut sm = ConnectionStateMachine::new();
+
+        sm.transition(ConnectionState::Login).unwrap();
+        assert_eq!(sm.state(), ConnectionState::Login);
+
+        sm.transition(ConnectionState::Configuration).unwrap();
+        assert_eq!(sm.state(), ConnectionState::Configuration);
+
+        sm.transition(ConnectionState::Play).unwrap();
+        assert_eq!(sm.state(), ConnectionState::Play);
+    }
+
+    #[test]
+    fn test_state_machine_invalid_handshaking_to_play() {
+        let mut sm = ConnectionStateMachine::new();
+        let err = sm.transition(ConnectionState::Play).unwrap_err();
+        assert_eq!(err.from, ConnectionState::Handshaking);
+        assert_eq!(err.to, ConnectionState::Play);
+        // State should remain unchanged after invalid transition.
+        assert_eq!(sm.state(), ConnectionState::Handshaking);
+    }
+
+    #[test]
+    fn test_state_machine_invalid_handshaking_to_configuration() {
+        let mut sm = ConnectionStateMachine::new();
+        let err = sm.transition(ConnectionState::Configuration).unwrap_err();
+        assert_eq!(err.from, ConnectionState::Handshaking);
+        assert_eq!(err.to, ConnectionState::Configuration);
+    }
+
+    #[test]
+    fn test_state_machine_invalid_status_to_login() {
+        let mut sm = ConnectionStateMachine::new();
+        sm.transition(ConnectionState::Status).unwrap();
+        let err = sm.transition(ConnectionState::Login).unwrap_err();
+        assert_eq!(err.from, ConnectionState::Status);
+        assert_eq!(err.to, ConnectionState::Login);
+    }
+
+    #[test]
+    fn test_state_machine_invalid_login_to_play() {
+        let mut sm = ConnectionStateMachine::new();
+        sm.transition(ConnectionState::Login).unwrap();
+        let err = sm.transition(ConnectionState::Play).unwrap_err();
+        assert_eq!(err.from, ConnectionState::Login);
+        assert_eq!(err.to, ConnectionState::Play);
+    }
+
+    #[test]
+    fn test_state_machine_invalid_play_to_anything() {
+        let mut sm = ConnectionStateMachine::new();
+        sm.transition(ConnectionState::Login).unwrap();
+        sm.transition(ConnectionState::Configuration).unwrap();
+        sm.transition(ConnectionState::Play).unwrap();
+
+        // Play is a terminal state — no valid transitions out.
+        for target in [
+            ConnectionState::Handshaking,
+            ConnectionState::Status,
+            ConnectionState::Login,
+            ConnectionState::Configuration,
+            ConnectionState::Play,
+        ] {
+            assert!(sm.transition(target).is_err());
+        }
+    }
+
+    #[test]
+    fn test_state_machine_encryption_compression_flags() {
+        let mut sm = ConnectionStateMachine::new();
+        assert!(!sm.is_encrypted());
+        assert!(!sm.is_compressed());
+
+        sm.set_encrypted();
+        assert!(sm.is_encrypted());
+        assert!(!sm.is_compressed());
+
+        sm.set_compressed();
+        assert!(sm.is_encrypted());
+        assert!(sm.is_compressed());
+    }
+
+    #[test]
+    fn test_state_machine_is_valid_transition_exhaustive() {
+        use ConnectionState::*;
+        let all = [Handshaking, Status, Login, Configuration, Play];
+
+        let valid = [
+            (Handshaking, Status),
+            (Handshaking, Login),
+            (Login, Configuration),
+            (Configuration, Play),
+        ];
+
+        for &from in &all {
+            for &to in &all {
+                let expected = valid.contains(&(from, to));
+                assert_eq!(
+                    ConnectionStateMachine::is_valid_transition(from, to),
+                    expected,
+                    "is_valid_transition({from}, {to}) should be {expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_state_machine_invalid_transition_display() {
+        let err = InvalidTransition {
+            from: ConnectionState::Handshaking,
+            to: ConnectionState::Play,
+        };
+        assert_eq!(
+            err.to_string(),
+            "invalid state transition: Handshaking -> Play"
+        );
     }
 }

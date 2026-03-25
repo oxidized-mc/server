@@ -214,6 +214,57 @@ Run with nextest for faster feedback:
 cargo nextest run --workspace
 ```
 
+### Benchmarks
+
+[Criterion](https://github.com/bheisler/criterion.rs) benchmarks live in
+`crates/<crate>/benches/`. Run the full suite:
+
+```bash
+cargo bench --workspace
+```
+
+Run a single crate's benchmarks:
+
+```bash
+cargo bench -p oxidized-nbt
+cargo bench -p oxidized-protocol
+cargo bench -p oxidized-world
+cargo bench -p oxidized-game
+```
+
+Benchmark results are written to `target/criterion/` with HTML reports.
+
+### Fuzz Testing
+
+Fuzz targets live in `crates/<crate>/fuzz/` and use
+[cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz) (requires nightly).
+
+Install cargo-fuzz:
+
+```bash
+cargo install cargo-fuzz
+```
+
+List available targets for a crate:
+
+```bash
+cd crates/oxidized-nbt && cargo +nightly fuzz list
+cd crates/oxidized-protocol && cargo +nightly fuzz list
+cd crates/oxidized-world && cargo +nightly fuzz list
+```
+
+Run a fuzz target (runs until stopped with Ctrl-C):
+
+```bash
+cd crates/oxidized-nbt && cargo +nightly fuzz run fuzz_nbt_read
+cd crates/oxidized-protocol && cargo +nightly fuzz run fuzz_varint
+cd crates/oxidized-protocol && cargo +nightly fuzz run fuzz_packet_decode
+cd crates/oxidized-world && cargo +nightly fuzz run fuzz_paletted_container
+```
+
+Crash artifacts are stored in `fuzz/artifacts/`. If a crash is found, add a
+regression test in the corresponding crate's `tests/` directory.
+
 ---
 
 ## Release Process

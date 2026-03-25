@@ -26,7 +26,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.11 | Decompose oversized structs | ✅ Complete |
 | R5.12 | Break down long functions & reduce nesting | ✅ Done |
 | R5.13 | Replace magic numbers with named constants | ✅ Done |
-| R5.14 | Benchmark & fuzz testing infrastructure | 📋 Planned |
+| R5.14 | Benchmark & fuzz testing infrastructure | ✅ Done |
 | R5.15 | Per-player operator permissions (`ops.json`) | 📋 Planned |
 | R5.16 | Safety hardening & cleanup | 📋 Planned |
 | R5.17 | Entity selector completeness | 📋 Planned |
@@ -1105,40 +1105,40 @@ where raw literals previously appeared.
 
 ### R5.14: Benchmark & Fuzz Testing Infrastructure
 
+**Status:** ✅ Done
+
 **Source:** memories.md Phase 5 & 12 retrospectives ("Still open"), ADR-034
 
-**Current problems:**
-- **No benchmark suite:** ADR-010 calls for criterion benchmarks. `[profile.bench]`
-  configured in `Cargo.toml` but no `benches/` directories or criterion benchmarks exist.
-- **No fuzz tests:** `cargo-fuzz` infrastructure never set up. Protocol parsers, NBT
-  reader/writer, VarInt/VarLong are all untested against adversarial input.
-- **Connection state tests impossible:** `Connection::new()` requires a real `TcpStream`;
-  state transition logic cannot be unit-tested without extracting it.
+**What was done:**
 
-**Steps:**
+1. **Criterion benchmarks** — added `criterion` 0.5 as workspace dev-dependency,
+   created `[[bench]]` targets in 4 crates:
+   - `oxidized-nbt/benches/nbt_benchmarks.rs`: 10 benchmarks (read/write small & large,
+     roundtrip, SNBT format/parse, compound lookup & insert)
+   - `oxidized-protocol/benches/codec_benchmarks.rs`: 12 benchmarks (VarInt/VarLong
+     encode/decode, roundtrip, BytesMut helpers, varint_size, packet frame encode/decode)
+   - `oxidized-world/benches/world_benchmarks.rs`: 10 benchmarks (block state data/name/
+     flags/physics lookups, is_air batch, with_property, tag contains/get/batch)
+   - `oxidized-game/benches/game_benchmarks.rs`: 6 benchmarks (friction/speed/jump/
+     combined physics, light properties, block categorization)
+   - `cargo bench --workspace --no-run` compiles cleanly
 
-1. **Set up criterion benchmarks** in `crates/<crate>/benches/`:
-   - `oxidized-nbt`: NBT parse/write roundtrip, SNBT formatting, compound lookups
-   - `oxidized-protocol`: VarInt/VarLong encode/decode, packet encode/decode
-   - `oxidized-world`: Block state lookup, tag membership check, chunk serialization
-   - `oxidized-game`: Physics tick step, block property access
-   - Add `criterion` as a workspace dev-dependency, configure `[[bench]]` targets
+2. **Cargo-fuzz targets** — set up `fuzz/` in 3 crates (requires nightly):
+   - `oxidized-nbt/fuzz/`: `fuzz_nbt_read` (arbitrary bytes → NbtReader with 2 MiB limit)
+   - `oxidized-protocol/fuzz/`: `fuzz_varint`, `fuzz_packet_decode`
+   - `oxidized-world/fuzz/`: `fuzz_paletted_container` (both BlockStates and Biomes)
+   - Documented in `CONTRIBUTING.md` how to install, list, and run fuzz targets
 
-2. **Set up cargo-fuzz targets** in `crates/<crate>/fuzz/`:
-   - `oxidized-nbt`: `fuzz_nbt_read` (arbitrary bytes → NbtReader)
-   - `oxidized-protocol`: `fuzz_varint`, `fuzz_packet_decode` (per-state)
-   - `oxidized-world`: `fuzz_region_read`, `fuzz_paletted_container`
-   - Document in `CONTRIBUTING.md` how to run fuzz targets
+3. **ConnectionStateMachine** extracted from `Connection`:
+   - New `ConnectionStateMachine` struct in `transport/connection.rs` with validated
+     transitions (`is_valid_transition`, `transition`), encryption/compression flags
+   - `InvalidTransition` error type with Display
+   - 13 unit tests: initial state, default, all valid transitions, all invalid transitions
+     (exhaustive 5×5 matrix), encryption/compression flags, error display
+   - Doc example on the struct
 
-3. **Extract connection state logic** for unit testing:
-   - Factor state transition logic out of `Connection` into a testable
-     `ConnectionStateMachine` or equivalent that doesn't require `TcpStream`
-   - Add unit tests for state transitions without network I/O
-
-**Verification:**
-- `cargo bench --workspace` runs without errors (benchmarks produce results)
-- `cargo fuzz list` in each crate shows configured targets
-- New connection state tests cover all transitions
+**Note:** `fuzz_region_read` was deferred — region files are read from disk, not untrusted
+network input, so the paletted container (which IS on the wire path) was prioritized.
 
 ---
 

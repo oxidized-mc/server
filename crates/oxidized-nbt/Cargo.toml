@@ -22,6 +22,11 @@ indexmap      = { workspace = true }
 serde_json = { workspace = true }
 proptest   = { workspace = true }
 insta      = { workspace = true }
+criterion  = { workspace = true }
+
+[[bench]]
+name    = "nbt_benchmarks"
+harness = false
 
 [lints]
 workspace = true

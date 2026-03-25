@@ -39,6 +39,11 @@ sha2          = { workspace = true }
 tokio    = { workspace = true }
 proptest = { workspace = true }
 insta    = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name    = "game_benchmarks"
+harness = false
 
 [lints]
 workspace = true
