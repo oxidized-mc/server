@@ -1,8 +1,11 @@
-//! Build script: generates static block state data from vanilla `blocks.json.gz`.
+//! Build script: generates static block state and tag data from vanilla JSON.
 //!
-//! Reads the embedded compressed JSON, parses all block types and states,
-//! computes property strides for O(1) state transitions, and writes a Rust
-//! source file into `$OUT_DIR/block_states_generated.rs`.
+//! Reads compressed block JSON, parses all block types and states,
+//! computes property strides for O(1) state transitions, and writes
+//! `block_states_generated.rs` into `$OUT_DIR/`.
+//!
+//! Also reads `tags.json` (vanilla tags) and custom Oxidized tag files,
+//! resolving block names to type IDs, and writes `block_tags_generated.rs`.
 
 // Build scripts run at compile time; expect/panic are the standard error
 // reporting mechanism and are not reachable at runtime.
@@ -17,12 +20,24 @@ use std::path::Path;
 
 fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-    let data_path = Path::new(&manifest_dir).join("src/data/blocks.json.gz");
-    let props_path = Path::new(&manifest_dir).join("src/data/block_properties.json.gz");
+    let manifest_path = Path::new(&manifest_dir);
+    let data_path = manifest_path.join("src/data/blocks.json.gz");
+    let props_path = manifest_path.join("src/data/block_properties.json.gz");
+
+    // Vanilla tags from the protocol crate
+    let tags_path = manifest_path
+        .parent()
+        .expect("parent of oxidized-world")
+        .join("oxidized-protocol/src/data/tags.json");
+
+    // Custom Oxidized tag directory
+    let custom_tags_dir = manifest_path.join("src/data/tags/block");
 
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed={}", data_path.display());
     println!("cargo::rerun-if-changed={}", props_path.display());
+    println!("cargo::rerun-if-changed={}", tags_path.display());
+    println!("cargo::rerun-if-changed={}", custom_tags_dir.display());
 
     let compressed = fs::read(&data_path)
         .unwrap_or_else(|e| panic!("Failed to read {}: {e}", data_path.display()));
@@ -191,6 +206,11 @@ fn main() {
     );
 
     fs::write(&dest, &code).expect("Failed to write generated code");
+
+    // ── Generate block tags ─────────────────────────────────────────────
+    let tag_dest = Path::new(&out_dir).join("block_tags_generated.rs");
+    let tag_code = generate_block_tags(&tags_path, &custom_tags_dir, &name_lookup);
+    fs::write(&tag_dest, &tag_code).expect("Failed to write block tags generated code");
 }
 
 // ─── Data structures ────────────────────────────────────────────────────────
@@ -669,4 +689,178 @@ fn write_generated(
             );
         }
     }
+}
+
+// ─── Block tag generation ───────────────────────────────────────────────────
+
+/// Generates `block_tags_generated.rs` containing static tag lookup tables.
+///
+/// Reads vanilla tags from `tags.json` and custom Oxidized tags from
+/// `src/data/tags/block/*.json`, producing three static arrays:
+/// - `TAG_NAMES` — sorted tag names for binary search
+/// - `TAG_RANGES` — (start, len) pairs into `TAG_MEMBERS`
+/// - `TAG_MEMBERS` — flat array of sorted block type IDs
+fn generate_block_tags(
+    tags_path: &Path,
+    custom_tags_dir: &Path,
+    name_lookup: &[(&str, u16)],
+) -> String {
+    // Build name → type_id map for resolving custom tag block names
+    let name_to_type_id: HashMap<&str, u16> = name_lookup.iter().copied().collect();
+
+    // ── Load vanilla block tags ─────────────────────────────────────────
+    let tags_json = fs::read_to_string(tags_path)
+        .unwrap_or_else(|e| panic!("Failed to read {}: {e}", tags_path.display()));
+    let tags_root: serde_json::Value =
+        serde_json::from_str(&tags_json).expect("Invalid tags.json");
+    let block_tags = tags_root
+        .get("minecraft:block")
+        .and_then(|v| v.as_object())
+        .expect("tags.json must have a 'minecraft:block' key");
+
+    let mut all_tags: Vec<(String, Vec<u16>)> = Vec::new();
+
+    for (tag_name, ids_value) in block_tags {
+        let ids: Vec<u16> = ids_value
+            .as_array()
+            .expect("tag entries must be arrays")
+            .iter()
+            .map(|v| {
+                v.as_u64()
+                    .unwrap_or_else(|| panic!("tag {tag_name} has non-integer entry"))
+                    as u16
+            })
+            .collect();
+        all_tags.push((tag_name.clone(), ids));
+    }
+
+    // ── Load custom Oxidized tags ───────────────────────────────────────
+    if custom_tags_dir.is_dir() {
+        let mut entries: Vec<_> = fs::read_dir(custom_tags_dir)
+            .unwrap_or_else(|e| panic!("Failed to read {}: {e}", custom_tags_dir.display()))
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .is_some_and(|ext| ext == "json")
+            })
+            .collect();
+        entries.sort_by_key(|e| e.file_name());
+
+        for entry in entries {
+            let path = entry.path();
+            let stem = path
+                .file_stem()
+                .expect("file should have a stem")
+                .to_str()
+                .expect("file stem should be UTF-8");
+            let tag_name = format!("oxidized:{stem}");
+
+            let json_str = fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
+            let tag_data: serde_json::Value =
+                serde_json::from_str(&json_str).unwrap_or_else(|e| {
+                    panic!("Invalid JSON in {}: {e}", path.display());
+                });
+            let values = tag_data
+                .get("values")
+                .and_then(|v| v.as_array())
+                .unwrap_or_else(|| panic!("{} must have a 'values' array", path.display()));
+
+            let ids: Vec<u16> = values
+                .iter()
+                .map(|v| {
+                    let block_name = v.as_str().unwrap_or_else(|| {
+                        panic!("{}: entries must be strings", path.display())
+                    });
+                    *name_to_type_id.get(block_name).unwrap_or_else(|| {
+                        panic!(
+                            "{}: unknown block name {:?}",
+                            path.display(),
+                            block_name
+                        )
+                    })
+                })
+                .collect();
+
+            all_tags.push((tag_name, ids));
+        }
+    }
+
+    // ── Sort tags by name, sort members within each tag ─────────────────
+    all_tags.sort_by(|a, b| a.0.cmp(&b.0));
+    for (_, members) in &mut all_tags {
+        members.sort();
+        members.dedup();
+    }
+
+    // ── Build flat member array ─────────────────────────────────────────
+    let mut flat_members: Vec<u16> = Vec::new();
+    let mut ranges: Vec<(u32, u32)> = Vec::new();
+    for (_, members) in &all_tags {
+        let start = flat_members.len() as u32;
+        let len = members.len() as u32;
+        ranges.push((start, len));
+        flat_members.extend(members);
+    }
+
+    // ── Generate Rust code ──────────────────────────────────────────────
+    let mut out = String::with_capacity(128 * 1024);
+
+    let _ = writeln!(out, "// @generated by build.rs — do not edit\n");
+
+    // TAG_NAMES
+    let _ = writeln!(
+        out,
+        "/// Sorted tag names for binary search lookup."
+    );
+    let _ = writeln!(
+        out,
+        "pub static TAG_NAMES: [&str; {}] = [",
+        all_tags.len()
+    );
+    for (name, _) in &all_tags {
+        let _ = writeln!(out, "    {name:?},");
+    }
+    let _ = writeln!(out, "];\n");
+
+    // TAG_RANGES
+    let _ = writeln!(
+        out,
+        "/// (start, len) pairs into TAG_MEMBERS for each tag."
+    );
+    let _ = writeln!(
+        out,
+        "pub static TAG_RANGES: [(u32, u32); {}] = [",
+        ranges.len()
+    );
+    for (start, len) in &ranges {
+        let _ = writeln!(out, "    ({start}, {len}),");
+    }
+    let _ = writeln!(out, "];\n");
+
+    // TAG_MEMBERS
+    let _ = writeln!(
+        out,
+        "/// Flat array of sorted block type IDs for all tags."
+    );
+    let _ = writeln!(
+        out,
+        "pub static TAG_MEMBERS: [u16; {}] = [",
+        flat_members.len()
+    );
+    // Write members in chunks for readability
+    for chunk in flat_members.chunks(16) {
+        let _ = write!(out, "    ");
+        for (i, id) in chunk.iter().enumerate() {
+            if i > 0 {
+                let _ = write!(out, ", ");
+            }
+            let _ = write!(out, "{id}");
+        }
+        let _ = writeln!(out, ",");
+    }
+    let _ = writeln!(out, "];");
+
+    out
 }

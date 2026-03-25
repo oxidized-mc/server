@@ -11,6 +11,7 @@ mod error;
 pub(crate) mod generated;
 mod item;
 mod item_registry;
+mod tags;
 
 pub use block::{BlockDef, BlockStateEntry, BlockStateFlags, BlockStateId, PropertyDef};
 pub use block_registry::BlockRegistry;
@@ -18,3 +19,4 @@ pub use constants::*;
 pub use error::RegistryError;
 pub use item::{Item, ItemStack};
 pub use item_registry::ItemRegistry;
+pub use tags::{BlockTags, TagSet};

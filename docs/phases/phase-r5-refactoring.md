@@ -15,7 +15,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 |----------|-------------|--------|
 | R5.1 | Enrich BlockStateFlags (ADR-012 compliance) | ✅ Done |
 | R5.2 | Enrich BlockStateEntry with block properties | ✅ Done |
-| R5.3 | Implement block tag loading from vanilla data | 📋 Planned |
+| R5.3 | Implement block tag loading from vanilla data | ✅ Done |
 | R5.4 | Replace string-based block categorization with flags/tags | 📋 Planned |
 | R5.5 | Replace hardcoded physics properties with registry data | 📋 Planned |
 | R5.6 | Replace hardcoded biome resolution with registry lookup | 📋 Planned |
@@ -485,83 +485,53 @@ resolved IDs). The new `block_properties.json.gz` complements `blocks.json.gz`
 
 ### R5.3: Implement Block Tag Loading From Vanilla Data
 
+**Status:** ✅ Done
+
 **Targets:** `crates/oxidized-world/src/registry/tags.rs` (new),
-`crates/oxidized-world/build.rs` or startup loading
+`crates/oxidized-world/build.rs`
 
-**Current problems:**
-- Tags are not implemented at all despite ADR-011 describing the full system
-- Block categories (doors, signs, beds, tall plants) are checked via
-  `.ends_with("_door")`, `.contains("sign")` etc.
+**What was done:**
 
-**Steps:**
+1. **Compile-time tag loading via `build.rs` (Option A)**:
+   - `build.rs` reads `tags.json` from `oxidized-protocol/src/data/` and custom
+     tag JSON files from `src/data/tags/block/`
+   - Resolves custom tag block names to type IDs using the block registry
+   - Generates `block_tags_generated.rs` with three static arrays:
+     - `TAG_NAMES: [&str; 252]` — sorted tag names for binary search
+     - `TAG_RANGES: [(u32, u32); 252]` — (start, len) pairs into `TAG_MEMBERS`
+     - `TAG_MEMBERS: [u16; N]` — flat array of sorted block type IDs
+   - 248 vanilla block tags + 4 custom Oxidized tags = 252 total
 
-1. **Leverage existing tag data**:
-   - `crates/oxidized-protocol/src/data/tags.json` already contains all 758
-     vanilla tags with resolved numeric IDs (produced by `tools/bundle_tags.py`)
-   - Block tags are under `"minecraft:block"` key with entries already mapped
-     to block type IDs
-   - No additional extraction needed for vanilla tags
-     - `minecraft:replaceable` (used by `is_replaceable_block`)
-     - `minecraft:doors` (used by `is_door_block`)
-     - `minecraft:beds` (used by `is_bed_block`)
-     - `minecraft:signs` / `minecraft:all_signs` (used by `is_sign_block`)
-     - `minecraft:tall_flowers` (partial match for `is_tall_plant`)
-     - `minecraft:climbable` (future use for physics)
-     - `minecraft:buttons` (used by `is_interactable_block`)
-     - `minecraft:fence_gates` (used by `is_player_direction_block`)
-     - `minecraft:trapdoors` (used by string pattern)
-     - `minecraft:shulker_boxes` (used by string pattern)
+2. **Created `crates/oxidized-world/src/registry/tags.rs`**:
+   - `BlockTags` — zero-sized struct (like `BlockRegistry`) with query API
+   - `TagSet` — sorted slice wrapper with O(log n) membership testing
+   - API: `contains(tag, block_type_id)`, `get(tag)`, `tag_count()`,
+     `tag_names()`
+   - Full doc comments with examples on all public items
 
-2. **Create `crates/oxidized-world/src/registry/tags.rs`**:
-   ```rust
-   /// Block tag registry loaded from vanilla tag data.
-   ///
-   /// Tags group blocks into categories for behavior dispatch.
-   /// Membership testing is O(1) via bitset or O(log n) via sorted vec.
-   pub struct BlockTags { ... }
+3. **Created 4 custom Oxidized tags** in `src/data/tags/block/`:
+   - `interactable.json` (33 blocks) — blocks from `is_interactable_block()`
+     not covered by vanilla tags (doors, beds, buttons, etc.)
+   - `wall_mountable.json` (64 blocks) — buttons, levers, wall torches/signs/
+     banners/heads/skulls/fans
+   - `player_direction.json` (130 blocks) — beds, doors, stairs, fence gates,
+     trapdoors, repeaters, comparators
+   - `tall_plants.json` (8 blocks) — complete set including `tall_grass`,
+     `large_fern`, `tall_seagrass` not in vanilla tags
 
-   pub struct TagSet { ... }
+4. **Integrated with registry module** — `BlockTags` and `TagSet` exported
+   from `oxidized_world::registry`
 
-   impl BlockTags {
-       pub fn load(block_registry: &BlockRegistry) -> Result<Self, TagError>;
-       pub fn contains(&self, tag: &str, block_type_id: u16) -> bool;
-       pub fn get(&self, tag: &str) -> Option<&TagSet>;
-   }
-   ```
+**Tests:** 17 unit tests + 3 doc tests covering:
+- Vanilla tag existence and membership (doors, beds, buttons, replaceable, signs)
+- Positive/negative membership checks (oak_door ∈ doors, stone ∉ doors)
+- Unknown tag returns `None`/`false`
+- Custom tag existence and membership (tall_plants, wall_mountable, etc.)
+- Tag names and members are sorted (invariant verification)
 
-3. **Decide compile-time vs runtime loading**:
-   - **Option A (recommended for R5)**: Compile-time via `build.rs` — read
-     `tags.json` from `oxidized-protocol/src/data/` and generate static tag
-     membership arrays. Zero startup cost. Cannot be extended by data packs
-     (fine for now).
-   - **Option B**: Runtime loading at server startup — read the same JSON,
-     build tag sets dynamically. Supports future data pack overrides. More
-     complex.
-   - Choose Option A for this phase. Option B is added when Phase 34 implements
-     data pack loading.
-
-4. **Create custom Oxidized tags** for block categories not in vanilla tags:
-   - Committed as JSON files in `crates/oxidized-world/src/data/tags/block/`
-   - `interactable.json` — blocks from the current
-     `is_interactable_block()` function that aren't covered by vanilla tags
-   - `wall_mountable.json` — blocks from `is_wall_mountable()`
-   - `player_direction.json` — blocks from `is_player_direction_block()`
-   - `tall_plants.json` — complete set from `is_tall_plant()` (vanilla
-     `#tall_flowers` doesn't include `tall_grass`, `large_fern`, `tall_seagrass`)
-   - These use block names (not IDs) and are resolved by `build.rs` using
-     the block registry
-
-5. **Integrate with `BlockRegistry`**:
-   - `BlockRegistry` holds or provides access to `BlockTags`
-   - Tags are available anywhere the registry is available
-
-**Verification:**
-- For each vanilla tag file, verify loaded tag contains exactly the expected
-  block type IDs
-- For each custom tag, verify membership matches the current hardcoded function
-- Tag membership is reflexive: `contains("minecraft:doors", oak_door_id) == true`
-- Non-member check: `contains("minecraft:doors", stone_id) == false`
-- Unknown tag returns `None` / `false`
+**Design note:** `BlockTags` is a zero-sized marker struct — all data is in
+compile-time-generated static arrays. Zero startup cost, zero allocation.
+Runtime tag loading (Option B) deferred to Phase 34 (data packs).
 
 ---
 
