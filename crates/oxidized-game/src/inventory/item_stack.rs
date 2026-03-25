@@ -194,6 +194,16 @@ impl ItemStack {
         self.item == other.item && self.components == other.components
     }
 
+    /// Returns `true` if this stack has enchantments applied.
+    ///
+    /// Used by [`crate::player::PlayerInventory::suitable_hotbar_slot`] to
+    /// prefer replacing non-enchanted items when all hotbar slots are occupied.
+    pub fn is_enchanted(&self) -> bool {
+        self.components
+            .added
+            .contains_key("minecraft:enchantments")
+    }
+
     /// Serializes to NBT for disk persistence.
     ///
     /// Returns `None` if the stack is empty (matching vanilla behavior —
@@ -377,6 +387,23 @@ mod tests {
         let nbt = patch.to_nbt();
         let decoded = DataComponentPatch::from_nbt(&nbt);
         assert!(decoded.removed.contains("minecraft:lore"));
+    }
+
+    // --- is_enchanted ---
+
+    #[test]
+    fn test_is_enchanted_false_by_default() {
+        let s = ItemStack::new("minecraft:diamond_sword", 1);
+        assert!(!s.is_enchanted());
+    }
+
+    #[test]
+    fn test_is_enchanted_true_with_enchantments() {
+        let mut s = ItemStack::new("minecraft:diamond_sword", 1);
+        s.components
+            .added
+            .insert("minecraft:enchantments".to_string(), NbtTag::Int(1));
+        assert!(s.is_enchanted());
     }
 
     #[test]

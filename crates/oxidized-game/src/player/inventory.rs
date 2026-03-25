@@ -115,6 +115,84 @@ impl PlayerInventory {
         &self.slots[Self::OFFHAND_SLOT]
     }
 
+    /// Searches hotbar and main inventory (slots 0–35) for a stack matching
+    /// the given target (same item type and components).
+    ///
+    /// Returns the first matching slot index, or `None` if not found.
+    /// Matches vanilla `Inventory.findSlotMatchingItem()`.
+    pub fn find_matching_item(&self, target: &ItemStack) -> Option<usize> {
+        (Self::HOTBAR_START..Self::MAIN_END)
+            .find(|&i| !self.slots[i].is_empty() && self.slots[i].is_stackable_with(target))
+    }
+
+    /// Returns `true` if the given slot index is in the hotbar (0–8).
+    pub fn is_hotbar_slot(slot: usize) -> bool {
+        slot < Self::HOTBAR_END
+    }
+
+    /// Finds the best hotbar slot for pick-block operations.
+    ///
+    /// Prefers empty slots, then non-enchanted items, wrapping around from the
+    /// current selection. Matches vanilla `Inventory.getSuitableHotbarSlot()`.
+    pub fn suitable_hotbar_slot(&self) -> usize {
+        let sel = self.selected_slot as usize;
+        // First pass: empty slot, wrapping from current selection.
+        for offset in 0..Self::HOTBAR_END {
+            let idx = (sel + offset) % Self::HOTBAR_END;
+            if self.slots[idx].is_empty() {
+                return idx;
+            }
+        }
+        // Second pass: non-enchanted item.
+        for offset in 0..Self::HOTBAR_END {
+            let idx = (sel + offset) % Self::HOTBAR_END;
+            if !self.slots[idx].is_enchanted() {
+                return idx;
+            }
+        }
+        sel
+    }
+
+    /// Swaps an item from main inventory into the best hotbar slot and selects it.
+    ///
+    /// Returns `(hotbar_slot, source_slot)` — both slots are modified.
+    /// Matches vanilla `Inventory.pickSlot()`.
+    pub fn pick_slot(&mut self, slot: usize) -> (usize, usize) {
+        let target = self.suitable_hotbar_slot();
+        self.selected_slot = target as u8;
+        self.slots.swap(target, slot);
+        (target, slot)
+    }
+
+    /// Places an item into the best hotbar slot (creative mode pick block).
+    ///
+    /// Finds a suitable hotbar slot, moves the existing item to a free inventory
+    /// slot if possible, then places the new stack. Returns the indices of all
+    /// modified slots.
+    ///
+    /// Matches vanilla `Inventory.addAndPickItem()`.
+    pub fn add_and_pick_item(&mut self, stack: ItemStack) -> Vec<usize> {
+        let target = self.suitable_hotbar_slot();
+        self.selected_slot = target as u8;
+        let mut changed = vec![target];
+
+        if !self.slots[target].is_empty() {
+            if let Some(free) = self.free_slot() {
+                self.slots.swap(target, free);
+                changed.push(free);
+            }
+            // If no free slot, existing item is overwritten (creative mode, vanilla behavior).
+        }
+
+        self.slots[target] = stack;
+        changed
+    }
+
+    /// Returns the first empty slot in hotbar + main inventory, or `None`.
+    fn free_slot(&self) -> Option<usize> {
+        (Self::HOTBAR_START..Self::MAIN_END).find(|&i| self.slots[i].is_empty())
+    }
+
     /// Swaps the currently selected hotbar item with the offhand slot.
     ///
     /// Returns `(selected_slot_index, offhand_slot_index)` for inventory sync.
@@ -265,6 +343,7 @@ impl Default for PlayerInventory {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use oxidized_nbt::NbtTag;
 
     #[test]
     fn test_new_inventory() {
@@ -441,5 +520,237 @@ mod tests {
     fn test_all_slots_count() {
         let inv = PlayerInventory::new();
         assert_eq!(inv.all_slots().count(), PlayerInventory::TOTAL_SLOTS);
+    }
+
+    // --- find_matching_item ---
+
+    #[test]
+    fn test_find_matching_item_in_hotbar() {
+        let mut inv = PlayerInventory::new();
+        inv.set(3, ItemStack::new("minecraft:stone", 32));
+        let target = ItemStack::new("minecraft:stone", 1);
+        assert_eq!(inv.find_matching_item(&target), Some(3));
+    }
+
+    #[test]
+    fn test_find_matching_item_in_main() {
+        let mut inv = PlayerInventory::new();
+        inv.set(20, ItemStack::new("minecraft:dirt", 16));
+        let target = ItemStack::new("minecraft:dirt", 1);
+        assert_eq!(inv.find_matching_item(&target), Some(20));
+    }
+
+    #[test]
+    fn test_find_matching_item_not_found() {
+        let inv = PlayerInventory::new();
+        let target = ItemStack::new("minecraft:stone", 1);
+        assert_eq!(inv.find_matching_item(&target), None);
+    }
+
+    #[test]
+    fn test_find_matching_item_ignores_armor_and_offhand() {
+        let mut inv = PlayerInventory::new();
+        inv.set(36, ItemStack::new("minecraft:diamond_helmet", 1));
+        inv.set(40, ItemStack::new("minecraft:shield", 1));
+        assert_eq!(
+            inv.find_matching_item(&ItemStack::new("minecraft:diamond_helmet", 1)),
+            None
+        );
+        assert_eq!(
+            inv.find_matching_item(&ItemStack::new("minecraft:shield", 1)),
+            None
+        );
+    }
+
+    #[test]
+    fn test_find_matching_item_returns_first_occurrence() {
+        let mut inv = PlayerInventory::new();
+        inv.set(2, ItemStack::new("minecraft:stone", 10));
+        inv.set(5, ItemStack::new("minecraft:stone", 20));
+        inv.set(15, ItemStack::new("minecraft:stone", 30));
+        let target = ItemStack::new("minecraft:stone", 1);
+        assert_eq!(inv.find_matching_item(&target), Some(2));
+    }
+
+    #[test]
+    fn test_find_matching_item_skips_different_components() {
+        let mut inv = PlayerInventory::new();
+        let mut enchanted = ItemStack::new("minecraft:diamond_sword", 1);
+        enchanted
+            .components
+            .added
+            .insert("minecraft:enchantments".to_string(), NbtTag::Int(1));
+        inv.set(0, enchanted);
+        // Plain diamond sword should NOT match enchanted one.
+        let target = ItemStack::new("minecraft:diamond_sword", 1);
+        assert_eq!(inv.find_matching_item(&target), None);
+    }
+
+    // --- is_hotbar_slot ---
+
+    #[test]
+    fn test_is_hotbar_slot() {
+        for i in 0..9 {
+            assert!(PlayerInventory::is_hotbar_slot(i), "slot {i} is hotbar");
+        }
+        for i in 9..41 {
+            assert!(!PlayerInventory::is_hotbar_slot(i), "slot {i} is not hotbar");
+        }
+    }
+
+    // --- suitable_hotbar_slot ---
+
+    #[test]
+    fn test_suitable_hotbar_slot_returns_empty() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 0;
+        // Slot 0 is empty, so it should be returned immediately.
+        assert_eq!(inv.suitable_hotbar_slot(), 0);
+    }
+
+    #[test]
+    fn test_suitable_hotbar_slot_wraps_from_selection() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 5;
+        // Fill slots 5–8, leave 0–4 empty.
+        for i in 5..9 {
+            inv.set(i, ItemStack::new("minecraft:stone", 1));
+        }
+        // Should wrap around and find slot 0.
+        assert_eq!(inv.suitable_hotbar_slot(), 0);
+    }
+
+    #[test]
+    fn test_suitable_hotbar_slot_prefers_current_when_empty() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 4;
+        // Fill all except slot 4.
+        for i in 0..9 {
+            if i != 4 {
+                inv.set(i, ItemStack::new("minecraft:stone", 1));
+            }
+        }
+        assert_eq!(inv.suitable_hotbar_slot(), 4);
+    }
+
+    #[test]
+    fn test_suitable_hotbar_slot_prefers_non_enchanted_when_full() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 0;
+        // Fill all hotbar slots.
+        for i in 0..9 {
+            inv.set(i, ItemStack::new("minecraft:stone", 1));
+        }
+        // Enchant slots 0 and 1.
+        inv.get_mut(0)
+            .components
+            .added
+            .insert("minecraft:enchantments".to_string(), NbtTag::Int(1));
+        inv.get_mut(1)
+            .components
+            .added
+            .insert("minecraft:enchantments".to_string(), NbtTag::Int(1));
+        // Should return slot 2 (first non-enchanted after 0,1 which are enchanted).
+        assert_eq!(inv.suitable_hotbar_slot(), 2);
+    }
+
+    #[test]
+    fn test_suitable_hotbar_slot_fallback_to_selected_when_all_enchanted() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 3;
+        for i in 0..9 {
+            let mut stack = ItemStack::new(format!("minecraft:item_{i}"), 1);
+            stack
+                .components
+                .added
+                .insert("minecraft:enchantments".to_string(), NbtTag::Int(1));
+            inv.set(i, stack);
+        }
+        assert_eq!(inv.suitable_hotbar_slot(), 3);
+    }
+
+    // --- pick_slot ---
+
+    #[test]
+    fn test_pick_slot_swaps_main_to_hotbar() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 2;
+        inv.set(2, ItemStack::new("minecraft:dirt", 10));
+        inv.set(15, ItemStack::new("minecraft:stone", 32));
+        // Slot 0 is empty → suitable_hotbar_slot returns 0? No wait, we start
+        // from selected_slot which is 2. Slot 2 has an item, so first empty
+        // would be slot 3.
+        // Actually let me fill slot 2 and leave 3 empty.
+        let (hotbar, main) = inv.pick_slot(15);
+        // suitable_hotbar_slot starts from selected (2), slot 2 has dirt → skip,
+        // slot 3 is empty → target=3.
+        assert_eq!(hotbar, 3);
+        assert_eq!(main, 15);
+        assert_eq!(inv.selected_slot, 3);
+        assert_eq!(inv.get(3).item.0, "minecraft:stone");
+        assert!(inv.get(15).is_empty());
+    }
+
+    #[test]
+    fn test_pick_slot_swaps_with_selected_when_no_empty() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 0;
+        // Fill entire hotbar.
+        for i in 0..9 {
+            inv.set(i, ItemStack::new(format!("minecraft:item_{i}"), 1));
+        }
+        inv.set(20, ItemStack::new("minecraft:stone", 32));
+        let (hotbar, main) = inv.pick_slot(20);
+        // All full, all non-enchanted → first non-enchanted from selected (0).
+        assert_eq!(hotbar, 0);
+        assert_eq!(main, 20);
+        assert_eq!(inv.selected_slot, 0);
+        assert_eq!(inv.get(0).item.0, "minecraft:stone");
+        assert_eq!(inv.get(20).item.0, "minecraft:item_0");
+    }
+
+    // --- add_and_pick_item ---
+
+    #[test]
+    fn test_add_and_pick_item_into_empty_slot() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 0;
+        let changed = inv.add_and_pick_item(ItemStack::new("minecraft:stone", 1));
+        assert_eq!(changed, vec![0]);
+        assert_eq!(inv.selected_slot, 0);
+        assert_eq!(inv.get(0).item.0, "minecraft:stone");
+    }
+
+    #[test]
+    fn test_add_and_pick_item_moves_existing_to_free_slot() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 0;
+        // Fill all hotbar slots.
+        for i in 0..9 {
+            inv.set(i, ItemStack::new(format!("minecraft:item_{i}"), 1));
+        }
+        // Main inventory slot 9 is empty (free slot).
+        let changed = inv.add_and_pick_item(ItemStack::new("minecraft:stone", 1));
+        // suitable_hotbar_slot: all occupied, first non-enchanted from 0 → slot 0.
+        assert_eq!(inv.selected_slot, 0);
+        assert_eq!(inv.get(0).item.0, "minecraft:stone");
+        // Old item_0 moved to first free slot (9).
+        assert_eq!(inv.get(9).item.0, "minecraft:item_0");
+        assert!(changed.contains(&0));
+        assert!(changed.contains(&9));
+    }
+
+    #[test]
+    fn test_add_and_pick_item_overwrites_when_full() {
+        let mut inv = PlayerInventory::new();
+        inv.selected_slot = 0;
+        // Fill all hotbar + main slots (0–35).
+        for i in 0..PlayerInventory::MAIN_END {
+            inv.set(i, ItemStack::new(format!("minecraft:item_{i}"), 1));
+        }
+        let changed = inv.add_and_pick_item(ItemStack::new("minecraft:stone", 1));
+        assert_eq!(changed, vec![0]);
+        assert_eq!(inv.get(0).item.0, "minecraft:stone");
+        // Old item_0 is lost — no free slot available.
     }
 }

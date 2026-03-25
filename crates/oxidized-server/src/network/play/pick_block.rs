@@ -1,16 +1,22 @@
 //! Pick block handler (middle-click).
 //!
-//! Creative: places a fresh stack of the target block into the selected hotbar slot.
-//! Survival: searches inventory for an existing stack and moves it to hotbar.
+//! Unified logic for both Creative and Survival modes (matches vanilla
+//! `tryPickItem`):
+//!
+//! 1. Search hotbar + main inventory for the target item.
+//! 2. Found in hotbar → select that slot.
+//! 3. Found in main inventory → swap to the best hotbar slot.
+//! 4. Not found + Creative → place a fresh stack in the best hotbar slot.
+//! 5. Always send `ClientboundSetHeldSlotPacket` to confirm selection.
 
 use bytes::Bytes;
 use tracing::debug;
 
 use oxidized_game::inventory::item_ids::item_name_to_id;
 use oxidized_game::inventory::item_stack::ItemStack;
-use oxidized_game::player::GameMode;
+use oxidized_game::player::{GameMode, PlayerInventory};
 use oxidized_protocol::packets::play::{
-    ClientboundSetPlayerInventoryPacket, ServerboundPickItemFromBlockPacket,
+    ClientboundSetHeldSlotPacket, ServerboundPickItemFromBlockPacket,
 };
 use oxidized_world::registry::AIR;
 
@@ -21,8 +27,8 @@ use crate::network::helpers::decode_packet;
 
 /// Handles `ServerboundPickItemFromBlockPacket` (0x24) — pick block.
 ///
-/// Creative: places a fresh stack of the target block into the hotbar.
-/// Survival: searches inventory for an existing stack and moves it to hotbar.
+/// Both Creative and Survival first search the inventory for an existing stack.
+/// Creative additionally creates a fresh stack when no match exists.
 pub async fn handle_pick_item_from_block(
     play_ctx: &mut PlayContext<'_>,
     data: Bytes,
@@ -57,88 +63,49 @@ pub async fn handle_pick_item_from_block(
         None => return Ok(()),
     };
 
-    let item_id = item_name_to_id(&item_name);
     // Items not in the registry can't be picked.
-    if item_id < 0 {
+    if item_name_to_id(&item_name) < 0 {
         return Ok(());
     }
 
-    if game_mode == GameMode::Creative {
-        // Creative: place a fresh stack of 1 into the selected hotbar slot.
-        let selected = {
-            let mut player = play_ctx.player.write();
-            let slot = player.inventory.selected_slot as usize;
-            player
-                .inventory
-                .set(slot, ItemStack::new(item_name.clone(), 1));
-            player.inventory.selected_slot
-        };
-        let slot_data = {
-            use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
-            Some(SlotData {
-                item_id,
-                count: 1,
-                component_data: ComponentPatchData::default(),
-            })
-        };
-        let set_slot = ClientboundSetPlayerInventoryPacket {
-            slot: i32::from(selected),
-            contents: slot_data,
-        };
-        play_ctx.conn_handle.send_packet(&set_slot).await?;
-    } else {
-        // Survival: search inventory for a matching item and move it to hotbar.
-        let (found_slot, selected) = {
-            let player = play_ctx.player.read();
-            let sel = player.inventory.selected_slot as usize;
-            // Check if the selected slot already has the item.
-            if !player.inventory.get(sel).is_empty()
-                && player.inventory.get(sel).item.0 == item_name
-            {
-                // Already holding it — nothing to do.
-                return Ok(());
-            }
-            // Search hotbar first (0–8), then main inventory (9–35).
-            let mut found = None;
-            for i in 0..36usize {
-                let stack = player.inventory.get(i);
-                if !stack.is_empty() && stack.item.0 == item_name {
-                    found = Some(i);
-                    break;
-                }
-            }
-            (found, sel)
-        };
+    // Unified pick-item logic (matches vanilla tryPickItem).
+    let target = ItemStack::new(item_name.clone(), 1);
+    let (selected_after, changed_slots) = {
+        let mut player = play_ctx.player.write();
+        let found = player.inventory.find_matching_item(&target);
 
-        match found_slot {
-            Some(slot) if slot < 9 => {
-                // Item is already in the hotbar — switch to that slot.
-                {
-                    let mut player = play_ctx.player.write();
-                    player.inventory.selected_slot = slot as u8;
-                }
-                let held_pkt = oxidized_protocol::packets::play::ClientboundSetHeldSlotPacket {
-                    slot: slot as i32,
-                };
-                play_ctx.conn_handle.send_packet(&held_pkt).await?;
-            },
+        let changed = match found {
+            Some(slot) if PlayerInventory::is_hotbar_slot(slot) => {
+                // Item already in hotbar — just select it.
+                player.inventory.selected_slot = slot as u8;
+                vec![]
+            }
             Some(slot) => {
-                // Item is in main inventory — swap with selected hotbar slot.
-                {
-                    let mut player = play_ctx.player.write();
-                    let sel = player.inventory.selected_slot as usize;
-                    let main_item = player.inventory.get(slot).clone();
-                    let hotbar_item = player.inventory.get(sel).clone();
-                    player.inventory.set(sel, main_item);
-                    player.inventory.set(slot, hotbar_item);
-                }
-                sync_inventory_slot(play_ctx, selected).await?;
-                sync_inventory_slot(play_ctx, slot).await?;
-            },
+                // Item in main inventory — swap to best hotbar slot.
+                let (hotbar, main) = player.inventory.pick_slot(slot);
+                vec![hotbar, main]
+            }
+            None if game_mode == GameMode::Creative => {
+                // Creative: add fresh stack to best hotbar slot.
+                player.inventory.add_and_pick_item(target)
+            }
             None => {
-                // Item not in inventory — nothing to do in survival.
-            },
-        }
+                // Survival: item not in inventory — nothing to do.
+                vec![]
+            }
+        };
+        (player.inventory.selected_slot, changed)
+    };
+
+    // Always inform the client of the (possibly new) selected slot.
+    let held_pkt = ClientboundSetHeldSlotPacket {
+        slot: i32::from(selected_after),
+    };
+    play_ctx.conn_handle.send_packet(&held_pkt).await?;
+
+    // Sync every inventory slot that was modified.
+    for slot in changed_slots {
+        sync_inventory_slot(play_ctx, slot).await?;
     }
 
     debug!(
