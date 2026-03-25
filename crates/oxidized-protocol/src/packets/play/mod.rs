@@ -25,6 +25,7 @@ pub mod clientbound_game_event;
 pub mod clientbound_initialize_border;
 pub mod clientbound_keep_alive;
 pub mod clientbound_level_chunk_with_light;
+pub mod clientbound_light_update;
 pub mod clientbound_login;
 pub mod clientbound_move_entity;
 pub mod clientbound_open_sign_editor;
@@ -100,6 +101,7 @@ pub use clientbound_keep_alive::ClientboundKeepAlivePacket;
 pub use clientbound_level_chunk_with_light::{
     ChunkPacketData, ClientboundLevelChunkWithLightPacket, HeightmapEntry, LightUpdateData,
 };
+pub use clientbound_light_update::ClientboundLightUpdatePacket;
 pub use clientbound_login::{ClientboundLoginPacket, CommonPlayerSpawnInfo};
 pub use clientbound_move_entity::{
     ClientboundMoveEntityPosPacket, ClientboundMoveEntityPosRotPacket,

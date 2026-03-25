@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use oxidized_game::lighting::queue::LightUpdate;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
@@ -14,7 +15,7 @@ use oxidized_protocol::packets::play::{
 use oxidized_protocol::types::{BlockPos, Direction};
 use oxidized_world::chunk::ChunkPos;
 use oxidized_world::chunk::level_chunk::{OVERWORLD_MAX_Y, OVERWORLD_MIN_Y};
-use oxidized_world::registry::AIR;
+use oxidized_world::registry::{AIR, BlockStateId};
 
 use super::PlayContext;
 use crate::network::{BroadcastMessage, ConnectionError, ServerContext};
@@ -132,13 +133,35 @@ pub(super) fn get_block(ctx: &Arc<ServerContext>, pos: BlockPos) -> Option<u32> 
 ///
 /// Returns `true` if the block was successfully set, `false` if the chunk
 /// is not loaded or the position is out of bounds.
-/// Marks the chunk as dirty for autosave.
+/// Marks the chunk as dirty for autosave and queues a light update if the
+/// block's emission or opacity changed.
 pub(super) fn set_block(ctx: &Arc<ServerContext>, pos: BlockPos, state_id: u32) -> bool {
     let chunk_pos = ChunkPos::from_block_coords(pos.x, pos.z);
     if let Some(chunk_ref) = ctx.world.chunks.get(&chunk_pos) {
         let mut chunk = chunk_ref.write();
+        let old_state = chunk.get_block_state(pos.x, pos.y, pos.z).unwrap_or(0);
         if chunk.set_block_state(pos.x, pos.y, pos.z, state_id).is_ok() {
             ctx.world.dirty_chunks.insert(chunk_pos);
+
+            // Queue a light update if emission or opacity changed.
+            let old_sid = BlockStateId(old_state as u16);
+            let new_sid = BlockStateId(state_id as u16);
+            let old_emission = old_sid.light_emission();
+            let new_emission = new_sid.light_emission();
+            let old_opacity = old_sid.light_opacity();
+            let new_opacity = new_sid.light_opacity();
+            if old_emission != new_emission || old_opacity != new_opacity {
+                ctx.world.pending_light_updates.lock().push((
+                    chunk_pos,
+                    LightUpdate {
+                        pos,
+                        old_emission,
+                        new_emission,
+                        old_opacity,
+                        new_opacity,
+                    },
+                ));
+            }
             true
         } else {
             false
@@ -510,6 +533,7 @@ mod tests {
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
+                pending_light_updates: parking_lot::Mutex::new(Vec::new()),
             },
             network: crate::network::NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,
@@ -577,6 +601,7 @@ mod tests {
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
+                pending_light_updates: parking_lot::Mutex::new(Vec::new()),
             },
             network: crate::network::NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,

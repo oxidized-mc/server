@@ -16,6 +16,7 @@ use oxidized_world::chunk::{ChunkPos, DataLayer, LevelChunk};
 use oxidized_world::registry::{PLAINS_BIOME_ID, biome_name_to_id};
 
 use super::config::FlatWorldConfig;
+use crate::lighting::block_light::initialize_block_light;
 use crate::worldgen::ChunkGenerator;
 
 /// Sea level for flat worlds (vanilla: −63).
@@ -217,6 +218,9 @@ impl ChunkGenerator for FlatChunkGenerator {
                 chunk.set_sky_light(i, data.clone());
             }
         }
+
+        // Initialize block light from any emitting blocks in the config.
+        initialize_block_light(&mut chunk);
 
         chunk
     }

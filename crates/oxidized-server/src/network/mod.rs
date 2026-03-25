@@ -24,6 +24,7 @@ use oxidized_game::event::EventBus;
 use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::level::tick_rate::ServerTickRateManager;
 use oxidized_game::level::weather::WeatherType;
+use oxidized_game::lighting::queue::LightUpdate;
 use oxidized_game::worldgen::ChunkGenerator;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
@@ -34,7 +35,7 @@ use oxidized_world::anvil::{AsyncChunkLoader, ChunkSerializer};
 use oxidized_world::chunk::{ChunkPos, LevelChunk};
 use oxidized_world::registry::BlockRegistry;
 use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
@@ -87,6 +88,8 @@ pub struct WorldContext {
     pub chunk_serializer: Arc<ChunkSerializer>,
     /// Game rules — thread-safe for tick loop + command access.
     pub game_rules: RwLock<GameRules>,
+    /// Pending light updates queued by block changes, processed at tick end.
+    pub pending_light_updates: Mutex<Vec<(ChunkPos, LightUpdate)>>,
 }
 
 /// Network-level state: player list, broadcast, shutdown, kick channels.
@@ -1035,6 +1038,7 @@ mod tests {
                         block_registry,
                     )),
                     game_rules: RwLock::new(oxidized_game::level::GameRules::default()),
+                    pending_light_updates: parking_lot::Mutex::new(Vec::new()),
                 },
                 network: NetworkContext {
                     broadcast_tx: broadcast::channel(256).0,

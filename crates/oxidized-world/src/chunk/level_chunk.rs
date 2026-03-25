@@ -252,6 +252,82 @@ impl LevelChunk {
         &self.block_light
     }
 
+    /// Converts a section index (0-based) to a light array index (1-based,
+    /// since index 0 is the below-chunk border section).
+    const fn light_index(section_idx: usize) -> usize {
+        section_idx + 1
+    }
+
+    /// Ensures a sky light `DataLayer` exists for the given section index,
+    /// creating an all-zeros layer if absent. Returns a mutable reference.
+    pub fn ensure_sky_light(&mut self, section_idx: usize) -> &mut DataLayer {
+        let li = Self::light_index(section_idx);
+        if self.sky_light[li].is_none() {
+            self.sky_light[li] = Some(DataLayer::new());
+        }
+        self.sky_light[li].as_mut().expect("just inserted")
+    }
+
+    /// Ensures a block light `DataLayer` exists for the given section index,
+    /// creating an all-zeros layer if absent. Returns a mutable reference.
+    pub fn ensure_block_light(&mut self, section_idx: usize) -> &mut DataLayer {
+        let li = Self::light_index(section_idx);
+        if self.block_light[li].is_none() {
+            self.block_light[li] = Some(DataLayer::new());
+        }
+        self.block_light[li].as_mut().expect("just inserted")
+    }
+
+    /// Returns the sky light level at a world position (0–15), or 0 if
+    /// the section has no light data.
+    #[must_use]
+    pub fn get_sky_light_at(&self, x: i32, y: i32, z: i32) -> u8 {
+        let Some(si) = self.section_index(y) else {
+            return 0;
+        };
+        let li = Self::light_index(si);
+        match &self.sky_light[li] {
+            Some(layer) => layer.get((x & 15) as usize, (y & 15) as usize, (z & 15) as usize),
+            None => 0,
+        }
+    }
+
+    /// Sets the sky light level at a world position.
+    ///
+    /// Creates the section's `DataLayer` if it doesn't exist yet.
+    pub fn set_sky_light_at(&mut self, x: i32, y: i32, z: i32, level: u8) {
+        let Some(si) = self.section_index(y) else {
+            return;
+        };
+        let layer = self.ensure_sky_light(si);
+        layer.set((x & 15) as usize, (y & 15) as usize, (z & 15) as usize, level);
+    }
+
+    /// Returns the block light level at a world position (0–15), or 0 if
+    /// the section has no light data.
+    #[must_use]
+    pub fn get_block_light_at(&self, x: i32, y: i32, z: i32) -> u8 {
+        let Some(si) = self.section_index(y) else {
+            return 0;
+        };
+        let li = Self::light_index(si);
+        match &self.block_light[li] {
+            Some(layer) => layer.get((x & 15) as usize, (y & 15) as usize, (z & 15) as usize),
+            None => 0,
+        }
+    }
+
+    /// Sets the block light level at a world position.
+    ///
+    /// Creates the section's `DataLayer` if it doesn't exist yet.
+    pub fn set_block_light_at(&mut self, x: i32, y: i32, z: i32, level: u8) {
+        let Some(si) = self.section_index(y) else {
+            return;
+        };
+        let layer = self.ensure_block_light(si);
+        layer.set((x & 15) as usize, (y & 15) as usize, (z & 15) as usize, level);
+    }
+
     /// Serializes all section data to bytes (for `ClientboundLevelChunkPacketData.buffer`).
     #[must_use]
     pub fn write_sections_to_bytes(&self) -> Vec<u8> {

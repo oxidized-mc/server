@@ -13,11 +13,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use oxidized_game::level::game_rules::GameRuleKey;
+use oxidized_game::lighting::engine::LightEngine;
+use oxidized_game::net::light_serializer::build_light_data;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::constants::TICKS_PER_SECOND;
 use oxidized_protocol::packets::play::{
-    ClientboundGameEventPacket, ClientboundSetTimePacket, ClientboundTickingStepPacket,
-    ClockNetworkState, ClockUpdate, GameEventType,
+    ClientboundGameEventPacket, ClientboundLightUpdatePacket, ClientboundSetTimePacket,
+    ClientboundTickingStepPacket, ClockNetworkState, ClockUpdate, GameEventType,
 };
 use oxidized_world::anvil::{RegionFile, compress_zlib};
 use oxidized_world::chunk::ChunkPos;
@@ -189,8 +191,68 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
         autosave_level_dat(ctx);
         autosave_chunks(ctx);
     }
+
+    // Process any pending light updates from block changes this tick.
+    process_light_updates(ctx);
 }
 
+/// Drains pending light updates, processes them per-chunk, and broadcasts
+/// light update packets to all connected clients.
+fn process_light_updates(ctx: &ServerContext) {
+    let updates = {
+        let mut queue = ctx.world.pending_light_updates.lock();
+        if queue.is_empty() {
+            return;
+        }
+        std::mem::take(&mut *queue)
+    };
+
+    // Group updates by chunk position.
+    let mut by_chunk: HashMap<ChunkPos, Vec<oxidized_game::lighting::queue::LightUpdate>> =
+        HashMap::new();
+    for (chunk_pos, update) in updates {
+        by_chunk.entry(chunk_pos).or_default().push(update);
+    }
+
+    // Process each chunk's updates and broadcast light packets.
+    for (chunk_pos, chunk_updates) in &by_chunk {
+        let Some(chunk_ref) = ctx.world.chunks.get(chunk_pos) else {
+            continue;
+        };
+
+        let mut chunk = chunk_ref.write();
+        let mut engine = LightEngine::new();
+        for update in chunk_updates {
+            engine.queue_mut().push(update.clone());
+        }
+
+        match engine.process_updates(&mut chunk) {
+            Ok(changed_sections) if !changed_sections.is_empty() => {
+                let light_data = build_light_data(
+                    chunk.sky_light_layers(),
+                    chunk.block_light_layers(),
+                );
+                drop(chunk); // Release write lock before broadcasting.
+                let pkt = ClientboundLightUpdatePacket {
+                    chunk_x: chunk_pos.x,
+                    chunk_z: chunk_pos.z,
+                    light_data,
+                };
+                let data = pkt.encode();
+                ctx.broadcast(BroadcastMessage {
+                    packet_id: ClientboundLightUpdatePacket::PACKET_ID,
+                    data: data.freeze(),
+                    exclude_entity: None,
+                    target_entity: None,
+                });
+            }
+            Err(e) => {
+                warn!(chunk = ?chunk_pos, error = %e, "Light update failed");
+            }
+            _ => {}
+        }
+    }
+}
 /// Advances weather countdown timers, transitions weather states, interpolates
 /// visual levels, and broadcasts changes to clients.
 ///
@@ -612,6 +674,7 @@ mod tests {
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
+                pending_light_updates: parking_lot::Mutex::new(Vec::new()),
             },
             network: crate::network::NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,

@@ -1,8 +1,49 @@
 # Phase 23a — Lighting Engine
 
-**Status:** 📋 Planned  
-**Crate:** `oxidized-game`, `oxidized-world`  
+**Status:** ✅ Complete  
+**Crate:** `oxidized-game`, `oxidized-world`, `oxidized-protocol`, `oxidized-server`  
 **Reward:** Chunks have correct sky and block light; placing/breaking light sources updates light in real time.
+
+---
+
+## Implementation Summary
+
+### What was built
+
+| Module | File | Description |
+|--------|------|-------------|
+| BFS propagation | `oxidized-game/src/lighting/propagation.rs` | Core BFS increase/decrease algorithms for sky and block light |
+| Sky light init | `oxidized-game/src/lighting/sky.rs` | Top-down sky light calculation with horizontal BFS for caves |
+| Block light init | `oxidized-game/src/lighting/block_light.rs` | Emitter scan + BFS for block light sources |
+| Cross-chunk | `oxidized-game/src/lighting/cross_chunk.rs` | Light propagation across chunk boundaries |
+| Parallel | `oxidized-game/src/lighting/parallel.rs` | Parallel chunk lighting (delegates to sequential) |
+| Engine | `oxidized-game/src/lighting/engine.rs` | `LightEngine` orchestrator — `process_updates()` and `light_chunk()` |
+| Light packet | `oxidized-protocol/src/packets/play/clientbound_light_update.rs` | `ClientboundLightUpdatePacket` (ID 0x30) |
+| Chunk accessors | `oxidized-world/src/chunk/level_chunk.rs` | `get/set_sky_light_at()`, `get/set_block_light_at()` |
+
+### Integration hooks
+
+| Hook | Location | Description |
+|------|----------|-------------|
+| Worldgen | `oxidized-game/src/worldgen/flat/generator.rs` | `initialize_block_light()` called after sky light cloning |
+| Block changes | `oxidized-server/src/network/play/block_interaction.rs` | `set_block()` queues `LightUpdate` when emission/opacity changes |
+| Tick processing | `oxidized-server/src/tick.rs` | `process_light_updates()` at tick end — drains queue, runs BFS, broadcasts |
+| Packet delivery | `oxidized-server/src/tick.rs` | `ClientboundLightUpdatePacket` broadcast after processing |
+| Pending queue | `oxidized-server/src/network/mod.rs` | `WorldContext.pending_light_updates` field |
+
+### Algorithm (ADR-017)
+
+1. Block changes push `LightUpdate` to `WorldContext.pending_light_updates`
+2. At tick end, updates are grouped by chunk
+3. Per chunk: emission changes → decrease BFS → opacity-decrease re-seeding → increase BFS
+4. Decrease pass runs first to clear stale light, then increase pass propagates new light
+5. Changed sections are serialized via `build_light_data()` and broadcast as `ClientboundLightUpdatePacket`
+
+### Test coverage
+
+- 29 unit tests across all lighting modules (propagation, sky, block_light, cross_chunk, parallel, engine)
+- 2 roundtrip tests for `ClientboundLightUpdatePacket`
+- All tests pass with the full workspace suite
 
 ---
 
@@ -35,16 +76,17 @@ the lighting engine into the block change pipeline so light propagates correctly
 
 ## Existing Scaffolding (from R3.9)
 
-The following types and modules already exist and must be used:
+The following types and modules were used:
 
 | Type | Location | Status |
 |------|----------|--------|
 | `DataLayer` | `oxidized-world/src/chunk/data_layer.rs` | ✅ Complete (nibble storage) |
-| `LevelChunk` | `oxidized-world/src/chunk/level_chunk.rs` | ✅ Complete (sky/block light vecs) |
+| `LevelChunk` | `oxidized-world/src/chunk/level_chunk.rs` | ✅ Complete (sky/block light vecs + per-block accessors) |
 | `LightUpdateQueue` | `oxidized-game/src/lighting/queue.rs` | ✅ Complete (pending update batch) |
 | `LightUpdate` | `oxidized-game/src/lighting/queue.rs` | ✅ Complete (emission/opacity delta) |
-| `LightEngine` | `oxidized-game/src/lighting/engine.rs` | 🚧 Stubs (`todo!()`) |
+| `LightEngine` | `oxidized-game/src/lighting/engine.rs` | ✅ Complete (BFS orchestrator) |
 | `build_light_data()` | `oxidized-game/src/net/light_serializer.rs` | ✅ Complete (packet encoding) |
+| `ClientboundLightUpdatePacket` | `oxidized-protocol/src/packets/play/` | ✅ New (incremental light updates) |
 
 ---
 
@@ -70,7 +112,7 @@ The following types and modules already exist and must be used:
 
 ## Tasks
 
-### 23a.1 — BFS propagation core (`oxidized-game/src/lighting/propagation.rs`)
+### 23a.1 — BFS propagation core (`oxidized-game/src/lighting/propagation.rs`) ✅
 
 New module containing the core BFS algorithms shared by both sky and block light.
 This is the heart of the lighting engine.
@@ -154,7 +196,7 @@ fn propagate_decrease(
 
 ---
 
-### 23a.2 — Sky light initialization (`oxidized-game/src/lighting/sky.rs`)
+### 23a.2 — Sky light initialization (`oxidized-game/src/lighting/sky.rs`) ✅
 
 Top-down sky light calculation for a full chunk column.
 
@@ -208,7 +250,7 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) {
 
 ---
 
-### 23a.3 — Block light initialization (`oxidized-game/src/lighting/block_light.rs`)
+### 23a.3 — Block light initialization (`oxidized-game/src/lighting/block_light.rs`) ✅
 
 BFS from all light-emitting blocks in a chunk.
 
@@ -254,7 +296,7 @@ pub fn initialize_block_light(chunk: &mut LevelChunk) {
 
 ---
 
-### 23a.4 — Cross-chunk light propagation (`oxidized-game/src/lighting/cross_chunk.rs`)
+### 23a.4 — Cross-chunk light propagation (`oxidized-game/src/lighting/cross_chunk.rs`) ✅
 
 Handle light that crosses chunk boundaries (x=0/15 or z=0/15 in a section).
 
@@ -300,7 +342,7 @@ pub struct ChunkNeighbors<'a> {
 
 ---
 
-### 23a.5 — Incremental light updates (`oxidized-game/src/lighting/engine.rs`)
+### 23a.5 — Incremental light updates (`oxidized-game/src/lighting/engine.rs`) ✅
 
 Replace the `todo!()` stubs in `LightEngine` with the real BFS implementation.
 
@@ -366,7 +408,7 @@ impl LightEngine {
 
 ---
 
-### 23a.6 — Parallel section processing for worldgen (`oxidized-game/src/lighting/parallel.rs`)
+### 23a.6 — Parallel section processing for worldgen (`oxidized-game/src/lighting/parallel.rs`) ✅
 
 Rayon-based parallel full-chunk lighting for worldgen throughput.
 
@@ -402,7 +444,7 @@ pub fn light_chunk_parallel(chunk: &mut LevelChunk) {
 
 ---
 
-### 23a.7 — Worldgen integration
+### 23a.7 — Worldgen integration ✅
 
 Hook `light_chunk()` / `light_chunk_parallel()` into the flat world generator
 (Phase 23) so that newly generated chunks include correct light data before
@@ -422,7 +464,7 @@ being sent to clients.
 
 ---
 
-### 23a.8 — Block change integration
+### 23a.8 — Block change integration ✅
 
 Hook `LightUpdateQueue` into the block placement/breaking pipeline (Phase 22)
 so that every block change enqueues a `LightUpdate` and the engine processes
@@ -464,7 +506,7 @@ fn end_of_tick() {
 
 ---
 
-### 23a.9 — Light update packets
+### 23a.9 — Light update packets ✅
 
 Send `ClientboundLightUpdatePacket` to watching clients when sections change
 during gameplay. Full-chunk light is already included in
