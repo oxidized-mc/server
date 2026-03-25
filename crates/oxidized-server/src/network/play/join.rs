@@ -401,6 +401,18 @@ async fn broadcast_player_join(
     let self_info = build_player_info_packet(player_arc, player_name, uuid);
     conn_handle.send_packet(&self_info).await?;
 
+    // Send the joining player their own entity data (skin parts + cape
+    // visibility). Vanilla default for DATA_PLAYER_MODE_CUSTOMISATION is 0
+    // (all parts hidden), so the client won't render outer layers or capes
+    // unless we send the actual value.
+    let skin = player_arc.read().connection.model_customisation;
+    let self_entity_data = ClientboundSetEntityDataPacket::single_byte(
+        entity_id,
+        DATA_PLAYER_MODE_CUSTOMISATION,
+        skin,
+    );
+    conn_handle.send_packet(&self_entity_data).await?;
+
     // Broadcast the new player to all existing players' tab lists.
     broadcast_player_info(server_ctx, player_arc, player_name, uuid, entity_id);
 
