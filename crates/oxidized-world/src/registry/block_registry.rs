@@ -522,4 +522,255 @@ mod tests {
         assert!(!glass.is_opaque(), "glass should not be opaque");
         assert!(glass.has_collision(), "glass should have collision");
     }
+
+    // --- R5.2 property value spot-checks ---
+
+    /// Helper: assert a float is within epsilon of the expected value.
+    fn assert_approx(actual: f64, expected: f64, label: &str) {
+        let eps = 0.011; // fixed-point ×100 gives ±0.01 precision
+        assert!(
+            (actual - expected).abs() < eps,
+            "{label}: expected {expected}, got {actual}"
+        );
+    }
+
+    /// Helper: assert a float is within epsilon for ×10000 encoded values.
+    fn assert_approx_fine(actual: f64, expected: f64, label: &str) {
+        let eps = 0.0002; // fixed-point ×10000 gives ±0.0001 precision
+        assert!(
+            (actual - expected).abs() < eps,
+            "{label}: expected {expected}, got {actual}"
+        );
+    }
+
+    fn default(name: &str) -> BlockStateId {
+        BlockRegistry
+            .default_state(name)
+            .unwrap_or_else(|| panic!("{name} missing from registry"))
+    }
+
+    #[test]
+    fn test_stone_properties() {
+        let s = default("minecraft:stone");
+        assert_approx(s.hardness(), 1.5, "stone hardness");
+        assert_approx(s.explosion_resistance(), 6.0, "stone resistance");
+        assert_approx_fine(s.friction(), 0.6, "stone friction");
+        assert_approx_fine(s.speed_factor(), 1.0, "stone speed_factor");
+        assert_approx_fine(s.jump_factor(), 1.0, "stone jump_factor");
+        assert_eq!(s.light_emission(), 0);
+    }
+
+    #[test]
+    fn test_ice_properties() {
+        let s = default("minecraft:ice");
+        assert_approx(s.hardness(), 0.5, "ice hardness");
+        assert_approx_fine(s.friction(), 0.98, "ice friction");
+        assert_approx_fine(s.speed_factor(), 1.0, "ice speed_factor");
+    }
+
+    #[test]
+    fn test_blue_ice_properties() {
+        let s = default("minecraft:blue_ice");
+        assert_approx(s.hardness(), 2.8, "blue_ice hardness");
+        assert_approx_fine(s.friction(), 0.989, "blue_ice friction");
+    }
+
+    #[test]
+    fn test_soul_sand_properties() {
+        let s = default("minecraft:soul_sand");
+        assert_approx_fine(s.speed_factor(), 0.4, "soul_sand speed_factor");
+        assert_approx_fine(s.jump_factor(), 1.0, "soul_sand jump_factor");
+    }
+
+    #[test]
+    fn test_honey_block_properties() {
+        let s = default("minecraft:honey_block");
+        assert_approx_fine(s.speed_factor(), 0.4, "honey speed_factor");
+        assert_approx_fine(s.jump_factor(), 0.5, "honey jump_factor");
+    }
+
+    #[test]
+    fn test_glowstone_properties() {
+        let s = default("minecraft:glowstone");
+        assert_eq!(s.light_emission(), 15, "glowstone light_emission");
+        assert_approx(s.hardness(), 0.3, "glowstone hardness");
+    }
+
+    #[test]
+    fn test_obsidian_properties() {
+        let s = default("minecraft:obsidian");
+        assert_approx(s.hardness(), 50.0, "obsidian hardness");
+        // Explosion resistance 1200.0 exceeds u16×100 range (max 655.35), clamped.
+        assert_approx(s.explosion_resistance(), 655.35, "obsidian resistance (clamped)");
+    }
+
+    #[test]
+    fn test_bedrock_unbreakable() {
+        let s = default("minecraft:bedrock");
+        assert_eq!(s.hardness(), -1.0, "bedrock hardness should be -1.0");
+    }
+
+    #[test]
+    fn test_torch_light_emission() {
+        let s = default("minecraft:torch");
+        assert_eq!(s.light_emission(), 14, "torch light_emission");
+    }
+
+    #[test]
+    fn test_redstone_torch_light() {
+        let s = default("minecraft:redstone_torch");
+        assert_eq!(s.light_emission(), 7, "redstone_torch light_emission");
+    }
+
+    #[test]
+    fn test_slime_block_properties() {
+        let s = default("minecraft:slime_block");
+        assert_approx_fine(s.friction(), 0.8, "slime friction");
+        assert_approx(s.hardness(), 0.0, "slime hardness");
+    }
+
+    #[test]
+    fn test_powder_snow_properties() {
+        let s = default("minecraft:powder_snow");
+        // Powder snow's speed reduction comes from PowderSnowBlock behavior at
+        // runtime, NOT the block property speedFactor (which is default 1.0).
+        assert_approx_fine(s.speed_factor(), 1.0, "powder_snow speed_factor");
+        assert_approx(s.hardness(), 0.25, "powder_snow hardness");
+    }
+
+    #[test]
+    fn test_packed_ice_properties() {
+        let s = default("minecraft:packed_ice");
+        assert_approx_fine(s.friction(), 0.98, "packed_ice friction");
+        assert_approx(s.hardness(), 0.5, "packed_ice hardness");
+    }
+
+    #[test]
+    fn test_dirt_properties() {
+        let s = default("minecraft:dirt");
+        assert_approx(s.hardness(), 0.5, "dirt hardness");
+        assert_approx(s.explosion_resistance(), 0.5, "dirt resistance");
+        assert_approx_fine(s.friction(), 0.6, "dirt friction");
+    }
+
+    #[test]
+    fn test_oak_planks_properties() {
+        let s = default("minecraft:oak_planks");
+        assert_approx(s.hardness(), 2.0, "oak_planks hardness");
+        assert_approx(s.explosion_resistance(), 3.0, "oak_planks resistance");
+    }
+
+    #[test]
+    fn test_iron_block_properties() {
+        let s = default("minecraft:iron_block");
+        assert_approx(s.hardness(), 5.0, "iron_block hardness");
+        assert_approx(s.explosion_resistance(), 6.0, "iron_block resistance");
+    }
+
+    #[test]
+    fn test_diamond_block_properties() {
+        let s = default("minecraft:diamond_block");
+        assert_approx(s.hardness(), 5.0, "diamond_block hardness");
+        assert_approx(s.explosion_resistance(), 6.0, "diamond_block resistance");
+    }
+
+    #[test]
+    fn test_sea_lantern_light() {
+        let s = default("minecraft:sea_lantern");
+        assert_eq!(s.light_emission(), 15, "sea_lantern light_emission");
+    }
+
+    #[test]
+    fn test_water_properties() {
+        let s = default("minecraft:water");
+        // Light opacity heuristic: liquids → 1
+        assert_eq!(s.light_opacity(), 1, "water light_opacity");
+        assert!(s.is_liquid());
+        assert!(s.is_replaceable());
+        assert_eq!(s.map_color(), 12, "water map_color=WATER");
+    }
+
+    #[test]
+    fn test_cobweb_properties() {
+        let s = default("minecraft:cobweb");
+        assert_approx(s.hardness(), 4.0, "cobweb hardness");
+        assert!(!s.has_collision(), "cobweb should not have collision");
+        // Cobweb has forceSolidOn + noCollision → solid but no collision
+        assert_eq!(s.push_reaction(), 1, "cobweb push=DESTROY");
+    }
+
+    #[test]
+    fn test_push_reaction_values() {
+        // Moving piston cannot be pushed
+        assert_eq!(
+            default("minecraft:moving_piston").push_reaction(),
+            2,
+            "moving_piston push=BLOCK"
+        );
+        // Torch is destroyed when pushed
+        assert_eq!(default("minecraft:torch").push_reaction(), 1, "torch push=DESTROY");
+        // Stone is pushable normally
+        assert_eq!(default("minecraft:stone").push_reaction(), 0, "stone push=NORMAL");
+        // Obsidian uses default NORMAL (piston code prevents pushing via hardness)
+        assert_eq!(default("minecraft:obsidian").push_reaction(), 0, "obsidian push=NORMAL");
+    }
+
+    #[test]
+    fn test_fixed_point_roundtrip_precision() {
+        // Verify fixed-point encoding preserves values within acceptable error.
+        // ×100 fields: hardness, explosion_resistance — precision ±0.01
+        // ×10000 fields: friction, speed_factor, jump_factor — precision ±0.0001
+        let cases = [
+            ("minecraft:stone", 1.5_f64, 6.0, 0.6, 1.0, 1.0),
+            ("minecraft:ice", 0.5, 0.5, 0.98, 1.0, 1.0),
+            ("minecraft:blue_ice", 2.8, 2.8, 0.989, 1.0, 1.0),
+            ("minecraft:soul_sand", 0.5, 0.5, 0.6, 0.4, 1.0),
+            ("minecraft:honey_block", 0.0, 0.0, 0.6, 0.4, 0.5),
+        ];
+        for (name, hard, resist, fric, speed, jump) in &cases {
+            let s = default(name);
+            assert_approx(s.hardness(), *hard, &format!("{name} hardness roundtrip"));
+            assert_approx(
+                s.explosion_resistance(),
+                *resist,
+                &format!("{name} resistance roundtrip"),
+            );
+            assert_approx_fine(s.friction(), *fric, &format!("{name} friction roundtrip"));
+            assert_approx_fine(
+                s.speed_factor(),
+                *speed,
+                &format!("{name} speed roundtrip"),
+            );
+            assert_approx_fine(
+                s.jump_factor(),
+                *jump,
+                &format!("{name} jump roundtrip"),
+            );
+        }
+    }
+
+    #[test]
+    fn test_map_color_values() {
+        assert_eq!(default("minecraft:stone").map_color(), 11, "stone=STONE");
+        assert_eq!(default("minecraft:grass_block").map_color(), 1, "grass=GRASS");
+        assert_eq!(default("minecraft:dirt").map_color(), 10, "dirt=DIRT");
+        assert_eq!(default("minecraft:oak_planks").map_color(), 13, "oak_planks=WOOD");
+        assert_eq!(default("minecraft:water").map_color(), 12, "water=WATER");
+        assert_eq!(default("minecraft:obsidian").map_color(), 29, "obsidian=COLOR_BLACK");
+        assert_eq!(default("minecraft:white_wool").map_color(), 8, "white_wool=SNOW");
+        assert_eq!(default("minecraft:gold_block").map_color(), 30, "gold_block=GOLD");
+    }
+
+    #[test]
+    fn test_light_opacity_heuristic() {
+        // Full opaque solid blocks → 15
+        assert_eq!(default("minecraft:stone").light_opacity(), 15, "stone=opaque");
+        assert_eq!(default("minecraft:dirt").light_opacity(), 15, "dirt=opaque");
+        // Transparent blocks → 0
+        assert_eq!(default("minecraft:glass").light_opacity(), 0, "glass=transparent");
+        assert_eq!(default("minecraft:air").light_opacity(), 0, "air=transparent");
+        // Liquids → 1
+        assert_eq!(default("minecraft:water").light_opacity(), 1, "water=liquid");
+        assert_eq!(default("minecraft:lava").light_opacity(), 1, "lava=liquid");
+    }
 }

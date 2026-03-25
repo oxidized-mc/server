@@ -46,70 +46,106 @@ Before implementing this phase, review:
 
 ## Critical Clarifications
 
-### Block Properties & Double Blocks
+### Block Properties Coverage
 
-**Q: Are all block properties covered? What about "double blocks"?**
+**Q: Are all block properties covered?**
 
-**A:** ✅ **YES, fully covered. No hardcoding needed for double blocks.**
+**Blocks — mostly covered.** R5.1 added 12 `BlockStateFlags` and R5.2 added physics
+properties (hardness, friction, speed/jump factors, explosion resistance, light
+emission/opacity, map color, push reaction). Together they capture 18 of the ~23
+vanilla `BlockBehaviour.Properties` fields.
 
-Blocks with `half` property (doors, tall plants, etc.) are represented entirely
-via **state properties** in `blocks.json.gz`:
-```json
-"minecraft:oak_door": {
-  "properties": {
-    "facing": ["north", "south", "west", "east"],
-    "half": ["upper", "lower"],      // ← Doubles handled here!
-    "hinge": ["left", "right"],
-    "open": ["true", "false"],
-    "powered": ["true", "false"]
-  },
-  "states": [
-    {"id": 5655, "properties": {"facing": "north", "half": "upper", ...}},
-    {"id": 5656, "properties": {"facing": "north", "half": "lower", ...}},
-    // ... 112 total states for all combinations
-  ]
+**Still missing** (not needed yet, add when gameplay requires them):
+- `soundType` — needed for block break/place/step audio
+- `forceSolidOn` — affects culling for a handful of blocks
+- `instrument` — note block instrument type
+- State predicates (`isRedstoneConductor`, `isValidSpawn`, `isSuffocating`,
+  `isViewBlocking`) — these are runtime lambda predicates in vanilla, not simple
+  stored values; will need custom extraction logic when redstone/mob spawning lands
+
+**Items — severely incomplete.** `items.json.gz` currently only stores
+`max_stack_size` and `max_damage` (2 of 20+ gameplay-relevant properties). Missing:
+rarity, food properties (nutrition, saturation, effects), tool properties (mining
+speed, mining level), weapon stats (attack damage/speed), armor properties
+(defense, toughness), enchantability, fire resistance, equipment slot, use
+cooldown, crafting remainder. Vanilla 26.1 uses a data component system
+(`DataComponents.*`) for these — extraction must parse `Items.java` builder chains
+and component registrations.
+
+### Double Blocks
+
+**Q: Are double blocks (doors, beds, tall plants) handled or hardcoded?**
+
+**State representation: data-driven.** Each half/part has its own `BlockStateId`
+with a distinguishing property (`half`, `part`, or `type`). No special block
+registry handling needed.
+
+**Placement logic: currently hardcoded.** `placement.rs` has explicit string-based
+dispatch for companion block placement:
+```rust
+// placement.rs — double_block_companion()
+if is_door_block(item_name) {           // ends_with("_door")
+    let upper = primary.with_property("half", "upper")?;
+    Some((primary_pos.above(), upper))
+} else if is_bed_block(item_name) {     // ends_with("_bed")
+    let head = primary.with_property("part", "head")?;
+    Some((head_pos, head))
+} else if is_tall_plant(item_name) {    // hardcoded list of 8 plants
+    let upper = primary.with_property("half", "upper")?;
+    Some((primary_pos.above(), upper))
 }
 ```
+This is part of the string dispatch that R5.4 aims to replace with flags/tags.
+A `IS_DOUBLE_BLOCK` flag or `#minecraft:double_blocks` tag could eliminate these
+string checks.
 
-Each state (upper/lower) has its own BlockStateId and inherits block properties
-(friction, hardness, is_solid, etc.) from the parent block type. Placement logic
-checks the `half` property to determine behavior. No special-case code needed.
-
-**Blocks with multi-part mechanics:**
-- Doors, trapdoors, gates (19 blocks with `half` property)
-- Beds (2 blocks with `part` property: head/foot)
-- Chests (3 blocks with `type` property: single/left/right)
-- Plants: tall grass, large fern, flowers (4 blocks with `half`)
-- Pistons, repeaters, comparators (property-driven, no special handling)
+**Actual block counts using multi-part properties:**
+- `half` property: **110 blocks** — 21 doors, 21 trapdoors, 58 stairs, 9 tall
+  plants, 1 pitcher crop (note: stairs use `half` for top/bottom but are NOT
+  double blocks — only doors and tall plants get companion placement)
+- `part` property: **16 blocks** — all 16 colored bed variants (head/foot)
+- `type` property: **74 blocks** — 10 chest variants (single/left/right) +
+  64 slab types (top/bottom/double)
 
 ### Data Extraction Architecture
 
 **Q: Can we unify extraction scripts? Do we need separate block property file?**
 
-**A:** ✅ **YES, unify into single script. Consolidate block_properties.json.gz into blocks.json.gz.**
+**A:** YES to both. Consolidate scripts and merge `block_properties.json.gz` into
+`blocks.json.gz`.
 
-**Current state (redundant):**
+**Current state:**
 ```
 tools/
-├── bundle_registries.py          (extracts protocol IDs)
-├── extract_block_properties.py   (extracts material properties)
-└── bundle_tags.py               (extracts tags)
+├── bundle_registries.py           → oxidized-protocol/src/data/registries.json
+│   (reads extracted JAR data → 28 synchronized registries)
+├── extract_block_properties.py    → oxidized-world/src/data/block_properties.json.gz
+│   (reads decompiled Blocks.java → material properties)
+└── bundle_tags.py                 → oxidized-protocol/src/data/tags.json
+    (reads extracted tag JSONs + vanilla reports → 758 tag→ID mappings)
 
-data/
-├── blocks.json.gz               (state machine + definitions)
-├── block_properties.json.gz     (material properties)
-├── items.json.gz                (ONLY has max_stack_size, max_damage)
-└── tags.json
+Vanilla generated reports (setup-ref.sh):
+  mc-server-ref/generated/reports/blocks.json → blocks.json.gz (oxidized-world)
+  mc-server-ref/generated/reports/items.json  → items.json.gz  (oxidized-world)
 ```
 
-**New unified approach (R5.7 step 6):**
+Note: `blocks.json.gz` and `items.json.gz` come from **vanilla generated reports**,
+not from any Python script. They were manually preprocessed into `.gz` and committed.
+
+**Target unified approach:**
 - **Create `tools/extract_vanilla_data.py`** — single script handles all extraction
-  - Reads: `registries.json`, `Blocks.java`, `Items.java`, `BlockEntityType.java`, `tags.json`
-  - Outputs: `blocks.json.gz`, `items.json.gz`, `tags.json`
+  - Reads: vanilla generated reports (`blocks.json`, `items.json`), decompiled Java
+    (`Blocks.java`, `Items.java`, `BlockEntityType.java`), extracted JAR data
+  - Outputs: `blocks.json.gz` (states + material properties merged),
+    `items.json.gz` (expanded with gameplay properties)
 - **Merge `block_properties.json.gz` into `blocks.json.gz`** — eliminate redundant file
-- **Expand `items.json.gz`** to include: rarity, enchantability, fireResistant, foodProperties
-  - Future proofs gameplay features without breaking current codegen
-- Benefits: Single entry point, consistent error handling, easier to add properties, faster
+- **Expand `items.json.gz`** — extract food, tool, weapon, armor, and enchantment
+  properties from `Items.java` builder chains and data component registrations
+- Keep `bundle_registries.py` and `bundle_tags.py` separate or fold them in —
+  they target `oxidized-protocol/src/data/` (different crate), so folding is
+  optional but reduces cognitive overhead
+- Benefits: single entry point for version updates, consistent error handling,
+  cross-referencing between blocks/items/entities in one pass
 
 ---
 
@@ -199,16 +235,17 @@ Without this refactoring:
 | R5.4 | R5.1, R5.3 | Can't replace string checks without flags and tags |
 | R5.5 | R5.2 | Physics properties must exist in BlockStateEntry first |
 | R5.6 | — | Independent; uses existing biome registry |
-| R5.7 | — | Independent; pure deduplication |
+| R5.7 | — | Independent; item codegen mirrors block pattern |
 | R5.8 | — | Independent; pure deduplication |
-| R5.9 | — | Independent; error handling standardization |
-| R5.10 | — | Independent; struct decomposition |
-| R5.11 | — | Independent; function decomposition |
-| R5.12 | — | Independent; constant extraction |
+| R5.9 | — | Independent; pure deduplication |
+| R5.10 | — | Independent; error handling standardization |
+| R5.11 | — | Independent; struct decomposition |
+| R5.12 | — | Independent; function decomposition |
+| R5.13 | — | Independent; constant extraction |
 
 **Parallelizable groups:**
 - **Group A** (sequential): R5.1 → R5.2 → R5.3 → R5.4 → R5.5
-- **Group B** (independent): R5.6, R5.7, R5.8, R5.9, R5.10, R5.11, R5.12
+- **Group B** (independent): R5.6, R5.7, R5.8, R5.9, R5.10, R5.11, R5.12, R5.13
 
 Group B sub-tasks can be done in any order and in parallel with Group A.
 
@@ -416,23 +453,35 @@ resolved IDs). The new `block_properties.json.gz` complements `blocks.json.gz`
   - Bedrock: hardness=-1 (unbreakable)
 - Property roundtrip: encode/decode fixed-point values, verify precision
 
-**✅ Completed**
-
-- ✅ Expanded `BlockStateEntry` to 18 bytes with all property fields
-- ✅ Updated `build.rs` to extract and encode all properties from `block_properties.json.gz`
-- ✅ Implemented property accessors on `BlockStateId` with correct fixed-point conversions
-- ✅ Verified table size: exactly 525.1 KB (29,873 states × 18 bytes)
-- ✅ Spot-checked 8 well-known blocks: all values match vanilla
-- ✅ Verified fixed-point roundtrip precision: values round-trip with <0.01 error
-- ✅ All cargo tests pass (186 unit tests, 0 failures)
-- ✅ Fixed-point encoding handles extreme values gracefully via clamping (e.g., barrier block's infinite resistance)
-
-**Notes:**
+**Completion notes:**
+- Expanded `BlockStateEntry` to 18 bytes with all property fields
+- Updated `build.rs` to extract and encode all properties from `block_properties.json.gz`
+- Implemented property accessors on `BlockStateId` with correct fixed-point conversions
+- Verified table size: exactly 525.1 KB (29,873 states × 18 bytes)
+- Spot-checked 20+ well-known blocks with value assertion tests: stone, ice, blue ice,
+  soul sand, honey block, glowstone, obsidian, bedrock, torch, redstone torch, slime block,
+  powder snow, packed ice, dirt, oak planks, iron block, diamond block, sea lantern, cobweb,
+  water, grass block, white wool, gold block
+- Verified fixed-point roundtrip precision: values round-trip with <0.01 error (×100) /
+  <0.0001 error (×10000)
+- Added `map_color` extraction (MapColor.X constants + DyeColor.X mapping +
+  BLOCK.defaultMapColor() resolution) — 854/1168 blocks have non-zero values
+- Added `light_opacity` heuristic derivation (opaque+solid→15, liquid→1, else→0) —
+  666/1168 blocks have non-zero values
+- All 2315 workspace tests pass (51 block registry tests including 24 R5.2 property tests)
 - Light emission/opacity are limited to 0–15 (4-bit values)
-- Map color is limited to 0–63 (6-bit values)
+- Map color is limited to 0–63 (6-bit values), 854/1168 blocks have map_color extracted
 - Push reaction is limited to 0–3 (2-bit values)
-- Explosion resistance values >6553.5 are clamped to 655.35 (u16::MAX)—acceptable since these are rare edge cases (barrier blocks only)
-- All normal game blocks have full precision
+- Explosion resistance values >655.35 are clamped to u16::MAX/100 — affects obsidian
+  (1200.0→655.35), bedrock (3600000.0→655.35), and other extreme-resistance blocks.
+  Functionally these are all "blast-proof" so gameplay impact is nil.
+- Light opacity is a heuristic approximation (vanilla computes it from collision shape which
+  we don't have). Accurate for full solid blocks (15), air (0), liquids (1), and transparent
+  blocks (0). Partial blocks (slabs, stairs) default to 0 which may differ from vanilla.
+- Powder snow's speed reduction comes from `PowderSnowBlock` runtime behavior, not the
+  `speedFactor` block property (which is vanilla default 1.0)
+- Obsidian's push_reaction is NORMAL (0), not BLOCK — vanilla piston code prevents moving
+  obsidian via separate hardness checks, not via push_reaction
 
 ### R5.3: Implement Block Tag Loading From Vanilla Data
 
@@ -710,108 +759,51 @@ resolved IDs). The new `block_properties.json.gz` complements `blocks.json.gz`
 `crates/oxidized-game/src/inventory/item_ids.rs`
 
 **Current problems:**
-- **Runtime loading**: `ItemRegistry::load()` decompresses `items.json.gz`, builds a
-  `Vec<Item>` and `AHashMap<String, usize>` on first access (via `LazyLock`)
-- **Hash lookup cost**: Every item name-to-ID lookup (e.g., `item_name_to_id("minecraft:stone")`)
-  does an `AHashMap` lookup instead of O(1) array access
-- **Startup overhead**: Decompression + hashmap construction happens at runtime, not at
-  compile time
-- **Inconsistency**: Blocks use compile-time codegen with pre-computed arrays; items use
-  runtime loading — no good reason for the difference
-
-**Comparison:**
-
-| Operation | Current (Runtime) | Target (Compile-Time) |
-|-----------|-------------------|----------------------|
-| Name → ID | `AHashMap::get()` (hash) | Array index (O(1)) |
-| ID → Name | `Vec::get()` (O(1)) | Array index (O(1)) |
-| Startup | Decompress + build maps | Zero |
-| Binary size | ~100 KB gzipped JSON | Similar (pre-gen Rust code) |
+- `ItemRegistry::load()` decompresses `items.json.gz` and builds a `Vec<Item>` +
+  `AHashMap<String, usize>` at runtime on first access (via `LazyLock`)
+- Every `item_name_to_id()` call does an `AHashMap` lookup instead of O(1) access
+- Decompression + hashmap construction at startup, not compile time
+- Blocks use compile-time codegen with pre-computed arrays; items use runtime
+  loading — no reason for the inconsistency
 
 **Steps:**
 
-1. **Extend `build.rs`** to also generate item registration data:
-   - Read `items.json.gz` (already embedded in `oxidized-world`)
-   - Parse the JSON in vanilla registration order
-   - Generate `item_ids_generated.rs` with:
-     ```rust
-     /// All 1506 items in vanilla registration order
-     const ITEM_NAMES: &[&str] = &[
-         "minecraft:air",
-         "minecraft:stone",
-         // ... 1504 more
-     ];
+1. **Extend `build.rs`** to generate item registration data from `items.json.gz`:
+   ```rust
+   // Generated in $OUT_DIR/item_ids_generated.rs
+   const ITEM_NAMES: &[&str] = &[
+       "minecraft:air",
+       "minecraft:stone",
+       // ... 1504 more in vanilla registration order
+   ];
+   const ITEM_MAX_STACK_SIZES: &[u8] = &[64, 64, 64, /* ... */];
+   const ITEM_MAX_DAMAGES: &[u16] = &[0, 0, 0, /* ... */];
+   ```
 
-     const ITEM_MAX_STACK_SIZES: &[u8] = &[
-         64, 64, 64, // ...
-     ];
+2. **Generate a compile-time perfect hash** (`phf` crate) for name → ID lookup.
+   With 1506 items, linear search is too slow for hot paths. `phf` gives O(1)
+   with zero runtime cost, matching the block codegen's zero-overhead approach.
 
-     const ITEM_MAX_DAMAGES: &[u16] = &[
-         0, 0, 0, // ...
-     ];
-     ```
-
-2. **Create `crates/oxidized-world/src/registry/item_ids_generated.rs`** (auto-generated):
-   - Include the static arrays from step 1
-   - Public access: `pub fn item_name_to_id(name: &str) -> Option<usize>`
-   - Public access: `pub fn item_id_to_name(id: usize) -> Option<&'static str>`
-
-3. **Rewrite `ItemRegistry`** to use the generated arrays:
-   - Replace `Vec<Item>` with direct array references
-   - Remove `AHashMap<String, usize>` — replace with `name_to_id()` doing a linear
-     search over the static `ITEM_NAMES` array (or use a compile-time perfect hash
-     if needed)
+3. **Rewrite `ItemRegistry`** to wrap the generated arrays:
+   - Replace `Vec<Item>` with references to static arrays
+   - Replace `AHashMap<String, usize>` with the generated `phf::Map`
    - Keep the same public API: `name_to_id()`, `id_to_name()`, `max_stack_size()`
 
 4. **Update `crates/oxidized-game/src/inventory/item_ids.rs`**:
-   - `item_name_to_id()` now calls the generated function (no LazyLock needed)
-   - Still return `-1` for unknown items (same interface)
-   - Zero startup cost
+   - Remove `LazyLock<ItemRegistry>` — call generated functions directly
+   - Preserve return values (`-1` for unknown items, `"minecraft:air"` for
+     unknown IDs)
 
-5. **Add snapshot tests** to verify the generated code:
-   - `insta::assert_snapshot!(ITEM_NAMES)` — check all 1506 items
-   - Round-trip test: `for each name in ITEM_NAMES: assert_eq!(item_name_to_id(name), id)`
+5. **Add verification tests**:
+   - Snapshot test: `insta::assert_snapshot!` over all 1506 item names
+   - Round-trip: for each name in `ITEM_NAMES`, verify `name_to_id` → `id_to_name`
+   - Spot-check known items: stone, diamond_sword, ender_pearl
 
 **Verification:**
-- `cargo build -p oxidized-world` — `item_ids_generated.rs` exists and compiles
-- `cargo test -p oxidized-game inventory::item_ids` — all 4 existing tests pass
-- `item_name_to_id("minecraft:stone")` returns `1` (not parsed, array index)
-- Zero startup latency compared to before
-
-**Important: Data extraction architecture decision:**
-
-R5.7 also unifies all vanilla data extraction into a single script. Currently,
-three scripts redundantly parse vanilla data sources:
-
-- `tools/bundle_registries.py` (extracts block/item protocol IDs)
-- `tools/extract_block_properties.py` (extracts block material properties)
-- `tools/bundle_tags.py` (extracts tag definitions)
-
-**New unified approach:**
-- Create `tools/extract_vanilla_data.py` — single entry point for all data extraction
-- Reads: `registries.json` (protocol IDs), `Blocks.java` (block properties),
-  `Items.java` (item properties), `BlockEntityType.java` (block entities), `tags.json`
-- Outputs: `blocks.json.gz`, `items.json.gz`, `tags.json`
-- **Consolidate `block_properties.json.gz` into `blocks.json.gz`** (remove redundant file)
-- This is a **separate task from the codegen itself** but should be done in R5.7
-  to avoid maintaining multiple extraction sources during the transition
-
-**Item properties to expand in R5.7:**
-- `items.json.gz` currently only has `max_stack_size` and `max_damage`
-- Should also capture: `rarity`, `enchantability`, `fireResistant`, `foodProperties`
-  (these enable future gameplay features but can default to vanilla if not yet used
-  in Oxidized logic)
-- The unified script extracts all properties; `build.rs` and `item_ids.rs` only use
-  what's needed for now, but infrastructure is ready for expansion
-
-**Notes:**
-- Double blocks (doors, chests, plants) are already fully supported via state properties
-  (`half`, `type`, `part` properties in `blocks.json.gz`). No special hardcoding needed.
-- If linear search in `name_to_id()` becomes a bottleneck, add a compile-time perfect
-  hash (via `phf` crate) — but start with linear search and measure first.
-- Keep the generated file in `src/registry/item_ids_generated.rs` in `.gitignore` —
-  it's always regenerated at build time.
-- This mirrors the block codegen approach (ADR-012).
+- `cargo build -p oxidized-world` — generated code compiles
+- `cargo test -p oxidized-game inventory::item_ids` — all existing tests pass
+- Zero startup latency (no decompression, no hashmap construction)
+- Generated file lives in `$OUT_DIR/`, never in source tree
 
 ---
 
@@ -1197,7 +1189,7 @@ three scripts redundantly parse vanilla data sources:
 | R5.4 | 4-6 | +50, -300 |
 | R5.5 | 2-3 | +30, -120 |
 | R5.6 | 1-2 | +10, -20 |
-| R5.7 | 3-4 | +150, -100 |
+| R5.7 | 5-8 | +300, -150 |
 | R5.8 | 40-60 | +200, -800 |
 | R5.9 | 17-20 | +80, -400 |
 | R5.10 | 20-30 | +100, -150 |

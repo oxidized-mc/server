@@ -86,6 +86,8 @@ DEFAULTS = {
     "jump_factor": 1.0,
     "hardness": 0.0,
     "explosion_resistance": 0.0,
+    "map_color": 0,           # MapColor.NONE
+    "light_opacity": 0,       # derived heuristic: opaque+solid→15, liquid→1, else→0
 }
 
 PUSH_REACTION_MAP = {
@@ -94,6 +96,42 @@ PUSH_REACTION_MAP = {
     "PushReaction.BLOCK": 2,
     "PushReaction.PUSH_ONLY": 3,
     "PushReaction.IGNORE": 4,
+}
+
+# MapColor name → numeric ID (from MapColor.java constructor args).
+# field_57 = ICE (renamed by decompiler).
+MAP_COLOR_IDS = {
+    "NONE": 0, "GRASS": 1, "SAND": 2, "WOOL": 3, "FIRE": 4,
+    "field_57": 5, "METAL": 6, "PLANT": 7, "SNOW": 8, "CLAY": 9,
+    "DIRT": 10, "STONE": 11, "WATER": 12, "WOOD": 13, "QUARTZ": 14,
+    "COLOR_ORANGE": 15, "COLOR_MAGENTA": 16, "COLOR_LIGHT_BLUE": 17,
+    "COLOR_YELLOW": 18, "COLOR_LIGHT_GREEN": 19, "COLOR_PINK": 20,
+    "COLOR_GRAY": 21, "COLOR_LIGHT_GRAY": 22, "COLOR_CYAN": 23,
+    "COLOR_PURPLE": 24, "COLOR_BLUE": 25, "COLOR_BROWN": 26,
+    "COLOR_GREEN": 27, "COLOR_RED": 28, "COLOR_BLACK": 29,
+    "GOLD": 30, "DIAMOND": 31, "LAPIS": 32, "EMERALD": 33,
+    "PODZOL": 34, "NETHER": 35,
+    "TERRACOTTA_WHITE": 36, "TERRACOTTA_ORANGE": 37,
+    "TERRACOTTA_MAGENTA": 38, "TERRACOTTA_LIGHT_BLUE": 39,
+    "TERRACOTTA_YELLOW": 40, "TERRACOTTA_LIGHT_GREEN": 41,
+    "TERRACOTTA_PINK": 42, "TERRACOTTA_GRAY": 43,
+    "TERRACOTTA_LIGHT_GRAY": 44, "TERRACOTTA_CYAN": 45,
+    "TERRACOTTA_PURPLE": 46, "TERRACOTTA_BLUE": 47,
+    "TERRACOTTA_BROWN": 48, "TERRACOTTA_GREEN": 49,
+    "TERRACOTTA_RED": 50, "TERRACOTTA_BLACK": 51,
+    "CRIMSON_NYLIUM": 52, "CRIMSON_STEM": 53, "CRIMSON_HYPHAE": 54,
+    "WARPED_NYLIUM": 55, "WARPED_STEM": 56, "WARPED_HYPHAE": 57,
+    "WARPED_WART_BLOCK": 58, "DEEPSLATE": 59, "RAW_IRON": 60,
+    "GLOW_LICHEN": 61,
+}
+
+# DyeColor name → MapColor ID (from DyeColor.java).
+# field_559 = RED (renamed by decompiler).
+DYE_COLOR_TO_MAP_COLOR = {
+    "WHITE": 8, "ORANGE": 15, "MAGENTA": 16, "LIGHT_BLUE": 17,
+    "YELLOW": 18, "LIME": 19, "PINK": 20, "GRAY": 21,
+    "LIGHT_GRAY": 22, "CYAN": 23, "PURPLE": 24, "BLUE": 25,
+    "BROWN": 26, "GREEN": 27, "field_559": 28, "BLACK": 29,
 }
 
 # WeatheringCopperBlocks.create() produces 8 variants from a base name
@@ -284,6 +322,14 @@ def extract_properties(
     # Apply builder method calls from the statement
     apply_builder_methods(props, stmt)
 
+    # Handle mapColor(BLOCK.defaultMapColor()) — resolve from already-parsed blocks
+    m = re.search(r'\.mapColor\((\w+)\.defaultMapColor\(\)', stmt)
+    if m:
+        ref_field = m.group(1)
+        ref_name = field_to_name.get(ref_field)
+        if ref_name and ref_name in existing_blocks:
+            props["map_color"] = existing_blocks[ref_name].get("map_color", 0)
+
     return props
 
 
@@ -389,6 +435,16 @@ def apply_builder_methods(props: dict, text: str) -> None:
     m = re.search(r'\.pushReaction\((PushReaction\.\w+)\)', text)
     if m:
         props["push_reaction"] = PUSH_REACTION_MAP.get(m.group(1), 0)
+
+    # mapColor(MapColor.X) — direct constant
+    m = re.search(r'\.mapColor\(MapColor\.(\w+)\)', text)
+    if m:
+        props["map_color"] = MAP_COLOR_IDS.get(m.group(1), 0)
+
+    # mapColor(DyeColor.X) — dye color mapping
+    m = re.search(r'\.mapColor\(DyeColor\.(\w+)\)', text)
+    if m:
+        props["map_color"] = DYE_COLOR_TO_MAP_COLOR.get(m.group(1), 0)
 
     # lightLevel — various patterns
     parse_light_level(props, text)
@@ -650,6 +706,18 @@ def main() -> None:
         props["has_block_entity"] = name in be_block_names
         props["is_interactable"] = name in interactable_blocks
         props["is_solid"] = compute_is_solid(props)
+        # Derive light_opacity heuristic:
+        #   Full opaque solid blocks → 15 (blocks all light)
+        #   Liquids → 1 (attenuates light slightly)
+        #   Everything else → 0 (transparent or partial)
+        if props["is_air"]:
+            props["light_opacity"] = 0
+        elif props["is_liquid"]:
+            props["light_opacity"] = 1
+        elif props["is_opaque"] and props["has_collision"] and props["is_solid"]:
+            props["light_opacity"] = 15
+        else:
+            props["light_opacity"] = 0
 
     # Remove internal-only fields not needed by build.rs
     for props in blocks.values():
