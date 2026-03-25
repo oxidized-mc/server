@@ -36,12 +36,13 @@ pub async fn handle_command_suggestion(
         ((p.movement.pos.x, p.movement.pos.y, p.movement.pos.z), (p.movement.yaw, p.movement.pitch))
     };
     let (feedback_tx, _) = std::sync::mpsc::channel::<Component>();
+    let perm_level = ctx.server_ctx.ops.get_permission_level(&ctx.player_uuid).clamp(0, 4) as u32;
     let source = make_command_source_for_player(
         ctx.player_name,
         ctx.player_uuid,
         pos,
         rot,
-        4, // TODO: read actual permission level
+        perm_level,
         feedback_tx,
         ctx.server_ctx,
     );
@@ -97,6 +98,7 @@ pub fn make_command_source(
     player: &ServerPlayer,
     server_ctx: &Arc<ServerContext>,
 ) -> CommandSourceStack {
+    let perm_level = server_ctx.ops.get_permission_level(&uuid).clamp(0, 4) as u32;
     CommandSourceStack {
         source: CommandSourceKind::Player {
             name: player_name.to_string(),
@@ -104,7 +106,7 @@ pub fn make_command_source(
         },
         position: (player.movement.pos.x, player.movement.pos.y, player.movement.pos.z),
         rotation: (player.movement.yaw, player.movement.pitch),
-        permission_level: 4, // full permissions for tree serialization
+        permission_level: perm_level,
         display_name: player_name.to_string(),
         server: server_ctx.clone(),
         feedback_sender: Arc::new(|_| {}),

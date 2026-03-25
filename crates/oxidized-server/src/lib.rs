@@ -3,4 +3,5 @@
 pub mod app;
 pub mod config;
 pub mod network;
+pub mod ops;
 pub mod tick;

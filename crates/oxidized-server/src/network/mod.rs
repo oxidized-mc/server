@@ -41,6 +41,8 @@ use tracing::{debug, info, warn};
 
 use oxidized_game::player::PlayerList;
 
+use crate::ops::SharedOpsStore;
+
 /// Shared state for login operations, passed to each connection handler.
 pub struct LoginContext {
     /// Pre-built server status for the multiplayer list.
@@ -108,8 +110,8 @@ pub struct ServerSettings {
     pub max_view_distance: i32,
     /// Maximum simulation distance allowed by the server config (2–32 chunks).
     pub max_simulation_distance: i32,
-    /// Operator permission level for all players (from server config).
-    /// TODO: Replace with per-player ops from `ops.json`.
+    /// Default operator permission level for `/op` (from server config).
+    /// Per-player levels are stored in `ops.json` via [`OpsStore`].
     pub op_permission_level: i32,
     /// Spawn protection radius (Chebyshev distance from world spawn).
     /// A value of 0 disables spawn protection.
@@ -135,6 +137,8 @@ pub struct ServerContext {
     pub event_bus: EventBus,
     /// Tick rate manager — controls freeze/step/sprint.
     pub tick_rate_manager: RwLock<ServerTickRateManager>,
+    /// Per-player operator permissions loaded from `ops.json`.
+    pub ops: SharedOpsStore,
 }
 
 impl ServerContext {
@@ -144,6 +148,78 @@ impl ServerContext {
         if let Err(e) = self.network.broadcast_tx.send(msg) {
             warn!("Broadcast send failed: {e}");
         }
+    }
+
+    /// Sends an `EntityEventPacket` with the player's current permission level.
+    ///
+    /// Vanilla calls this `sendPlayerPermissionLevel` — event IDs 24–28
+    /// correspond to permission levels 0–4.
+    fn send_permission_level_update(&self, uuid: uuid::Uuid) {
+        use oxidized_protocol::codec::Packet;
+        use oxidized_protocol::packets::play::ClientboundEntityEventPacket;
+
+        let entity_id = {
+            let player_list = self.network.player_list.read();
+            match player_list.get(&uuid) {
+                Some(p) => p.read().entity_id,
+                None => return,
+            }
+        };
+
+        let perm_level = self.ops.get_permission_level(&uuid).clamp(0, 4) as u8;
+        let pkt = ClientboundEntityEventPacket {
+            entity_id,
+            event_id: ClientboundEntityEventPacket::PERMISSION_LEVEL_BASE + perm_level,
+        };
+        let encoded = pkt.encode();
+        self.broadcast(BroadcastMessage {
+            packet_id: ClientboundEntityEventPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: Some(entity_id),
+        });
+    }
+
+    /// Resends the command tree to a player so visible commands update
+    /// after a permission level change.
+    fn send_command_tree_update(&self, uuid: uuid::Uuid) {
+        use oxidized_protocol::codec::Packet;
+
+        let (entity_id, player_name) = {
+            let player_list = self.network.player_list.read();
+            match player_list.get(&uuid) {
+                Some(p) => {
+                    let player = p.read();
+                    (player.entity_id, player.name.clone())
+                }
+                None => return,
+            }
+        };
+
+        let perm_level = self.ops.get_permission_level(&uuid).clamp(0, 4) as u32;
+        let source = oxidized_game::commands::CommandSourceStack {
+            source: oxidized_game::commands::CommandSourceKind::Player {
+                name: player_name.clone(),
+                uuid,
+            },
+            position: (0.0, 0.0, 0.0),
+            rotation: (0.0, 0.0),
+            permission_level: perm_level,
+            display_name: player_name,
+            server: Arc::new(NoopServerHandle),
+            feedback_sender: Arc::new(|_| {}),
+            is_silent: true,
+        };
+
+        let tree = self.commands.serialize_tree(&source);
+        let cmd_pkt = play::commands::commands_packet_from_tree(&tree);
+        let encoded = cmd_pkt.encode();
+        self.broadcast(BroadcastMessage {
+            packet_id: oxidized_protocol::packets::play::ClientboundCommandsPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: None,
+            target_entity: Some(entity_id),
+        });
     }
 }
 
@@ -553,6 +629,59 @@ impl ServerHandle for ServerContext {
         let chunk = chunk_ref.read();
         chunk.get_block_state(x, y, z).ok()
     }
+
+    fn is_op(&self, uuid: &uuid::Uuid) -> bool {
+        self.ops.is_op(uuid)
+    }
+
+    fn get_permission_level(&self, uuid: &uuid::Uuid) -> i32 {
+        self.ops.get_permission_level(uuid)
+    }
+
+    fn op_player(&self, uuid: uuid::Uuid, name: &str) -> bool {
+        if self.ops.is_op(&uuid) {
+            return false;
+        }
+        self.ops.add(uuid, name.to_string(), None, false);
+
+        // Send updated permission level to the target player via EntityEvent.
+        self.send_permission_level_update(uuid);
+        // Resend command tree so newly available commands appear.
+        self.send_command_tree_update(uuid);
+        true
+    }
+
+    fn deop_player(&self, uuid: uuid::Uuid) -> bool {
+        if !self.ops.remove(&uuid) {
+            return false;
+        }
+
+        // Send updated permission level (0) to the target player.
+        self.send_permission_level_update(uuid);
+        // Resend command tree so restricted commands disappear.
+        self.send_command_tree_update(uuid);
+        true
+    }
+
+    fn op_names(&self) -> Vec<String> {
+        self.ops.op_names()
+    }
+
+    fn non_op_player_names(&self) -> Vec<String> {
+        self.network
+            .player_list
+            .read()
+            .iter()
+            .filter_map(|p| {
+                let player = p.read();
+                if self.ops.is_op(&player.uuid) {
+                    None
+                } else {
+                    Some(player.name.clone())
+                }
+            })
+            .collect()
+    }
 }
 
 /// A packet broadcast to all connected players (or a targeted subset).
@@ -571,6 +700,27 @@ pub struct BroadcastMessage {
     /// If set, send ONLY to the player with this entity ID.
     /// Used for targeted packets like game mode changes and abilities updates.
     pub target_entity: Option<i32>,
+}
+
+/// Minimal no-op [`ServerHandle`] used when serializing the command tree
+/// for permission-level updates (no server methods are actually called).
+struct NoopServerHandle;
+
+impl ServerHandle for NoopServerHandle {
+    fn broadcast_to_ops(&self, _: &Component, _: u32) {}
+    fn request_shutdown(&self) {}
+    fn seed(&self) -> i64 { 0 }
+    fn online_player_names(&self) -> Vec<String> { vec![] }
+    fn online_player_count(&self) -> usize { 0 }
+    fn max_players(&self) -> usize { 0 }
+    fn difficulty(&self) -> i32 { 0 }
+    fn game_time(&self) -> i64 { 0 }
+    fn day_time(&self) -> i64 { 0 }
+    fn is_raining(&self) -> bool { false }
+    fn is_thundering(&self) -> bool { false }
+    fn kick_player(&self, _: &str, _: &str) -> bool { false }
+    fn find_player_uuid(&self, _: &str) -> Option<uuid::Uuid> { None }
+    fn command_descriptions(&self) -> Vec<(String, Option<String>)> { vec![] }
 }
 
 /// Maximum valid serverbound PLAY packet ID for protocol 26.1-pre-3.
@@ -875,6 +1025,7 @@ mod tests {
                 tick_rate_manager: RwLock::new(
                     oxidized_game::level::ServerTickRateManager::default(),
                 ),
+                ops: Arc::new(crate::ops::OpsStore::load("/dev/null/nonexistent", 4)),
             }),
         })
     }

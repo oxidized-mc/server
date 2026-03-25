@@ -27,7 +27,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.12 | Break down long functions & reduce nesting | ✅ Done |
 | R5.13 | Replace magic numbers with named constants | ✅ Done |
 | R5.14 | Benchmark & fuzz testing infrastructure | ✅ Done |
-| R5.15 | Per-player operator permissions (`ops.json`) | 📋 Planned |
+| R5.15 | Per-player operator permissions (`ops.json`) | ✅ Done |
 | R5.16 | Safety hardening & cleanup | 📋 Planned |
 | R5.17 | Entity selector completeness | 📋 Planned |
 | R5.18 | Config cleanup: remove Java leftovers & extract hardcoded values | 📋 Planned |
@@ -1192,6 +1192,17 @@ network input, so the paletted container (which IS on the wire path) was priorit
 - Integration test: player with op entry gets correct permission level
 - Regression: default behavior (no ops.json) matches current behavior
 - `cargo test --workspace` passes
+
+**Completed.** All steps implemented:
+- `OpsStore` in `oxidized-server/src/ops.rs` — `DashMap<Uuid, OpEntry>`, load/save, 12 unit tests
+- `ServerHandle` trait extended with `is_op`, `get_permission_level`, `op_player`, `deop_player`,
+  `op_names`, `non_op_player_names` methods
+- `ServerContext` wired with `SharedOpsStore` (Arc), loaded from `ops.json` on startup
+- All 4 hardcoded permission sites replaced with per-player lookup:
+  - `play/mod.rs` command execution, `play/commands.rs` command source (×2), `play/join.rs` EntityEvent
+- `is_spawn_protected` accepts player UUID, operators bypass protection, empty ops disables protection
+- `/op` and `/deop` commands implemented (replaced stubs) with `GameProfile` argument
+- Permission level updates broadcast via `EntityEventPacket` + command tree resend on op/deop
 
 ---
 

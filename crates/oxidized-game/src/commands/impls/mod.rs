@@ -3,6 +3,7 @@
 //! Each `cmd_*.rs` module registers one or more commands with the dispatcher.
 //! `stubs.rs` provides placeholder commands for features not yet implemented.
 
+mod cmd_deop;
 mod cmd_difficulty;
 mod cmd_effect;
 mod cmd_gamemode;
@@ -12,6 +13,7 @@ mod cmd_help;
 mod cmd_kick;
 mod cmd_kill;
 mod cmd_list;
+mod cmd_op;
 mod cmd_say;
 mod cmd_seed;
 mod cmd_setblock;
@@ -44,5 +46,7 @@ pub(crate) fn register_all(d: &mut CommandDispatcher<CommandSourceStack>) {
     cmd_effect::register(d);
     cmd_gamerule::register(d);
     cmd_tick::register(d);
+    cmd_op::register(d);
+    cmd_deop::register(d);
     stubs::register_all(d);
 }

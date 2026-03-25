@@ -73,16 +73,30 @@ pub(super) fn is_within_build_height(pos: BlockPos) -> bool {
     pos.y >= MIN_BUILD_HEIGHT && pos.y <= MAX_BUILD_HEIGHT
 }
 
-/// Returns `true` if the position is inside the spawn protection zone.
+/// Returns `true` if the position is inside the spawn protection zone
+/// and the player is not an operator.
 ///
 /// Vanilla uses Chebyshev distance: `max(|bx - sx|, |bz - sz|)`. A radius
-/// of 0 disables spawn protection entirely.
-///
-/// TODO: Accept player info and skip protection for operators once ops.json
-/// is implemented. Currently all players are treated as non-ops.
-pub(super) fn is_spawn_protected(ctx: &ServerContext, pos: BlockPos) -> bool {
+/// of 0 disables spawn protection entirely. Operators always bypass spawn
+/// protection. If no ops are configured, spawn protection is disabled
+/// (vanilla behavior).
+pub(super) fn is_spawn_protected(
+    ctx: &ServerContext,
+    pos: BlockPos,
+    player_uuid: &uuid::Uuid,
+) -> bool {
     let radius = ctx.settings.spawn_protection;
     if radius == 0 {
+        return false;
+    }
+
+    // Vanilla: no spawn protection when the ops list is empty.
+    if ctx.ops.is_empty() {
+        return false;
+    }
+
+    // Operators bypass spawn protection.
+    if ctx.ops.is_op(player_uuid) {
         return false;
     }
 
@@ -339,36 +353,56 @@ mod tests {
 
     // -- Spawn protection tests --
 
+    /// Non-operator UUID used for spawn protection tests.
+    fn non_op_uuid() -> uuid::Uuid {
+        uuid::Uuid::parse_str("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee").unwrap()
+    }
+
     #[test]
     fn test_spawn_protection_disabled_when_radius_zero() {
         let ctx = test_server_ctx_with_spawn_protection(0);
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0)));
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &non_op_uuid()));
     }
 
     #[test]
     fn test_spawn_protection_at_spawn_origin() {
         let ctx = test_server_ctx_with_spawn_protection(16);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(0, 64, 0)));
+        assert!(is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &non_op_uuid()));
     }
 
     #[test]
     fn test_spawn_protection_at_boundary() {
         let ctx = test_server_ctx_with_spawn_protection(16);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(15, 64, 0)));
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(16, 64, 0)));
+        assert!(is_spawn_protected(&ctx, BlockPos::new(15, 64, 0), &non_op_uuid()));
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(16, 64, 0), &non_op_uuid()));
     }
 
     #[test]
     fn test_spawn_protection_diagonal() {
         let ctx = test_server_ctx_with_spawn_protection(10);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(9, 64, 9)));
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(10, 64, 10)));
+        assert!(is_spawn_protected(&ctx, BlockPos::new(9, 64, 9), &non_op_uuid()));
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(10, 64, 10), &non_op_uuid()));
     }
 
     #[test]
     fn test_spawn_protection_negative_coords() {
         let ctx = test_server_ctx_with_spawn_protection(16);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(-15, 64, -15)));
+        assert!(is_spawn_protected(&ctx, BlockPos::new(-15, 64, -15), &non_op_uuid()));
+    }
+
+    #[test]
+    fn test_spawn_protection_bypassed_for_operator() {
+        let ctx = test_server_ctx_with_spawn_protection(16);
+        // The dummy op (Uuid::nil) should bypass spawn protection.
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &uuid::Uuid::nil()));
+    }
+
+    #[test]
+    fn test_spawn_protection_disabled_when_no_ops() {
+        // Build a context with spawn protection but an empty ops list.
+        let ctx = test_server_ctx_with_spawn_protection(16);
+        ctx.ops.remove(&uuid::Uuid::nil()); // remove the dummy op
+        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &non_op_uuid()));
     }
 
     // -- Block access tests --
@@ -450,10 +484,14 @@ mod tests {
             commands: oxidized_game::commands::Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
+            ops: Arc::new(crate::ops::OpsStore::load("/dev/null/nonexistent", 4)),
         })
     }
 
     /// Builds a `ServerContext` with a custom spawn protection radius.
+    ///
+    /// Adds a dummy op entry so that spawn protection is active (vanilla
+    /// disables spawn protection when no ops are configured).
     fn test_server_ctx_with_spawn_protection(radius: u32) -> Arc<ServerContext> {
         use oxidized_game::level::game_rules::GameRules;
         use oxidized_game::level::tick_rate::ServerTickRateManager;
@@ -466,6 +504,10 @@ mod tests {
 
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
         let loader = AnvilChunkLoader::new(std::path::Path::new(""), block_registry.clone());
+        let ops = Arc::new(crate::ops::OpsStore::load("/dev/null/nonexistent", 4));
+        // Add a dummy op so spawn protection is active (vanilla disables it
+        // when no ops exist).
+        ops.add(uuid::Uuid::nil(), "DummyOp".to_string(), Some(4), false);
         Arc::new(ServerContext {
             world: crate::network::WorldContext {
                 level_data: RwLock::new(
@@ -504,6 +546,7 @@ mod tests {
             commands: oxidized_game::commands::Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
+            ops,
         })
     }
 }

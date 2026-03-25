@@ -148,6 +148,46 @@ pub trait ServerHandle: Send + Sync {
 
     /// Sends a system chat message to a specific player by UUID.
     fn send_system_message_to_player(&self, _uuid: uuid::Uuid, _message: &Component) {}
+
+    // --- Operator permission methods ---
+
+    /// Returns `true` if the player is an operator (has an ops.json entry).
+    fn is_op(&self, _uuid: &uuid::Uuid) -> bool {
+        false
+    }
+
+    /// Returns the permission level for a player (0 if not an operator).
+    fn get_permission_level(&self, _uuid: &uuid::Uuid) -> i32 {
+        0
+    }
+
+    /// Grants operator status to a player. Returns `true` if the player
+    /// was not already an operator.
+    ///
+    /// Implementations should persist the change and send the updated
+    /// permission level to the client.
+    fn op_player(&self, _uuid: uuid::Uuid, _name: &str) -> bool {
+        false
+    }
+
+    /// Revokes operator status from a player. Returns `true` if the player
+    /// was an operator.
+    ///
+    /// Implementations should persist the change and send the updated
+    /// permission level to the client.
+    fn deop_player(&self, _uuid: uuid::Uuid) -> bool {
+        false
+    }
+
+    /// Returns the display names of all current operators (for tab-completion).
+    fn op_names(&self) -> Vec<String> {
+        vec![]
+    }
+
+    /// Returns names of online players who are NOT operators (for /op completion).
+    fn non_op_player_names(&self) -> Vec<String> {
+        vec![]
+    }
 }
 
 /// The kind of entity that is executing a command.

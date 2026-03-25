@@ -556,8 +556,7 @@ async fn dispatch_chat_command(
             (p.movement.yaw, p.movement.pitch),
         )
     };
-    // TODO: implement per-player ops (ops.json) instead of
-    // giving all players the configured op level.
+    let perm_level = server_ctx.ops.get_permission_level(&uuid).clamp(0, 4) as u32;
     chat::handle_chat_command(
         play_ctx.conn_handle,
         command,
@@ -565,7 +564,7 @@ async fn dispatch_chat_command(
         uuid,
         pos,
         rot,
-        server_ctx.settings.op_permission_level as u32,
+        perm_level,
         server_ctx,
     )
     .await;

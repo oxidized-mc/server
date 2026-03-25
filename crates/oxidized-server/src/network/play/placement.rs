@@ -123,7 +123,7 @@ pub async fn handle_use_item_on(
     // Vanilla checks the *clicked* block position, not the computed placement
     // position, and resyncs both blocks to fully correct client predictions.
     let clicked_pos = pkt.hit_result.pos;
-    if is_spawn_protected(play_ctx.server_ctx, clicked_pos) {
+    if is_spawn_protected(play_ctx.server_ctx, clicked_pos, &play_ctx.player_uuid) {
         debug!(
             peer = %play_ctx.addr,
             name = %play_ctx.player_name,

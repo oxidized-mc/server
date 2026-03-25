@@ -273,7 +273,7 @@ async fn send_level_info(
     // Send EntityEvent with the player's permission level (vanilla sends
     // this via sendPlayerPermissionLevel — event IDs 24–28).
     {
-        let perm_level = server_ctx.settings.op_permission_level.clamp(0, 4) as u8;
+        let perm_level = server_ctx.ops.get_permission_level(&uuid).clamp(0, 4) as u8;
         conn_handle
             .send_packet(&ClientboundEntityEventPacket {
                 entity_id,

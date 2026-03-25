@@ -81,7 +81,7 @@ pub async fn handle_player_action(
     if matches!(
         pkt.action,
         PlayerAction::StartDestroyBlock | PlayerAction::StopDestroyBlock
-    ) && is_spawn_protected(play_ctx.server_ctx, pkt.pos)
+    ) && is_spawn_protected(play_ctx.server_ctx, pkt.pos, &play_ctx.player_uuid)
     {
         debug!(
             peer = %play_ctx.addr,

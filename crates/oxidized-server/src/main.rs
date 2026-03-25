@@ -219,6 +219,18 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
+        // Load per-player operator permissions from ops.json (same directory
+        // as the config file, matching vanilla's server root convention).
+        let ops_path = args
+            .config
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("ops.json");
+        let ops_store = Arc::new(oxidized_server::ops::OpsStore::load(
+            &ops_path,
+            config.admin.op_permission_level,
+        ));
+
         let server_ctx = Arc::new(ServerContext {
             world: WorldContext {
                 level_data: parking_lot::RwLock::new(level_data),
@@ -255,6 +267,7 @@ fn main() -> anyhow::Result<()> {
             tick_rate_manager: parking_lot::RwLock::new(
                 oxidized_game::level::ServerTickRateManager::default(),
             ),
+            ops: ops_store,
         });
 
         // Build the shared login context.
