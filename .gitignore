@@ -9,6 +9,7 @@
 # Minecraft reference files (large, not needed in git)
 /mc-server-ref/
 oxidized.toml
+ops.json
 
 # World data / test worlds (large binary files)
 *.mca
