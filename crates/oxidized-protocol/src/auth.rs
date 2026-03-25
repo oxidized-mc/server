@@ -9,6 +9,20 @@
 //! 3. Server decrypts, computes auth hash (`minecraft_digest`)
 //! 4. Server calls `hasJoined` on Mojang's session server
 //! 5. Mojang returns the player's profile (UUID, name, skin)
+//!
+//! # HTTP Client Choice (R5.16 evaluation)
+//!
+//! This module uses `reqwest` for HTTP. We evaluated lighter alternatives
+//! (`ureq`, raw `hyper`, custom TLS+HTTP) and decided to keep `reqwest`:
+//!
+//! - Only one HTTP call exists (GET to Mojang `hasJoined`), so the
+//!   dependency weight is amortized across the entire binary.
+//! - `reqwest` provides async TLS, connection pooling, and JSON
+//!   deserialization — all required — with minimal boilerplate.
+//! - Switching would break the public `has_joined()` API signature for
+//!   marginal compile-time savings (~2-3 s).
+//! - `ureq` is sync-only, incompatible with our Tokio runtime without
+//!   `spawn_blocking` wrappers.
 
 use serde::Deserialize;
 use thiserror::Error;

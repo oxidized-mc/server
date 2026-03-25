@@ -4,6 +4,7 @@
 //! palette-compressed and serialized for the network packet.
 
 use super::paletted_container::{PalettedContainer, PalettedContainerError, Strategy};
+use crate::registry::BlockStateId;
 
 /// A 16×16×16 section of a chunk column.
 ///
@@ -57,12 +58,27 @@ impl LevelChunkSection {
     #[must_use]
     pub fn filled(block_state_id: u32) -> Self {
         let states = PalettedContainer::new(Strategy::BlockStates, block_state_id);
-        let non_empty = if block_state_id == 0 { 0 } else { 4096 };
+        if block_state_id == 0 {
+            return Self {
+                non_empty_block_count: 0,
+                fluid_count: 0,
+                ticking_block_count: 0,
+                ticking_fluid_count: 0,
+                states,
+                biomes: PalettedContainer::empty(Strategy::Biomes),
+            };
+        }
+        #[allow(clippy::cast_possible_truncation)]
+        let sid = BlockStateId(block_state_id as u16);
         Self {
-            non_empty_block_count: non_empty,
-            fluid_count: 0,
-            ticking_block_count: 0,
-            ticking_fluid_count: 0,
+            non_empty_block_count: 4096,
+            fluid_count: if sid.is_liquid() { 4096 } else { 0 },
+            ticking_block_count: if sid.ticks_randomly() { 4096 } else { 0 },
+            ticking_fluid_count: if sid.is_liquid() && sid.ticks_randomly() {
+                4096
+            } else {
+                0
+            },
             states,
             biomes: PalettedContainer::empty(Strategy::Biomes),
         }
@@ -70,18 +86,19 @@ impl LevelChunkSection {
 
     /// Creates a section from pre-built palette containers.
     ///
-    /// Recalculates `non_empty_block_count` by scanning the states container.
+    /// Recalculates all counters by scanning the states container.
     #[must_use]
     pub fn from_parts(states: PalettedContainer, biomes: PalettedContainer) -> Self {
-        let non_empty_block_count = states.count_non_zero() as i16;
-        Self {
-            non_empty_block_count,
+        let mut section = Self {
+            non_empty_block_count: 0,
             fluid_count: 0,
             ticking_block_count: 0,
             ticking_fluid_count: 0,
             states,
             biomes,
-        }
+        };
+        section.recalculate_counts();
+        section
     }
 
     /// Returns the block state ID at the given section-local coordinates.
@@ -102,7 +119,8 @@ impl LevelChunkSection {
 
     /// Sets the block state ID at the given section-local coordinates.
     ///
-    /// Updates `non_empty_block_count` automatically (assumes state 0 = air).
+    /// Updates all counters automatically: `non_empty_block_count`,
+    /// `fluid_count`, `ticking_block_count`, and `ticking_fluid_count`.
     ///
     /// # Errors
     ///
@@ -116,13 +134,37 @@ impl LevelChunkSection {
     ) -> Result<u32, PalettedContainerError> {
         let old = self.states.get_and_set(x, y, z, state_id)?;
         if old != state_id {
-            if old == 0 && state_id != 0 {
-                self.non_empty_block_count += 1;
-            } else if old != 0 && state_id == 0 {
+            // Decrement counters for the old state.
+            #[allow(clippy::cast_possible_truncation)]
+            let old_state = BlockStateId(old as u16);
+            if !old_state.is_air() {
                 self.non_empty_block_count -= 1;
+                if old_state.ticks_randomly() {
+                    self.ticking_block_count -= 1;
+                }
+                if old_state.is_liquid() {
+                    self.fluid_count -= 1;
+                    if old_state.ticks_randomly() {
+                        self.ticking_fluid_count -= 1;
+                    }
+                }
             }
-            // TODO: update fluid_count, ticking_block_count, ticking_fluid_count
-            // once block property lookups are available
+
+            // Increment counters for the new state.
+            #[allow(clippy::cast_possible_truncation)]
+            let new_state = BlockStateId(state_id as u16);
+            if !new_state.is_air() {
+                self.non_empty_block_count += 1;
+                if new_state.ticks_randomly() {
+                    self.ticking_block_count += 1;
+                }
+                if new_state.is_liquid() {
+                    self.fluid_count += 1;
+                    if new_state.ticks_randomly() {
+                        self.ticking_fluid_count += 1;
+                    }
+                }
+            }
         }
         Ok(old)
     }
@@ -207,12 +249,37 @@ impl LevelChunkSection {
         })
     }
 
-    /// Recalculates `non_empty_block_count` by scanning all 4096 positions.
+    /// Recalculates all counters by scanning all 4096 positions.
     ///
-    /// Note: `fluid_count`, `ticking_block_count`, and `ticking_fluid_count` require
-    /// block property lookups and are not recalculated here.
+    /// Uses [`BlockStateId`] property lookups to determine fluid and ticking
+    /// status for each block state.
     pub fn recalculate_counts(&mut self) {
-        self.non_empty_block_count = self.states.count_non_zero() as i16;
+        let mut non_empty: i16 = 0;
+        let mut fluid: i16 = 0;
+        let mut ticking_block: i16 = 0;
+        let mut ticking_fluid: i16 = 0;
+
+        self.states.for_each_value(|raw| {
+            #[allow(clippy::cast_possible_truncation)]
+            let sid = BlockStateId(raw as u16);
+            if !sid.is_air() {
+                non_empty += 1;
+                if sid.ticks_randomly() {
+                    ticking_block += 1;
+                }
+                if sid.is_liquid() {
+                    fluid += 1;
+                    if sid.ticks_randomly() {
+                        ticking_fluid += 1;
+                    }
+                }
+            }
+        });
+
+        self.non_empty_block_count = non_empty;
+        self.fluid_count = fluid;
+        self.ticking_block_count = ticking_block;
+        self.ticking_fluid_count = ticking_fluid;
     }
 
     /// Returns a clone of the block states container.
@@ -330,5 +397,159 @@ mod tests {
         section.non_empty_block_count = 99;
         section.recalculate_counts();
         assert_eq!(section.non_empty_block_count(), 2);
+    }
+
+    /// Helper: look up the default state ID for a block by name.
+    fn default_state(name: &str) -> u32 {
+        use crate::registry::BlockRegistry;
+        u32::from(
+            BlockRegistry
+                .default_state(name)
+                .unwrap_or_else(|| panic!("{name} missing from registry"))
+                .0,
+        )
+    }
+
+    #[test]
+    fn test_fluid_count_increments_for_water() {
+        let water = default_state("minecraft:water");
+        let mut section = LevelChunkSection::new();
+
+        section.set_block_state(0, 0, 0, water).unwrap();
+        assert_eq!(section.non_empty_block_count(), 1);
+        assert_eq!(section.fluid_count(), 1);
+
+        section.set_block_state(1, 0, 0, water).unwrap();
+        assert_eq!(section.fluid_count(), 2);
+
+        // Remove one water → decrement
+        section.set_block_state(0, 0, 0, 0).unwrap();
+        assert_eq!(section.fluid_count(), 1);
+        assert_eq!(section.non_empty_block_count(), 1);
+    }
+
+    #[test]
+    fn test_fluid_count_increments_for_lava() {
+        let lava = default_state("minecraft:lava");
+        let mut section = LevelChunkSection::new();
+
+        section.set_block_state(0, 0, 0, lava).unwrap();
+        assert_eq!(section.fluid_count(), 1);
+
+        section.set_block_state(0, 0, 0, 0).unwrap();
+        assert_eq!(section.fluid_count(), 0);
+    }
+
+    #[test]
+    fn test_ticking_block_count_for_grass() {
+        let grass = default_state("minecraft:grass_block");
+        let stone = default_state("minecraft:stone");
+        let mut section = LevelChunkSection::new();
+
+        section.set_block_state(0, 0, 0, grass).unwrap();
+        assert_eq!(section.ticking_block_count(), 1);
+        assert_eq!(section.non_empty_block_count(), 1);
+
+        // Stone doesn't tick randomly.
+        section.set_block_state(1, 0, 0, stone).unwrap();
+        assert_eq!(section.ticking_block_count(), 1);
+        assert_eq!(section.non_empty_block_count(), 2);
+
+        // Replace grass with stone → ticking decrements.
+        section.set_block_state(0, 0, 0, stone).unwrap();
+        assert_eq!(section.ticking_block_count(), 0);
+        assert_eq!(section.non_empty_block_count(), 2);
+    }
+
+    #[test]
+    fn test_stone_does_not_affect_fluid_or_ticking() {
+        let stone = default_state("minecraft:stone");
+        let mut section = LevelChunkSection::new();
+
+        section.set_block_state(0, 0, 0, stone).unwrap();
+        assert_eq!(section.non_empty_block_count(), 1);
+        assert_eq!(section.fluid_count(), 0);
+        assert_eq!(section.ticking_block_count(), 0);
+        assert_eq!(section.ticking_fluid_count(), 0);
+    }
+
+    #[test]
+    fn test_replace_water_with_stone_updates_all_counters() {
+        let water = default_state("minecraft:water");
+        let stone = default_state("minecraft:stone");
+        let mut section = LevelChunkSection::new();
+
+        section.set_block_state(0, 0, 0, water).unwrap();
+        assert_eq!(section.fluid_count(), 1);
+
+        section.set_block_state(0, 0, 0, stone).unwrap();
+        assert_eq!(section.non_empty_block_count(), 1);
+        assert_eq!(section.fluid_count(), 0);
+    }
+
+    #[test]
+    fn test_filled_water_section_counters() {
+        let water = default_state("minecraft:water");
+        let section = LevelChunkSection::filled(water);
+        assert_eq!(section.non_empty_block_count(), 4096);
+        assert_eq!(section.fluid_count(), 4096);
+    }
+
+    #[test]
+    fn test_recalculate_counts_with_fluids_and_ticking() {
+        let water = default_state("minecraft:water");
+        let grass = default_state("minecraft:grass_block");
+        let stone = default_state("minecraft:stone");
+        let mut section = LevelChunkSection::new();
+
+        section.set_block_state(0, 0, 0, water).unwrap();
+        section.set_block_state(1, 0, 0, grass).unwrap();
+        section.set_block_state(2, 0, 0, stone).unwrap();
+
+        // Force wrong counts.
+        section.non_empty_block_count = 99;
+        section.fluid_count = 99;
+        section.ticking_block_count = 99;
+        section.ticking_fluid_count = 99;
+
+        section.recalculate_counts();
+        assert_eq!(section.non_empty_block_count(), 3);
+        assert_eq!(section.fluid_count(), 1);
+        assert_eq!(section.ticking_block_count(), 1); // grass
+        assert_eq!(section.ticking_fluid_count(), 0); // water doesn't tick randomly
+    }
+
+    #[test]
+    fn test_set_same_state_no_counter_change() {
+        let water = default_state("minecraft:water");
+        let mut section = LevelChunkSection::new();
+
+        section.set_block_state(0, 0, 0, water).unwrap();
+        assert_eq!(section.fluid_count(), 1);
+
+        // Setting the same state should not change counters.
+        section.set_block_state(0, 0, 0, water).unwrap();
+        assert_eq!(section.fluid_count(), 1);
+        assert_eq!(section.non_empty_block_count(), 1);
+    }
+
+    #[test]
+    fn test_from_parts_recalculates_all_counters() {
+        let water = default_state("minecraft:water");
+        let grass = default_state("minecraft:grass_block");
+
+        let mut section = LevelChunkSection::new();
+        section.set_block_state(0, 0, 0, water).unwrap();
+        section.set_block_state(1, 0, 0, grass).unwrap();
+
+        // Rebuild from parts — counters should be fully recalculated.
+        let rebuilt = LevelChunkSection::from_parts(
+            section.states_clone(),
+            section.biomes_clone(),
+        );
+        assert_eq!(rebuilt.non_empty_block_count(), 2);
+        assert_eq!(rebuilt.fluid_count(), 1);
+        assert_eq!(rebuilt.ticking_block_count(), 1);
+        assert_eq!(rebuilt.ticking_fluid_count(), 0);
     }
 }

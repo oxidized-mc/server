@@ -561,6 +561,17 @@ impl PalettedContainer {
         count
     }
 
+    /// Calls `f` with each stored value in flat-index order.
+    ///
+    /// This is more efficient than iterating 3D coordinates because it
+    /// skips bounds checking.
+    pub fn for_each_value(&self, mut f: impl FnMut(u32)) {
+        let size = self.strategy.size();
+        for i in 0..size {
+            f(self.get_by_index(i));
+        }
+    }
+
     /// Serializes this container to NBT disk format.
     ///
     /// Returns `(palette_ids, data_longs)` matching the Anvil on-disk format.

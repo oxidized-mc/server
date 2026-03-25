@@ -53,7 +53,7 @@ impl Packet for ClientboundRegistryDataPacket {
             let has_data = types::read_bool(&mut data)?;
             let nbt_data = if has_data {
                 let mut reader = data.reader();
-                let mut acc = oxidized_nbt::NbtAccounter::unlimited();
+                let mut acc = oxidized_nbt::NbtAccounter::default_quota();
                 let compound = oxidized_nbt::read_network_nbt(&mut reader, &mut acc)?;
                 data = reader.into_inner();
                 Some(compound)

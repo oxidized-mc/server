@@ -72,7 +72,7 @@ pub fn write_component_nbt(buf: &mut BytesMut, component: &Component) {
 /// component structure is invalid.
 pub fn read_component_nbt(data: &mut Bytes) -> Result<Component, PacketDecodeError> {
     let mut cursor = std::io::Cursor::new(data.as_ref());
-    let mut acc = oxidized_nbt::NbtAccounter::unlimited();
+    let mut acc = oxidized_nbt::NbtAccounter::default_quota();
     let compound = oxidized_nbt::read_network_nbt(&mut cursor, &mut acc)
         .map_err(|e| PacketDecodeError::InvalidData(format!("NBT decode error: {e}")))?;
     let consumed = cursor.position() as usize;

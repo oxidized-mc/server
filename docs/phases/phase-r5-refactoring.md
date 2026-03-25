@@ -28,7 +28,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.13 | Replace magic numbers with named constants | ✅ Done |
 | R5.14 | Benchmark & fuzz testing infrastructure | ✅ Done |
 | R5.15 | Per-player operator permissions (`ops.json`) | ✅ Done |
-| R5.16 | Safety hardening & cleanup | 📋 Planned |
+| R5.16 | Safety hardening & cleanup | ✅ Done |
 | R5.17 | Entity selector completeness | 📋 Planned |
 | R5.18 | Config cleanup: remove Java leftovers & extract hardcoded values | 📋 Planned |
 
@@ -1210,47 +1210,48 @@ network input, so the paletted container (which IS on the wire path) was priorit
 
 **Source:** memories.md Phase 5/12/17/22 retrospectives, code TODOs
 
+**Status:** ✅ Done
+
 **Combines 6 small independent items into one sub-phase:**
 
 **Items:**
 
-1. **Bound `read_component_nbt` NbtAccounter** (security)
-   - `oxidized-protocol/src/chat/` uses unlimited `NbtAccounter` for
-     reading component NBT — fine for server-created packets but unsafe
-     if ever used for untrusted client input
-   - Add a reasonable size limit (2 MB, matching vanilla network limit)
-   - Source: memories.md Phase 17 tech debt
+1. **Bound `read_component_nbt` NbtAccounter** (security) ✅
+   - Replaced `NbtAccounter::unlimited()` with `NbtAccounter::default_quota()`
+     (2 MiB, matching vanilla network limit) in `read_component_nbt()` and
+     `clientbound_registry_data` packet decode
+   - All network-facing NBT reads now enforce the vanilla size budget
 
-2. **Rate limiter: disconnect persistent spammers** (security)
-   - Chat rate limiter currently sends a warning but doesn't disconnect
-     players who persistently exceed the limit
-   - Add disconnect after N consecutive violations (vanilla behavior)
-   - Source: memories.md Phase 17 tech debt
+2. **Rate limiter: disconnect persistent spammers** (security) ✅
+   - Already implemented: `chat/rate_limit.rs` disconnects with
+     `"disconnect.spam"` after exceeding threshold (200 / 20-per-msg)
+   - Also applied to commands — no changes needed
 
-3. **Player removal from PlayerList on disconnect** (cleanup)
-   - No player removal from `PlayerList` on disconnect — cleanup is
-     best-effort log + remove
-   - Ensure deterministic cleanup: remove from PlayerList, broadcast
-     `PlayerInfoRemove`, clean up all references
-   - Source: memories.md Phase 12 tech debt ("Still open")
+3. **Player removal from PlayerList on disconnect** (cleanup) ✅
+   - Already implemented: deterministic cleanup in `play/mod.rs` —
+     `PlayerList::remove()`, `PlayerInfoRemove` broadcast, entity removal
+   - No changes needed
 
-4. **Replace `spawn_pos` reuse with `mining_pos` field** (correctness)
-   - `spawn_pos` field on `ServerPlayer` is temporarily reused for mining
-     position tracking — needs a proper `mining_pos: Option<BlockPos>`
-   - Straightforward struct field addition + update call sites
-   - Source: memories.md Phase 22 gotchas
+4. **Replace `spawn_pos` reuse with `mining_pos` field** (correctness) ✅
+   - Already fixed: `MiningState::start_pos` is a proper `Option<BlockPos>`
+     in `server_player.rs`, not reusing `spawn_pos`
+   - No changes needed
 
-5. **Update fluid/ticking counters in chunk sections** (correctness)
-   - `chunk/section.rs` TODO: "update fluid_count, ticking_block_count,
-     ticking_fluid_count" — now unblocked by R5.1/R5.2 block property
-     lookups (`BlockStateId::is_liquid()`, `ticks_randomly()`)
-   - Source: code TODO in `oxidized-world/src/chunk/section.rs`
+5. **Update fluid/ticking counters in chunk sections** (correctness) ✅
+   - `set_block_state()` now maintains `fluid_count`, `ticking_block_count`,
+     and `ticking_fluid_count` using `BlockStateId` property lookups
+   - `recalculate_counts()` now recalculates all four counters
+   - `from_parts()` calls `recalculate_counts()` for full accuracy
+   - `filled()` computes correct counters for the fill block
+   - Added `PalettedContainer::for_each_value()` for efficient iteration
+   - 14 new unit tests covering all counter transitions
 
-6. **Evaluate `reqwest` → lighter HTTP client** (dependency cleanup)
-   - `reqwest` is a heavy dependency for a single Mojang auth endpoint
-   - Evaluate `ureq` or `hyper` as lighter alternatives
-   - If benefit is marginal, document the decision and close the item
-   - Source: memories.md Phase 4 tech debt ("Still open")
+6. **Evaluate `reqwest` → lighter HTTP client** (dependency cleanup) ✅
+   - Evaluated `ureq` (sync-only, incompatible), `hyper` (more boilerplate),
+     and custom HTTP. Decision: **keep `reqwest`** — only one HTTP call
+     exists, all features (async TLS, JSON, pooling) are required, switching
+     breaks public API for marginal compile-time savings (~2-3 s).
+   - Rationale documented in `auth.rs` module doc
 
 **Verification:**
 - Each item has its own unit test or regression test
