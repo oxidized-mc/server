@@ -21,7 +21,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("tick")
             .description("Controls the server tick rate")
-            .requires(|s: &CommandSourceStack| s.has_permission(3))
+            .requires_op_level(3)
             // /tick query
             .then(
                 literal("query").executes(|ctx: &CommandContext<CommandSourceStack>| {

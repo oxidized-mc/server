@@ -17,7 +17,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("say")
             .description("Sends a message in chat to other players")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             .then(
                 argument("message", ArgumentType::String(StringKind::GreedyPhrase)).executes(
                     |ctx: &CommandContext<CommandSourceStack>| {

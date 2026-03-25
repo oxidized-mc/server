@@ -438,11 +438,14 @@ mod tests {
 
     fn make_source(permission_level: u32) -> CommandSourceStack {
         CommandSourceStack {
-            source: CommandSourceKind::Console,
+            source: CommandSourceKind::Player {
+                name: "TestPlayer".to_string(),
+                uuid: uuid::Uuid::nil(),
+            },
             position: (0.0, 64.0, 0.0),
             rotation: (0.0, 0.0),
             permission_level,
-            display_name: "Console".to_string(),
+            display_name: "TestPlayer".to_string(),
             server: Arc::new(MockServer),
             feedback_sender: Arc::new(|_| {}),
             is_silent: false,
@@ -530,6 +533,28 @@ mod tests {
                 .executes(|_| Ok(1)),
         );
         let src = make_source(4);
+        let parse = d.parse("stop", src).unwrap();
+        assert_eq!(d.execute(&parse).unwrap(), 1);
+    }
+
+    #[test]
+    fn console_source_always_has_permission() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("stop")
+                .requires(|s: &CommandSourceStack| s.has_permission(4))
+                .executes(|_| Ok(1)),
+        );
+        let src = CommandSourceStack {
+            source: CommandSourceKind::Console,
+            position: (0.0, 0.0, 0.0),
+            rotation: (0.0, 0.0),
+            permission_level: 0, // Console should bypass regardless
+            display_name: "Console".to_string(),
+            server: Arc::new(MockServer),
+            feedback_sender: Arc::new(|_| {}),
+            is_silent: false,
+        };
         let parse = d.parse("stop", src).unwrap();
         assert_eq!(d.execute(&parse).unwrap(), 1);
     }

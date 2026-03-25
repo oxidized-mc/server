@@ -13,7 +13,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("op")
             .description("Grant operator status")
-            .requires(|s: &CommandSourceStack| s.has_permission(3))
+            .requires_op_level(3)
             .then(
                 argument("targets", ArgumentType::GameProfile).executes(
                     |ctx: &CommandContext<CommandSourceStack>| {

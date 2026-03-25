@@ -15,7 +15,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("effect")
             .description("Add or remove status effects")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             // /effect give <targets> <effect> [seconds] [amplifier] [hideParticles]
             .then(
                 literal("give").then(

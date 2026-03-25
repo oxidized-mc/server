@@ -19,7 +19,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("gamemode")
             .description("Sets a player's game mode")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             .then(
                 argument("gamemode", ArgumentType::Gamemode)
                     // /gamemode <mode> — apply to self

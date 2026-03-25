@@ -15,7 +15,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("give")
             .description("Gives an item to a player")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             .then(
                 argument(
                     "targets",

@@ -21,7 +21,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("time")
             .description("Changes or queries the world's game time")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             // /time set ...
             .then(
                 literal("set")

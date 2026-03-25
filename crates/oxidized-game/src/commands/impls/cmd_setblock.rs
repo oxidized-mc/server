@@ -17,7 +17,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("setblock")
             .description("Changes a block to another block")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             .then(
                 argument("pos", ArgumentType::BlockPos).then(
                     argument("block", ArgumentType::BlockState)

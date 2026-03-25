@@ -16,7 +16,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("gamerule")
             .description("Sets or queries a game rule value")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             // /gamerule <rule>
             .then(
                 argument("rule", ArgumentType::String(StringKind::SingleWord))

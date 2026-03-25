@@ -15,7 +15,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("kill")
             .description("Kills entities")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             // /kill — kill self
             .executes(|_ctx: &CommandContext<CommandSourceStack>| {
                 // TODO: Actually kill the source player — requires

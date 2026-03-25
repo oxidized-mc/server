@@ -323,6 +323,44 @@ impl<S: Clone + Send + Sync + 'static> From<LiteralBuilder<S>> for CommandNode<S
     }
 }
 
+// ── CommandSourceStack convenience methods ───────────────────────────
+
+use super::source::CommandSourceStack;
+
+impl LiteralBuilder<CommandSourceStack> {
+    /// Marks this command as requiring operator status (permission level ≥ 2).
+    ///
+    /// Console sources always pass this check.
+    pub fn requires_op(self) -> Self {
+        self.requires(|s: &CommandSourceStack| s.has_permission(2))
+    }
+
+    /// Marks this command as requiring a specific permission level.
+    ///
+    /// Console sources always pass this check.
+    /// Common levels: 2 = gamemaster, 3 = admin, 4 = owner.
+    pub fn requires_op_level(self, level: u32) -> Self {
+        self.requires(move |s: &CommandSourceStack| s.has_permission(level))
+    }
+}
+
+impl ArgumentBuilder<CommandSourceStack> {
+    /// Marks this argument as requiring operator status (permission level ≥ 2).
+    ///
+    /// Console sources always pass this check.
+    pub fn requires_op(self) -> Self {
+        self.requires(|s: &CommandSourceStack| s.has_permission(2))
+    }
+
+    /// Marks this argument as requiring a specific permission level.
+    ///
+    /// Console sources always pass this check.
+    /// Common levels: 2 = gamemaster, 3 = admin, 4 = owner.
+    pub fn requires_op_level(self, level: u32) -> Self {
+        self.requires(move |s: &CommandSourceStack| s.has_permission(level))
+    }
+}
+
 /// Builder for argument nodes.
 pub struct ArgumentBuilder<S> {
     name: String,

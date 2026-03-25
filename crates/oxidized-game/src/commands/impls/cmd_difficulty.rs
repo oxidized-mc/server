@@ -29,7 +29,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("difficulty")
             .description("Sets the difficulty level")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             // /difficulty — query current difficulty
             .executes(|ctx: &CommandContext<CommandSourceStack>| {
                 let diff = ctx.source.server.difficulty();

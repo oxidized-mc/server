@@ -13,7 +13,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("seed")
             .description("Displays the world seed")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             .executes(|ctx: &CommandContext<CommandSourceStack>| {
                 let seed = ctx.source.server.seed();
                 // Build a clickable seed component like vanilla does

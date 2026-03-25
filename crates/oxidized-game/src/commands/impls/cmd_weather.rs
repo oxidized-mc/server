@@ -16,7 +16,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("weather")
             .description("Sets the weather")
-            .requires(|s: &CommandSourceStack| s.has_permission(2))
+            .requires_op()
             .then(
                 literal("clear")
                     .executes(weather_fn(WeatherType::Clear, "commands.weather.set.clear"))

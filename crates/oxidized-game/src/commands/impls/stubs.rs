@@ -85,18 +85,19 @@ fn register_one(
     description: &'static str,
     permission_level: u32,
 ) {
-    d.register(
-        literal(name)
-            .description(description)
-            .requires(move |s: &CommandSourceStack| s.has_permission(permission_level))
-            .executes(move |ctx: &CommandContext<CommandSourceStack>| {
-                ctx.source
-                    .send_translatable_failure("commands.help.failed", vec![]);
-                ctx.source
-                    .send_failure(&Component::text(format!("/{name} is not yet implemented")));
-                Ok(0)
-            }),
-    );
+    let mut builder = literal(name)
+        .description(description)
+        .executes(move |ctx: &CommandContext<CommandSourceStack>| {
+            ctx.source
+                .send_translatable_failure("commands.help.failed", vec![]);
+            ctx.source
+                .send_failure(&Component::text(format!("/{name} is not yet implemented")));
+            Ok(0)
+        });
+    if permission_level > 0 {
+        builder = builder.requires_op_level(permission_level);
+    }
+    d.register(builder);
 }
 
 /// Registers all unimplemented stub commands (and their aliases).

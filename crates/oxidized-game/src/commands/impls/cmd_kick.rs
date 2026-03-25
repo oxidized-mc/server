@@ -19,7 +19,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
     d.register(
         literal("kick")
             .description("Kicks a player off the server")
-            .requires(|s: &CommandSourceStack| s.has_permission(3))
+            .requires_op_level(3)
             .then(
                 argument(
                     "targets",

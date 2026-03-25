@@ -29,7 +29,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 fn build_tp_tree(name: &'static str) -> crate::commands::nodes::LiteralBuilder<CommandSourceStack> {
     literal(name)
         .description("Teleports entities")
-        .requires(|s: &CommandSourceStack| s.has_permission(2))
+        .requires_op()
         // /tp <location> — teleport self to coordinates
         .then(argument("location", ArgumentType::Vec3).executes(exec_tp_location))
         // /tp <destination> — teleport self to entity

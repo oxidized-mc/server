@@ -227,9 +227,16 @@ pub struct CommandSourceStack {
 }
 
 impl CommandSourceStack {
+    /// Returns `true` if the source is the server console.
+    pub fn is_console(&self) -> bool {
+        matches!(self.source, CommandSourceKind::Console)
+    }
+
     /// Returns `true` if the source has at least the given permission level.
+    ///
+    /// Console sources always return `true` regardless of the level.
     pub fn has_permission(&self, level: u32) -> bool {
-        self.permission_level >= level
+        self.is_console() || self.permission_level >= level
     }
 
     /// Sends a success message to the source and optionally broadcasts to ops.
