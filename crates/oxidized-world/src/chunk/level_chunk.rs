@@ -262,20 +262,14 @@ impl LevelChunk {
     /// creating an all-zeros layer if absent. Returns a mutable reference.
     pub fn ensure_sky_light(&mut self, section_idx: usize) -> &mut DataLayer {
         let li = Self::light_index(section_idx);
-        if self.sky_light[li].is_none() {
-            self.sky_light[li] = Some(DataLayer::new());
-        }
-        self.sky_light[li].as_mut().expect("just inserted")
+        self.sky_light[li].get_or_insert_with(DataLayer::new)
     }
 
     /// Ensures a block light `DataLayer` exists for the given section index,
     /// creating an all-zeros layer if absent. Returns a mutable reference.
     pub fn ensure_block_light(&mut self, section_idx: usize) -> &mut DataLayer {
         let li = Self::light_index(section_idx);
-        if self.block_light[li].is_none() {
-            self.block_light[li] = Some(DataLayer::new());
-        }
-        self.block_light[li].as_mut().expect("just inserted")
+        self.block_light[li].get_or_insert_with(DataLayer::new)
     }
 
     /// Returns the sky light level at a world position (0–15), or 0 if

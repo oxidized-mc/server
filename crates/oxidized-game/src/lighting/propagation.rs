@@ -103,7 +103,7 @@ pub(crate) fn propagate_block_light_increase(
             let nz = entry.z + dz;
 
             // Check for cross-chunk boundary.
-            if nx < 0 || nx >= 16 || nz < 0 || nz >= 16 {
+            if !(0..16).contains(&nx) || !(0..16).contains(&nz) {
                 boundary.push(BoundaryEntry {
                     world_x: chunk_base_x + nx,
                     world_y: ny,
@@ -162,7 +162,7 @@ pub(crate) fn propagate_block_light_decrease(
             let ny = entry.y + dy;
             let nz = entry.z + dz;
 
-            if nx < 0 || nx >= 16 || nz < 0 || nz >= 16 {
+            if !(0..16).contains(&nx) || !(0..16).contains(&nz) {
                 // Boundary decrease — neighbor chunk needs to handle this.
                 if entry.old_level > 1 {
                     boundary.push(BoundaryEntry {
@@ -231,7 +231,7 @@ pub(crate) fn propagate_sky_light_increase(
             let ny = entry.y + dy;
             let nz = entry.z + dz;
 
-            if nx < 0 || nx >= 16 || nz < 0 || nz >= 16 {
+            if !(0..16).contains(&nx) || !(0..16).contains(&nz) {
                 boundary.push(BoundaryEntry {
                     world_x: chunk_base_x + nx,
                     world_y: ny,
@@ -283,7 +283,7 @@ pub(crate) fn propagate_sky_light_decrease(
             let ny = entry.y + dy;
             let nz = entry.z + dz;
 
-            if nx < 0 || nx >= 16 || nz < 0 || nz >= 16 {
+            if !(0..16).contains(&nx) || !(0..16).contains(&nz) {
                 if entry.old_level > 1 {
                     boundary.push(BoundaryEntry {
                         world_x: chunk_base_x + nx,

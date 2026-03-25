@@ -263,7 +263,7 @@ fn check_neighbor_light_sources(
         let ny = y + dy;
         let nz = z + dz;
 
-        if nx < 0 || nx >= 16 || nz < 0 || nz >= 16 {
+        if !(0..16).contains(&nx) || !(0..16).contains(&nz) {
             continue;
         }
         if ny < chunk.min_y() || ny >= chunk.max_y() {
