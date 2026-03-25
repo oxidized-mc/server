@@ -32,7 +32,7 @@ impl Packet for ClientboundContainerSetContentPacket {
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
         let container_id = crate::codec::types::read_u8(&mut data)?;
         let state_id = varint::read_varint_buf(&mut data)?;
-        let items = crate::codec::types::read_list(&mut data, |d| slot::read_slot(d))?;
+        let items = crate::codec::types::read_list(&mut data, slot::read_slot)?;
         let carried_item = slot::read_slot(&mut data)?;
         Ok(Self {
             container_id,

@@ -165,9 +165,9 @@ impl ServerContext {
     /// Initialises the weak self-reference. Must be called once, immediately
     /// after wrapping in `Arc`.
     pub fn init_self_ref(self: &Arc<Self>) {
-        self.self_ref
-            .set(Arc::downgrade(self))
-            .expect("init_self_ref called twice");
+        if self.self_ref.set(Arc::downgrade(self)).is_err() {
+            warn!("init_self_ref called twice — ignoring duplicate");
+        }
     }
     /// Sends a broadcast message to all connected players, logging a warning
     /// if no receivers are active.
@@ -224,11 +224,15 @@ impl ServerContext {
         };
 
         let perm_level = self.ops.get_permission_level(&uuid).clamp(0, 4) as u32;
-        let server: Arc<dyn ServerHandle> = self
+        let Some(server) = self
             .self_ref
             .get()
             .and_then(std::sync::Weak::upgrade)
-            .expect("ServerContext dropped or init_self_ref not called");
+            .map(|arc| arc as Arc<dyn ServerHandle>)
+        else {
+            warn!("cannot send command tree update: ServerContext dropped or not initialised");
+            return;
+        };
         let source = oxidized_game::commands::CommandSourceStack {
             source: oxidized_game::commands::CommandSourceKind::Player {
                 name: player_name.clone(),

@@ -34,7 +34,7 @@ impl Packet for ClientboundPlayerInfoRemovePacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::with_capacity(5 + self.uuids.len() * 16);
-        types::write_list(&mut buf, &self.uuids, |b, u| types::write_uuid(b, u));
+        types::write_list(&mut buf, &self.uuids, types::write_uuid);
         buf
     }
 }

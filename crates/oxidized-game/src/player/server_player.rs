@@ -118,6 +118,12 @@ pub struct TeleportTracker {
     id_counter: i32,
 }
 
+impl Default for TeleportTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TeleportTracker {
     /// Creates a new empty tracker.
     pub fn new() -> Self {

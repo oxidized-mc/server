@@ -184,9 +184,7 @@ enum ChildMatch<'a, S> {
         /// The matched child node.
         node: &'a CommandNode<S>,
         /// The command handler, if the matched node is executable.
-        cmd: Option<
-            std::sync::Arc<dyn Fn(&CommandContext<S>) -> Result<i32, CommandError> + Send + Sync>,
-        >,
+        cmd: Option<super::nodes::CommandFn<S>>,
     },
     /// No child matched the input.
     NoMatch,
