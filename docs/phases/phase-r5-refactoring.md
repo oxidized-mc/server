@@ -26,6 +26,10 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.11 | Decompose oversized structs | ✅ Complete |
 | R5.12 | Break down long functions & reduce nesting | 📋 Planned |
 | R5.13 | Replace magic numbers with named constants | 📋 Planned |
+| R5.14 | Benchmark & fuzz testing infrastructure | 📋 Planned |
+| R5.15 | Per-player operator permissions (`ops.json`) | 📋 Planned |
+| R5.16 | Safety hardening & cleanup | 📋 Planned |
+| R5.17 | Entity selector completeness | 📋 Planned |
 
 ---
 
@@ -242,12 +246,18 @@ Without this refactoring:
 | R5.11 | — | Independent; struct decomposition |
 | R5.12 | — | Independent; function decomposition |
 | R5.13 | — | Independent; constant extraction |
+| R5.14 | — | Independent; testing infrastructure |
+| R5.15 | — | Independent; permission system |
+| R5.16 | R5.1, R5.2 | Fluid counters need block property lookups |
+| R5.17 | — | Independent; command system improvements |
 
 **Parallelizable groups:**
 - **Group A** (sequential): R5.1 → R5.2 → R5.3 → R5.4 → R5.5
 - **Group B** (independent): R5.6, R5.7, R5.8, R5.9, R5.10, R5.11, R5.12, R5.13
+- **Group C** (tech debt): R5.14, R5.15, R5.16 (after Group A), R5.17
 
-Group B sub-tasks can be done in any order and in parallel with Group A.
+Groups B and C can be done in any order and in parallel with Group A.
+R5.16 has a soft dependency on R5.1/R5.2 for the fluid counter item only.
 
 ---
 
@@ -1109,6 +1119,191 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 ---
 
+### R5.14: Benchmark & Fuzz Testing Infrastructure
+
+**Source:** memories.md Phase 5 & 12 retrospectives ("Still open"), ADR-034
+
+**Current problems:**
+- **No benchmark suite:** ADR-010 calls for criterion benchmarks. `[profile.bench]`
+  configured in `Cargo.toml` but no `benches/` directories or criterion benchmarks exist.
+- **No fuzz tests:** `cargo-fuzz` infrastructure never set up. Protocol parsers, NBT
+  reader/writer, VarInt/VarLong are all untested against adversarial input.
+- **Connection state tests impossible:** `Connection::new()` requires a real `TcpStream`;
+  state transition logic cannot be unit-tested without extracting it.
+
+**Steps:**
+
+1. **Set up criterion benchmarks** in `crates/<crate>/benches/`:
+   - `oxidized-nbt`: NBT parse/write roundtrip, SNBT formatting, compound lookups
+   - `oxidized-protocol`: VarInt/VarLong encode/decode, packet encode/decode
+   - `oxidized-world`: Block state lookup, tag membership check, chunk serialization
+   - `oxidized-game`: Physics tick step, block property access
+   - Add `criterion` as a workspace dev-dependency, configure `[[bench]]` targets
+
+2. **Set up cargo-fuzz targets** in `crates/<crate>/fuzz/`:
+   - `oxidized-nbt`: `fuzz_nbt_read` (arbitrary bytes → NbtReader)
+   - `oxidized-protocol`: `fuzz_varint`, `fuzz_packet_decode` (per-state)
+   - `oxidized-world`: `fuzz_region_read`, `fuzz_paletted_container`
+   - Document in `CONTRIBUTING.md` how to run fuzz targets
+
+3. **Extract connection state logic** for unit testing:
+   - Factor state transition logic out of `Connection` into a testable
+     `ConnectionStateMachine` or equivalent that doesn't require `TcpStream`
+   - Add unit tests for state transitions without network I/O
+
+**Verification:**
+- `cargo bench --workspace` runs without errors (benchmarks produce results)
+- `cargo fuzz list` in each crate shows configured targets
+- New connection state tests cover all transitions
+
+---
+
+### R5.15: Per-Player Operator Permissions (`ops.json`)
+
+**Source:** memories.md Phase 18/22 retrospectives, 3+ code TODOs
+
+**Current problems:**
+- All players receive the server-wide `op_permission_level` from config
+- No `ops.json` file support — vanilla uses this for per-player permission levels
+- Spawn protection checks cannot distinguish operators from regular players
+- Command permission level hardcoded as `4` in `commands.rs`
+
+**Related TODOs in code:**
+- `network/play/mod.rs:420` — "implement per-player ops (ops.json)"
+- `network/mod.rs:112` — "Replace with per-player ops from `ops.json`"
+- `network/play/block_interaction.rs:81` — "skip protection for operators
+  once ops.json is implemented"
+- `network/play/commands.rs:44` — "read actual permission level"
+
+**Steps:**
+
+1. **Define `OpsConfig` data structure** and `ops.json` schema:
+   ```rust
+   pub struct OpEntry {
+       pub uuid: Uuid,
+       pub name: String,
+       pub level: i32,        // 1-4
+       pub bypasses_player_limit: bool,
+   }
+   ```
+
+2. **Implement `ops.json` load/save** in `oxidized-server`:
+   - Load on startup, create empty file if missing
+   - `DashMap<Uuid, OpEntry>` for O(1) lookup
+   - Save on modification (op/deop commands)
+
+3. **Wire permission lookup** into existing systems:
+   - `CommandSourceStack::has_permission()` checks `ops.json` entry
+   - `commands.rs` reads actual player permission level from ops map
+   - Spawn protection checks operator status
+   - `EntityEventPacket` sends correct per-player permission level on login
+
+4. **Implement `/op` and `/deop` commands** (currently stubs):
+   - `/op <player>` — add to ops.json with configured level
+   - `/deop <player>` — remove from ops.json
+   - Broadcast permission level change via `EntityEventPacket`
+
+**Verification:**
+- Unit tests: load/save ops.json roundtrip, permission level lookup
+- Integration test: player with op entry gets correct permission level
+- Regression: default behavior (no ops.json) matches current behavior
+- `cargo test --workspace` passes
+
+---
+
+### R5.16: Safety Hardening & Cleanup
+
+**Source:** memories.md Phase 5/12/17/22 retrospectives, code TODOs
+
+**Combines 6 small independent items into one sub-phase:**
+
+**Items:**
+
+1. **Bound `read_component_nbt` NbtAccounter** (security)
+   - `oxidized-protocol/src/chat/` uses unlimited `NbtAccounter` for
+     reading component NBT — fine for server-created packets but unsafe
+     if ever used for untrusted client input
+   - Add a reasonable size limit (2 MB, matching vanilla network limit)
+   - Source: memories.md Phase 17 tech debt
+
+2. **Rate limiter: disconnect persistent spammers** (security)
+   - Chat rate limiter currently sends a warning but doesn't disconnect
+     players who persistently exceed the limit
+   - Add disconnect after N consecutive violations (vanilla behavior)
+   - Source: memories.md Phase 17 tech debt
+
+3. **Player removal from PlayerList on disconnect** (cleanup)
+   - No player removal from `PlayerList` on disconnect — cleanup is
+     best-effort log + remove
+   - Ensure deterministic cleanup: remove from PlayerList, broadcast
+     `PlayerInfoRemove`, clean up all references
+   - Source: memories.md Phase 12 tech debt ("Still open")
+
+4. **Replace `spawn_pos` reuse with `mining_pos` field** (correctness)
+   - `spawn_pos` field on `ServerPlayer` is temporarily reused for mining
+     position tracking — needs a proper `mining_pos: Option<BlockPos>`
+   - Straightforward struct field addition + update call sites
+   - Source: memories.md Phase 22 gotchas
+
+5. **Update fluid/ticking counters in chunk sections** (correctness)
+   - `chunk/section.rs` TODO: "update fluid_count, ticking_block_count,
+     ticking_fluid_count" — now unblocked by R5.1/R5.2 block property
+     lookups (`BlockStateId::is_liquid()`, `ticks_randomly()`)
+   - Source: code TODO in `oxidized-world/src/chunk/section.rs`
+
+6. **Evaluate `reqwest` → lighter HTTP client** (dependency cleanup)
+   - `reqwest` is a heavy dependency for a single Mojang auth endpoint
+   - Evaluate `ureq` or `hyper` as lighter alternatives
+   - If benefit is marginal, document the decision and close the item
+   - Source: memories.md Phase 4 tech debt ("Still open")
+
+**Verification:**
+- Each item has its own unit test or regression test
+- `cargo test --workspace` passes
+- `cargo clippy --workspace -- -D warnings` passes
+- Security items verified with targeted test cases
+
+---
+
+### R5.17: Entity Selector Completeness
+
+**Source:** memories.md Phase 18 retrospective, code TODOs
+
+**Current problems:**
+- `@r` selector is deterministic — should be properly randomized
+- Filter syntax `[key=value]` is accepted by the parser (bracket
+  detected) but filters are completely ignored at runtime
+- Both are small, independent improvements to the command system
+
+**Steps:**
+
+1. **Randomize `@r` selector**:
+   - Replace deterministic selection with `rand::thread_rng().gen_range()`
+   - Add `rand` as a dependency to `oxidized-game` (if not already present)
+   - Test: verify `@r` produces different results across calls (statistical)
+
+2. **Implement basic `[key=value]` filter processing**:
+   - Parse filter pairs from bracket syntax (already tokenized)
+   - Implement core filters matching vanilla:
+     - `type=<entity_type>` — filter by entity type
+     - `name=<name>` — filter by entity name
+     - `distance=<range>` — filter by distance from source
+     - `limit=<N>` — cap result count
+     - `sort=nearest|furthest|random|arbitrary` — result ordering
+     - `gamemode=<mode>` — filter players by game mode
+   - Each filter is a predicate applied post-resolution
+   - Unrecognized filter keys log a warning and are ignored
+
+3. **Add tab-completion for filter keys** in entity selector suggestions
+
+**Verification:**
+- Unit tests: `@r` produces varied results, each filter correctly
+  includes/excludes entities
+- Integration test: `@a[gamemode=creative]` resolves correctly
+- `cargo test -p oxidized-game` passes
+
+---
+
 ## Risk Assessment
 
 | Risk | Likelihood | Impact | Mitigation |
@@ -1118,6 +1313,9 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 | Tag membership differs from string patterns | Low | High | Regression test: old function vs new for all block states |
 | Performance regression from larger table | Low | Low | Table is still <1 MB; benchmark block state lookups |
 | Breaking change in `BlockStateEntry` layout | Certain | Medium | Update all callers in same PR; no external consumers |
+| ops.json format drift from vanilla | Low | Medium | Test against vanilla-generated ops.json samples |
+| Fuzz targets find deep bugs | Medium | High | Fix bugs before merging; fuzz in CI nightly |
+| reqwest replacement breaks auth | Low | High | Feature-flag behind `light-http`; keep reqwest as fallback |
 
 ---
 
@@ -1149,6 +1347,14 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 10. **`cargo clippy --workspace -- -D warnings`** passes
 
+11. **Benchmark suite exists** — `cargo bench` runs in at least 3 crates
+
+12. **Fuzz targets exist** — `cargo fuzz list` shows targets for protocol and NBT
+
+13. **Per-player permissions** — `ops.json` loaded and used for command dispatch
+
+14. **No stale TODOs** for items addressed in R5.14–R5.17
+
 ---
 
 ## Estimated Scope
@@ -1168,7 +1374,13 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 | R5.11 | 10-15 | +200, -50 |
 | R5.12 | 8-12 | +100, -0 |
 | R5.13 | 10-15 | +80, -40 |
-| **Total** | ~140-190 | +1900, -2050 |
+| R5.14 | 10-15 | +600, -0 |
+| R5.15 | 8-12 | +400, -30 |
+| R5.16 | 8-10 | +150, -60 |
+| R5.17 | 3-5 | +200, -20 |
+| **Total** | ~190-260 | +3330, -2200 |
 
-Net reduction: ~150 lines. The key metric is not LOC but the elimination of
-string dispatch, runtime overhead, and duplication patterns.
+Net reduction: ~150 lines for R5.1–R5.13 (original scope). R5.14–R5.17 are net
+additions (new infrastructure, features, and safety improvements). The key metric
+is not LOC but the elimination of string dispatch, runtime overhead, duplication
+patterns, and accumulated tech debt.
