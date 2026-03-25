@@ -13,6 +13,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use oxidized_game::level::game_rules::GameRuleKey;
+use oxidized_game::lighting::cross_chunk::{
+    ChunkNeighbors, propagate_block_light_cross_chunk, propagate_sky_light_cross_chunk,
+};
 use oxidized_game::lighting::engine::LightEngine;
 use oxidized_game::net::light_serializer::build_light_data_filtered;
 use oxidized_protocol::codec::Packet;
@@ -237,34 +240,141 @@ fn process_light_updates(ctx: &ServerContext) {
             engine.queue_mut().push(update.clone());
         }
 
-        match engine.process_updates(&mut chunk) {
-            Ok(changed_sections) if !changed_sections.is_empty() => {
-                let light_data = build_light_data_filtered(
-                    chunk.sky_light_layers(),
-                    chunk.block_light_layers(),
-                    &changed_sections,
-                    chunk.min_y(),
-                );
-                drop(chunk); // Release write lock before broadcasting.
-                let pkt = ClientboundLightUpdatePacket {
-                    chunk_x: chunk_pos.x,
-                    chunk_z: chunk_pos.z,
-                    light_data,
-                };
-                let data = pkt.encode();
-                ctx.broadcast(BroadcastMessage {
-                    packet_id: ClientboundLightUpdatePacket::PACKET_ID,
-                    data: data.freeze(),
-                    exclude_entity: None,
-                    target_entity: None,
-                });
-            },
+        let result = match engine.process_updates(&mut chunk) {
+            Ok(result) => result,
             Err(e) => {
                 warn!(chunk = ?chunk_pos, error = %e, "Light update failed");
+                continue;
             },
-            _ => {},
+        };
+
+        // Broadcast light update for the center chunk.
+        if !result.changed_sections.is_empty() {
+            let light_data = build_light_data_filtered(
+                chunk.sky_light_layers(),
+                chunk.block_light_layers(),
+                &result.changed_sections,
+                chunk.min_y(),
+            );
+            drop(chunk); // Release write lock before broadcasting.
+            broadcast_light_update(ctx, chunk_pos.x, chunk_pos.z, light_data);
+        } else {
+            drop(chunk);
+        }
+
+        // Propagate boundary entries into neighbor chunks.
+        if result.block_boundary.is_empty() && result.sky_boundary.is_empty() {
+            continue;
+        }
+        propagate_cross_chunk_light(ctx, chunk_pos, &result.block_boundary, &result.sky_boundary);
+    }
+}
+
+/// Propagates boundary light entries into neighboring chunks and broadcasts
+/// light update packets for any affected neighbors.
+fn propagate_cross_chunk_light(
+    ctx: &ServerContext,
+    center: &ChunkPos,
+    block_boundary: &[oxidized_game::lighting::propagation::BoundaryEntry],
+    sky_boundary: &[oxidized_game::lighting::propagation::BoundaryEntry],
+) {
+    let cx = center.x;
+    let cz = center.z;
+
+    // Acquire write locks on available neighbor chunks.
+    // We look up each neighbor independently via DashMap to avoid holding
+    // multiple DashMap refs simultaneously (which could deadlock).
+    let neighbor_positions = [
+        (ChunkPos::new(cx, cz - 1), "north"),
+        (ChunkPos::new(cx, cz + 1), "south"),
+        (ChunkPos::new(cx + 1, cz), "east"),
+        (ChunkPos::new(cx - 1, cz), "west"),
+    ];
+
+    // Collect neighbor chunks that exist. We get() each from DashMap, clone
+    // the Arc, and release the DashMap ref before acquiring write locks.
+    let mut neighbor_arcs: [Option<std::sync::Arc<parking_lot::RwLock<oxidized_world::chunk::LevelChunk>>>; 4] =
+        [None, None, None, None];
+    for (i, (pos, _)) in neighbor_positions.iter().enumerate() {
+        if let Some(arc) = ctx.world.chunks.get(pos) {
+            neighbor_arcs[i] = Some(arc.clone());
         }
     }
+
+    // Acquire write locks.
+    let mut north_guard = neighbor_arcs[0].as_ref().map(|a| a.write());
+    let mut south_guard = neighbor_arcs[1].as_ref().map(|a| a.write());
+    let mut east_guard = neighbor_arcs[2].as_ref().map(|a| a.write());
+    let mut west_guard = neighbor_arcs[3].as_ref().map(|a| a.write());
+
+    let mut neighbors = ChunkNeighbors {
+        north: north_guard.as_deref_mut(),
+        south: south_guard.as_deref_mut(),
+        east: east_guard.as_deref_mut(),
+        west: west_guard.as_deref_mut(),
+    };
+
+    if !block_boundary.is_empty() {
+        propagate_block_light_cross_chunk(&mut neighbors, block_boundary, cx, cz);
+    }
+    if !sky_boundary.is_empty() {
+        propagate_sky_light_cross_chunk(&mut neighbors, sky_boundary, cx, cz);
+    }
+
+    // Broadcast light updates for each neighbor that was modified.
+    // We build the packet while still holding the write lock, then drop it.
+    for (i, (pos, _)) in neighbor_positions.iter().enumerate() {
+        let guard = match i {
+            0 => &north_guard,
+            1 => &south_guard,
+            2 => &east_guard,
+            3 => &west_guard,
+            _ => unreachable!(),
+        };
+        if let Some(chunk) = guard.as_deref() {
+            // Build a light update covering all sections (we don't track
+            // exactly which neighbor sections changed, so send all non-empty).
+            let min_y = chunk.min_y();
+            let section_count = chunk.section_count();
+            let all_sections: Vec<oxidized_protocol::types::SectionPos> = (0..section_count)
+                .map(|i| {
+                    oxidized_protocol::types::SectionPos::new(
+                        pos.x,
+                        (min_y >> 4) + i as i32,
+                        pos.z,
+                    )
+                })
+                .collect();
+            let light_data = build_light_data_filtered(
+                chunk.sky_light_layers(),
+                chunk.block_light_layers(),
+                &all_sections,
+                min_y,
+            );
+            broadcast_light_update(ctx, pos.x, pos.z, light_data);
+        }
+    }
+}
+
+/// Encodes and broadcasts a [`ClientboundLightUpdatePacket`] to all clients.
+fn broadcast_light_update(
+    ctx: &ServerContext,
+    chunk_x: i32,
+    chunk_z: i32,
+    light_data: oxidized_protocol::packets::play::LightUpdateData,
+) {
+    let pkt = ClientboundLightUpdatePacket {
+        chunk_x,
+        chunk_z,
+        light_data,
+    };
+    let data = pkt.encode();
+    ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundLightUpdatePacket::PACKET_ID,
+        data: data.freeze(),
+        exclude_entity: None,
+        target_entity: None,
+    });
 }
 
 /// Drains outbound entity packets produced by ECS systems and broadcasts

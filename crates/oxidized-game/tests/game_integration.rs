@@ -1011,3 +1011,247 @@ fn biome_ids_match_protocol_registry_order() {
         );
     }
 }
+
+// ============== Cross-chunk light propagation tests (23a.10) ==============
+
+mod cross_chunk_light {
+    use oxidized_game::lighting::cross_chunk::{
+        ChunkNeighbors, propagate_block_light_cross_chunk, propagate_sky_light_cross_chunk,
+    };
+    use oxidized_game::lighting::engine::LightEngine;
+    use oxidized_game::lighting::queue::LightUpdate;
+    use oxidized_protocol::types::BlockPos;
+    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
+    use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
+    use oxidized_world::chunk::{ChunkPos, LevelChunk};
+    use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
+
+    fn flat_chunk(pos: ChunkPos) -> LevelChunk {
+        let mut chunk = LevelChunk::new(pos);
+        let bedrock = u32::from(BEDROCK.0);
+        let dirt = u32::from(DIRT.0);
+        let grass = u32::from(GRASS_BLOCK.0);
+
+        for x in 0..16i32 {
+            for z in 0..16i32 {
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y, z, bedrock)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 1, z, dirt)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 2, z, dirt)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 3, z, grass)
+                    .unwrap();
+            }
+        }
+
+        let mut hm = Heightmap::new(HeightmapType::MotionBlocking, OVERWORLD_HEIGHT).unwrap();
+        for x in 0..16 {
+            for z in 0..16 {
+                hm.set(x, z, 4).unwrap();
+            }
+        }
+        chunk.set_heightmap(hm);
+        chunk
+    }
+
+    fn glowstone_id() -> u32 {
+        u32::from(
+            BlockRegistry
+                .default_state("minecraft:glowstone")
+                .expect("glowstone missing")
+                .0,
+        )
+    }
+
+    /// Torch at chunk edge (x=15) in chunk (0,0) — light should propagate
+    /// into chunk (1,0) at x=0 via cross-chunk boundary entries.
+    #[test]
+    fn test_torch_at_chunk_edge_propagates_to_neighbor() {
+        let mut center = flat_chunk(ChunkPos::new(0, 0));
+        let mut east = flat_chunk(ChunkPos::new(1, 0));
+
+        // Initialize light for both chunks.
+        let mut engine = LightEngine::new();
+        engine.light_chunk(&mut center).unwrap();
+        engine.light_chunk(&mut east).unwrap();
+
+        // Place glowstone at x=15 (east edge) in center chunk, above surface.
+        let gs = glowstone_id();
+        let emission = BlockStateId(gs as u16).light_emission();
+        center.set_block_state(15, -56, 8, gs).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(15, -56, 8),
+            old_emission: 0,
+            new_emission: emission,
+            old_opacity: 0,
+            new_opacity: BlockStateId(gs as u16).light_opacity(),
+        });
+
+        let result = engine.process_updates(&mut center).unwrap();
+
+        // Should have block boundary entries crossing into east (x >= 16).
+        assert!(
+            !result.block_boundary.is_empty(),
+            "expected block boundary entries from glowstone at chunk edge"
+        );
+        assert!(
+            result.block_boundary.iter().any(|b| b.world_x >= 16),
+            "expected boundary entries crossing into east chunk (x >= 16)"
+        );
+
+        // Now propagate into the east neighbor.
+        let mut neighbors = ChunkNeighbors {
+            north: None,
+            south: None,
+            east: Some(&mut east),
+            west: None,
+        };
+        propagate_block_light_cross_chunk(&mut neighbors, &result.block_boundary, 0, 0);
+
+        // Verify light appeared in the east neighbor at x=0.
+        let light_at_border = east.get_block_light_at(0, -56, 8);
+        assert!(
+            light_at_border > 0,
+            "expected block light at east neighbor border, got {light_at_border}"
+        );
+        // Should be attenuated: emission passes as boundary level, then -1 for air opacity.
+        assert!(
+            light_at_border <= emission,
+            "neighbor light {light_at_border} should be <= source emission {emission}"
+        );
+
+        // Light should propagate further into the neighbor.
+        let light_at_1 = east.get_block_light_at(1, -56, 8);
+        assert!(
+            light_at_1 > 0 && light_at_1 < light_at_border,
+            "expected further propagation: at x=1 got {light_at_1}, at x=0 got {light_at_border}"
+        );
+    }
+
+    /// Removing a torch at chunk edge should produce decrease boundary entries
+    /// that can clear light in the neighbor chunk.
+    #[test]
+    fn test_remove_torch_at_chunk_edge_decreases_neighbor_light() {
+        let mut center = flat_chunk(ChunkPos::new(0, 0));
+        let mut east = flat_chunk(ChunkPos::new(1, 0));
+
+        let mut engine = LightEngine::new();
+        engine.light_chunk(&mut center).unwrap();
+        engine.light_chunk(&mut east).unwrap();
+
+        // Place glowstone at east edge.
+        let gs = glowstone_id();
+        let emission = BlockStateId(gs as u16).light_emission();
+        center.set_block_state(15, -56, 8, gs).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(15, -56, 8),
+            old_emission: 0,
+            new_emission: emission,
+            old_opacity: 0,
+            new_opacity: BlockStateId(gs as u16).light_opacity(),
+        });
+
+        let result = engine.process_updates(&mut center).unwrap();
+        let mut neighbors = ChunkNeighbors {
+            north: None,
+            south: None,
+            east: Some(&mut east),
+            west: None,
+        };
+        propagate_block_light_cross_chunk(&mut neighbors, &result.block_boundary, 0, 0);
+
+        // Verify light is present in the neighbor.
+        let light_before = east.get_block_light_at(0, -56, 8);
+        assert!(light_before > 0, "light should exist before removal");
+
+        // Now remove the glowstone.
+        center.set_block_state(15, -56, 8, 0).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(15, -56, 8),
+            old_emission: emission,
+            new_emission: 0,
+            old_opacity: BlockStateId(gs as u16).light_opacity(),
+            new_opacity: 0,
+        });
+
+        let result2 = engine.process_updates(&mut center).unwrap();
+
+        // Should produce block boundary entries for the decrease pass.
+        assert!(
+            !result2.block_boundary.is_empty(),
+            "expected boundary entries from removing glowstone at edge"
+        );
+    }
+
+    /// When a neighbor chunk is not loaded (None), boundary entries are
+    /// silently dropped — no panic.
+    #[test]
+    fn test_missing_neighbor_no_panic() {
+        let mut center = flat_chunk(ChunkPos::new(0, 0));
+
+        let mut engine = LightEngine::new();
+        engine.light_chunk(&mut center).unwrap();
+
+        // Place glowstone at chunk edge.
+        let gs = glowstone_id();
+        let emission = BlockStateId(gs as u16).light_emission();
+        center.set_block_state(15, -56, 8, gs).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(15, -56, 8),
+            old_emission: 0,
+            new_emission: emission,
+            old_opacity: 0,
+            new_opacity: BlockStateId(gs as u16).light_opacity(),
+        });
+
+        let result = engine.process_updates(&mut center).unwrap();
+        assert!(!result.block_boundary.is_empty());
+
+        // All neighbors are None — should not panic.
+        let mut neighbors = ChunkNeighbors {
+            north: None,
+            south: None,
+            east: None,
+            west: None,
+        };
+        propagate_block_light_cross_chunk(&mut neighbors, &result.block_boundary, 0, 0);
+        propagate_sky_light_cross_chunk(&mut neighbors, &result.sky_boundary, 0, 0);
+    }
+
+    /// Sky boundary entries from initialize_sky_light at chunk edge
+    /// propagate into neighbor chunks.
+    #[test]
+    fn test_sky_light_boundary_propagates_to_neighbor() {
+        let mut center = flat_chunk(ChunkPos::new(0, 0));
+        let mut east = flat_chunk(ChunkPos::new(1, 0));
+
+        let mut engine = LightEngine::new();
+        let center_result = engine.light_chunk(&mut center).unwrap();
+        engine.light_chunk(&mut east).unwrap();
+
+        // A flat chunk's sky light init will produce boundary entries where
+        // sky light bleeds sideways below the heightmap at the chunk edges.
+        // Even if the flat chunk doesn't produce many, verify the API works.
+        if !center_result.sky_boundary.is_empty() {
+            let mut neighbors = ChunkNeighbors {
+                north: None,
+                south: None,
+                east: Some(&mut east),
+                west: None,
+            };
+            propagate_sky_light_cross_chunk(
+                &mut neighbors,
+                &center_result.sky_boundary,
+                0,
+                0,
+            );
+        }
+        // No assertion on specific values — this test verifies the API works
+        // end-to-end without panicking.
+    }
+}

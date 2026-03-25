@@ -8,13 +8,16 @@ use std::collections::VecDeque;
 use oxidized_world::chunk::LevelChunk;
 use oxidized_world::registry::BlockStateId;
 
-use super::propagation::{LightEntry, propagate_block_light_increase};
+use super::propagation::{BoundaryEntry, LightEntry, propagate_block_light_increase};
 
 /// Initializes block light for a newly generated chunk.
 ///
 /// Iterates through all blocks, finds emitters (light_emission > 0), sets
 /// their block light to the emission level, and then BFS-propagates outward.
-pub fn initialize_block_light(chunk: &mut LevelChunk) {
+///
+/// Returns boundary entries for positions where block light reached a chunk
+/// edge and needs to propagate into a neighbor chunk.
+pub fn initialize_block_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
     let min_y = chunk.min_y();
     let section_count = chunk.section_count();
     let mut queue = VecDeque::new();
@@ -58,7 +61,9 @@ pub fn initialize_block_light(chunk: &mut LevelChunk) {
     if !queue.is_empty() {
         let chunk_base_x = chunk.pos.x * 16;
         let chunk_base_z = chunk.pos.z * 16;
-        let _boundary = propagate_block_light_increase(chunk, &mut queue, chunk_base_x, chunk_base_z);
+        propagate_block_light_increase(chunk, &mut queue, chunk_base_x, chunk_base_z)
+    } else {
+        Vec::new()
     }
 }
 

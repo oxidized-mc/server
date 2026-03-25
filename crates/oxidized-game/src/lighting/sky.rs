@@ -12,14 +12,17 @@ use oxidized_world::chunk::LevelChunk;
 use oxidized_world::chunk::heightmap::HeightmapType;
 use oxidized_world::registry::BlockStateId;
 
-use super::propagation::{LightEntry, propagate_sky_light_increase};
+use super::propagation::{BoundaryEntry, LightEntry, propagate_sky_light_increase};
 
 /// Initializes sky light for a newly generated chunk.
 ///
 /// Clears any existing sky light, runs the vertical pass, then the
 /// horizontal BFS. After this call, the chunk's sky light layers are
 /// fully populated.
-pub fn initialize_sky_light(chunk: &mut LevelChunk) {
+///
+/// Returns boundary entries for positions where sky light reached a chunk
+/// edge and needs to propagate into a neighbor chunk.
+pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
     let min_y = chunk.min_y();
     let max_y = chunk.max_y();
 
@@ -74,7 +77,7 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) {
     // Phase 2: Horizontal BFS for sky light bleeding into caves.
     let chunk_base_x = chunk.pos.x * 16;
     let chunk_base_z = chunk.pos.z * 16;
-    let _boundary = propagate_sky_light_increase(chunk, &mut bfs_seeds, chunk_base_x, chunk_base_z);
+    propagate_sky_light_increase(chunk, &mut bfs_seeds, chunk_base_x, chunk_base_z)
 }
 
 /// Returns the highest Y coordinate at which blocks exist in this column,

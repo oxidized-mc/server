@@ -13,8 +13,8 @@ use oxidized_world::registry::BlockStateId;
 
 use super::block_light::initialize_block_light;
 use super::propagation::{
-    DecreaseEntry, LightEntry, propagate_block_light_decrease, propagate_block_light_increase,
-    propagate_sky_light_decrease, propagate_sky_light_increase,
+    BoundaryEntry, DecreaseEntry, LightEntry, propagate_block_light_decrease,
+    propagate_block_light_increase, propagate_sky_light_decrease, propagate_sky_light_increase,
 };
 use super::queue::LightUpdateQueue;
 use super::sky::initialize_sky_light;
@@ -28,6 +28,22 @@ pub enum LightingError {
         /// The position of the unavailable section.
         section: SectionPos,
     },
+}
+
+/// Result of processing light updates for a single chunk.
+///
+/// Contains the list of sections whose light data changed, plus any
+/// boundary entries that need to be propagated into neighboring chunks.
+#[derive(Debug, Default)]
+pub struct LightResult {
+    /// Sections within this chunk whose light data changed.
+    pub changed_sections: Vec<SectionPos>,
+    /// Block light entries that crossed chunk boundaries and need
+    /// propagation into adjacent chunks.
+    pub block_boundary: Vec<BoundaryEntry>,
+    /// Sky light entries that crossed chunk boundaries and need
+    /// propagation into adjacent chunks.
+    pub sky_boundary: Vec<BoundaryEntry>,
 }
 
 /// Batched BFS lighting engine.
@@ -71,8 +87,8 @@ impl LightEngine {
     /// Processes all pending light updates for this tick on a single chunk.
     ///
     /// Groups updates by section, processes each section's decrease and
-    /// increase BFS passes, and returns the list of sections whose light
-    /// data changed.
+    /// increase BFS passes, and returns a [`LightResult`] containing the
+    /// changed sections and any cross-chunk boundary entries.
     ///
     /// # Errors
     ///
@@ -80,10 +96,10 @@ impl LightEngine {
     pub fn process_updates(
         &mut self,
         chunk: &mut LevelChunk,
-    ) -> Result<Vec<SectionPos>, LightingError> {
+    ) -> Result<LightResult, LightingError> {
         let updates = self.queue.drain();
         if updates.is_empty() {
-            return Ok(Vec::new());
+            return Ok(LightResult::default());
         }
 
         let chunk_x = chunk.pos.x;
@@ -155,24 +171,29 @@ impl LightEngine {
             }
         }
 
+        let mut block_boundary = Vec::new();
+        let mut sky_boundary = Vec::new();
+
         // Run decrease passes first (per ADR-017).
         if !block_decrease.is_empty() {
-            let _boundary = propagate_block_light_decrease(
+            let boundary = propagate_block_light_decrease(
                 chunk,
                 &mut block_decrease,
                 &mut block_increase,
                 chunk_base_x,
                 chunk_base_z,
             );
+            block_boundary.extend(boundary);
         }
         if !sky_decrease.is_empty() {
-            let _boundary = propagate_sky_light_decrease(
+            let boundary = propagate_sky_light_decrease(
                 chunk,
                 &mut sky_decrease,
                 &mut sky_increase,
                 chunk_base_x,
                 chunk_base_z,
             );
+            sky_boundary.extend(boundary);
         }
 
         // After decrease completes, handle opacity decreases (block broken)
@@ -205,16 +226,18 @@ impl LightEngine {
 
         // Then run increase passes.
         if !block_increase.is_empty() {
-            let _boundary = propagate_block_light_increase(
+            let boundary = propagate_block_light_increase(
                 chunk,
                 &mut block_increase,
                 chunk_base_x,
                 chunk_base_z,
             );
+            block_boundary.extend(boundary);
         }
         if !sky_increase.is_empty() {
-            let _boundary =
+            let boundary =
                 propagate_sky_light_increase(chunk, &mut sky_increase, chunk_base_x, chunk_base_z);
+            sky_boundary.extend(boundary);
         }
 
         // Mark sections around each changed position as changed.
@@ -228,7 +251,11 @@ impl LightEngine {
             }
         }
 
-        Ok(changed_sections.into_keys().collect())
+        Ok(LightResult {
+            changed_sections: changed_sections.into_keys().collect(),
+            block_boundary,
+            sky_boundary,
+        })
     }
 
     /// Computes full sky + block light for a newly generated chunk.
@@ -237,13 +264,21 @@ impl LightEngine {
     /// Initializes sky light top-down from the heightmap, seeds block light
     /// from emitters, and runs BFS propagation for both light types.
     ///
+    /// Returns a [`LightResult`] containing boundary entries for cross-chunk
+    /// propagation. The `changed_sections` field is empty since all sections
+    /// in a newly generated chunk are implicitly "changed".
+    ///
     /// # Errors
     ///
     /// Returns [`LightingError`] if a chunk section is unavailable.
-    pub fn light_chunk(&mut self, chunk: &mut LevelChunk) -> Result<(), LightingError> {
-        initialize_sky_light(chunk);
-        initialize_block_light(chunk);
-        Ok(())
+    pub fn light_chunk(&mut self, chunk: &mut LevelChunk) -> Result<LightResult, LightingError> {
+        let sky_boundary = initialize_sky_light(chunk);
+        let block_boundary = initialize_block_light(chunk);
+        Ok(LightResult {
+            changed_sections: Vec::new(),
+            block_boundary,
+            sky_boundary,
+        })
     }
 }
 
@@ -462,7 +497,7 @@ mod tests {
         let mut engine = LightEngine::new();
         let mut chunk = flat_chunk();
         let result = engine.process_updates(&mut chunk).unwrap();
-        assert!(result.is_empty());
+        assert!(result.changed_sections.is_empty());
     }
 
     #[test]
@@ -484,7 +519,7 @@ mod tests {
         });
 
         let changed = engine.process_updates(&mut chunk).unwrap();
-        assert!(!changed.is_empty());
+        assert!(!changed.changed_sections.is_empty());
         assert_eq!(chunk.get_block_light_at(8, -56, 8), emission);
         assert_eq!(chunk.get_block_light_at(9, -56, 8), emission - 1);
     }
@@ -546,7 +581,7 @@ mod tests {
             new_opacity: opacity,
         });
         let changed = engine.process_updates(&mut chunk).unwrap();
-        assert!(!changed.is_empty());
+        assert!(!changed.changed_sections.is_empty());
     }
 
     #[test]
@@ -573,5 +608,62 @@ mod tests {
 
         // The broken block's position should now have sky light 15.
         assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y + 3, 8), 15);
+    }
+
+    #[test]
+    fn test_process_updates_returns_block_boundary_at_chunk_edge() {
+        let mut engine = LightEngine::new();
+        let mut chunk = flat_chunk();
+        engine.light_chunk(&mut chunk).unwrap();
+
+        // Place glowstone at chunk edge (0, -56, 8) — in air above surface.
+        let gs = glowstone_id();
+        let emission = BlockStateId(gs as u16).light_emission();
+        chunk.set_block_state(0, -56, 8, gs).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(0, -56, 8),
+            old_emission: 0,
+            new_emission: emission,
+            old_opacity: 0,
+            new_opacity: BlockStateId(gs as u16).light_opacity(),
+        });
+
+        let result = engine.process_updates(&mut chunk).unwrap();
+        assert!(
+            !result.block_boundary.is_empty(),
+            "expected block boundary entries when light source is at chunk edge"
+        );
+        // Boundary entries should cross into negative X (neighbor chunk).
+        assert!(
+            result.block_boundary.iter().any(|b| b.world_x < 0),
+            "expected boundary entries crossing into negative X"
+        );
+    }
+
+    #[test]
+    fn test_process_updates_returns_sky_boundary_at_chunk_edge() {
+        let mut engine = LightEngine::new();
+        let mut chunk = flat_chunk();
+        engine.light_chunk(&mut chunk).unwrap();
+
+        // Place opaque block at chunk edge above surface to trigger sky decrease.
+        let st = stone_id();
+        let opacity = BlockStateId(st as u16).light_opacity();
+        chunk.set_block_state(0, OVERWORLD_MIN_Y + 5, 8, st).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(0, OVERWORLD_MIN_Y + 5, 8),
+            old_emission: 0,
+            new_emission: 0,
+            old_opacity: 0,
+            new_opacity: opacity,
+        });
+
+        let result = engine.process_updates(&mut chunk).unwrap();
+        // Sky light decrease near chunk edge should produce sky boundary entries.
+        // The decrease BFS propagates outward and hits x=-1 or z=-1.
+        assert!(
+            !result.sky_boundary.is_empty(),
+            "expected sky boundary entries when opaque block placed at chunk edge"
+        );
     }
 }
