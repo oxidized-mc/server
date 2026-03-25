@@ -90,11 +90,11 @@ pub async fn handle_movement(
     {
         let mut p = ctx.player.write();
         let now = Instant::now();
-        if now.duration_since(p.movement_rate.1).as_millis() >= 1000 {
-            p.movement_rate = (0, now);
+        if now.duration_since(p.connection.movement_rate.1).as_millis() >= 1000 {
+            p.connection.movement_rate = (0, now);
         }
-        p.movement_rate.0 += 1;
-        if p.movement_rate.0 > 120 {
+        p.connection.movement_rate.0 += 1;
+        if p.connection.movement_rate.0 > 120 {
             debug!(peer = %ctx.addr, name = %ctx.player_name, "Movement packet throttled");
             return Ok(());
         }
@@ -103,17 +103,17 @@ pub async fn handle_movement(
     let (old_pos, old_yaw, old_pitch, entity_id, is_fall_flying, game_mode) = {
         let p = ctx.player.read();
         (
-            p.pos,
-            p.yaw,
-            p.pitch,
+            p.movement.pos,
+            p.movement.yaw,
+            p.movement.pitch,
             p.entity_id,
-            p.is_fall_flying,
+            p.movement.is_fall_flying,
             p.game_mode,
         )
     };
 
     let (player_movement_check, elytra_movement_check) = {
-        let rules = ctx.server_ctx.game_rules.read();
+        let rules = ctx.server_ctx.world.game_rules.read();
         (
             rules.get_bool(GameRuleKey::PlayerMovementCheck),
             rules.get_bool(GameRuleKey::ElytraMovementCheck),
@@ -150,20 +150,20 @@ pub async fn handle_movement(
     if result.is_correction_needed {
         let correction = {
             let mut p = ctx.player.write();
-            let teleport_id = p.next_teleport_id();
-            let pos = p.pos;
-            p.pending_teleports
+            let teleport_id = p.teleport.next_id();
+            let pos = p.movement.pos;
+            p.teleport.pending
                 .push_back((teleport_id, pos, Instant::now()));
             ClientboundPlayerPositionPacket {
                 teleport_id,
-                x: p.pos.x,
-                y: p.pos.y,
-                z: p.pos.z,
+                x: p.movement.pos.x,
+                y: p.movement.pos.y,
+                z: p.movement.pos.z,
                 dx: 0.0,
                 dy: 0.0,
                 dz: 0.0,
-                yaw: p.yaw,
-                pitch: p.pitch,
+                yaw: p.movement.yaw,
+                pitch: p.movement.pitch,
                 relative_flags: RelativeFlags::empty(),
             }
         };
@@ -172,13 +172,13 @@ pub async fn handle_movement(
     } else {
         {
             let mut p = ctx.player.write();
-            p.pos = result.new_pos;
-            p.yaw = result.new_yaw;
-            p.pitch = result.new_pitch;
-            p.is_on_ground = move_pkt.is_on_ground;
+            p.movement.pos = result.new_pos;
+            p.movement.yaw = result.new_yaw;
+            p.movement.pitch = result.new_pitch;
+            p.movement.is_on_ground = move_pkt.is_on_ground;
             // Vanilla: elytra flight ends when the player touches the ground.
             if move_pkt.is_on_ground {
-                p.is_fall_flying = false;
+                p.movement.is_fall_flying = false;
             }
         }
 

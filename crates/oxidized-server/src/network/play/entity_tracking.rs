@@ -22,13 +22,13 @@ use crate::network::helpers::decode_packet;
 /// Builds the `DATA_SHARED_FLAGS` byte from the player's current state.
 pub(super) fn build_shared_flags(player: &ServerPlayer) -> u8 {
     let mut flags: u8 = 0;
-    if player.is_sneaking {
+    if player.movement.is_sneaking {
         flags |= 1 << FLAG_CROUCHING;
     }
-    if player.is_sprinting {
+    if player.movement.is_sprinting {
         flags |= 1 << FLAG_SPRINTING;
     }
-    if player.is_fall_flying {
+    if player.movement.is_fall_flying {
         flags |= 1 << FLAG_FALL_FLYING;
     }
     flags
@@ -62,7 +62,7 @@ pub(super) fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
             PlayerCommandAction::StartSprinting => {
                 let entity_id = {
                     let mut p = ctx.player.write();
-                    p.is_sprinting = true;
+                    p.movement.is_sprinting = true;
                     p.entity_id
                 };
                 broadcast_entity_flags(ctx, entity_id);
@@ -71,7 +71,7 @@ pub(super) fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
             PlayerCommandAction::StopSprinting => {
                 let entity_id = {
                     let mut p = ctx.player.write();
-                    p.is_sprinting = false;
+                    p.movement.is_sprinting = false;
                     p.entity_id
                 };
                 broadcast_entity_flags(ctx, entity_id);
@@ -80,7 +80,7 @@ pub(super) fn handle_player_command(ctx: &PlayContext<'_>, data: bytes::Bytes) {
             PlayerCommandAction::StartFallFlying => {
                 let entity_id = {
                     let mut p = ctx.player.write();
-                    p.is_fall_flying = true;
+                    p.movement.is_fall_flying = true;
                     p.entity_id
                 };
                 // Broadcast fall-flying flag.
@@ -124,7 +124,7 @@ pub(super) fn handle_player_input(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     ) {
         let (old_sneaking, old_sprinting, entity_id) = {
             let p = ctx.player.read();
-            (p.is_sneaking, p.is_sprinting, p.entity_id)
+            (p.movement.is_sneaking, p.movement.is_sprinting, p.entity_id)
         };
         let new_sneaking = input_pkt.input.is_shifting;
         let new_sprinting = input_pkt.input.is_sprinting;
@@ -132,8 +132,8 @@ pub(super) fn handle_player_input(ctx: &PlayContext<'_>, data: bytes::Bytes) {
         // Update local state.
         {
             let mut p = ctx.player.write();
-            p.is_sneaking = new_sneaking;
-            p.is_sprinting = new_sprinting;
+            p.movement.is_sneaking = new_sneaking;
+            p.movement.is_sprinting = new_sprinting;
         }
 
         // Broadcast entity metadata if flags changed.

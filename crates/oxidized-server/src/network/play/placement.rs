@@ -153,7 +153,7 @@ pub async fn handle_use_item_on(
         let name = selected.item.0.clone();
         let gm = player.game_mode;
         let has = !selected.is_empty() && selected.count > 0;
-        (name, gm, has, player.is_sneaking)
+        (name, gm, has, player.movement.is_sneaking)
     };
 
     // Vanilla: if the clicked block is interactable and the player is NOT
@@ -178,10 +178,10 @@ pub async fn handle_use_item_on(
     }
 
     // Determine block state to place from the held item.
-    let player_yaw = play_ctx.player.read().yaw;
+    let player_yaw = play_ctx.player.read().movement.yaw;
     let block_state_id = match held_item_to_block_state(
         &held_item,
-        &play_ctx.server_ctx.block_registry,
+        &play_ctx.server_ctx.world.block_registry,
         player_yaw,
         pkt.hit_result.direction,
         pkt.hit_result.cursor_y,
@@ -289,7 +289,7 @@ pub async fn handle_use_item_on(
     // the matching upper/lower or head/foot half.
     if let Some((companion_pos, companion_state)) = double_block_companion(
         &held_item,
-        &play_ctx.server_ctx.block_registry,
+        &play_ctx.server_ctx.world.block_registry,
         place_pos,
         block_state_id,
         player_yaw,
@@ -661,10 +661,10 @@ const PLAYER_SNEAKING_HEIGHT: f64 = 1.5;
 /// placing player's axis-aligned bounding box.
 fn block_intersects_player(play_ctx: &PlayContext<'_>, pos: BlockPos) -> bool {
     let player = play_ctx.player.read();
-    let px = player.pos.x;
-    let py = player.pos.y;
-    let pz = player.pos.z;
-    let height = if player.is_sneaking {
+    let px = player.movement.pos.x;
+    let py = player.movement.pos.y;
+    let pz = player.movement.pos.z;
+    let height = if player.movement.is_sneaking {
         PLAYER_SNEAKING_HEIGHT
     } else {
         PLAYER_STANDING_HEIGHT

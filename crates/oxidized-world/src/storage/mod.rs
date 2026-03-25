@@ -8,4 +8,6 @@ mod primary_level_data;
 pub use dimension::Dimension;
 pub use dirty_tracker::DirtyChunkTracker;
 pub use level_storage::LevelStorageSource;
-pub use primary_level_data::PrimaryLevelData;
+pub use primary_level_data::{
+    PrimaryLevelData, SpawnPoint, WeatherState, WorldSettings, WorldTime,
+};

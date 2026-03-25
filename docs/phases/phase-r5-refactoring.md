@@ -23,7 +23,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.8 | Extract packet codec helpers & roundtrip test macro | ✅ Done |
 | R5.9 | Extract command registration helpers | ✅ Done |
 | R5.10 | Standardize packet decoder error handling | ✅ Done |
-| R5.11 | Decompose oversized structs | 📋 Planned |
+| R5.11 | Decompose oversized structs | ✅ Complete |
 | R5.12 | Break down long functions & reduce nesting | 📋 Planned |
 | R5.13 | Replace magic numbers with named constants | 📋 Planned |
 
@@ -961,52 +961,48 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 ---
 
-### R5.11: Decompose Oversized Structs
+### R5.11: Decompose Oversized Structs ✅
 
-**Targets:**
-- `crates/oxidized-game/src/player/server_player.rs` — `ServerPlayer` (45 fields)
-- `crates/oxidized-server/src/network/mod.rs` — `ServerContext` (26 fields)
-- `crates/oxidized-world/src/storage/primary_level_data.rs` — `PrimaryLevelData` (21 fields)
-- `crates/oxidized-game/src/entity/mod.rs` — `Entity` (20 fields)
+**Targets (all complete):**
+- `crates/oxidized-world/src/storage/primary_level_data.rs` — `PrimaryLevelData` (21 → 4 fields + sub-structs)
+- `crates/oxidized-game/src/entity/mod.rs` — `Entity` (19 → 12 fields + sub-structs)
+- `crates/oxidized-game/src/player/server_player.rs` — `ServerPlayer` (45 → 16 fields + sub-structs)
+- `crates/oxidized-server/src/network/mod.rs` — `ServerContext` (23 → 6 fields + sub-structs)
 
-**Steps:**
+**What was done:**
 
-1. **Decompose `ServerPlayer` into sub-structs**:
-   ```rust
-   pub struct ServerPlayer {
-       pub identity: PlayerIdentity,   // uuid, name, profile
-       pub position: PlayerPosition,   // pos, rot, on_ground, chunk
-       pub abilities: PlayerAbilities,  // creative, flying, speed, etc.
-       pub mining: MiningState,         // mining_start_pos, mining_start_time
-       pub inventory: PlayerInventory,  // items, selected_slot, cursor
-       pub connection: ConnectionInfo,  // protocol version, brand, locale
-       // ... remaining fields that don't group naturally
-   }
-   ```
+1. **`PrimaryLevelData`** decomposed into 4 sub-structs:
+   - `SpawnPoint { x, y, z, angle }` — spawn location
+   - `WorldTime { game_time, day_time }` — time tracking
+   - `WeatherState { is_raining, is_thundering, rain_time, thunder_time, clear_weather_time }` — weather
+   - `WorldSettings { level_name, data_version, game_type, is_hardcore, difficulty, ... }` — world config
+   - Access: `ld.spawn_x` → `ld.spawn.x`, `ld.time` → `ld.time.game_time`, `ld.is_raining` → `ld.weather.is_raining`
 
-2. **Decompose `ServerContext` into sub-structs**:
-   ```rust
-   pub struct ServerContext {
-       pub config: Arc<ServerConfig>,
-       pub registries: Arc<Registries>,      // block, item, biome registries
-       pub network: NetworkContext,           // listener, broadcast, connections
-       pub world: WorldContext,               // level, chunk manager
-       pub commands: CommandContext,           // dispatcher, suggestions
-       // ...
-   }
-   ```
+2. **`Entity`** consolidated coordinate fields into sub-structs:
+   - `pos: Vec3` (x/y/z → pos.x/pos.y/pos.z)
+   - `velocity: Vec3` (vx/vy/vz → velocity.x/velocity.y/velocity.z)
+   - `rotation: EntityRotation { yaw, pitch, head_yaw }`
+   - `dimensions: EntityDimensions { width, height }`
 
-3. **Decompose `PrimaryLevelData`**:
-   - Group world settings: `WorldSettings { seed, generator, difficulty, ... }`
-   - Group time data: `WorldTime { day_time, game_time, ... }`
-   - Group spawn data: `SpawnPoint { x, y, z, angle }`
+3. **`ServerPlayer`** decomposed into 8 sub-structs:
+   - `PlayerMovement` (pos, yaw, pitch, is_on_ground, is_sneaking, is_sprinting, is_fall_flying)
+   - `CombatStats` (health, max_health, food_level, food_saturation, score, absorption_amount, last_death_location)
+   - `PlayerExperience` (xp_level, xp_progress, xp_total, xp_seed)
+   - `SpawnInfo` (dimension, spawn_pos, spawn_angle)
+   - `ConnectionInfo` (view_distance, simulation_distance, chunk_send_rate, latency, model_customisation, movement_rate)
+   - `TeleportTracker` (pending, id_counter) — with `next_id()` method
+   - `MiningState` (start_pos, start_time)
+   - `RawPlayerNbt` (active_effects, attributes, ender_items)
 
-4. **Update all call sites** — field access goes from `player.uuid` to
-   `player.identity.uuid`. Use search-and-replace per field group.
+4. **`ServerContext`** decomposed into 3 sub-structs:
+   - `WorldContext` (level_data, dimensions, chunks, dirty_chunks, storage, block_registry, chunk_generator, chunk_loader, chunk_serializer, game_rules)
+   - `NetworkContext` (broadcast_tx, shutdown_tx, kick_channels, player_list, max_players)
+   - `ServerSettings` (max_view_distance, max_simulation_distance, op_permission_level, spawn_protection, color_char)
+   - Remaining top-level: commands, event_bus, tick_rate_manager
 
 **Verification:**
-- `cargo test --workspace` — all tests pass
-- No public API change for external consumers (these are internal structs)
+- `cargo check --workspace --tests` — clean build
+- `cargo test --workspace` — all 2,372+ tests pass
 
 ---
 

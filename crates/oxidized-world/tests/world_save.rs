@@ -180,14 +180,14 @@ fn test_level_dat_save_roundtrip() {
     let data_nbt = loaded_nbt.get_compound("Data").unwrap();
     let loaded = PrimaryLevelData::from_nbt(data_nbt).unwrap();
 
-    assert_eq!(loaded.level_name, "IntegrationTest");
-    assert_eq!(loaded.spawn_x, 100);
-    assert_eq!(loaded.spawn_y, 64);
-    assert_eq!(loaded.spawn_z, -200);
-    assert_eq!(loaded.day_time, 12_000);
-    assert_eq!(loaded.time, 24_000);
-    assert!(loaded.is_raining);
-    assert_eq!(loaded.rain_time, 5000);
+    assert_eq!(loaded.settings.level_name, "IntegrationTest");
+    assert_eq!(loaded.spawn.x, 100);
+    assert_eq!(loaded.spawn.y, 64);
+    assert_eq!(loaded.spawn.z, -200);
+    assert_eq!(loaded.time.day_time, 12_000);
+    assert_eq!(loaded.time.game_time, 24_000);
+    assert!(loaded.weather.is_raining);
+    assert_eq!(loaded.weather.rain_time, 5000);
 }
 
 /// Backup pattern: saving twice creates level.dat_old.

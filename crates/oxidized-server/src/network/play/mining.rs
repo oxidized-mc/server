@@ -133,8 +133,8 @@ pub async fn handle_player_action(
                 // Record mining start position and time for StopDestroyBlock validation.
                 let entity_id = {
                     let mut player = play_ctx.player.write();
-                    player.mining_start_pos = Some(pkt.pos);
-                    player.mining_start_time = Some(Instant::now());
+                    player.mining.start_pos = Some(pkt.pos);
+                    player.mining.start_time = Some(Instant::now());
                     player.entity_id
                 };
                 // Broadcast mining start animation to other players.
@@ -160,7 +160,7 @@ pub async fn handle_player_action(
                 // Validate that the player started mining this block.
                 let (mining_pos, mining_time) = {
                     let player = play_ctx.player.read();
-                    (player.mining_start_pos, player.mining_start_time)
+                    (player.mining.start_pos, player.mining.start_time)
                 };
                 if mining_pos != Some(pkt.pos) {
                     debug!(
@@ -193,8 +193,8 @@ pub async fn handle_player_action(
                 {
                     let mut player = play_ctx.player.write();
                     let eid = player.entity_id;
-                    player.mining_start_pos = None;
-                    player.mining_start_time = None;
+                    player.mining.start_pos = None;
+                    player.mining.start_time = None;
                     // Clear mining animation on other players' screens.
                     broadcast_block_destruction(play_ctx.server_ctx, eid, pkt.pos, 10, Some(eid));
                 }
@@ -205,8 +205,8 @@ pub async fn handle_player_action(
         PlayerAction::AbortDestroyBlock => {
             let entity_id = {
                 let mut player = play_ctx.player.write();
-                player.mining_start_pos = None;
-                player.mining_start_time = None;
+                player.mining.start_pos = None;
+                player.mining.start_time = None;
                 player.entity_id
             };
             // Clear mining animation on other players' screens.

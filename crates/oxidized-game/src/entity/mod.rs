@@ -27,6 +27,39 @@ use self::id::next_entity_id;
 use self::synched_data::{DataSerializerType, SynchedEntityData};
 use oxidized_protocol::types::aabb::Aabb;
 use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_protocol::types::Vec3;
+
+/// Entity rotation in degrees (yaw, pitch, and head yaw).
+///
+/// Body yaw and pitch are sent together; head yaw may differ when
+/// the entity looks around without turning its body.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EntityRotation {
+    /// Body yaw in degrees.
+    pub yaw: f32,
+    /// Pitch in degrees.
+    pub pitch: f32,
+    /// Head yaw in degrees (independent of body yaw).
+    pub head_yaw: f32,
+}
+
+impl EntityRotation {
+    /// All-zero rotation.
+    pub const ZERO: Self = Self {
+        yaw: 0.0,
+        pitch: 0.0,
+        head_yaw: 0.0,
+    };
+}
+
+/// Entity hitbox width and height.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EntityDimensions {
+    /// Width of the hitbox (meters).
+    pub width: f32,
+    /// Height of the hitbox (meters).
+    pub height: f32,
+}
 
 /// Base entity containing all fields common to every entity type.
 ///
@@ -47,7 +80,7 @@ use oxidized_protocol::types::resource_location::ResourceLocation;
 ///     1.4,  // height
 /// );
 /// entity.set_pos(10.0, 64.0, 10.0);
-/// assert!((entity.x - 10.0).abs() < 1e-10);
+/// assert!((entity.pos.x - 10.0).abs() < 1e-10);
 /// ```
 pub struct Entity {
     /// Network entity ID (unique per server session).
@@ -57,25 +90,12 @@ pub struct Entity {
     /// Entity type identifier (e.g., `minecraft:cow`).
     pub entity_type: ResourceLocation,
 
-    /// X position (world coordinates).
-    pub x: f64,
-    /// Y position (world coordinates, feet level).
-    pub y: f64,
-    /// Z position (world coordinates).
-    pub z: f64,
-    /// Yaw rotation in degrees.
-    pub yaw: f32,
-    /// Pitch rotation in degrees.
-    pub pitch: f32,
-    /// Head yaw rotation in degrees (independent of body yaw).
-    pub head_yaw: f32,
-
-    /// X velocity (blocks per tick).
-    pub vx: f64,
-    /// Y velocity (blocks per tick).
-    pub vy: f64,
-    /// Z velocity (blocks per tick).
-    pub vz: f64,
+    /// World position (double precision).
+    pub pos: Vec3,
+    /// Rotation in degrees.
+    pub rotation: EntityRotation,
+    /// Velocity in blocks per tick.
+    pub velocity: Vec3,
 
     /// Whether the entity is on the ground.
     pub is_on_ground: bool,
@@ -87,10 +107,8 @@ pub struct Entity {
     /// Synchronised entity data for network serialisation.
     pub synched_data: SynchedEntityData,
 
-    /// Width of entity's hitbox (meters).
-    pub width: f32,
-    /// Height of entity's hitbox (meters).
-    pub height: f32,
+    /// Hitbox dimensions.
+    pub dimensions: EntityDimensions,
 
     /// Accumulated fall distance (blocks) for fall damage calculation.
     ///
@@ -125,21 +143,14 @@ impl Entity {
             id,
             uuid: Uuid::new_v4(),
             entity_type,
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            yaw: 0.0,
-            pitch: 0.0,
-            head_yaw: 0.0,
-            vx: 0.0,
-            vy: 0.0,
-            vz: 0.0,
+            pos: Vec3::ZERO,
+            rotation: EntityRotation::ZERO,
+            velocity: Vec3::ZERO,
             is_on_ground: false,
             is_removed: false,
             bounding_box: Aabb::from_center(0.0, 0.0, 0.0, f64::from(width), f64::from(height)),
             synched_data,
-            width,
-            height,
+            dimensions: EntityDimensions { width, height },
             fall_distance: 0.0,
         }
     }
@@ -147,11 +158,16 @@ impl Entity {
     /// Teleports the entity to `(x, y, z)` and recalculates the
     /// bounding box.
     pub fn set_pos(&mut self, x: f64, y: f64, z: f64) {
-        self.x = x;
-        self.y = y;
-        self.z = z;
-        self.bounding_box =
-            Aabb::from_center(x, y, z, f64::from(self.width), f64::from(self.height));
+        self.pos.x = x;
+        self.pos.y = y;
+        self.pos.z = z;
+        self.bounding_box = Aabb::from_center(
+            x,
+            y,
+            z,
+            f64::from(self.dimensions.width),
+            f64::from(self.dimensions.height),
+        );
     }
 
     /// Returns the value of a shared flag bit.
@@ -245,18 +261,18 @@ mod tests {
     #[test]
     fn test_entity_default_position_zero() {
         let e = make_entity();
-        assert!((e.x).abs() < 1e-10);
-        assert!((e.y).abs() < 1e-10);
-        assert!((e.z).abs() < 1e-10);
+        assert!((e.pos.x).abs() < 1e-10);
+        assert!((e.pos.y).abs() < 1e-10);
+        assert!((e.pos.z).abs() < 1e-10);
     }
 
     #[test]
     fn test_set_pos_updates_bbox() {
         let mut e = make_entity();
         e.set_pos(100.0, 64.0, 200.0);
-        assert!((e.x - 100.0).abs() < 1e-10);
-        assert!((e.y - 64.0).abs() < 1e-10);
-        assert!((e.z - 200.0).abs() < 1e-10);
+        assert!((e.pos.x - 100.0).abs() < 1e-10);
+        assert!((e.pos.y - 64.0).abs() < 1e-10);
+        assert!((e.pos.z - 200.0).abs() < 1e-10);
         assert!(e.bounding_box.contains(100.0, 64.5, 200.0));
     }
 
@@ -308,7 +324,7 @@ mod tests {
     #[test]
     fn test_entity_dimensions() {
         let e = make_entity();
-        assert!((e.width - 0.9).abs() < 1e-6);
-        assert!((e.height - 1.4).abs() < 1e-6);
+        assert!((e.dimensions.width - 0.9).abs() < 1e-6);
+        assert!((e.dimensions.height - 1.4).abs() < 1e-6);
     }
 }

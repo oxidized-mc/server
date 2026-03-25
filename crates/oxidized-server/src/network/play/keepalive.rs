@@ -50,8 +50,8 @@ pub(super) fn handle_keepalive(
         *keepalive_pending = false;
         let sample = keepalive_sent_at.elapsed().as_millis() as i32;
         let mut p = player.write();
-        p.latency = (p.latency * 3 + sample) / 4;
-        let latency = p.latency;
+        p.connection.latency = (p.connection.latency * 3 + sample) / 4;
+        let latency = p.connection.latency;
         let uuid = p.uuid;
         debug!(peer = %addr, name = %player_name, latency_ms = latency, "Keepalive response");
         KeepaliveResult::Ok(uuid, latency)

@@ -83,7 +83,7 @@ pub async fn handle_chat(ctx: &mut PlayContext<'_>, message: &str) -> Result<(),
         return Err(disconnect_handle(ctx.conn_handle, "disconnect.spam").await);
     }
 
-    let message_component = match ctx.server_ctx.color_char {
+    let message_component = match ctx.server_ctx.settings.color_char {
         Some(ch) => Component::from_legacy_with_char(message, ch),
         None => Component::from_legacy(message),
     };

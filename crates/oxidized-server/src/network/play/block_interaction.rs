@@ -50,8 +50,8 @@ pub(super) const MAX_BUILD_HEIGHT: i32 = OVERWORLD_MAX_Y - 1;
 /// of the given block.
 pub(super) fn player_distance_to_block_sq(play_ctx: &PlayContext<'_>, pos: BlockPos) -> f64 {
     let player = play_ctx.player.read();
-    let eye_height = if player.is_sneaking { 1.27 } else { 1.62 };
-    let eye = Vec3::new(player.pos.x, player.pos.y + eye_height, player.pos.z);
+    let eye_height = if player.movement.is_sneaking { 1.27 } else { 1.62 };
+    let eye = Vec3::new(player.movement.pos.x, player.movement.pos.y + eye_height, player.movement.pos.z);
     let block_center = Vec3::new(pos.x as f64 + 0.5, pos.y as f64 + 0.5, pos.z as f64 + 0.5);
     eye.distance_to_sqr(block_center)
 }
@@ -81,13 +81,13 @@ pub(super) fn is_within_build_height(pos: BlockPos) -> bool {
 /// TODO: Accept player info and skip protection for operators once ops.json
 /// is implemented. Currently all players are treated as non-ops.
 pub(super) fn is_spawn_protected(ctx: &ServerContext, pos: BlockPos) -> bool {
-    let radius = ctx.spawn_protection;
+    let radius = ctx.settings.spawn_protection;
     if radius == 0 {
         return false;
     }
 
-    let level_data = ctx.level_data.read();
-    let (sx, sz) = (level_data.spawn_x, level_data.spawn_z);
+    let level_data = ctx.world.level_data.read();
+    let (sx, sz) = (level_data.spawn.x, level_data.spawn.z);
 
     let dx = (pos.x - sx).unsigned_abs();
     let dz = (pos.z - sz).unsigned_abs();
@@ -101,7 +101,7 @@ pub(super) fn is_spawn_protected(ctx: &ServerContext, pos: BlockPos) -> bool {
 /// Returns `None` if the chunk is not loaded.
 pub(super) fn get_block(ctx: &Arc<ServerContext>, pos: BlockPos) -> Option<u32> {
     let chunk_pos = ChunkPos::from_block_coords(pos.x, pos.z);
-    let chunk_ref = ctx.chunks.get(&chunk_pos)?;
+    let chunk_ref = ctx.world.chunks.get(&chunk_pos)?;
     let chunk = chunk_ref.read();
     chunk.get_block_state(pos.x, pos.y, pos.z).ok()
 }
@@ -113,10 +113,10 @@ pub(super) fn get_block(ctx: &Arc<ServerContext>, pos: BlockPos) -> Option<u32> 
 /// Marks the chunk as dirty for autosave.
 pub(super) fn set_block(ctx: &Arc<ServerContext>, pos: BlockPos, state_id: u32) -> bool {
     let chunk_pos = ChunkPos::from_block_coords(pos.x, pos.z);
-    if let Some(chunk_ref) = ctx.chunks.get(&chunk_pos) {
+    if let Some(chunk_ref) = ctx.world.chunks.get(&chunk_pos) {
         let mut chunk = chunk_ref.write();
         if chunk.set_block_state(pos.x, pos.y, pos.z, state_id).is_ok() {
-            ctx.dirty_chunks.insert(chunk_pos);
+            ctx.world.dirty_chunks.insert(chunk_pos);
             true
         } else {
             false
@@ -244,7 +244,7 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.chunks
+        ctx.world.chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
@@ -264,14 +264,14 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.chunks
+        ctx.world.chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
-        assert!(!ctx.dirty_chunks.contains(&chunk_pos));
+        assert!(!ctx.world.dirty_chunks.contains(&chunk_pos));
 
         set_block(&ctx, pos, 1);
-        assert!(ctx.dirty_chunks.contains(&chunk_pos));
+        assert!(ctx.world.dirty_chunks.contains(&chunk_pos));
     }
 
     #[test]
@@ -378,7 +378,7 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.chunks
+        ctx.world.chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
@@ -391,7 +391,7 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.chunks
+        ctx.world.chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
@@ -413,33 +413,43 @@ mod tests {
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
         let loader = AnvilChunkLoader::new(std::path::Path::new(""), block_registry.clone());
         Arc::new(ServerContext {
-            player_list: RwLock::new(PlayerList::new(20)),
-            level_data: RwLock::new(
-                PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
-            ),
-            dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
-            max_view_distance: 10,
-            max_simulation_distance: 10,
-            broadcast_tx: broadcast::channel(256).0,
-            color_char: None,
+            world: crate::network::WorldContext {
+                level_data: RwLock::new(
+                    PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                ),
+                dimensions: vec![
+                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
+                ],
+                chunks: dashmap::DashMap::new(),
+                dirty_chunks: dashmap::DashSet::new(),
+                storage: LevelStorageSource::new(""),
+                block_registry: block_registry.clone(),
+                chunk_generator: Arc::new(
+                    oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                        oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                    ),
+                ),
+                chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
+                chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
+                game_rules: RwLock::new(GameRules::default()),
+            },
+            network: crate::network::NetworkContext {
+                broadcast_tx: broadcast::channel(256).0,
+                shutdown_tx: broadcast::channel(1).0,
+                kick_channels: dashmap::DashMap::new(),
+                player_list: RwLock::new(PlayerList::new(20)),
+                max_players: 20,
+            },
+            settings: crate::network::ServerSettings {
+                max_view_distance: 10,
+                max_simulation_distance: 10,
+                op_permission_level: 4,
+                spawn_protection: 16,
+                color_char: None,
+            },
             commands: oxidized_game::commands::Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
-            max_players: 20,
-            shutdown_tx: broadcast::channel(1).0,
-            game_rules: RwLock::new(GameRules::default()),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
-            storage: LevelStorageSource::new(""),
-            chunks: dashmap::DashMap::new(),
-            dirty_chunks: dashmap::DashSet::new(),
-            block_registry: block_registry.clone(),
-            chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                oxidized_game::worldgen::flat::FlatWorldConfig::default(),
-            )),
-            chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
-            chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
-            op_permission_level: 4,
-            spawn_protection: 16,
-            kick_channels: dashmap::DashMap::new(),
         })
     }
 
@@ -457,33 +467,43 @@ mod tests {
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
         let loader = AnvilChunkLoader::new(std::path::Path::new(""), block_registry.clone());
         Arc::new(ServerContext {
-            player_list: RwLock::new(PlayerList::new(20)),
-            level_data: RwLock::new(
-                PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
-            ),
-            dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
-            max_view_distance: 10,
-            max_simulation_distance: 10,
-            broadcast_tx: broadcast::channel(256).0,
-            color_char: None,
+            world: crate::network::WorldContext {
+                level_data: RwLock::new(
+                    PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                ),
+                dimensions: vec![
+                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
+                ],
+                chunks: dashmap::DashMap::new(),
+                dirty_chunks: dashmap::DashSet::new(),
+                storage: LevelStorageSource::new(""),
+                block_registry: block_registry.clone(),
+                chunk_generator: Arc::new(
+                    oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                        oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                    ),
+                ),
+                chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
+                chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
+                game_rules: RwLock::new(GameRules::default()),
+            },
+            network: crate::network::NetworkContext {
+                broadcast_tx: broadcast::channel(256).0,
+                shutdown_tx: broadcast::channel(1).0,
+                kick_channels: dashmap::DashMap::new(),
+                player_list: RwLock::new(PlayerList::new(20)),
+                max_players: 20,
+            },
+            settings: crate::network::ServerSettings {
+                max_view_distance: 10,
+                max_simulation_distance: 10,
+                op_permission_level: 4,
+                spawn_protection: radius,
+                color_char: None,
+            },
             commands: oxidized_game::commands::Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
-            max_players: 20,
-            shutdown_tx: broadcast::channel(1).0,
-            game_rules: RwLock::new(GameRules::default()),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
-            storage: LevelStorageSource::new(""),
-            chunks: dashmap::DashMap::new(),
-            dirty_chunks: dashmap::DashSet::new(),
-            block_registry: block_registry.clone(),
-            chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                oxidized_game::worldgen::flat::FlatWorldConfig::default(),
-            )),
-            chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
-            chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
-            op_permission_level: 4,
-            spawn_protection: radius,
-            kick_channels: dashmap::DashMap::new(),
         })
     }
 }

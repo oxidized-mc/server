@@ -190,11 +190,11 @@ pub async fn handle_play_split(
     let mut chunk_tracker = PlayerChunkTracker::new(initial_chunk, join_state.view_distance);
 
     // Subscribe to broadcast channel.
-    let mut broadcast_rx = server_ctx.broadcast_tx.subscribe();
+    let mut broadcast_rx = server_ctx.network.broadcast_tx.subscribe();
 
     // Register a per-player kick channel for remote disconnect signaling.
     let (kick_tx, mut kick_rx) = tokio::sync::mpsc::channel::<String>(1);
-    server_ctx.kick_channels.insert(uuid, kick_tx);
+    server_ctx.network.kick_channels.insert(uuid, kick_tx);
 
     // Per-player chat rate limiter.
     let mut rate_limiter = ChatRateLimiter::new();
@@ -268,10 +268,10 @@ pub async fn handle_play_split(
                 let resend_list: Vec<(i32, f64, f64, f64, f32, f32)> = {
                     let now = Instant::now();
                     let mut p = play_ctx.player.write();
-                    let yaw = p.yaw;
-                    let pitch = p.pitch;
+                    let yaw = p.movement.yaw;
+                    let pitch = p.movement.pitch;
                     let mut list = Vec::new();
-                    for entry in p.pending_teleports.iter_mut() {
+                    for entry in p.teleport.pending.iter_mut() {
                         if now.duration_since(entry.2) >= TELEPORT_RESEND_INTERVAL {
                             list.push((entry.0, entry.1.x, entry.1.y, entry.1.z, yaw, pitch));
                             entry.2 = now;
@@ -409,7 +409,7 @@ pub async fn handle_play_split(
                                     } else {
                                         let (pos, rot) = {
                                             let p = play_ctx.player.read();
-                                            ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
+                                            ((p.movement.pos.x, p.movement.pos.y, p.movement.pos.z), (p.movement.yaw, p.movement.pitch))
                                         };
                                         chat::handle_chat_command(
                                             play_ctx.conn_handle,
@@ -419,7 +419,7 @@ pub async fn handle_play_split(
                                             pos, rot,
                                             // TODO: implement per-player ops (ops.json) instead of
                                             // giving all players the configured op level.
-                                            server_ctx.op_permission_level as u32,
+                                            server_ctx.settings.op_permission_level as u32,
                                             server_ctx,
                                         ).await;
                                     }
@@ -435,7 +435,7 @@ pub async fn handle_play_split(
                                     } else {
                                         let (pos, rot) = {
                                             let p = play_ctx.player.read();
-                                            ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
+                                            ((p.movement.pos.x, p.movement.pos.y, p.movement.pos.z), (p.movement.yaw, p.movement.pitch))
                                         };
                                         chat::handle_chat_command(
                                             play_ctx.conn_handle,
@@ -443,7 +443,7 @@ pub async fn handle_play_split(
                                             &player_name,
                                             uuid,
                                             pos, rot,
-                                            server_ctx.op_permission_level as u32,
+                                            server_ctx.settings.op_permission_level as u32,
                                             server_ctx,
                                         ).await;
                                     }
@@ -510,20 +510,20 @@ pub async fn handle_play_split(
                                 ) {
                                     let new_view_distance =
                                         i32::from(info_pkt.information.view_distance)
-                                            .clamp(2, server_ctx.max_view_distance);
+                                            .clamp(2, server_ctx.settings.max_view_distance);
                                     let (old_view_distance, skin_changed) = {
                                         let mut p = play_ctx.player.write();
-                                        let old_vd = p.view_distance;
-                                        p.view_distance = new_view_distance;
-                                        let old_skin = p.model_customisation;
-                                        p.model_customisation =
+                                        let old_vd = p.connection.view_distance;
+                                        p.connection.view_distance = new_view_distance;
+                                        let old_skin = p.connection.model_customisation;
+                                        p.connection.model_customisation =
                                             info_pkt.information.model_customisation;
-                                        (old_vd, old_skin != p.model_customisation)
+                                        (old_vd, old_skin != p.connection.model_customisation)
                                     };
 
                                     // Broadcast skin customisation change to others.
                                     if skin_changed {
-                                        let skin = play_ctx.player.read().model_customisation;
+                                        let skin = play_ctx.player.read().connection.model_customisation;
                                         let skin_pkt =
                                             ClientboundSetEntityDataPacket::single_byte(
                                                 entity_id,
@@ -609,7 +609,7 @@ pub async fn handle_play_split(
     // Save player data to disk before removing from the list.
     {
         let nbt = player_arc.read().save_to_nbt();
-        let playerdata_dir = server_ctx.storage.player_data_dir();
+        let playerdata_dir = server_ctx.world.storage.player_data_dir();
         let player_uuid = uuid;
         if let Err(e) = tokio::task::spawn_blocking(move || {
             std::fs::create_dir_all(&playerdata_dir)?;
@@ -641,8 +641,8 @@ pub async fn handle_play_split(
     }
 
     // Clean up — remove player from the list and broadcast removal to tab lists.
-    server_ctx.kick_channels.remove(&uuid);
-    server_ctx.player_list.write().remove(&uuid);
+    server_ctx.network.kick_channels.remove(&uuid);
+    server_ctx.network.player_list.write().remove(&uuid);
     {
         let remove_pkt = ClientboundPlayerInfoRemovePacket { uuids: vec![uuid] };
         let encoded = remove_pkt.encode();
@@ -695,7 +695,7 @@ fn handle_accept_teleport(ctx: &PlayContext<'_>, data: bytes::Bytes) {
             name = %ctx.player_name,
             teleport_id = ack.teleport_id,
             accepted = accepted,
-            pending = p.pending_teleports.len(),
+            pending = p.teleport.pending.len(),
             "Teleport confirmation",
         );
     }
@@ -711,7 +711,7 @@ fn handle_chunk_batch_ack(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     ) {
         let rate = batch_ack.desired_chunks_per_tick;
         if rate.is_finite() && rate > 0.0 {
-            ctx.player.write().chunk_send_rate = rate.clamp(0.1, 100.0);
+            ctx.player.write().connection.chunk_send_rate = rate.clamp(0.1, 100.0);
             debug!(peer = %ctx.addr, name = %ctx.player_name, rate, "Chunk batch rate update");
         } else {
             debug!(

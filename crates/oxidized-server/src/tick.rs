@@ -157,7 +157,7 @@ pub fn run_tick_loop(ctx: &ServerContext, shutdown: &AtomicBool) {
 fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &mut WeatherLevels) {
     // Snapshot game rules once per tick to minimize lock acquisitions.
     let (do_daylight, do_weather) = {
-        let rules = ctx.game_rules.read();
+        let rules = ctx.world.game_rules.read();
         (
             rules.get_bool(GameRuleKey::AdvanceTime),
             rules.get_bool(GameRuleKey::AdvanceWeather),
@@ -166,13 +166,13 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
 
     // Advance world time.
     {
-        let mut ld = ctx.level_data.write();
-        ld.time = ld.time.wrapping_add(1);
+        let mut ld = ctx.world.level_data.write();
+        ld.time.game_time = ld.time.game_time.wrapping_add(1);
 
         // Advance day time if the advance_time game rule is enabled.
         // Day time grows unbounded — the client uses `day_time % 24000` for rendering.
         if do_daylight {
-            ld.day_time = ld.day_time.wrapping_add(1);
+            ld.time.day_time = ld.time.day_time.wrapping_add(1);
         }
     }
 
@@ -204,14 +204,14 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
 fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLevels) {
     let was_raining;
     {
-        let mut ld = ctx.level_data.write();
-        was_raining = ld.is_raining;
+        let mut ld = ctx.world.level_data.write();
+        was_raining = ld.weather.is_raining;
 
-        let mut clear_weather_time = ld.clear_weather_time;
-        let mut thunder_time = ld.thunder_time;
-        let mut rain_time = ld.rain_time;
-        let mut thundering = ld.is_thundering;
-        let mut raining = ld.is_raining;
+        let mut clear_weather_time = ld.weather.clear_weather_time;
+        let mut thunder_time = ld.weather.thunder_time;
+        let mut rain_time = ld.weather.rain_time;
+        let mut thundering = ld.weather.is_thundering;
+        let mut raining = ld.weather.is_raining;
 
         if clear_weather_time > 0 {
             // `/weather clear <duration>` forces clear weather.
@@ -246,17 +246,17 @@ fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLe
             }
         }
 
-        ld.clear_weather_time = clear_weather_time;
-        ld.thunder_time = thunder_time;
-        ld.rain_time = rain_time;
-        ld.is_thundering = thundering;
-        ld.is_raining = raining;
+        ld.weather.clear_weather_time = clear_weather_time;
+        ld.weather.thunder_time = thunder_time;
+        ld.weather.rain_time = rain_time;
+        ld.weather.is_thundering = thundering;
+        ld.weather.is_raining = raining;
     }
 
     // Interpolate visual levels (±0.01 per tick, clamped to 0.0–1.0).
     let (raining, thundering) = {
-        let ld = ctx.level_data.read();
-        (ld.is_raining, ld.is_thundering)
+        let ld = ctx.world.level_data.read();
+        (ld.weather.is_raining, ld.weather.is_thundering)
     };
 
     weather.old_thunder_level = weather.thunder_level;
@@ -324,13 +324,13 @@ fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLe
 /// Includes the overworld clock update so clients synchronise their
 /// day/night cycle each broadcast (every 20 ticks).
 fn broadcast_time(ctx: &ServerContext, _do_daylight: bool) {
-    let ld = ctx.level_data.read();
+    let ld = ctx.world.level_data.read();
     let pkt = ClientboundSetTimePacket {
-        game_time: ld.time,
+        game_time: ld.time.game_time,
         clock_updates: vec![ClockUpdate {
             clock_id: ClientboundSetTimePacket::OVERWORLD_CLOCK_ID,
             state: ClockNetworkState {
-                total_ticks: ld.day_time,
+                total_ticks: ld.time.day_time,
                 partial_tick: 0.0,
                 rate: 1.0,
             },
@@ -357,8 +357,8 @@ fn broadcast_packet<P: Packet>(ctx: &ServerContext, pkt: &P) {
 /// Suitable for the tick thread (which is allowed to block) and other
 /// non-async contexts.
 fn save_level_dat_blocking(ctx: &ServerContext) -> Result<(), Box<dyn std::error::Error + Send>> {
-    let level_data = ctx.level_data.read().clone();
-    let level_dat_path = ctx.storage.level_dat_path();
+    let level_data = ctx.world.level_data.read().clone();
+    let level_dat_path = ctx.world.storage.level_dat_path();
     level_data
         .save(&level_dat_path)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)
@@ -371,8 +371,8 @@ fn save_level_dat_blocking(ctx: &ServerContext) -> Result<(), Box<dyn std::error
 ///
 /// Used by the shutdown save path (which runs in async context).
 pub async fn save_level_dat(ctx: &ServerContext) -> Result<(), Box<dyn std::error::Error + Send>> {
-    let level_data = ctx.level_data.read().clone();
-    let level_dat_path = ctx.storage.level_dat_path();
+    let level_data = ctx.world.level_data.read().clone();
+    let level_dat_path = ctx.world.storage.level_dat_path();
     let result = tokio::task::spawn_blocking(move || level_data.save(&level_dat_path)).await;
     match result {
         Ok(Ok(())) => Ok(()),
@@ -406,13 +406,13 @@ fn autosave_level_dat(ctx: &ServerContext) {
 pub fn save_dirty_chunks_blocking(
     ctx: &ServerContext,
 ) -> Result<usize, Box<dyn std::error::Error + Send>> {
-    let dirty: Vec<ChunkPos> = ctx.dirty_chunks.iter().map(|r| *r).collect();
+    let dirty: Vec<ChunkPos> = ctx.world.dirty_chunks.iter().map(|r| *r).collect();
     if dirty.is_empty() {
         return Ok(0);
     }
 
     let region_dir = ctx
-        .storage
+        .world.storage
         .region_dir(oxidized_world::storage::Dimension::Overworld);
 
     // Group chunks by region coordinates.
@@ -440,12 +440,12 @@ pub fn save_dirty_chunks_blocking(
         };
 
         for pos in positions {
-            let chunk_ref = match ctx.chunks.get(pos) {
+            let chunk_ref = match ctx.world.chunks.get(pos) {
                 Some(r) => r.clone(),
                 None => continue, // Chunk was unloaded since marking dirty
             };
             let chunk = chunk_ref.read();
-            let nbt_bytes = match ctx.chunk_serializer.serialize(&chunk) {
+            let nbt_bytes = match ctx.world.chunk_serializer.serialize(&chunk) {
                 Ok(bytes) => bytes,
                 Err(e) => {
                     warn!(pos = ?pos, error = %e, "Failed to serialize chunk, will retry");
@@ -462,7 +462,7 @@ pub fn save_dirty_chunks_blocking(
             match region.write_chunk_data(pos.x, pos.z, &compressed, timestamp) {
                 Ok(()) => {
                     // Only remove from dirty set after successful write.
-                    ctx.dirty_chunks.remove(pos);
+                    ctx.world.dirty_chunks.remove(pos);
                     saved += 1;
                 },
                 Err(e) => {
@@ -477,7 +477,7 @@ pub fn save_dirty_chunks_blocking(
 
 /// Autosaves dirty chunks from the tick thread, logging the outcome.
 fn autosave_chunks(ctx: &ServerContext) {
-    if ctx.dirty_chunks.is_empty() {
+    if ctx.world.dirty_chunks.is_empty() {
         return;
     }
     debug!("Autosaving dirty chunks...");
@@ -495,20 +495,20 @@ fn autosave_chunks(ctx: &ServerContext) {
 pub async fn save_dirty_chunks(
     ctx: &ServerContext,
 ) -> Result<usize, Box<dyn std::error::Error + Send>> {
-    let dirty: Vec<ChunkPos> = ctx.dirty_chunks.iter().map(|r| *r).collect();
+    let dirty: Vec<ChunkPos> = ctx.world.dirty_chunks.iter().map(|r| *r).collect();
     if dirty.is_empty() {
         return Ok(0);
     }
 
     let region_dir = ctx
-        .storage
+        .world.storage
         .region_dir(oxidized_world::storage::Dimension::Overworld);
-    let serializer = ctx.chunk_serializer.clone();
+    let serializer = ctx.world.chunk_serializer.clone();
 
     // Serialize all dirty chunks, skipping failures (they stay dirty).
     let mut chunk_data: Vec<(ChunkPos, Vec<u8>)> = Vec::with_capacity(dirty.len());
     for pos in &dirty {
-        let chunk_ref = match ctx.chunks.get(pos) {
+        let chunk_ref = match ctx.world.chunks.get(pos) {
             Some(r) => r.clone(),
             None => continue,
         };
@@ -572,7 +572,7 @@ pub async fn save_dirty_chunks(
 
     // Remove successfully saved chunks from the dirty set.
     for pos in &serialized_positions {
-        ctx.dirty_chunks.remove(pos);
+        ctx.world.dirty_chunks.remove(pos);
     }
 
     Ok(result)
@@ -600,33 +600,43 @@ mod tests {
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
         let loader = AnvilChunkLoader::new(std::path::Path::new(""), block_registry.clone());
         Arc::new(ServerContext {
-            player_list: RwLock::new(PlayerList::new(20)),
-            level_data: RwLock::new(
-                PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
-            ),
-            dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
-            max_view_distance: 10,
-            max_simulation_distance: 10,
-            broadcast_tx: broadcast::channel(256).0,
-            color_char: None,
+            world: crate::network::WorldContext {
+                level_data: RwLock::new(
+                    PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                ),
+                dimensions: vec![
+                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
+                ],
+                chunks: dashmap::DashMap::new(),
+                dirty_chunks: dashmap::DashSet::new(),
+                storage: LevelStorageSource::new(""),
+                block_registry: block_registry.clone(),
+                chunk_generator: Arc::new(
+                    oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                        oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                    ),
+                ),
+                chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
+                chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
+                game_rules: RwLock::new(GameRules::default()),
+            },
+            network: crate::network::NetworkContext {
+                broadcast_tx: broadcast::channel(256).0,
+                shutdown_tx: broadcast::channel(1).0,
+                kick_channels: dashmap::DashMap::new(),
+                player_list: RwLock::new(PlayerList::new(20)),
+                max_players: 20,
+            },
+            settings: crate::network::ServerSettings {
+                max_view_distance: 10,
+                max_simulation_distance: 10,
+                op_permission_level: 4,
+                spawn_protection: 16,
+                color_char: None,
+            },
             commands: oxidized_game::commands::Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
-            max_players: 20,
-            shutdown_tx: broadcast::channel(1).0,
-            game_rules: RwLock::new(GameRules::default()),
             tick_rate_manager: RwLock::new(ServerTickRateManager::default()),
-            storage: LevelStorageSource::new(""),
-            chunks: dashmap::DashMap::new(),
-            dirty_chunks: dashmap::DashSet::new(),
-            block_registry: block_registry.clone(),
-            chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                oxidized_game::worldgen::flat::FlatWorldConfig::default(),
-            )),
-            chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
-            chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
-            op_permission_level: 4,
-            spawn_protection: 16,
-            kick_channels: dashmap::DashMap::new(),
         })
     }
 
@@ -646,26 +656,26 @@ mod tests {
     #[test]
     fn test_do_tick_advances_time() {
         let ctx = test_ctx();
-        let initial_time = ctx.level_data.read().time;
+        let initial_time = ctx.world.level_data.read().time.game_time;
         do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
-        assert_eq!(ctx.level_data.read().time, initial_time + 1);
+        assert_eq!(ctx.world.level_data.read().time.game_time, initial_time + 1);
     }
 
     #[test]
     fn test_do_tick_advances_day_time() {
         let ctx = test_ctx();
-        let initial_day = ctx.level_data.read().day_time;
+        let initial_day = ctx.world.level_data.read().time.day_time;
         do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
-        assert_eq!(ctx.level_data.read().day_time, initial_day + 1);
+        assert_eq!(ctx.world.level_data.read().time.day_time, initial_day + 1);
     }
 
     #[test]
     fn test_day_time_grows_unbounded() {
         let ctx = test_ctx();
-        ctx.level_data.write().day_time = TICKS_PER_DAY - 1;
+        ctx.world.level_data.write().time.day_time = TICKS_PER_DAY - 1;
         do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         assert_eq!(
-            ctx.level_data.read().day_time,
+            ctx.world.level_data.read().time.day_time,
             TICKS_PER_DAY,
             "day_time should grow past 24000 (client handles modulo)"
         );
@@ -674,31 +684,31 @@ mod tests {
     #[test]
     fn test_daylight_cycle_respects_gamerule() {
         let ctx = test_ctx();
-        ctx.game_rules
+        ctx.world.game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceTime, false);
-        let initial_day = ctx.level_data.read().day_time;
+        let initial_day = ctx.world.level_data.read().time.day_time;
         do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         assert_eq!(
-            ctx.level_data.read().day_time,
+            ctx.world.level_data.read().time.day_time,
             initial_day,
             "day_time should not advance when advance_time is false"
         );
         // But game_time always advances.
-        assert_eq!(ctx.level_data.read().time, 1);
+        assert_eq!(ctx.world.level_data.read().time.game_time, 1);
     }
 
     #[test]
     fn test_weather_cycle_respects_gamerule() {
         let ctx = test_ctx();
-        ctx.game_rules
+        ctx.world.game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceWeather, false);
-        ctx.level_data.write().rain_time = 1; // would flip without gamerule
+        ctx.world.level_data.write().weather.rain_time = 1; // would flip without gamerule
         do_tick(&ctx, 0, &mut test_rng(), &mut test_weather());
         // Weather should not have changed because gamerule is false.
         assert_eq!(
-            ctx.level_data.read().rain_time,
+            ctx.world.level_data.read().weather.rain_time,
             1,
             "weather should not tick when advance_weather is false"
         );
@@ -707,10 +717,10 @@ mod tests {
     #[test]
     fn test_weather_transitions() {
         let ctx = test_ctx();
-        ctx.level_data.write().is_raining = false;
-        ctx.level_data.write().rain_time = 1;
+        ctx.world.level_data.write().weather.is_raining = false;
+        ctx.world.level_data.write().weather.rain_time = 1;
         tick_weather(&ctx, &mut test_rng(), &mut test_weather());
-        assert!(ctx.level_data.read().is_raining, "should start raining");
+        assert!(ctx.world.level_data.read().weather.is_raining, "should start raining");
     }
 
     #[test]
@@ -719,15 +729,15 @@ mod tests {
         // Thunder doesn't require rain — both can toggle independently.
         let ctx = test_ctx();
         {
-            let mut ld = ctx.level_data.write();
-            ld.is_raining = false;
-            ld.is_thundering = true;
-            ld.thunder_time = 5;
+            let mut ld = ctx.world.level_data.write();
+            ld.weather.is_raining = false;
+            ld.weather.is_thundering = true;
+            ld.weather.thunder_time = 5;
         }
         tick_weather(&ctx, &mut test_rng(), &mut test_weather());
         // Thunder remains true because its timer hasn't reached 0.
         assert!(
-            ctx.level_data.read().is_thundering,
+            ctx.world.level_data.read().weather.is_thundering,
             "thunder should persist independently of rain"
         );
     }
@@ -736,19 +746,19 @@ mod tests {
     fn test_clear_weather_time_overrides() {
         let ctx = test_ctx();
         {
-            let mut ld = ctx.level_data.write();
-            ld.is_raining = true;
-            ld.is_thundering = true;
-            ld.clear_weather_time = 100;
-            ld.rain_time = 5000;
-            ld.thunder_time = 3000;
+            let mut ld = ctx.world.level_data.write();
+            ld.weather.is_raining = true;
+            ld.weather.is_thundering = true;
+            ld.weather.clear_weather_time = 100;
+            ld.weather.rain_time = 5000;
+            ld.weather.thunder_time = 3000;
         }
         tick_weather(&ctx, &mut test_rng(), &mut test_weather());
-        let ld = ctx.level_data.read();
-        assert!(!ld.is_raining, "clear weather should stop rain");
-        assert!(!ld.is_thundering, "clear weather should stop thunder");
+        let ld = ctx.world.level_data.read();
+        assert!(!ld.weather.is_raining, "clear weather should stop rain");
+        assert!(!ld.weather.is_thundering, "clear weather should stop thunder");
         assert_eq!(
-            ld.clear_weather_time, 99,
+            ld.weather.clear_weather_time, 99,
             "clear weather timer should decrement"
         );
     }
@@ -758,16 +768,16 @@ mod tests {
         let ctx = test_ctx();
         // Set rain_time to 0 while raining to trigger duration sample.
         {
-            let mut ld = ctx.level_data.write();
-            ld.is_raining = true;
-            ld.rain_time = 0;
+            let mut ld = ctx.world.level_data.write();
+            ld.weather.is_raining = true;
+            ld.weather.rain_time = 0;
         }
         tick_weather(
             &ctx,
             &mut rand::rngs::SmallRng::seed_from_u64(12345),
             &mut test_weather(),
         );
-        let rain_time = ctx.level_data.read().rain_time;
+        let rain_time = ctx.world.level_data.read().weather.rain_time;
         assert!(
             (RAIN_DURATION_MIN..=RAIN_DURATION_MAX).contains(&rain_time),
             "rain duration {rain_time} should be in range {RAIN_DURATION_MIN}..={RAIN_DURATION_MAX}"

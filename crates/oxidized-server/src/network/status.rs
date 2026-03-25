@@ -47,7 +47,7 @@ pub async fn handle_status(
             // player count and sample are always up to date.
             let server_ctx = &ctx.server_ctx;
             let (online, sample) = {
-                let player_list = server_ctx.player_list.read();
+                let player_list = server_ctx.network.player_list.read();
                 let count = player_list.player_count() as u32;
                 let entries: Vec<_> = player_list
                     .iter()
@@ -67,7 +67,7 @@ pub async fn handle_status(
             let live_status = ServerStatus {
                 version: base.version.clone(),
                 players: oxidized_protocol::status::StatusPlayers {
-                    max: server_ctx.max_players as u32,
+                    max: server_ctx.network.max_players as u32,
                     online,
                     sample,
                 },

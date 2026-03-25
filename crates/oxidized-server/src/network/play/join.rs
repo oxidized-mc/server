@@ -76,7 +76,7 @@ pub(super) async fn send_join_sequence(
 
     // Vanilla: canPlayerLogin — reject if server is full (and this isn't a reconnect).
     let is_server_full = {
-        let player_list = server_ctx.player_list.read();
+        let player_list = server_ctx.network.player_list.read();
         player_list.is_full() && !player_list.contains(&uuid)
     };
     if is_server_full {
@@ -87,8 +87,8 @@ pub(super) async fn send_join_sequence(
     }
 
     // Create ServerPlayer with entity ID from the player list.
-    let entity_id = server_ctx.player_list.read().next_entity_id();
-    let game_mode = GameMode::from_id(server_ctx.level_data.read().game_type);
+    let entity_id = server_ctx.network.player_list.read().next_entity_id();
+    let game_mode = GameMode::from_id(server_ctx.world.level_data.read().settings.game_type);
     let dimension = ResourceLocation::from_string("minecraft:overworld").map_err(|e| {
         ConnectionError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -99,10 +99,10 @@ pub(super) async fn send_join_sequence(
     let mut player = ServerPlayer::new(entity_id, profile, dimension, game_mode);
 
     // Apply client preferences, capped to server maximums.
-    player.view_distance =
-        i32::from(client_info.view_distance).clamp(2, server_ctx.max_view_distance);
-    player.simulation_distance = server_ctx.max_simulation_distance;
-    player.model_customisation = client_info.model_customisation;
+    player.connection.view_distance =
+        i32::from(client_info.view_distance).clamp(2, server_ctx.settings.max_view_distance);
+    player.connection.simulation_distance = server_ctx.settings.max_simulation_distance;
+    player.connection.model_customisation = client_info.model_customisation;
 
     // Try to load saved player data from playerdata/<uuid>.dat.
     let playerdata_path = format!("world/playerdata/{uuid}.dat");
@@ -118,8 +118,8 @@ pub(super) async fn send_join_sequence(
         }
     } else {
         // New player — spawn at world spawn, centered on the block (vanilla: +0.5 on X/Z).
-        let (sx, sy, sz) = server_ctx.level_data.read().spawn_pos();
-        player.pos = oxidized_protocol::types::Vec3::new(
+        let (sx, sy, sz) = server_ctx.world.level_data.read().spawn_pos();
+        player.movement.pos = oxidized_protocol::types::Vec3::new(
             f64::from(sx) + 0.5,
             f64::from(sy),
             f64::from(sz) + 0.5,
@@ -128,29 +128,29 @@ pub(super) async fn send_join_sequence(
     }
 
     // Assign a teleport ID for the initial position packet.
-    let teleport_id = player.next_teleport_id();
+    let teleport_id = player.teleport.next_id();
     player
-        .pending_teleports
-        .push_back((teleport_id, player.pos, Instant::now()));
+        .teleport.pending
+        .push_back((teleport_id, player.movement.pos, Instant::now()));
 
     let player_name = player.name.clone();
-    let player_view_distance = player.view_distance;
-    let player_chunk_x = player.pos.x.floor() as i32;
-    let player_chunk_z = player.pos.z.floor() as i32;
+    let player_view_distance = player.connection.view_distance;
+    let player_chunk_x = player.movement.pos.x.floor() as i32;
+    let player_chunk_z = player.movement.pos.z.floor() as i32;
 
     // Build the login sequence.
     let dimension_type_id = 0; // overworld = 0 in registry order
-    let is_flat = server_ctx.chunk_generator.generator_type() == "minecraft:flat";
+    let is_flat = server_ctx.world.chunk_generator.generator_type() == "minecraft:flat";
     let packets = {
-        let level_data = server_ctx.level_data.read();
-        let player_list = server_ctx.player_list.read();
-        let game_rules = server_ctx.game_rules.read();
+        let level_data = server_ctx.world.level_data.read();
+        let player_list = server_ctx.network.player_list.read();
+        let game_rules = server_ctx.world.game_rules.read();
         build_login_sequence(
             &player,
             teleport_id,
             &level_data,
             &player_list,
-            &server_ctx.dimensions,
+            &server_ctx.world.dimensions,
             dimension_type_id,
             &game_rules,
             is_flat,
@@ -198,12 +198,12 @@ pub(super) async fn send_join_sequence(
 
     // Kick any existing session for this UUID before replacing it.
     // This fires the old session's kick_rx, causing a clean disconnect.
-    if let Some(kick_tx) = server_ctx.kick_channels.get(&uuid) {
+    if let Some(kick_tx) = server_ctx.network.kick_channels.get(&uuid) {
         let _ = kick_tx.try_send("You logged in from another location".to_string());
     }
 
     // Add player to the server player list (only after successful send).
-    let (player_arc, old_player) = server_ctx.player_list.write().add(player);
+    let (player_arc, old_player) = server_ctx.network.player_list.write().add(player);
     if let Some(old) = old_player {
         let old_p = old.read();
         let old_entity_id = old_p.entity_id;
@@ -273,7 +273,7 @@ async fn send_level_info(
     // Send EntityEvent with the player's permission level (vanilla sends
     // this via sendPlayerPermissionLevel — event IDs 24–28).
     {
-        let perm_level = server_ctx.op_permission_level.clamp(0, 4) as u8;
+        let perm_level = server_ctx.settings.op_permission_level.clamp(0, 4) as u8;
         conn_handle
             .send_packet(&ClientboundEntityEventPacket {
                 entity_id,
@@ -307,13 +307,13 @@ async fn send_level_info(
     // Send time sync with overworld clock data (vanilla: sendLevelInfo).
     {
         let time_pkt = {
-            let ld = server_ctx.level_data.read();
+            let ld = server_ctx.world.level_data.read();
             ClientboundSetTimePacket {
-                game_time: ld.time,
+                game_time: ld.time.game_time,
                 clock_updates: vec![ClockUpdate {
                     clock_id: ClientboundSetTimePacket::OVERWORLD_CLOCK_ID,
                     state: ClockNetworkState {
-                        total_ticks: ld.day_time,
+                        total_ticks: ld.time.day_time,
                         partial_tick: 0.0,
                         rate: 1.0,
                     },
@@ -326,7 +326,7 @@ async fn send_level_info(
     // Send spawn position (vanilla: sendLevelInfo → respawnData).
     {
         let spawn_pkt = {
-            let ld = server_ctx.level_data.read();
+            let ld = server_ctx.world.level_data.read();
             build_spawn_position_packet(player, &ld)
         };
         conn_handle
@@ -336,8 +336,8 @@ async fn send_level_info(
 
     // Send weather state if it is currently raining (vanilla: sendLevelInfo).
     let (is_raining, is_thundering) = {
-        let ld = server_ctx.level_data.read();
-        (ld.is_raining, ld.is_thundering)
+        let ld = server_ctx.world.level_data.read();
+        (ld.weather.is_raining, ld.weather.is_thundering)
     };
     if is_raining {
         conn_handle
@@ -465,15 +465,15 @@ async fn broadcast_player_join(
                 entity_id,
                 uuid,
                 entity_type: PLAYER_ENTITY_TYPE_ID,
-                x: p.pos.x,
-                y: p.pos.y,
-                z: p.pos.z,
+                x: p.movement.pos.x,
+                y: p.movement.pos.y,
+                z: p.movement.pos.z,
                 vx: 0.0,
                 vy: 0.0,
                 vz: 0.0,
-                x_rot: pack_angle(p.pitch),
-                y_rot: pack_angle(p.yaw),
-                y_head_rot: pack_angle(p.yaw),
+                x_rot: pack_angle(p.movement.pitch),
+                y_rot: pack_angle(p.movement.yaw),
+                y_head_rot: pack_angle(p.movement.yaw),
                 data: 0,
             }
         };
@@ -505,7 +505,7 @@ async fn broadcast_player_join(
 
         // Broadcast new player's skin customisation to existing players.
         {
-            let skin = player_arc.read().model_customisation;
+            let skin = player_arc.read().connection.model_customisation;
             let pkt = ClientboundSetEntityDataPacket::single_byte(
                 entity_id,
                 DATA_PLAYER_MODE_CUSTOMISATION,
@@ -527,7 +527,7 @@ async fn broadcast_player_join(
             ClientboundSetEquipmentPacket,
             ClientboundSetEntityDataPacket,
         )> = {
-            let player_list = server_ctx.player_list.read();
+            let player_list = server_ctx.network.player_list.read();
             player_list
                 .iter()
                 .filter_map(|other_arc| {
@@ -539,22 +539,22 @@ async fn broadcast_player_join(
                         entity_id: other.entity_id,
                         uuid: other.uuid,
                         entity_type: PLAYER_ENTITY_TYPE_ID,
-                        x: other.pos.x,
-                        y: other.pos.y,
-                        z: other.pos.z,
+                        x: other.movement.pos.x,
+                        y: other.movement.pos.y,
+                        z: other.movement.pos.z,
                         vx: 0.0,
                         vy: 0.0,
                         vz: 0.0,
-                        x_rot: pack_angle(other.pitch),
-                        y_rot: pack_angle(other.yaw),
-                        y_head_rot: pack_angle(other.yaw),
+                        x_rot: pack_angle(other.movement.pitch),
+                        y_rot: pack_angle(other.movement.yaw),
+                        y_head_rot: pack_angle(other.movement.yaw),
                         data: 0,
                     };
                     let equip = build_equipment_packet(&other);
                     let skin = ClientboundSetEntityDataPacket::single_byte(
                         other.entity_id,
                         DATA_PLAYER_MODE_CUSTOMISATION,
-                        other.model_customisation,
+                        other.connection.model_customisation,
                     );
                     Some((add, equip, skin))
                 })

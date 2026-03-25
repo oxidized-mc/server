@@ -33,7 +33,7 @@ pub async fn handle_command_suggestion(
 
     let (pos, rot) = {
         let p = ctx.player.read();
-        ((p.pos.x, p.pos.y, p.pos.z), (p.yaw, p.pitch))
+        ((p.movement.pos.x, p.movement.pos.y, p.movement.pos.z), (p.movement.yaw, p.movement.pitch))
     };
     let (feedback_tx, _) = std::sync::mpsc::channel::<Component>();
     let source = make_command_source_for_player(
@@ -102,8 +102,8 @@ pub fn make_command_source(
             name: player_name.to_string(),
             uuid,
         },
-        position: (player.pos.x, player.pos.y, player.pos.z),
-        rotation: (player.yaw, player.pitch),
+        position: (player.movement.pos.x, player.movement.pos.y, player.movement.pos.z),
+        rotation: (player.movement.yaw, player.movement.pitch),
         permission_level: 4, // full permissions for tree serialization
         display_name: player_name.to_string(),
         server: server_ctx.clone(),

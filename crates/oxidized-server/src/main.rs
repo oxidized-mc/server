@@ -29,7 +29,9 @@ use tracing::{error, info, warn};
 
 use oxidized_server::app::cli::Args;
 use oxidized_server::config::ServerConfig;
-use oxidized_server::network::{LoginContext, ServerContext};
+use oxidized_server::network::{
+    LoginContext, NetworkContext, ServerContext, ServerSettings, WorldContext,
+};
 use oxidized_server::{app, network, tick};
 
 /// Use mimalloc as the global allocator for improved throughput and
@@ -145,7 +147,7 @@ fn main() -> anyhow::Result<()> {
         let mut level_data = if level_dat_path.exists() {
             match PrimaryLevelData::load(&level_dat_path) {
                 Ok(data) => {
-                    info!(world = %data.level_name, "Loaded level.dat");
+                    info!(world = %data.settings.level_name, "Loaded level.dat");
                     data
                 },
                 Err(e) => {
@@ -188,11 +190,11 @@ fn main() -> anyhow::Result<()> {
         // Initialize seed and spawn position for new worlds.
         let is_new_world = !level_dat_path.exists();
         if is_new_world {
-            level_data.spawn_y = chunk_generator.find_spawn_y();
+            level_data.spawn.y = chunk_generator.find_spawn_y();
 
             // Derive world seed from config: parse as i64, hash string seeds,
             // or generate a random seed if empty.
-            level_data.world_seed = if config.world.seed.is_empty() {
+            level_data.settings.world_seed = if config.world.seed.is_empty() {
                 rand::random::<i64>()
             } else if let Ok(numeric) = config.world.seed.parse::<i64>() {
                 numeric
@@ -205,8 +207,8 @@ fn main() -> anyhow::Result<()> {
             };
 
             info!(
-                spawn_y = level_data.spawn_y,
-                world_seed = level_data.world_seed,
+                spawn_y = level_data.spawn.y,
+                world_seed = level_data.settings.world_seed,
                 "New world initialized"
             );
 
@@ -218,33 +220,41 @@ fn main() -> anyhow::Result<()> {
         }
 
         let server_ctx = Arc::new(ServerContext {
-            player_list: parking_lot::RwLock::new(PlayerList::new(
-                config.gameplay.max_players as usize,
-            )),
-            level_data: parking_lot::RwLock::new(level_data),
-            dimensions,
-            max_view_distance: config.world.view_distance as i32,
-            max_simulation_distance: config.world.simulation_distance as i32,
-            broadcast_tx: broadcast::channel(256).0,
-            color_char,
+            world: WorldContext {
+                level_data: parking_lot::RwLock::new(level_data),
+                dimensions,
+                chunks: dashmap::DashMap::new(),
+                dirty_chunks: dashmap::DashSet::new(),
+                storage,
+                block_registry,
+                chunk_generator,
+                chunk_loader,
+                chunk_serializer,
+                game_rules: parking_lot::RwLock::new(
+                    oxidized_game::level::GameRules::default(),
+                ),
+            },
+            network: NetworkContext {
+                broadcast_tx: broadcast::channel(256).0,
+                shutdown_tx: shutdown_tx.clone(),
+                kick_channels: dashmap::DashMap::new(),
+                player_list: parking_lot::RwLock::new(PlayerList::new(
+                    config.gameplay.max_players as usize,
+                )),
+                max_players: config.gameplay.max_players as usize,
+            },
+            settings: ServerSettings {
+                max_view_distance: config.world.view_distance as i32,
+                max_simulation_distance: config.world.simulation_distance as i32,
+                op_permission_level: config.admin.op_permission_level,
+                spawn_protection: config.gameplay.spawn_protection,
+                color_char,
+            },
             commands: Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
-            max_players: config.gameplay.max_players as usize,
-            shutdown_tx: shutdown_tx.clone(),
-            game_rules: parking_lot::RwLock::new(oxidized_game::level::GameRules::default()),
             tick_rate_manager: parking_lot::RwLock::new(
                 oxidized_game::level::ServerTickRateManager::default(),
             ),
-            storage,
-            chunks: dashmap::DashMap::new(),
-            dirty_chunks: dashmap::DashSet::new(),
-            block_registry,
-            chunk_generator,
-            chunk_loader,
-            chunk_serializer,
-            op_permission_level: config.admin.op_permission_level,
-            spawn_protection: config.gameplay.spawn_protection,
-            kick_channels: dashmap::DashMap::new(),
         });
 
         // Build the shared login context.
@@ -328,7 +338,7 @@ fn main() -> anyhow::Result<()> {
 
         // Flush all dirty chunks to region files.
         {
-            let dirty_count = shutdown_server_ctx.dirty_chunks.len();
+            let dirty_count = shutdown_server_ctx.world.dirty_chunks.len();
             if dirty_count > 0 {
                 info!(dirty_count, "Saving dirty chunks...");
                 match tick::save_dirty_chunks(&shutdown_server_ctx).await {
@@ -340,9 +350,9 @@ fn main() -> anyhow::Result<()> {
 
         // Save all online players' data to disk.
         {
-            let playerdata_dir = shutdown_server_ctx.storage.player_data_dir();
+            let playerdata_dir = shutdown_server_ctx.world.storage.player_data_dir();
             let players: Vec<_> = {
-                let list = shutdown_server_ctx.player_list.read();
+                let list = shutdown_server_ctx.network.player_list.read();
                 list.iter().cloned().collect()
             };
             if !players.is_empty() {

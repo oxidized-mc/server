@@ -123,25 +123,25 @@ fn build_login_packet(
 ) -> EncodedPacket {
     let login = ClientboundLoginPacket {
         player_id: player.entity_id,
-        is_hardcore: level_data.is_hardcore,
+        is_hardcore: level_data.settings.is_hardcore,
         dimensions: dimensions.to_vec(),
         max_players: all_players.max_players() as i32,
-        chunk_radius: player.view_distance,
-        simulation_distance: player.simulation_distance,
+        chunk_radius: player.connection.view_distance,
+        simulation_distance: player.connection.simulation_distance,
         has_reduced_debug_info: game_rules.get_bool(GameRuleKey::ReducedDebugInfo),
         is_showing_death_screen: !game_rules.get_bool(GameRuleKey::ImmediateRespawn),
         is_limited_crafting: game_rules.get_bool(GameRuleKey::LimitedCrafting),
         common_spawn_info: CommonPlayerSpawnInfo {
             dimension_type_id,
-            dimension: player.dimension.clone(),
-            seed: obfuscate_seed(level_data.world_seed),
+            dimension: player.spawn.dimension.clone(),
+            seed: obfuscate_seed(level_data.settings.world_seed),
             game_mode: player.game_mode.id() as u8,
             previous_game_mode: GameMode::nullable_id(player.previous_game_mode),
             is_debug: false,
             is_flat,
-            last_death_location: player.last_death_location.clone(),
+            last_death_location: player.combat.last_death_location.clone(),
             portal_cooldown: 0,
-            sea_level: level_data.sea_level,
+            sea_level: level_data.settings.sea_level,
         },
         is_secure_chat_enforced: false,
     };
@@ -153,8 +153,8 @@ fn build_login_packet(
 
 fn build_difficulty_packet(level_data: &PrimaryLevelData) -> EncodedPacket {
     let pkt = ClientboundChangeDifficultyPacket {
-        difficulty: level_data.difficulty.clamp(0, 3) as u8,
-        is_locked: level_data.is_difficulty_locked,
+        difficulty: level_data.settings.difficulty.clamp(0, 3) as u8,
+        is_locked: level_data.settings.is_difficulty_locked,
     };
     EncodedPacket {
         id: ClientboundChangeDifficultyPacket::PACKET_ID,
@@ -184,9 +184,9 @@ pub fn build_spawn_position_packet(
     let (sx, sy, sz) = level_data.spawn_pos();
     let spawn_block = BlockPos::new(sx, sy, sz);
     let spawn_pos = ClientboundSetDefaultSpawnPositionPacket {
-        dimension: player.dimension.clone(),
+        dimension: player.spawn.dimension.clone(),
         pos: spawn_block.as_long(),
-        yaw: level_data.spawn_angle,
+        yaw: level_data.spawn.angle,
         pitch: 0.0,
     };
     EncodedPacket {
@@ -295,7 +295,7 @@ fn build_chunk_center_packet(player: &ServerPlayer) -> EncodedPacket {
 
 fn build_simulation_distance_packet(player: &ServerPlayer) -> EncodedPacket {
     let sim_dist = ClientboundSetSimulationDistancePacket {
-        simulation_distance: player.simulation_distance,
+        simulation_distance: player.connection.simulation_distance,
     };
     EncodedPacket {
         id: ClientboundSetSimulationDistancePacket::PACKET_ID,
@@ -306,14 +306,14 @@ fn build_simulation_distance_packet(player: &ServerPlayer) -> EncodedPacket {
 fn build_position_packet(player: &ServerPlayer, teleport_id: i32) -> EncodedPacket {
     let position = ClientboundPlayerPositionPacket {
         teleport_id,
-        x: player.pos.x,
-        y: player.pos.y,
-        z: player.pos.z,
+        x: player.movement.pos.x,
+        y: player.movement.pos.y,
+        z: player.movement.pos.z,
         dx: 0.0,
         dy: 0.0,
         dz: 0.0,
-        yaw: player.yaw,
-        pitch: player.pitch,
+        yaw: player.movement.yaw,
+        pitch: player.movement.pitch,
         relative_flags: RelativeFlags::empty(),
     };
     EncodedPacket {
@@ -335,13 +335,13 @@ fn build_position_packet(player: &ServerPlayer, teleport_id: i32) -> EncodedPack
 /// (unexpected or duplicate confirmation).
 pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) -> bool {
     if let Some(idx) = player
-        .pending_teleports
+        .teleport.pending
         .iter()
         .position(|&(id, _, _)| id == teleport_id)
     {
         // Remove this entry and all entries before it (they're implicitly confirmed).
         for _ in 0..=idx {
-            player.pending_teleports.pop_front();
+            player.teleport.pending.pop_front();
         }
         return true;
     }
@@ -572,7 +572,7 @@ mod tests {
     #[test]
     fn chunk_cache_center_matches_player_position() {
         let mut player = make_player(1, "Test");
-        player.pos = oxidized_protocol::types::Vec3::new(100.0, 64.0, -200.0);
+        player.movement.pos = oxidized_protocol::types::Vec3::new(100.0, 64.0, -200.0);
 
         let level_data = make_level_data();
         let player_list = PlayerList::new(20);
@@ -598,9 +598,9 @@ mod tests {
     #[test]
     fn position_packet_uses_player_pos_and_teleport_id() {
         let mut player = make_player(1, "Test");
-        player.pos = oxidized_protocol::types::Vec3::new(50.5, 70.0, -100.25);
-        player.yaw = 90.0;
-        player.pitch = -15.0;
+        player.movement.pos = oxidized_protocol::types::Vec3::new(50.5, 70.0, -100.25);
+        player.movement.yaw = 90.0;
+        player.movement.pitch = -15.0;
 
         let level_data = make_level_data();
         let player_list = PlayerList::new(20);
@@ -633,15 +633,15 @@ mod tests {
         use std::time::Instant;
         let mut player = make_player(1, "Test");
         player
-            .pending_teleports
+            .teleport.pending
             .push_back((1, Vec3::ZERO, Instant::now()));
         player
-            .pending_teleports
+            .teleport.pending
             .push_back((2, Vec3::ZERO, Instant::now()));
 
         assert!(handle_accept_teleportation(&mut player, 1));
-        assert_eq!(player.pending_teleports.len(), 1);
-        assert_eq!(player.pending_teleports.front().unwrap().0, 2);
+        assert_eq!(player.teleport.pending.len(), 1);
+        assert_eq!(player.teleport.pending.front().unwrap().0, 2);
     }
 
     #[test]
@@ -649,11 +649,11 @@ mod tests {
         use std::time::Instant;
         let mut player = make_player(1, "Test");
         player
-            .pending_teleports
+            .teleport.pending
             .push_back((1, Vec3::ZERO, Instant::now()));
 
         assert!(!handle_accept_teleportation(&mut player, 99));
-        assert_eq!(player.pending_teleports.len(), 1);
+        assert_eq!(player.teleport.pending.len(), 1);
     }
 
     #[test]
@@ -667,26 +667,26 @@ mod tests {
         use std::time::Instant;
         let mut player = make_player(1, "Test");
         player
-            .pending_teleports
+            .teleport.pending
             .push_back((1, Vec3::ZERO, Instant::now()));
         player
-            .pending_teleports
+            .teleport.pending
             .push_back((2, Vec3::ZERO, Instant::now()));
         player
-            .pending_teleports
+            .teleport.pending
             .push_back((3, Vec3::ZERO, Instant::now()));
 
         assert!(handle_accept_teleportation(&mut player, 1));
         assert!(handle_accept_teleportation(&mut player, 2));
         assert!(handle_accept_teleportation(&mut player, 3));
-        assert!(player.pending_teleports.is_empty());
+        assert!(player.teleport.pending.is_empty());
     }
 
     #[test]
     fn hardcore_world_reflected_in_login_packet() {
         let player = make_player(1, "Test");
         let mut level_data = make_level_data();
-        level_data.is_hardcore = true;
+        level_data.settings.is_hardcore = true;
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
 
@@ -728,7 +728,7 @@ mod tests {
     #[test]
     fn login_packet_contains_hashed_seed() {
         let mut level_data = make_level_data();
-        level_data.world_seed = 42;
+        level_data.settings.world_seed = 42;
         let player = make_player(1, "Test");
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     fn difficulty_packet_respects_lock() {
         let mut level_data = make_level_data();
-        level_data.is_difficulty_locked = true;
+        level_data.settings.is_difficulty_locked = true;
         let player = make_player(1, "Test");
         let player_list = PlayerList::new(20);
         let dimensions = vec![ResourceLocation::minecraft("overworld")];

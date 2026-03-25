@@ -26,17 +26,17 @@ use super::constants::*;
 /// let mut entity = Entity::new(ResourceLocation::minecraft("player"), 0.6, 1.8);
 /// entity.is_on_ground = true;
 /// apply_jump(&mut entity, 0, 1.0);
-/// assert!((entity.vy - 0.42).abs() < 0.001);
+/// assert!((entity.velocity.y - 0.42).abs() < 0.001);
 /// ```
 pub fn apply_jump(entity: &mut Entity, jump_boost_level: u8, jump_factor: f64) {
     let base = JUMP_POWER * jump_factor + f64::from(jump_boost_level) * JUMP_BOOST_PER_LEVEL;
-    entity.vy = base;
+    entity.velocity.y = base;
 
     if entity.is_sprinting() {
         // Sprint-is_jumping: horizontal boost in facing direction.
-        let yaw_rad = f64::from(entity.yaw).to_radians();
-        entity.vx -= yaw_rad.sin() * SPRINT_JUMP_BOOST;
-        entity.vz += yaw_rad.cos() * SPRINT_JUMP_BOOST;
+        let yaw_rad = f64::from(entity.rotation.yaw).to_radians();
+        entity.velocity.x -= yaw_rad.sin() * SPRINT_JUMP_BOOST;
+        entity.velocity.z += yaw_rad.cos() * SPRINT_JUMP_BOOST;
     }
 }
 
@@ -60,9 +60,9 @@ mod tests {
         let mut entity = make_entity_on_ground();
         apply_jump(&mut entity, 0, 1.0);
         assert!(
-            (entity.vy - JUMP_POWER).abs() < 0.0001,
+            (entity.velocity.y - JUMP_POWER).abs() < 0.0001,
             "Jump vy {} ≠ {}",
-            entity.vy,
+            entity.velocity.y,
             JUMP_POWER
         );
     }
@@ -73,9 +73,9 @@ mod tests {
         apply_jump(&mut entity, 2, 1.0);
         let expected = JUMP_POWER + 2.0 * JUMP_BOOST_PER_LEVEL;
         assert!(
-            (entity.vy - expected).abs() < 0.0001,
+            (entity.velocity.y - expected).abs() < 0.0001,
             "Jump Boost II vy {} ≠ {}",
-            entity.vy,
+            entity.velocity.y,
             expected
         );
     }
@@ -87,9 +87,9 @@ mod tests {
         apply_jump(&mut entity, 0, 0.5);
         let expected = JUMP_POWER * 0.5;
         assert!(
-            (entity.vy - expected).abs() < 0.0001,
+            (entity.velocity.y - expected).abs() < 0.0001,
             "Honey jump vy {} ≠ {}",
-            entity.vy,
+            entity.velocity.y,
             expected
         );
     }
@@ -98,41 +98,41 @@ mod tests {
     fn test_sprint_jump_adds_horizontal_boost() {
         let mut entity = make_entity_on_ground();
         entity.set_flag(FLAG_SPRINTING, true);
-        entity.yaw = 0.0; // facing +Z
-        entity.vx = 0.0;
-        entity.vz = 0.0;
+        entity.rotation.yaw = 0.0; // facing +Z
+        entity.velocity.x = 0.0;
+        entity.velocity.z = 0.0;
 
         apply_jump(&mut entity, 0, 1.0);
 
         // Facing 0° (yaw=0): sin(0)=0, cos(0)=1
         // vx -= 0 * 0.2 = 0, vz += 1 * 0.2 = 0.2
         assert!(
-            entity.vx.abs() < 0.001,
+            entity.velocity.x.abs() < 0.001,
             "vx should be ~0 at yaw=0: {}",
-            entity.vx
+            entity.velocity.x
         );
         assert!(
-            (entity.vz - SPRINT_JUMP_BOOST).abs() < 0.001,
+            (entity.velocity.z - SPRINT_JUMP_BOOST).abs() < 0.001,
             "vz should be ~0.2 at yaw=0: {}",
-            entity.vz
+            entity.velocity.z
         );
     }
 
     #[test]
     fn test_no_sprint_boost_when_not_sprinting() {
         let mut entity = make_entity_on_ground();
-        entity.yaw = 90.0;
-        entity.vx = 0.0;
-        entity.vz = 0.0;
+        entity.rotation.yaw = 90.0;
+        entity.velocity.x = 0.0;
+        entity.velocity.z = 0.0;
 
         apply_jump(&mut entity, 0, 1.0);
 
         assert!(
-            entity.vx.abs() < 0.0001,
+            entity.velocity.x.abs() < 0.0001,
             "No horizontal boost without sprint"
         );
         assert!(
-            entity.vz.abs() < 0.0001,
+            entity.velocity.z.abs() < 0.0001,
             "No horizontal boost without sprint"
         );
     }

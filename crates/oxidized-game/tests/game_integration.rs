@@ -575,18 +575,18 @@ fn test_teleport_accept_correct_id() {
     let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
     let mut player = ServerPlayer::new(1, profile, dim, GameMode::Survival);
     player
-        .pending_teleports
+        .teleport.pending
         .push_back((42, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
     player
-        .pending_teleports
+        .teleport.pending
         .push_back((43, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
 
     assert!(
         handle_accept_teleportation(&mut player, 42),
         "correct teleport ID should be accepted"
     );
-    assert_eq!(player.pending_teleports.len(), 1);
-    assert_eq!(player.pending_teleports[0].0, 43);
+    assert_eq!(player.teleport.pending.len(), 1);
+    assert_eq!(player.teleport.pending[0].0, 43);
 }
 
 #[test]
@@ -599,7 +599,7 @@ fn test_teleport_accept_wrong_id_fails() {
     let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
     let mut player = ServerPlayer::new(2, profile, dim, GameMode::Survival);
     player
-        .pending_teleports
+        .teleport.pending
         .push_back((10, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
 
     assert!(
@@ -607,7 +607,7 @@ fn test_teleport_accept_wrong_id_fails() {
         "wrong teleport ID should be rejected"
     );
     assert_eq!(
-        player.pending_teleports.len(),
+        player.teleport.pending.len(),
         1,
         "queue unchanged on wrong ID"
     );

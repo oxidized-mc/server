@@ -28,15 +28,15 @@ pub(super) async fn get_or_create_chunk(
     pos: ChunkPos,
 ) -> Arc<RwLock<LevelChunk>> {
     // Fast path: already in memory.
-    if let Some(existing) = server_ctx.chunks.get(&pos) {
+    if let Some(existing) = server_ctx.world.chunks.get(&pos) {
         return existing.clone();
     }
 
     // Try loading from disk.
-    match server_ctx.chunk_loader.load_chunk(pos.x, pos.z).await {
+    match server_ctx.world.chunk_loader.load_chunk(pos.x, pos.z).await {
         Ok(Some(chunk)) => {
             return server_ctx
-                .chunks
+                .world.chunks
                 .entry(pos)
                 .or_insert_with(|| Arc::new(RwLock::new(chunk)))
                 .clone();
@@ -51,10 +51,10 @@ pub(super) async fn get_or_create_chunk(
 
     // Generate a new chunk.
     server_ctx
-        .chunks
+        .world.chunks
         .entry(pos)
         .or_insert_with(|| {
-            let chunk = server_ctx.chunk_generator.generate_chunk(pos);
+            let chunk = server_ctx.world.chunk_generator.generate_chunk(pos);
             Arc::new(RwLock::new(chunk))
         })
         .clone()

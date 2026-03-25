@@ -59,43 +59,22 @@ pub struct LoginContext {
     pub server_ctx: Arc<ServerContext>,
 }
 
-/// Shared game server state accessible to all connection handlers.
-///
-/// Holds the player list, world metadata, and dimension registry needed
-/// when a client transitions from CONFIGURATION to PLAY state.
-pub struct ServerContext {
-    /// Server-wide player roster (thread-safe via interior mutability).
-    pub player_list: RwLock<PlayerList>,
+// ---------------------------------------------------------------------------
+// Sub-structs — logical groupings extracted from ServerContext (R5.11).
+// ---------------------------------------------------------------------------
+
+/// World-level state: level data, dimensions, chunks, storage, and game rules.
+pub struct WorldContext {
     /// World metadata loaded from `level.dat` (mutable via tick loop).
     pub level_data: RwLock<PrimaryLevelData>,
     /// All registered dimension identifiers (e.g., `minecraft:overworld`).
     pub dimensions: Vec<ResourceLocation>,
-    /// Maximum view distance allowed by the server config (2–32 chunks).
-    pub max_view_distance: i32,
-    /// Maximum simulation distance allowed by the server config (2–32 chunks).
-    pub max_simulation_distance: i32,
-    /// Broadcast channel for packets sent to all connected players.
-    pub broadcast_tx: broadcast::Sender<BroadcastMessage>,
-    /// Alternate color code prefix character, or `None` if disabled.
-    pub color_char: Option<char>,
-    /// Brigadier command framework — shared across all connections.
-    pub commands: Commands,
-    /// Game event bus for plugin extensibility.
-    pub event_bus: EventBus,
-    /// Maximum number of players allowed on the server.
-    pub max_players: usize,
-    /// Broadcast sender used to trigger a graceful server shutdown.
-    pub shutdown_tx: broadcast::Sender<()>,
-    /// Game rules — thread-safe for tick loop + command access.
-    pub game_rules: RwLock<GameRules>,
-    /// Tick rate manager — controls freeze/step/sprint.
-    pub tick_rate_manager: RwLock<ServerTickRateManager>,
-    /// World storage source — resolves paths to level.dat, region dirs, etc.
-    pub storage: LevelStorageSource,
     /// Loaded chunk columns keyed by position. Thread-safe via `DashMap`.
     pub chunks: DashMap<ChunkPos, Arc<RwLock<LevelChunk>>>,
     /// Chunk positions that have been modified and need saving.
     pub dirty_chunks: DashSet<ChunkPos>,
+    /// World storage source — resolves paths to level.dat, region dirs, etc.
+    pub storage: LevelStorageSource,
     /// Block registry — loaded once at startup, shared across all handlers.
     pub block_registry: Arc<BlockRegistry>,
     /// Chunk generator — produces new chunks on demand for unseen positions.
@@ -104,21 +83,65 @@ pub struct ServerContext {
     pub chunk_loader: Arc<AsyncChunkLoader>,
     /// Chunk serializer — converts in-memory chunks to Anvil NBT format.
     pub chunk_serializer: Arc<ChunkSerializer>,
+    /// Game rules — thread-safe for tick loop + command access.
+    pub game_rules: RwLock<GameRules>,
+}
+
+/// Network-level state: player list, broadcast, shutdown, kick channels.
+pub struct NetworkContext {
+    /// Broadcast channel for packets sent to all connected players.
+    pub broadcast_tx: broadcast::Sender<BroadcastMessage>,
+    /// Broadcast sender used to trigger a graceful server shutdown.
+    pub shutdown_tx: broadcast::Sender<()>,
+    /// Per-player kick channels: signals a player's play loop to exit.
+    pub kick_channels: DashMap<uuid::Uuid, tokio::sync::mpsc::Sender<String>>,
+    /// Server-wide player roster (thread-safe via interior mutability).
+    pub player_list: RwLock<PlayerList>,
+    /// Maximum number of players allowed on the server.
+    pub max_players: usize,
+}
+
+/// Server configuration settings.
+#[derive(Debug, Clone)]
+pub struct ServerSettings {
+    /// Maximum view distance allowed by the server config (2–32 chunks).
+    pub max_view_distance: i32,
+    /// Maximum simulation distance allowed by the server config (2–32 chunks).
+    pub max_simulation_distance: i32,
     /// Operator permission level for all players (from server config).
     /// TODO: Replace with per-player ops from `ops.json`.
     pub op_permission_level: i32,
     /// Spawn protection radius (Chebyshev distance from world spawn).
     /// A value of 0 disables spawn protection.
     pub spawn_protection: u32,
-    /// Per-player kick channels: signals a player's play loop to exit.
-    pub kick_channels: DashMap<uuid::Uuid, tokio::sync::mpsc::Sender<String>>,
+    /// Alternate color code prefix character, or `None` if disabled.
+    pub color_char: Option<char>,
+}
+
+/// Shared game server state accessible to all connection handlers.
+///
+/// Holds the player list, world metadata, and dimension registry needed
+/// when a client transitions from CONFIGURATION to PLAY state.
+pub struct ServerContext {
+    /// World state: level data, chunks, storage, block registry, game rules.
+    pub world: WorldContext,
+    /// Network state: player list, broadcast, shutdown, kick channels.
+    pub network: NetworkContext,
+    /// Configuration settings: view distance, simulation distance, etc.
+    pub settings: ServerSettings,
+    /// Brigadier command framework — shared across all connections.
+    pub commands: Commands,
+    /// Game event bus for plugin extensibility.
+    pub event_bus: EventBus,
+    /// Tick rate manager — controls freeze/step/sprint.
+    pub tick_rate_manager: RwLock<ServerTickRateManager>,
 }
 
 impl ServerContext {
     /// Sends a broadcast message to all connected players, logging a warning
     /// if no receivers are active.
     pub fn broadcast(&self, msg: BroadcastMessage) {
-        if let Err(e) = self.broadcast_tx.send(msg) {
+        if let Err(e) = self.network.broadcast_tx.send(msg) {
             warn!("Broadcast send failed: {e}");
         }
     }
@@ -131,15 +154,15 @@ impl ServerHandle for ServerContext {
 
     fn request_shutdown(&self) {
         info!("Server shutdown requested via /stop");
-        let _ = self.shutdown_tx.send(());
+        let _ = self.network.shutdown_tx.send(());
     }
 
     fn seed(&self) -> i64 {
-        self.level_data.read().world_seed
+        self.world.level_data.read().settings.world_seed
     }
 
     fn online_player_names(&self) -> Vec<String> {
-        self.player_list
+        self.network.player_list
             .read()
             .iter()
             .map(|p| p.read().name.clone())
@@ -147,31 +170,31 @@ impl ServerHandle for ServerContext {
     }
 
     fn online_player_count(&self) -> usize {
-        self.player_list.read().player_count()
+        self.network.player_list.read().player_count()
     }
 
     fn max_players(&self) -> usize {
-        self.max_players
+        self.network.max_players
     }
 
     fn difficulty(&self) -> i32 {
-        self.level_data.read().difficulty
+        self.world.level_data.read().settings.difficulty
     }
 
     fn game_time(&self) -> i64 {
-        self.level_data.read().time
+        self.world.level_data.read().time.game_time
     }
 
     fn day_time(&self) -> i64 {
-        self.level_data.read().day_time
+        self.world.level_data.read().time.day_time
     }
 
     fn is_raining(&self) -> bool {
-        self.level_data.read().is_raining
+        self.world.level_data.read().weather.is_raining
     }
 
     fn is_thundering(&self) -> bool {
-        self.level_data.read().is_thundering
+        self.world.level_data.read().weather.is_thundering
     }
 
     fn kick_player(&self, name: &str, reason: &str) -> bool {
@@ -180,7 +203,7 @@ impl ServerHandle for ServerContext {
             Some(u) => u,
             None => return false,
         };
-        if let Some(tx) = self.kick_channels.get(&uuid) {
+        if let Some(tx) = self.network.kick_channels.get(&uuid) {
             let _ = tx.try_send(reason.to_string());
             true
         } else {
@@ -189,7 +212,7 @@ impl ServerHandle for ServerContext {
     }
 
     fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid> {
-        let player_list = self.player_list.read();
+        let player_list = self.network.player_list.read();
         for player_arc in player_list.iter() {
             let player = player_arc.read();
             if player.name == name {
@@ -235,12 +258,12 @@ impl ServerHandle for ServerContext {
     }
 
     fn set_day_time(&self, time: i64) {
-        self.level_data.write().day_time = time;
+        self.world.level_data.write().time.day_time = time;
     }
 
     fn add_day_time(&self, ticks: i64) {
-        let mut ld = self.level_data.write();
-        ld.day_time = ld.day_time.wrapping_add(ticks);
+        let mut ld = self.world.level_data.write();
+        ld.time.day_time = ld.time.day_time.wrapping_add(ticks);
     }
 
     fn set_weather(&self, weather: WeatherType, duration: Option<i32>) {
@@ -249,36 +272,36 @@ impl ServerHandle for ServerContext {
 
         let was_raining;
         {
-            let mut ld = self.level_data.write();
-            was_raining = ld.is_raining;
+            let mut ld = self.world.level_data.write();
+            was_raining = ld.weather.is_raining;
             let dur = duration.unwrap_or(6000);
             match weather {
                 WeatherType::Clear => {
-                    ld.clear_weather_time = dur;
-                    ld.is_raining = false;
-                    ld.is_thundering = false;
-                    ld.rain_time = 0;
-                    ld.thunder_time = 0;
+                    ld.weather.clear_weather_time = dur;
+                    ld.weather.is_raining = false;
+                    ld.weather.is_thundering = false;
+                    ld.weather.rain_time = 0;
+                    ld.weather.thunder_time = 0;
                 },
                 WeatherType::Rain => {
-                    ld.clear_weather_time = 0;
-                    ld.is_raining = true;
-                    ld.is_thundering = false;
-                    ld.rain_time = dur;
-                    ld.thunder_time = dur;
+                    ld.weather.clear_weather_time = 0;
+                    ld.weather.is_raining = true;
+                    ld.weather.is_thundering = false;
+                    ld.weather.rain_time = dur;
+                    ld.weather.thunder_time = dur;
                 },
                 WeatherType::Thunder => {
-                    ld.clear_weather_time = 0;
-                    ld.is_raining = true;
-                    ld.is_thundering = true;
-                    ld.rain_time = dur;
-                    ld.thunder_time = dur;
+                    ld.weather.clear_weather_time = 0;
+                    ld.weather.is_raining = true;
+                    ld.weather.is_thundering = true;
+                    ld.weather.rain_time = dur;
+                    ld.weather.thunder_time = dur;
                 },
             }
         }
 
         // Broadcast weather change to all connected clients.
-        let now_raining = self.level_data.read().is_raining;
+        let now_raining = self.world.level_data.read().weather.is_raining;
         if was_raining != now_raining {
             let event = if now_raining {
                 GameEventType::StartRaining
@@ -298,12 +321,12 @@ impl ServerHandle for ServerContext {
 
     fn get_game_rule(&self, name: &str) -> Option<String> {
         let key = GameRules::from_name(name)?;
-        Some(self.game_rules.read().get_as_string(key))
+        Some(self.world.game_rules.read().get_as_string(key))
     }
 
     fn set_game_rule(&self, name: &str, value: &str) -> Result<(), String> {
         let key = GameRules::from_name(name).ok_or_else(|| format!("Unknown game rule: {name}"))?;
-        self.game_rules.write().set_from_string(key, value)
+        self.world.game_rules.write().set_from_string(key, value)
     }
 
     fn game_rule_names(&self) -> Vec<&'static str> {
@@ -375,7 +398,7 @@ impl ServerHandle for ServerContext {
 
         // Clone the Arc so we can drop the player_list lock early.
         let player_arc = {
-            let player_list = self.player_list.read();
+            let player_list = self.network.player_list.read();
             match player_list.get(&uuid) {
                 Some(p) => Arc::clone(p),
                 None => return false,
@@ -455,7 +478,7 @@ impl ServerHandle for ServerContext {
         use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
 
         let entity_id = {
-            let player_list = self.player_list.read();
+            let player_list = self.network.player_list.read();
             match player_list.get(&uuid) {
                 Some(p) => p.read().entity_id,
                 None => return,
@@ -480,17 +503,17 @@ impl ServerHandle for ServerContext {
         use oxidized_protocol::packets::play::ClientboundBlockUpdatePacket;
         use oxidized_protocol::types::BlockPos;
 
-        let state_id = match self.block_registry.default_state(block_name) {
+        let state_id = match self.world.block_registry.default_state(block_name) {
             Some(id) => u32::from(id.0),
             None => return false,
         };
 
         let pos = BlockPos::new(x, y, z);
         let chunk_pos = ChunkPos::from_block_coords(x, z);
-        if let Some(chunk_ref) = self.chunks.get(&chunk_pos) {
+        if let Some(chunk_ref) = self.world.chunks.get(&chunk_pos) {
             let mut chunk = chunk_ref.write();
             if chunk.set_block_state(x, y, z, state_id).is_ok() {
-                self.dirty_chunks.insert(chunk_pos);
+                self.world.dirty_chunks.insert(chunk_pos);
             } else {
                 return false;
             }
@@ -516,17 +539,17 @@ impl ServerHandle for ServerContext {
 
     fn get_block(&self, x: i32, y: i32, z: i32) -> Option<String> {
         let chunk_pos = ChunkPos::from_block_coords(x, z);
-        let chunk_ref = self.chunks.get(&chunk_pos)?;
+        let chunk_ref = self.world.chunks.get(&chunk_pos)?;
         let chunk = chunk_ref.read();
         let state_id = chunk.get_block_state(x, y, z).ok()?;
-        self.block_registry
+        self.world.block_registry
             .block_name_from_state_id(state_id)
             .map(String::from)
     }
 
     fn get_block_state_id(&self, x: i32, y: i32, z: i32) -> Option<u32> {
         let chunk_pos = ChunkPos::from_block_coords(x, z);
-        let chunk_ref = self.chunks.get(&chunk_pos)?;
+        let chunk_ref = self.world.chunks.get(&chunk_pos)?;
         let chunk = chunk_ref.read();
         chunk.get_block_state(x, y, z).ok()
     }
@@ -723,14 +746,14 @@ async fn handle_connection(
                         // Vanilla: if a player with the same UUID is already online,
                         // kick the OLD connection and let the new one proceed.
                         let uuid = profile.uuid().unwrap_or_default();
-                        if ctx.server_ctx.player_list.read().contains(&uuid) {
+                        if ctx.server_ctx.network.player_list.read().contains(&uuid) {
                             info!(
                                 peer = %addr,
                                 %uuid,
                                 "Duplicate login — kicking old session",
                             );
                             // Send kick signal to old player's play loop.
-                            if let Some(tx) = ctx.server_ctx.kick_channels.get(&uuid) {
+                            if let Some(tx) = ctx.server_ctx.network.kick_channels.get(&uuid) {
                                 let _ =
                                     tx.try_send("You logged in from another location".to_string());
                             }
@@ -811,37 +834,47 @@ mod tests {
             is_preventing_proxy_connections: false,
             http_client: reqwest::Client::new(),
             server_ctx: Arc::new(ServerContext {
-                player_list: RwLock::new(PlayerList::new(20)),
-                level_data: RwLock::new(
-                    PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
-                ),
-                dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
-                max_view_distance: 10,
-                max_simulation_distance: 10,
-                broadcast_tx: broadcast::channel(256).0,
-                color_char: Some('&'),
+                world: WorldContext {
+                    level_data: RwLock::new(
+                        PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
+                    ),
+                    dimensions: vec![
+                        ResourceLocation::from_string("minecraft:overworld").unwrap(),
+                    ],
+                    chunks: dashmap::DashMap::new(),
+                    dirty_chunks: dashmap::DashSet::new(),
+                    storage: LevelStorageSource::new(""),
+                    block_registry: block_registry.clone(),
+                    chunk_generator: Arc::new(
+                        oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                            oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                        ),
+                    ),
+                    chunk_loader: Arc::new(oxidized_world::anvil::AsyncChunkLoader::new(loader)),
+                    chunk_serializer: Arc::new(oxidized_world::anvil::ChunkSerializer::new(
+                        block_registry,
+                    )),
+                    game_rules: RwLock::new(oxidized_game::level::GameRules::default()),
+                },
+                network: NetworkContext {
+                    broadcast_tx: broadcast::channel(256).0,
+                    shutdown_tx: broadcast::channel(1).0,
+                    kick_channels: dashmap::DashMap::new(),
+                    player_list: RwLock::new(PlayerList::new(20)),
+                    max_players: 20,
+                },
+                settings: ServerSettings {
+                    max_view_distance: 10,
+                    max_simulation_distance: 10,
+                    op_permission_level: 4,
+                    spawn_protection: 16,
+                    color_char: Some('&'),
+                },
                 commands: oxidized_game::commands::Commands::new(),
                 event_bus: oxidized_game::event::EventBus::new(),
-                max_players: 20,
-                shutdown_tx: broadcast::channel(1).0,
-                game_rules: RwLock::new(oxidized_game::level::GameRules::default()),
                 tick_rate_manager: RwLock::new(
                     oxidized_game::level::ServerTickRateManager::default(),
                 ),
-                storage: LevelStorageSource::new(""),
-                chunks: dashmap::DashMap::new(),
-                dirty_chunks: dashmap::DashSet::new(),
-                block_registry: block_registry.clone(),
-                chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
-                )),
-                chunk_loader: Arc::new(oxidized_world::anvil::AsyncChunkLoader::new(loader)),
-                chunk_serializer: Arc::new(oxidized_world::anvil::ChunkSerializer::new(
-                    block_registry,
-                )),
-                op_permission_level: 4,
-                spawn_protection: 16,
-                kick_channels: dashmap::DashMap::new(),
             }),
         })
     }

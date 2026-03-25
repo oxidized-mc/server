@@ -10,31 +10,31 @@ use oxidized_nbt::{NbtCompound, NbtTag};
 
 use crate::anvil::AnvilError;
 
-/// World metadata parsed from the `Data` compound inside `level.dat`.
-///
-/// Stores raw numeric IDs for game type and difficulty to avoid depending
-/// on protocol-layer enums. Convert to `GameType`/`Difficulty` at a higher
-/// layer.
+/// World spawn location and orientation for new players.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PrimaryLevelData {
-    /// World display name.
-    pub level_name: String,
-    /// NBT data version for schema migrations.
-    pub data_version: i32,
-    /// Game mode as numeric ID (0=Survival, 1=Creative, 2=Adventure, 3=Spectator).
-    pub game_type: i32,
+pub struct SpawnPoint {
     /// World spawn X coordinate.
-    pub spawn_x: i32,
+    pub x: i32,
     /// World spawn Y coordinate.
-    pub spawn_y: i32,
+    pub y: i32,
     /// World spawn Z coordinate.
-    pub spawn_z: i32,
+    pub z: i32,
     /// Spawn angle (yaw) for new players.
-    pub spawn_angle: f32,
+    pub angle: f32,
+}
+
+/// World age and day/night cycle time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorldTime {
     /// Total world age in game ticks.
-    pub time: i64,
+    pub game_time: i64,
     /// Time of day within the 24000-tick day cycle.
     pub day_time: i64,
+}
+
+/// Current weather conditions and countdown timers.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WeatherState {
     /// Whether it is currently raining.
     pub is_raining: bool,
     /// Whether it is currently thundering.
@@ -45,6 +45,17 @@ pub struct PrimaryLevelData {
     pub thunder_time: i32,
     /// Ticks of guaranteed clear weather remaining (overrides rain/thunder when > 0).
     pub clear_weather_time: i32,
+}
+
+/// Persistent world configuration and generation settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorldSettings {
+    /// World display name.
+    pub level_name: String,
+    /// NBT data version for schema migrations.
+    pub data_version: i32,
+    /// Game mode as numeric ID (0=Survival, 1=Creative, 2=Adventure, 3=Spectator).
+    pub game_type: i32,
     /// Whether this is a hardcore world.
     pub is_hardcore: bool,
     /// Difficulty as numeric ID (0=Peaceful, 1=Easy, 2=Normal, 3=Hard).
@@ -61,6 +72,22 @@ pub struct PrimaryLevelData {
     pub world_seed: i64,
 }
 
+/// World metadata parsed from the `Data` compound inside `level.dat`.
+///
+/// Groups related fields into sub-structs: spawn location, time tracking,
+/// weather state, and persistent world settings.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrimaryLevelData {
+    /// World spawn location and player orientation.
+    pub spawn: SpawnPoint,
+    /// World age and day/night cycle.
+    pub time: WorldTime,
+    /// Current weather conditions.
+    pub weather: WeatherState,
+    /// Persistent world configuration.
+    pub settings: WorldSettings,
+}
+
 impl PrimaryLevelData {
     /// Parses level data from the `Data` compound inside `level.dat`.
     ///
@@ -68,33 +95,42 @@ impl PrimaryLevelData {
     ///
     /// Returns [`AnvilError::MissingField`] if required fields are absent.
     pub fn from_nbt(data: &NbtCompound) -> Result<Self, AnvilError> {
-        let level_name = data.get_string("LevelName").unwrap_or("Unnamed").to_owned();
-
         Ok(Self {
-            level_name,
-            data_version: data.get_int("DataVersion").unwrap_or(0),
-            game_type: data.get_int("GameType").unwrap_or(0),
-            spawn_x: data.get_int("SpawnX").unwrap_or(0),
-            spawn_y: data.get_int("SpawnY").unwrap_or(64),
-            spawn_z: data.get_int("SpawnZ").unwrap_or(0),
-            spawn_angle: data.get_float("SpawnAngle").unwrap_or(0.0),
-            time: data.get_long("Time").unwrap_or(0),
-            day_time: data.get_long("DayTime").unwrap_or(0),
-            is_raining: data.get_byte("raining").unwrap_or(0) != 0,
-            is_thundering: data.get_byte("thundering").unwrap_or(0) != 0,
-            rain_time: data.get_int("rainTime").unwrap_or(0),
-            thunder_time: data.get_int("thunderTime").unwrap_or(0),
-            clear_weather_time: data.get_int("clearWeatherTime").unwrap_or(0),
-            is_hardcore: data.get_byte("hardcore").unwrap_or(0) != 0,
-            difficulty: data.get_byte("Difficulty").unwrap_or(2) as i32,
-            is_commands_allowed: data.get_byte("allowCommands").unwrap_or(0) != 0,
-            is_initialized: data.get_byte("initialized").unwrap_or(1) != 0,
-            sea_level: data.get_int("SeaLevel").unwrap_or(63),
-            is_difficulty_locked: data.get_byte("DifficultyLocked").unwrap_or(0) != 0,
-            world_seed: data
-                .get_compound("WorldGenSettings")
-                .and_then(|wgs| wgs.get_long("seed"))
-                .unwrap_or(0),
+            spawn: SpawnPoint {
+                x: data.get_int("SpawnX").unwrap_or(0),
+                y: data.get_int("SpawnY").unwrap_or(64),
+                z: data.get_int("SpawnZ").unwrap_or(0),
+                angle: data.get_float("SpawnAngle").unwrap_or(0.0),
+            },
+            time: WorldTime {
+                game_time: data.get_long("Time").unwrap_or(0),
+                day_time: data.get_long("DayTime").unwrap_or(0),
+            },
+            weather: WeatherState {
+                is_raining: data.get_byte("raining").unwrap_or(0) != 0,
+                is_thundering: data.get_byte("thundering").unwrap_or(0) != 0,
+                rain_time: data.get_int("rainTime").unwrap_or(0),
+                thunder_time: data.get_int("thunderTime").unwrap_or(0),
+                clear_weather_time: data.get_int("clearWeatherTime").unwrap_or(0),
+            },
+            settings: WorldSettings {
+                level_name: data
+                    .get_string("LevelName")
+                    .unwrap_or("Unnamed")
+                    .to_owned(),
+                data_version: data.get_int("DataVersion").unwrap_or(0),
+                game_type: data.get_int("GameType").unwrap_or(0),
+                is_hardcore: data.get_byte("hardcore").unwrap_or(0) != 0,
+                difficulty: data.get_byte("Difficulty").unwrap_or(2) as i32,
+                is_commands_allowed: data.get_byte("allowCommands").unwrap_or(0) != 0,
+                is_initialized: data.get_byte("initialized").unwrap_or(1) != 0,
+                sea_level: data.get_int("SeaLevel").unwrap_or(63),
+                is_difficulty_locked: data.get_byte("DifficultyLocked").unwrap_or(0) != 0,
+                world_seed: data
+                    .get_compound("WorldGenSettings")
+                    .and_then(|wgs| wgs.get_long("seed"))
+                    .unwrap_or(0),
+            },
         })
     }
 
@@ -103,7 +139,7 @@ impl PrimaryLevelData {
     /// Returns a tuple rather than `BlockPos` because `oxidized-world`
     /// does not depend on `oxidized-protocol`.
     pub fn spawn_pos(&self) -> (i32, i32, i32) {
-        (self.spawn_x, self.spawn_y, self.spawn_z)
+        (self.spawn.x, self.spawn.y, self.spawn.z)
     }
 
     /// Loads level data from a `level.dat` file (GZip-compressed NBT).
@@ -127,31 +163,34 @@ impl PrimaryLevelData {
     #[must_use]
     pub fn to_nbt(&self) -> NbtCompound {
         let mut data = NbtCompound::new();
-        data.put_string("LevelName", &self.level_name);
-        data.put_int("DataVersion", self.data_version);
-        data.put_int("GameType", self.game_type);
-        data.put_int("SpawnX", self.spawn_x);
-        data.put_int("SpawnY", self.spawn_y);
-        data.put_int("SpawnZ", self.spawn_z);
-        data.put_float("SpawnAngle", self.spawn_angle);
-        data.put_long("Time", self.time);
-        data.put_long("DayTime", self.day_time);
-        data.put_byte("raining", i8::from(self.is_raining));
-        data.put_byte("thundering", i8::from(self.is_thundering));
-        data.put_int("rainTime", self.rain_time);
-        data.put_int("thunderTime", self.thunder_time);
-        data.put_int("clearWeatherTime", self.clear_weather_time);
-        data.put_byte("hardcore", i8::from(self.is_hardcore));
+        data.put_string("LevelName", &self.settings.level_name);
+        data.put_int("DataVersion", self.settings.data_version);
+        data.put_int("GameType", self.settings.game_type);
+        data.put_int("SpawnX", self.spawn.x);
+        data.put_int("SpawnY", self.spawn.y);
+        data.put_int("SpawnZ", self.spawn.z);
+        data.put_float("SpawnAngle", self.spawn.angle);
+        data.put_long("Time", self.time.game_time);
+        data.put_long("DayTime", self.time.day_time);
+        data.put_byte("raining", i8::from(self.weather.is_raining));
+        data.put_byte("thundering", i8::from(self.weather.is_thundering));
+        data.put_int("rainTime", self.weather.rain_time);
+        data.put_int("thunderTime", self.weather.thunder_time);
+        data.put_int("clearWeatherTime", self.weather.clear_weather_time);
+        data.put_byte("hardcore", i8::from(self.settings.is_hardcore));
         #[allow(clippy::cast_possible_truncation)]
-        data.put_byte("Difficulty", self.difficulty as i8);
-        data.put_byte("allowCommands", i8::from(self.is_commands_allowed));
-        data.put_byte("initialized", i8::from(self.is_initialized));
-        data.put_int("SeaLevel", self.sea_level);
-        data.put_byte("DifficultyLocked", i8::from(self.is_difficulty_locked));
+        data.put_byte("Difficulty", self.settings.difficulty as i8);
+        data.put_byte("allowCommands", i8::from(self.settings.is_commands_allowed));
+        data.put_byte("initialized", i8::from(self.settings.is_initialized));
+        data.put_int("SeaLevel", self.settings.sea_level);
+        data.put_byte(
+            "DifficultyLocked",
+            i8::from(self.settings.is_difficulty_locked),
+        );
 
         // WorldGenSettings/seed
         let mut wgs = NbtCompound::new();
-        wgs.put_long("seed", self.world_seed);
+        wgs.put_long("seed", self.settings.world_seed);
         data.put("WorldGenSettings", NbtTag::Compound(wgs));
 
         let mut root = NbtCompound::new();
@@ -238,26 +277,26 @@ mod tests {
         let data = sample_data_compound();
         let level = PrimaryLevelData::from_nbt(&data).unwrap();
 
-        assert_eq!(level.level_name, "TestWorld");
-        assert_eq!(level.data_version, 4782);
-        assert_eq!(level.game_type, 1);
-        assert_eq!(level.spawn_x, 100);
-        assert_eq!(level.spawn_y, 72);
-        assert_eq!(level.spawn_z, -200);
-        assert!((level.spawn_angle - 90.0).abs() < f32::EPSILON);
-        assert_eq!(level.time, 24000);
-        assert_eq!(level.day_time, 6000);
-        assert!(level.is_raining);
-        assert!(!level.is_thundering);
-        assert_eq!(level.rain_time, 5000);
-        assert_eq!(level.thunder_time, 0);
-        assert_eq!(level.clear_weather_time, 0);
-        assert!(!level.is_hardcore);
-        assert_eq!(level.difficulty, 2);
-        assert!(level.is_commands_allowed);
-        assert!(level.is_initialized);
-        assert!(level.is_difficulty_locked);
-        assert_eq!(level.world_seed, 123_456_789);
+        assert_eq!(level.settings.level_name, "TestWorld");
+        assert_eq!(level.settings.data_version, 4782);
+        assert_eq!(level.settings.game_type, 1);
+        assert_eq!(level.spawn.x, 100);
+        assert_eq!(level.spawn.y, 72);
+        assert_eq!(level.spawn.z, -200);
+        assert!((level.spawn.angle - 90.0).abs() < f32::EPSILON);
+        assert_eq!(level.time.game_time, 24000);
+        assert_eq!(level.time.day_time, 6000);
+        assert!(level.weather.is_raining);
+        assert!(!level.weather.is_thundering);
+        assert_eq!(level.weather.rain_time, 5000);
+        assert_eq!(level.weather.thunder_time, 0);
+        assert_eq!(level.weather.clear_weather_time, 0);
+        assert!(!level.settings.is_hardcore);
+        assert_eq!(level.settings.difficulty, 2);
+        assert!(level.settings.is_commands_allowed);
+        assert!(level.settings.is_initialized);
+        assert!(level.settings.is_difficulty_locked);
+        assert_eq!(level.settings.world_seed, 123_456_789);
     }
 
     #[test]
@@ -265,19 +304,19 @@ mod tests {
         let data = NbtCompound::new();
         let level = PrimaryLevelData::from_nbt(&data).unwrap();
 
-        assert_eq!(level.level_name, "Unnamed");
-        assert_eq!(level.data_version, 0);
-        assert_eq!(level.game_type, 0);
-        assert_eq!(level.spawn_x, 0);
-        assert_eq!(level.spawn_y, 64);
-        assert_eq!(level.spawn_z, 0);
-        assert!(!level.is_raining);
-        assert!(!level.is_hardcore);
-        assert_eq!(level.difficulty, 2); // Normal default
-        assert!(!level.is_commands_allowed);
-        assert!(level.is_initialized); // Default true
-        assert!(!level.is_difficulty_locked);
-        assert_eq!(level.world_seed, 0);
+        assert_eq!(level.settings.level_name, "Unnamed");
+        assert_eq!(level.settings.data_version, 0);
+        assert_eq!(level.settings.game_type, 0);
+        assert_eq!(level.spawn.x, 0);
+        assert_eq!(level.spawn.y, 64);
+        assert_eq!(level.spawn.z, 0);
+        assert!(!level.weather.is_raining);
+        assert!(!level.settings.is_hardcore);
+        assert_eq!(level.settings.difficulty, 2); // Normal default
+        assert!(!level.settings.is_commands_allowed);
+        assert!(level.settings.is_initialized); // Default true
+        assert!(!level.settings.is_difficulty_locked);
+        assert_eq!(level.settings.world_seed, 0);
     }
 
     #[test]
@@ -293,9 +332,9 @@ mod tests {
         oxidized_nbt::write_file(&path, &root).unwrap();
 
         let level = PrimaryLevelData::load(&path).unwrap();
-        assert_eq!(level.level_name, "TestWorld");
-        assert_eq!(level.spawn_x, 100);
-        assert_eq!(level.game_type, 1);
+        assert_eq!(level.settings.level_name, "TestWorld");
+        assert_eq!(level.spawn.x, 100);
+        assert_eq!(level.settings.game_type, 1);
 
         let _ = std::fs::remove_file(&path);
     }
@@ -326,27 +365,36 @@ mod tests {
         // Deserialize again
         let level2 = PrimaryLevelData::from_nbt(data_nbt).unwrap();
 
-        assert_eq!(level2.level_name, level.level_name);
-        assert_eq!(level2.data_version, level.data_version);
-        assert_eq!(level2.game_type, level.game_type);
-        assert_eq!(level2.spawn_x, level.spawn_x);
-        assert_eq!(level2.spawn_y, level.spawn_y);
-        assert_eq!(level2.spawn_z, level.spawn_z);
-        assert!((level2.spawn_angle - level.spawn_angle).abs() < f32::EPSILON);
-        assert_eq!(level2.time, level.time);
-        assert_eq!(level2.day_time, level.day_time);
-        assert_eq!(level2.is_raining, level.is_raining);
-        assert_eq!(level2.is_thundering, level.is_thundering);
-        assert_eq!(level2.rain_time, level.rain_time);
-        assert_eq!(level2.thunder_time, level.thunder_time);
-        assert_eq!(level2.clear_weather_time, level.clear_weather_time);
-        assert_eq!(level2.is_hardcore, level.is_hardcore);
-        assert_eq!(level2.difficulty, level.difficulty);
-        assert_eq!(level2.is_commands_allowed, level.is_commands_allowed);
-        assert_eq!(level2.is_initialized, level.is_initialized);
-        assert_eq!(level2.sea_level, level.sea_level);
-        assert_eq!(level2.is_difficulty_locked, level.is_difficulty_locked);
-        assert_eq!(level2.world_seed, level.world_seed);
+        assert_eq!(level2.settings.level_name, level.settings.level_name);
+        assert_eq!(level2.settings.data_version, level.settings.data_version);
+        assert_eq!(level2.settings.game_type, level.settings.game_type);
+        assert_eq!(level2.spawn.x, level.spawn.x);
+        assert_eq!(level2.spawn.y, level.spawn.y);
+        assert_eq!(level2.spawn.z, level.spawn.z);
+        assert!((level2.spawn.angle - level.spawn.angle).abs() < f32::EPSILON);
+        assert_eq!(level2.time.game_time, level.time.game_time);
+        assert_eq!(level2.time.day_time, level.time.day_time);
+        assert_eq!(level2.weather.is_raining, level.weather.is_raining);
+        assert_eq!(level2.weather.is_thundering, level.weather.is_thundering);
+        assert_eq!(level2.weather.rain_time, level.weather.rain_time);
+        assert_eq!(level2.weather.thunder_time, level.weather.thunder_time);
+        assert_eq!(
+            level2.weather.clear_weather_time,
+            level.weather.clear_weather_time
+        );
+        assert_eq!(level2.settings.is_hardcore, level.settings.is_hardcore);
+        assert_eq!(level2.settings.difficulty, level.settings.difficulty);
+        assert_eq!(
+            level2.settings.is_commands_allowed,
+            level.settings.is_commands_allowed
+        );
+        assert_eq!(level2.settings.is_initialized, level.settings.is_initialized);
+        assert_eq!(level2.settings.sea_level, level.settings.sea_level);
+        assert_eq!(
+            level2.settings.is_difficulty_locked,
+            level.settings.is_difficulty_locked
+        );
+        assert_eq!(level2.settings.world_seed, level.settings.world_seed);
     }
 
     #[test]
@@ -356,10 +404,10 @@ mod tests {
         let data_nbt = root_nbt.get_compound("Data").unwrap();
         let level2 = PrimaryLevelData::from_nbt(data_nbt).unwrap();
 
-        assert_eq!(level2.level_name, "Unnamed");
-        assert_eq!(level2.spawn_y, 64);
-        assert_eq!(level2.difficulty, 2);
-        assert!(level2.is_initialized);
+        assert_eq!(level2.settings.level_name, "Unnamed");
+        assert_eq!(level2.spawn.y, 64);
+        assert_eq!(level2.settings.difficulty, 2);
+        assert!(level2.settings.is_initialized);
     }
 
     #[test]
@@ -379,8 +427,8 @@ mod tests {
 
         // Verify we can load it back
         let loaded = PrimaryLevelData::load(&path).unwrap();
-        assert_eq!(loaded.level_name, "TestWorld");
-        assert_eq!(loaded.time, 24000);
+        assert_eq!(loaded.settings.level_name, "TestWorld");
+        assert_eq!(loaded.time.game_time, 24000);
 
         let _ = std::fs::remove_file(&path);
     }
@@ -398,7 +446,7 @@ mod tests {
         level.save(&path).unwrap();
 
         // Modify and save again — should create backup
-        level.time = 48000;
+        level.time.game_time = 48000;
         level.save(&path).unwrap();
 
         assert!(path.exists(), "level.dat should exist");
@@ -406,11 +454,11 @@ mod tests {
 
         // Backup should contain original data
         let backup = PrimaryLevelData::load(&old_path).unwrap();
-        assert_eq!(backup.time, 24000, "backup should have original time");
+        assert_eq!(backup.time.game_time, 24000, "backup should have original time");
 
         // New file should contain updated data
         let current = PrimaryLevelData::load(&path).unwrap();
-        assert_eq!(current.time, 48000, "current should have updated time");
+        assert_eq!(current.time.game_time, 48000, "current should have updated time");
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&old_path);
@@ -427,13 +475,13 @@ mod tests {
         level.save(&path).unwrap();
         let loaded = PrimaryLevelData::load(&path).unwrap();
 
-        assert_eq!(loaded.level_name, level.level_name);
-        assert_eq!(loaded.time, level.time);
-        assert_eq!(loaded.day_time, level.day_time);
-        assert_eq!(loaded.is_raining, level.is_raining);
-        assert_eq!(loaded.spawn_x, level.spawn_x);
-        assert_eq!(loaded.spawn_y, level.spawn_y);
-        assert_eq!(loaded.spawn_z, level.spawn_z);
+        assert_eq!(loaded.settings.level_name, level.settings.level_name);
+        assert_eq!(loaded.time.game_time, level.time.game_time);
+        assert_eq!(loaded.time.day_time, level.time.day_time);
+        assert_eq!(loaded.weather.is_raining, level.weather.is_raining);
+        assert_eq!(loaded.spawn.x, level.spawn.x);
+        assert_eq!(loaded.spawn.y, level.spawn.y);
+        assert_eq!(loaded.spawn.z, level.spawn.z);
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(path.with_extension("dat_old"));
