@@ -49,6 +49,10 @@ pub enum PalettedContainerError {
     /// Malformed VarInt encoding.
     #[error("malformed VarInt: exceeded 5-byte limit")]
     MalformedVarInt,
+
+    /// A VarInt that must be non-negative was negative on the wire.
+    #[error("negative value in palette data: {0}")]
+    NegativeValue(i32),
 }
 
 /// Strategy configuration for a paletted container.
@@ -205,16 +209,19 @@ impl PalettedContainer {
             PaletteData::Single(p) => Ok(p.value().unwrap_or(0)),
             PaletteData::Linear(palette, storage) => {
                 let palette_idx = storage.get(index)?;
+                // SAFETY: palette indices are bounded by palette size (< 2^16).
                 #[allow(clippy::cast_possible_truncation)]
                 Ok(palette.value_for(palette_idx as u32).unwrap_or(0))
             },
             PaletteData::HashMap(palette, storage) => {
                 let palette_idx = storage.get(index)?;
+                // SAFETY: palette indices are bounded by palette size (< 2^16).
                 #[allow(clippy::cast_possible_truncation)]
                 Ok(palette.value_for(palette_idx as u32).unwrap_or(0))
             },
             PaletteData::Global(storage) => {
                 let val = storage.get(index)?;
+                // SAFETY: block state IDs fit in u32 (< 2^20 for vanilla).
                 #[allow(clippy::cast_possible_truncation)]
                 Ok(val as u32)
             },
@@ -334,16 +341,19 @@ impl PalettedContainer {
         match &self.data {
             PaletteData::Single(p) => p.value().unwrap_or(0),
             PaletteData::Linear(palette, storage) => {
+                // SAFETY: palette indices are bounded by palette size (< 2^16).
                 #[allow(clippy::cast_possible_truncation)]
                 let palette_idx = storage.get(index).unwrap_or(0) as u32;
                 palette.value_for(palette_idx).unwrap_or(0)
             },
             PaletteData::HashMap(palette, storage) => {
+                // SAFETY: palette indices are bounded by palette size (< 2^16).
                 #[allow(clippy::cast_possible_truncation)]
                 let palette_idx = storage.get(index).unwrap_or(0) as u32;
                 palette.value_for(palette_idx).unwrap_or(0)
             },
             PaletteData::Global(storage) => {
+                // SAFETY: block state IDs fit in u32 (< 2^20 for vanilla).
                 #[allow(clippy::cast_possible_truncation)]
                 {
                     storage.get(index).unwrap_or(0) as u32
@@ -376,32 +386,36 @@ impl PalettedContainer {
         match &self.data {
             PaletteData::Single(palette) => {
                 buf.push(0); // 0 bits per entry
-                // Palette: single VarInt value
+                // SAFETY: block state IDs fit in i32 (< 2^20 for vanilla).
+                #[allow(clippy::cast_possible_wrap)]
                 write_varint(&mut buf, palette.value().unwrap_or(0) as i32);
-                // No data longs for single-value palette
             },
             PaletteData::Linear(palette, storage) => {
                 buf.push(storage.bits());
-                // Palette: VarInt count + VarInt entries
+                // SAFETY: palette length < 2^16 (max palette entries).
+                #[allow(clippy::cast_possible_wrap)]
                 write_varint(&mut buf, palette.len() as i32);
                 for &v in palette.entries() {
+                    // SAFETY: block state IDs fit in i32 (< 2^20 for vanilla).
+                    #[allow(clippy::cast_possible_wrap)]
                     write_varint(&mut buf, v as i32);
                 }
-                // Data longs
                 write_longs(&mut buf, storage.raw());
             },
             PaletteData::HashMap(palette, storage) => {
                 buf.push(storage.bits());
+                // SAFETY: palette length < 2^16 (max palette entries).
+                #[allow(clippy::cast_possible_wrap)]
                 write_varint(&mut buf, palette.len() as i32);
                 for &v in palette.entries() {
+                    // SAFETY: block state IDs fit in i32 (< 2^20 for vanilla).
+                    #[allow(clippy::cast_possible_wrap)]
                     write_varint(&mut buf, v as i32);
                 }
                 write_longs(&mut buf, storage.raw());
             },
             PaletteData::Global(storage) => {
                 buf.push(self.strategy.global_palette_bits());
-                // Global palette: no palette data on wire
-                // Data longs
                 write_longs(&mut buf, storage.raw());
             },
         }
@@ -422,7 +436,8 @@ impl PalettedContainer {
 
         if bits_per_entry == 0 {
             // Single value — no data longs on wire
-            let value = read_varint(data)? as u32;
+            let raw = read_varint(data)?;
+            let value = u32::try_from(raw).map_err(|_| PalettedContainerError::NegativeValue(raw))?;
             Ok(Self {
                 strategy,
                 data: PaletteData::Single(SingleValuePalette::with_value(value)),
@@ -437,10 +452,15 @@ impl PalettedContainer {
             })
         } else {
             // Linear or HashMap palette — read entries then select tier
-            let palette_len = read_varint(data)? as usize;
+            let raw_len = read_varint(data)?;
+            let palette_len = usize::try_from(raw_len)
+                .map_err(|_| PalettedContainerError::NegativeValue(raw_len))?;
             let mut entries = Vec::with_capacity(palette_len);
             for _ in 0..palette_len {
-                entries.push(read_varint(data)? as u32);
+                let raw = read_varint(data)?;
+                let entry =
+                    u32::try_from(raw).map_err(|_| PalettedContainerError::NegativeValue(raw))?;
+                entries.push(entry);
             }
             let storage = read_bit_storage(bits_per_entry, size, data)?;
             let palette_data =
@@ -504,7 +524,7 @@ impl PalettedContainer {
         let bits = bits_for_count(palette_ids.len());
         let storage_bits = strategy.storage_bits(bits);
 
-        // Convert i64 longs to u64
+        // Convert i64 longs to u64 (bit reinterpretation for packed data).
         let raw: Vec<u64> = data_longs.iter().map(|&l| l as u64).collect();
         let storage = BitStorage::from_raw(storage_bits, size, raw)?;
 
@@ -514,6 +534,7 @@ impl PalettedContainer {
             let global_bits = strategy.global_palette_bits();
             let mut global_storage = BitStorage::new(global_bits, size)?;
             for i in 0..size {
+                // SAFETY: palette indices are bounded by palette size (< 2^16).
                 #[allow(clippy::cast_possible_truncation)]
                 let palette_idx = storage.get(i)? as usize;
                 let registry_id = palette_ids.get(palette_idx).copied().unwrap_or(0);
@@ -553,6 +574,7 @@ impl PalettedContainer {
     pub fn to_nbt_data(&self) -> (Vec<u32>, Vec<i64>) {
         /// Helper: extract entries + raw longs from any palette+storage pair.
         fn palette_and_storage(entries: &[u32], storage: &BitStorage) -> (Vec<u32>, Vec<i64>) {
+            // Bit reinterpretation: u64 → i64 for NBT LongArray format.
             let longs: Vec<i64> = storage.raw().iter().map(|&v| v as i64).collect();
             (entries.to_vec(), longs)
         }
@@ -573,6 +595,7 @@ impl PalettedContainer {
                 let mut seen_map = ahash::AHashMap::<u32, usize>::new();
                 let mut indices = Vec::with_capacity(size);
                 for i in 0..size {
+                    // SAFETY: block state IDs fit in u32 (< 2^20 for vanilla).
                     #[allow(clippy::cast_possible_truncation)]
                     let val = storage.get(i).unwrap_or(0) as u32;
                     let idx = *seen_map.entry(val).or_insert_with(|| {
@@ -588,8 +611,10 @@ impl PalettedContainer {
                 // Build packed longs
                 if let Ok(mut new_storage) = BitStorage::new(sb, size) {
                     for (i, &idx) in indices.iter().enumerate() {
+                        // SAFETY: usize → u64 is always lossless.
                         let _ = new_storage.set(i, idx as u64);
                     }
+                    // Bit reinterpretation: u64 → i64 for NBT LongArray format.
                     let longs: Vec<i64> = new_storage.raw().iter().map(|&v| v as i64).collect();
                     (seen, longs)
                 } else {

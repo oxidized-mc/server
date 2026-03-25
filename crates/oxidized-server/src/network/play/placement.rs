@@ -255,30 +255,7 @@ pub async fn handle_use_item_on(
 
     // Decrement item count in survival/adventure modes.
     if game_mode != GameMode::Creative {
-        let (slot_idx, updated) = {
-            let mut player = play_ctx.player.write();
-            let slot = player.inventory.selected_slot as usize;
-            let stack = player.inventory.get_mut(slot);
-            stack.count -= 1;
-            if stack.count <= 0 {
-                player.inventory.set(
-                    slot,
-                    oxidized_game::inventory::item_stack::ItemStack::empty(),
-                );
-            }
-            (slot, player.inventory.get(slot).clone())
-        };
-        // Sync the updated slot back to the client to prevent desync.
-        let slot_data = if updated.is_empty() {
-            None
-        } else {
-            Some(super::inventory::item_stack_to_slot_data(&updated))
-        };
-        let sync_pkt = ClientboundSetPlayerInventoryPacket {
-            slot: slot_idx as i32,
-            contents: slot_data,
-        };
-        play_ctx.conn_handle.send_packet(&sync_pkt).await?;
+        decrement_held_item(play_ctx).await?;
     }
 
     // Broadcast block change to all players (including the acting player).
@@ -287,33 +264,7 @@ pub async fn handle_use_item_on(
     // Place the complementary block for double-block items (doors, beds,
     // tall plants). The primary block was already placed above; this adds
     // the matching upper/lower or head/foot half.
-    if let Some((companion_pos, companion_state)) = double_block_companion(
-        &held_item,
-        &play_ctx.server_ctx.world.block_registry,
-        place_pos,
-        block_state_id,
-        player_yaw,
-    ) {
-        if is_within_build_height(companion_pos) {
-            // Only place companion if the target is air or replaceable.
-            let companion_existing = get_block(play_ctx.server_ctx, companion_pos);
-            let companion_replaceable = match companion_existing {
-                Some(state) => is_replaceable_block(state),
-                None => false,
-            };
-            if companion_replaceable {
-                let companion_ok = set_block(play_ctx.server_ctx, companion_pos, companion_state);
-                if companion_ok {
-                    broadcast_block_update(
-                        play_ctx.server_ctx,
-                        companion_pos,
-                        companion_state as i32,
-                        None,
-                    );
-                }
-            }
-        }
-    }
+    place_companion_block(play_ctx, &held_item, place_pos, block_state_id, player_yaw);
 
     // If the placed block is a sign, open the sign editor UI.
     if is_sign_block(&held_item) {
@@ -355,6 +306,75 @@ pub async fn handle_use_item(
 
     send_ack(play_ctx, pkt.sequence).await?;
     Ok(())
+}
+
+/// Decrements the held item count by one and syncs the slot to the client.
+///
+/// Used after block placement in survival/adventure modes.
+async fn decrement_held_item(
+    play_ctx: &mut PlayContext<'_>,
+) -> Result<(), ConnectionError> {
+    let (slot_idx, updated) = {
+        let mut player = play_ctx.player.write();
+        let slot = player.inventory.selected_slot as usize;
+        let stack = player.inventory.get_mut(slot);
+        stack.count -= 1;
+        if stack.count <= 0 {
+            player.inventory.set(
+                slot,
+                oxidized_game::inventory::item_stack::ItemStack::empty(),
+            );
+        }
+        (slot, player.inventory.get(slot).clone())
+    };
+    let slot_data = if updated.is_empty() {
+        None
+    } else {
+        Some(super::inventory::item_stack_to_slot_data(&updated))
+    };
+    let sync_pkt = ClientboundSetPlayerInventoryPacket {
+        slot: slot_idx as i32,
+        contents: slot_data,
+    };
+    play_ctx.conn_handle.send_packet(&sync_pkt).await?;
+    Ok(())
+}
+
+/// Places the complementary block for double-block items (doors, beds, tall
+/// plants).
+///
+/// The primary block must already be placed in the world before calling this.
+fn place_companion_block(
+    play_ctx: &mut PlayContext<'_>,
+    held_item: &str,
+    place_pos: BlockPos,
+    block_state_id: u32,
+    player_yaw: f32,
+) {
+    if let Some((companion_pos, companion_state)) = double_block_companion(
+        held_item,
+        &play_ctx.server_ctx.world.block_registry,
+        place_pos,
+        block_state_id,
+        player_yaw,
+    ) {
+        if !is_within_build_height(companion_pos) {
+            return;
+        }
+        let companion_existing = get_block(play_ctx.server_ctx, companion_pos);
+        let is_replaceable = companion_existing.is_some_and(is_replaceable_block);
+        if is_replaceable {
+            let ok = set_block(play_ctx.server_ctx, companion_pos, companion_state);
+            if ok {
+                broadcast_block_update(
+                    play_ctx.server_ctx,
+                    companion_pos,
+                    companion_state as i32,
+                    None,
+                );
+            }
+        }
+    }
 }
 
 /// Returns `true` if a block state is air or a vanilla-replaceable block.

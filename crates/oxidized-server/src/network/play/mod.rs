@@ -342,35 +342,13 @@ pub async fn handle_play_split(
                     Some(pkt) => {
                         match pkt.id {
                             ServerboundKeepAlivePacket::PACKET_ID => {
-                                match keepalive::handle_keepalive(
+                                match handle_keepalive_response(
                                     pkt.data, addr, &player_name,
                                     &mut keepalive_pending, keepalive_challenge, &keepalive_sent_at,
-                                    &player_arc,
+                                    &player_arc, server_ctx,
                                 ) {
-                                    keepalive::KeepaliveResult::Ok(ka_uuid, ka_latency) => {
-                                        // Broadcast latency update to all players' tab lists.
-                                        let latency_update = ClientboundPlayerInfoUpdatePacket {
-                                            actions: PlayerInfoActions(PlayerInfoActions::UPDATE_LATENCY),
-                                            entries: vec![PlayerInfoEntry {
-                                                uuid: ka_uuid,
-                                                latency: ka_latency,
-                                                ..Default::default()
-                                            }],
-                                        };
-                                        let encoded = latency_update.encode();
-                                        server_ctx.broadcast(BroadcastMessage {
-                                            packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
-                                            data: encoded.into(),
-                                            exclude_entity: None,
-                                            target_entity: None,
-                                        });
-                                    },
-                                    keepalive::KeepaliveResult::Mismatch => {
-                                        // Vanilla disconnects on wrong keepalive ID.
-                                        info!(peer = %addr, name = %player_name, "Keepalive mismatch — disconnecting");
-                                        break;
-                                    },
-                                    keepalive::KeepaliveResult::DecodeError => {},
+                                    KeepaliveAction::Continue => {},
+                                    KeepaliveAction::Disconnect => break,
                                 }
                             },
                             id if is_movement_packet(id) => {
@@ -404,25 +382,9 @@ pub async fn handle_play_split(
                                     pkt.data,
                                     addr, &player_name, "ChatCommand",
                                 ) {
-                                    if !play_ctx.rate_limiter.try_acquire() {
-                                        warn!(peer = %addr, name = %player_name, "Command rate-limited");
-                                    } else {
-                                        let (pos, rot) = {
-                                            let p = play_ctx.player.read();
-                                            ((p.movement.pos.x, p.movement.pos.y, p.movement.pos.z), (p.movement.yaw, p.movement.pitch))
-                                        };
-                                        chat::handle_chat_command(
-                                            play_ctx.conn_handle,
-                                            &cmd_pkt.command,
-                                            &player_name,
-                                            uuid,
-                                            pos, rot,
-                                            // TODO: implement per-player ops (ops.json) instead of
-                                            // giving all players the configured op level.
-                                            server_ctx.settings.op_permission_level as u32,
-                                            server_ctx,
-                                        ).await;
-                                    }
+                                    dispatch_chat_command(
+                                        &mut play_ctx, &cmd_pkt.command, &player_name, uuid, server_ctx,
+                                    ).await;
                                 }
                             },
                             ServerboundChatCommandSignedPacket::PACKET_ID => {
@@ -430,23 +392,9 @@ pub async fn handle_play_split(
                                     pkt.data,
                                     addr, &player_name, "ChatCommandSigned",
                                 ) {
-                                    if !play_ctx.rate_limiter.try_acquire() {
-                                        warn!(peer = %addr, name = %player_name, "Command rate-limited (signed)");
-                                    } else {
-                                        let (pos, rot) = {
-                                            let p = play_ctx.player.read();
-                                            ((p.movement.pos.x, p.movement.pos.y, p.movement.pos.z), (p.movement.yaw, p.movement.pitch))
-                                        };
-                                        chat::handle_chat_command(
-                                            play_ctx.conn_handle,
-                                            &cmd_pkt.command,
-                                            &player_name,
-                                            uuid,
-                                            pos, rot,
-                                            server_ctx.settings.op_permission_level as u32,
-                                            server_ctx,
-                                        ).await;
-                                    }
+                                    dispatch_chat_command(
+                                        &mut play_ctx, &cmd_pkt.command, &player_name, uuid, server_ctx,
+                                    ).await;
                                 }
                             },
                             ServerboundCommandSuggestionPacket::PACKET_ID => {
@@ -474,106 +422,18 @@ pub async fn handle_play_split(
                                 block_interaction::handle_pick_item_from_block(&mut play_ctx, pkt.data).await?;
                             },
                             ServerboundSwingPacket::PACKET_ID => {
-                                if let Ok(swing) = decode_packet::<ServerboundSwingPacket>(
-                                    pkt.data, addr, &player_name, "Swing",
-                                ) {
-                                    let entity_id = play_ctx.player.read().entity_id;
-                                    let action = if swing.hand == 1 { 3u8 } else { 0u8 };
-                                    let animate = ClientboundAnimatePacket { entity_id, action };
-                                    let encoded = animate.encode();
-                                    server_ctx.broadcast(BroadcastMessage {
-                                        packet_id: ClientboundAnimatePacket::PACKET_ID,
-                                        data: encoded.into(),
-                                        exclude_entity: Some(entity_id),
-                                        target_entity: None,
-                                    });
-                                }
+                                handle_swing_packet(
+                                    pkt.data, &play_ctx, server_ctx,
+                                );
                             },
                             ServerboundPlayerAbilitiesPacket::PACKET_ID => {
-                                if let Ok(abilities_pkt) = decode_packet::<ServerboundPlayerAbilitiesPacket>(
-                                    pkt.data, addr, &player_name, "PlayerAbilities",
-                                ) {
-                                    let mut p = play_ctx.player.write();
-                                    p.abilities.is_flying =
-                                        abilities_pkt.is_flying() && p.abilities.can_fly;
-                                    debug!(
-                                        peer = %addr,
-                                        name = %player_name,
-                                        is_flying = p.abilities.is_flying,
-                                        "Player abilities update",
-                                    );
-                                }
+                                handle_abilities_packet(pkt.data, &play_ctx);
                             },
                             ServerboundClientInformationPlayPacket::PACKET_ID => {
-                                if let Ok(info_pkt) = decode_packet::<ServerboundClientInformationPlayPacket>(
-                                    pkt.data, addr, &player_name, "ClientInformation",
-                                ) {
-                                    let new_view_distance =
-                                        i32::from(info_pkt.information.view_distance)
-                                            .clamp(2, server_ctx.settings.max_view_distance);
-                                    let (old_view_distance, skin_changed) = {
-                                        let mut p = play_ctx.player.write();
-                                        let old_vd = p.connection.view_distance;
-                                        p.connection.view_distance = new_view_distance;
-                                        let old_skin = p.connection.model_customisation;
-                                        p.connection.model_customisation =
-                                            info_pkt.information.model_customisation;
-                                        (old_vd, old_skin != p.connection.model_customisation)
-                                    };
-
-                                    // Broadcast skin customisation change to others.
-                                    if skin_changed {
-                                        let skin = play_ctx.player.read().connection.model_customisation;
-                                        let skin_pkt =
-                                            ClientboundSetEntityDataPacket::single_byte(
-                                                entity_id,
-                                                DATA_PLAYER_MODE_CUSTOMISATION,
-                                                skin,
-                                            );
-                                        let encoded = skin_pkt.encode();
-                                        server_ctx.broadcast(BroadcastMessage {
-                                            packet_id:
-                                                ClientboundSetEntityDataPacket::PACKET_ID,
-                                            data: encoded.freeze(),
-                                            exclude_entity: Some(entity_id),
-                                            target_entity: None,
-                                        });
-                                    }
-
-                                    if new_view_distance != old_view_distance {
-                                        // Update the chunk tracker and send/forget chunks.
-                                        let (to_load, to_unload) = play_ctx
-                                            .chunk_tracker
-                                            .update_view_distance(new_view_distance);
-                                        let center = play_ctx.chunk_tracker.center;
-                                        if !to_load.is_empty() || !to_unload.is_empty() {
-                                            if let Err(e) = movement::send_chunk_updates(
-                                                &mut play_ctx,
-                                                center,
-                                                &to_load,
-                                                &to_unload,
-                                            )
-                                            .await
-                                            {
-                                                debug!(
-                                                    peer = %addr,
-                                                    name = %player_name,
-                                                    error = %e,
-                                                    "Failed to send view distance chunk updates",
-                                                );
-                                                break;
-                                            }
-                                        }
-                                        debug!(
-                                            peer = %addr,
-                                            name = %player_name,
-                                            old = old_view_distance,
-                                            new = new_view_distance,
-                                            loaded = to_load.len(),
-                                            unloaded = to_unload.len(),
-                                            "View distance changed",
-                                        );
-                                    }
+                                if handle_client_information_packet(
+                                    pkt.data, &mut play_ctx, entity_id, server_ctx,
+                                ).await.is_err() {
+                                    break;
                                 }
                             },
                             unknown if !(0..=MAX_SERVERBOUND_PLAY_ID).contains(&unknown) => {
@@ -606,9 +466,236 @@ pub async fn handle_play_split(
         }
     }
 
-    // Save player data to disk before removing from the list.
+    // Player disconnected or was kicked — clean up.
+    cleanup_disconnected_player(
+        &conn_handle, &player_arc, &player_name, uuid, entity_id, addr, server_ctx,
+    )
+    .await;
+
+    // Drop outbound sender → writer task sees channel closed → exits.
+    drop(conn_handle);
+
+    // Wait for reader and writer tasks to finish.
+    let _ = reader_handle.await;
+    let _ = writer_handle.await;
+
+    Ok(())
+}
+
+/// Result of processing a keepalive response.
+enum KeepaliveAction {
+    /// Keepalive accepted or decode error (continue loop).
+    Continue,
+    /// Keepalive mismatch (disconnect).
+    Disconnect,
+}
+
+/// Processes a keepalive response and broadcasts the latency update.
+fn handle_keepalive_response(
+    data: bytes::Bytes,
+    addr: SocketAddr,
+    player_name: &str,
+    keepalive_pending: &mut bool,
+    keepalive_challenge: i64,
+    keepalive_sent_at: &Instant,
+    player: &Arc<RwLock<ServerPlayer>>,
+    server_ctx: &Arc<ServerContext>,
+) -> KeepaliveAction {
+    match keepalive::handle_keepalive(
+        data,
+        addr,
+        player_name,
+        keepalive_pending,
+        keepalive_challenge,
+        keepalive_sent_at,
+        player,
+    ) {
+        keepalive::KeepaliveResult::Ok(uuid, latency) => {
+            let latency_update = ClientboundPlayerInfoUpdatePacket {
+                actions: PlayerInfoActions(PlayerInfoActions::UPDATE_LATENCY),
+                entries: vec![PlayerInfoEntry {
+                    uuid,
+                    latency,
+                    ..Default::default()
+                }],
+            };
+            let encoded = latency_update.encode();
+            server_ctx.broadcast(BroadcastMessage {
+                packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
+                data: encoded.into(),
+                exclude_entity: None,
+                target_entity: None,
+            });
+            KeepaliveAction::Continue
+        },
+        keepalive::KeepaliveResult::Mismatch => {
+            info!(peer = %addr, name = %player_name, "Keepalive mismatch — disconnecting");
+            KeepaliveAction::Disconnect
+        },
+        keepalive::KeepaliveResult::DecodeError => KeepaliveAction::Continue,
+    }
+}
+
+/// Rate-limits and dispatches a chat command (shared by signed and unsigned variants).
+async fn dispatch_chat_command(
+    play_ctx: &mut PlayContext<'_>,
+    command: &str,
+    player_name: &str,
+    uuid: uuid::Uuid,
+    server_ctx: &Arc<ServerContext>,
+) {
+    if !play_ctx.rate_limiter.try_acquire() {
+        warn!(peer = %play_ctx.addr, name = %player_name, "Command rate-limited");
+        return;
+    }
+    let (pos, rot) = {
+        let p = play_ctx.player.read();
+        (
+            (p.movement.pos.x, p.movement.pos.y, p.movement.pos.z),
+            (p.movement.yaw, p.movement.pitch),
+        )
+    };
+    // TODO: implement per-player ops (ops.json) instead of
+    // giving all players the configured op level.
+    chat::handle_chat_command(
+        play_ctx.conn_handle,
+        command,
+        player_name,
+        uuid,
+        pos,
+        rot,
+        server_ctx.settings.op_permission_level as u32,
+        server_ctx,
+    )
+    .await;
+}
+
+/// Decodes and broadcasts a swing animation to other players.
+fn handle_swing_packet(
+    data: bytes::Bytes,
+    ctx: &PlayContext<'_>,
+    server_ctx: &Arc<ServerContext>,
+) {
+    let Ok(swing) = decode_packet::<ServerboundSwingPacket>(
+        data, ctx.addr, ctx.player_name, "Swing",
+    ) else {
+        return;
+    };
+    let entity_id = ctx.player.read().entity_id;
+    let action = if swing.hand == 1 { 3u8 } else { 0u8 };
+    let animate = ClientboundAnimatePacket { entity_id, action };
+    let encoded = animate.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundAnimatePacket::PACKET_ID,
+        data: encoded.into(),
+        exclude_entity: Some(entity_id),
+        target_entity: None,
+    });
+}
+
+/// Updates the player's flying state from a client abilities packet.
+fn handle_abilities_packet(data: bytes::Bytes, ctx: &PlayContext<'_>) {
+    let Ok(pkt) = decode_packet::<ServerboundPlayerAbilitiesPacket>(
+        data, ctx.addr, ctx.player_name, "PlayerAbilities",
+    ) else {
+        return;
+    };
+    let mut p = ctx.player.write();
+    p.abilities.is_flying = pkt.is_flying() && p.abilities.can_fly;
+    debug!(
+        peer = %ctx.addr,
+        name = %ctx.player_name,
+        is_flying = p.abilities.is_flying,
+        "Player abilities update",
+    );
+}
+
+/// Handles client information updates (view distance, skin customisation).
+///
+/// Returns `Err(())` if sending chunk updates failed and the caller should break.
+async fn handle_client_information_packet(
+    data: bytes::Bytes,
+    play_ctx: &mut PlayContext<'_>,
+    entity_id: i32,
+    server_ctx: &Arc<ServerContext>,
+) -> Result<(), ()> {
+    let Ok(info_pkt) = decode_packet::<ServerboundClientInformationPlayPacket>(
+        data, play_ctx.addr, play_ctx.player_name, "ClientInformation",
+    ) else {
+        return Ok(());
+    };
+
+    let new_view_distance = i32::from(info_pkt.information.view_distance)
+        .clamp(2, server_ctx.settings.max_view_distance);
+    let (old_view_distance, skin_changed) = {
+        let mut p = play_ctx.player.write();
+        let old_vd = p.connection.view_distance;
+        p.connection.view_distance = new_view_distance;
+        let old_skin = p.connection.model_customisation;
+        p.connection.model_customisation = info_pkt.information.model_customisation;
+        (old_vd, old_skin != p.connection.model_customisation)
+    };
+
+    if skin_changed {
+        let skin = play_ctx.player.read().connection.model_customisation;
+        let skin_pkt = ClientboundSetEntityDataPacket::single_byte(
+            entity_id,
+            DATA_PLAYER_MODE_CUSTOMISATION,
+            skin,
+        );
+        let encoded = skin_pkt.encode();
+        server_ctx.broadcast(BroadcastMessage {
+            packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
+            data: encoded.freeze(),
+            exclude_entity: Some(entity_id),
+            target_entity: None,
+        });
+    }
+
+    if new_view_distance != old_view_distance {
+        let (to_load, to_unload) = play_ctx.chunk_tracker.update_view_distance(new_view_distance);
+        let center = play_ctx.chunk_tracker.center;
+        if !to_load.is_empty() || !to_unload.is_empty() {
+            if let Err(e) = movement::send_chunk_updates(play_ctx, center, &to_load, &to_unload)
+                .await
+            {
+                debug!(
+                    peer = %play_ctx.addr,
+                    name = %play_ctx.player_name,
+                    error = %e,
+                    "Failed to send view distance chunk updates",
+                );
+                return Err(());
+            }
+        }
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            old = old_view_distance,
+            new = new_view_distance,
+            loaded = to_load.len(),
+            unloaded = to_unload.len(),
+            "View distance changed",
+        );
+    }
+
+    Ok(())
+}
+
+/// Saves player data, broadcasts leave messages, and removes the player
+/// from all tracking structures.
+async fn cleanup_disconnected_player(
+    conn_handle: &ConnectionHandle,
+    player: &Arc<RwLock<ServerPlayer>>,
+    player_name: &str,
+    uuid: uuid::Uuid,
+    entity_id: i32,
+    addr: SocketAddr,
+    server_ctx: &Arc<ServerContext>,
+) {
+    // Save player data to disk.
     {
-        let nbt = player_arc.read().save_to_nbt();
+        let nbt = player.read().save_to_nbt();
         let playerdata_dir = server_ctx.world.storage.player_data_dir();
         let player_uuid = uuid;
         if let Err(e) = tokio::task::spawn_blocking(move || {
@@ -623,64 +710,51 @@ pub async fn handle_play_split(
     }
 
     // Broadcast "Player left the game" system message.
-    {
-        let leave_msg = ClientboundSystemChatPacket {
-            content: Component::translatable(
-                "multiplayer.player.left",
-                vec![Component::text(player_name.clone())],
-            ),
-            is_overlay: false,
-        };
-        let encoded = leave_msg.encode();
-        server_ctx.broadcast(BroadcastMessage {
-            packet_id: ClientboundSystemChatPacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: None,
-            target_entity: None,
-        });
-    }
+    let leave_msg = ClientboundSystemChatPacket {
+        content: Component::translatable(
+            "multiplayer.player.left",
+            vec![Component::text(player_name.to_owned())],
+        ),
+        is_overlay: false,
+    };
+    let encoded = leave_msg.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundSystemChatPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: None,
+        target_entity: None,
+    });
 
-    // Clean up — remove player from the list and broadcast removal to tab lists.
+    // Remove player from tracking structures.
     server_ctx.network.kick_channels.remove(&uuid);
     server_ctx.network.player_list.write().remove(&uuid);
-    {
-        let remove_pkt = ClientboundPlayerInfoRemovePacket { uuids: vec![uuid] };
-        let encoded = remove_pkt.encode();
-        let broadcast = BroadcastMessage {
-            packet_id: ClientboundPlayerInfoRemovePacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: None,
-            target_entity: None,
-        };
-        server_ctx.broadcast(broadcast);
-    }
+
+    // Broadcast tab-list removal.
+    let remove_pkt = ClientboundPlayerInfoRemovePacket { uuids: vec![uuid] };
+    let encoded = remove_pkt.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundPlayerInfoRemovePacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: None,
+        target_entity: None,
+    });
+
     // Broadcast entity removal so other players stop rendering this player.
-    {
-        let remove_entity = ClientboundRemoveEntitiesPacket {
-            entity_ids: vec![entity_id],
-        };
-        let encoded = remove_entity.encode();
-        let broadcast = BroadcastMessage {
-            packet_id: ClientboundRemoveEntitiesPacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: None,
-            target_entity: None,
-        };
-        server_ctx.broadcast(broadcast);
-    }
+    let remove_entity = ClientboundRemoveEntitiesPacket {
+        entity_ids: vec![entity_id],
+    };
+    let encoded = remove_entity.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundRemoveEntitiesPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: None,
+        target_entity: None,
+    });
+
+    // Suppress unused-variable warning — conn_handle is dropped by caller.
+    let _ = conn_handle;
     info!(peer = %addr, uuid = %uuid, name = %player_name, "Player removed from player list");
-
-    // Drop outbound sender → writer task sees channel closed → exits.
-    drop(conn_handle);
-
-    // Wait for reader and writer tasks to finish.
-    let _ = reader_handle.await;
-    let _ = writer_handle.await;
-
-    Ok(())
 }
-
-/// Handles a teleport confirmation from the client.
 fn handle_accept_teleport(ctx: &PlayContext<'_>, data: bytes::Bytes) {
     if let Ok(ack) = decode_packet::<ServerboundAcceptTeleportationPacket>(
         data,

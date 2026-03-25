@@ -14,6 +14,7 @@ use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::ServerboundPlayerActionPacket;
 use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
 use oxidized_protocol::types::BlockPos;
+use oxidized_protocol::types::direction::Direction;
 
 use super::PlayContext;
 use super::block_interaction::{
@@ -155,52 +156,7 @@ pub async fn handle_player_action(
             }
         },
         PlayerAction::StopDestroyBlock => {
-            let game_mode = play_ctx.player.read().game_mode;
-            if game_mode != GameMode::Creative {
-                // Validate that the player started mining this block.
-                let (mining_pos, mining_time) = {
-                    let player = play_ctx.player.read();
-                    (player.mining.start_pos, player.mining.start_time)
-                };
-                if mining_pos != Some(pkt.pos) {
-                    debug!(
-                        peer = %play_ctx.addr,
-                        name = %play_ctx.player_name,
-                        pos = ?pkt.pos,
-                        mining_pos = ?mining_pos,
-                        "StopDestroyBlock rejected: position mismatch"
-                    );
-                    resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
-                    send_ack(play_ctx, pkt.sequence).await?;
-                    return Ok(());
-                }
-                // Validate mining duration — even the fastest break takes ≥1 tick.
-                if let Some(start) = mining_time {
-                    if start.elapsed() < MIN_MINING_DURATION {
-                        debug!(
-                            peer = %play_ctx.addr,
-                            name = %play_ctx.player_name,
-                            pos = ?pkt.pos,
-                            elapsed = ?start.elapsed(),
-                            "StopDestroyBlock rejected: too fast (possible exploit)"
-                        );
-                        resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
-                        send_ack(play_ctx, pkt.sequence).await?;
-                        return Ok(());
-                    }
-                }
-                do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
-                {
-                    let mut player = play_ctx.player.write();
-                    let eid = player.entity_id;
-                    player.mining.start_pos = None;
-                    player.mining.start_time = None;
-                    // Clear mining animation on other players' screens.
-                    broadcast_block_destruction(play_ctx.server_ctx, eid, pkt.pos, 10, Some(eid));
-                }
-            } else {
-                send_ack(play_ctx, pkt.sequence).await?;
-            }
+            handle_stop_destroy(play_ctx, pkt.pos, pkt.direction, pkt.sequence).await?;
         },
         PlayerAction::AbortDestroyBlock => {
             let entity_id = {
@@ -272,6 +228,60 @@ pub async fn handle_player_action(
         },
     }
 
+    Ok(())
+}
+
+/// Validates and completes a survival block break for `StopDestroyBlock`.
+async fn handle_stop_destroy(
+    play_ctx: &mut PlayContext<'_>,
+    pos: BlockPos,
+    direction: Direction,
+    sequence: i32,
+) -> Result<(), ConnectionError> {
+    let game_mode = play_ctx.player.read().game_mode;
+    if game_mode == GameMode::Creative {
+        send_ack(play_ctx, sequence).await?;
+        return Ok(());
+    }
+
+    let (mining_pos, mining_time) = {
+        let player = play_ctx.player.read();
+        (player.mining.start_pos, player.mining.start_time)
+    };
+    if mining_pos != Some(pos) {
+        debug!(
+            peer = %play_ctx.addr,
+            name = %play_ctx.player_name,
+            pos = ?pos,
+            mining_pos = ?mining_pos,
+            "StopDestroyBlock rejected: position mismatch"
+        );
+        resync_block(play_ctx, pos, Some(direction)).await?;
+        send_ack(play_ctx, sequence).await?;
+        return Ok(());
+    }
+    if let Some(start) = mining_time {
+        if start.elapsed() < MIN_MINING_DURATION {
+            debug!(
+                peer = %play_ctx.addr,
+                name = %play_ctx.player_name,
+                pos = ?pos,
+                elapsed = ?start.elapsed(),
+                "StopDestroyBlock rejected: too fast (possible exploit)"
+            );
+            resync_block(play_ctx, pos, Some(direction)).await?;
+            send_ack(play_ctx, sequence).await?;
+            return Ok(());
+        }
+    }
+    do_block_break(play_ctx, pos, sequence).await?;
+    {
+        let mut player = play_ctx.player.write();
+        let eid = player.entity_id;
+        player.mining.start_pos = None;
+        player.mining.start_time = None;
+        broadcast_block_destruction(play_ctx.server_ctx, eid, pos, 10, Some(eid));
+    }
     Ok(())
 }
 

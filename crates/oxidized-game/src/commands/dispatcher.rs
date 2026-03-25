@@ -71,72 +71,20 @@ impl<S: Clone + Send + Sync + 'static> CommandDispatcher<S> {
                 break;
             }
 
-            // Try to match a child node.
-            let remaining = reader.remaining().to_string();
-            let mut matched = false;
-
-            // Try literal children first, then argument children.
-            for child in current.children().values() {
-                match child {
-                    CommandNode::Literal(lit) => {
-                        if remaining.starts_with(&lit.literal)
-                            && (remaining.len() == lit.literal.len()
-                                || remaining.as_bytes().get(lit.literal.len()) == Some(&b' '))
-                        {
-                            if !child.can_use(&source) {
-                                continue;
-                            }
-                            reader = StringReader::new(input, reader.cursor() + lit.literal.len());
-                            current = child;
-                            if let Some(cmd) = child.command() {
-                                command = Some(cmd.clone());
-                            }
-                            matched = true;
-                            break;
-                        }
-                    },
-                    CommandNode::Argument(arg) => {
-                        if !child.can_use(&source) {
-                            continue;
-                        }
-                        let start = reader.cursor();
-                        match parse_argument(&mut reader, &arg.argument_type) {
-                            Ok(result) => {
-                                let end = reader.cursor();
-                                arguments.insert(
-                                    arg.name.clone(),
-                                    ParsedArgument {
-                                        range: StringRange::new(start, end),
-                                        result,
-                                    },
-                                );
-                                current = child;
-                                if let Some(cmd) = child.command() {
-                                    command = Some(cmd.clone());
-                                }
-                                matched = true;
-                                break;
-                            },
-                            Err(e) => {
-                                // Reset cursor and try next child.
-                                reader = StringReader::new(input, start);
-                                // If this is the only child, propagate the error.
-                                if current.children().len() == 1 {
-                                    return Err(e);
-                                }
-                            },
-                        }
-                    },
-                    CommandNode::Root(_) => {},
-                }
-            }
-
-            if !matched {
-                // If there's remaining input but no child matched, error.
-                let pos = reader.cursor();
-                return Err(CommandError::Parse(format!(
-                    "Incorrect argument for command at position {pos}"
-                )));
+            match try_match_child(current, &source, input, &mut reader, &mut arguments) {
+                ChildMatch::Matched { node: next, cmd } => {
+                    current = next;
+                    if let Some(c) = cmd {
+                        command = Some(c);
+                    }
+                },
+                ChildMatch::NoMatch => {
+                    let pos = reader.cursor();
+                    return Err(CommandError::Parse(format!(
+                        "Incorrect argument for command at position {pos}"
+                    )));
+                },
+                ChildMatch::Error(e) => return Err(e),
             }
         }
 
@@ -229,6 +177,81 @@ impl<S: Clone + Send + Sync + 'static> Default for CommandDispatcher<S> {
     }
 }
 
+/// Result of attempting to match input against child nodes.
+enum ChildMatch<'a, S> {
+    /// A child node matched.
+    Matched {
+        /// The matched child node.
+        node: &'a CommandNode<S>,
+        /// The command handler, if the matched node is executable.
+        cmd: Option<
+            std::sync::Arc<dyn Fn(&CommandContext<S>) -> Result<i32, CommandError> + Send + Sync>,
+        >,
+    },
+    /// No child matched the input.
+    NoMatch,
+    /// A parse error occurred (single-child propagation).
+    Error(CommandError),
+}
+
+/// Tries to match the remaining input against children of `current`.
+///
+/// On success, advances `reader` past the matched token and inserts
+/// any parsed argument into `arguments`.
+fn try_match_child<'a, S: Clone + Send + Sync + 'static>(
+    current: &'a CommandNode<S>,
+    source: &S,
+    input: &'a str,
+    reader: &mut StringReader<'a>,
+    arguments: &mut HashMap<String, ParsedArgument>,
+) -> ChildMatch<'a, S> {
+    let remaining = reader.remaining().to_string();
+
+    for child in current.children().values() {
+        match child {
+            CommandNode::Literal(lit) => {
+                let is_match = remaining.starts_with(&lit.literal)
+                    && (remaining.len() == lit.literal.len()
+                        || remaining.as_bytes().get(lit.literal.len()) == Some(&b' '));
+                if !is_match || !child.can_use(source) {
+                    continue;
+                }
+                *reader = StringReader::new(input, reader.cursor() + lit.literal.len());
+                return ChildMatch::Matched {
+                    node: child,
+                    cmd: child.command().cloned(),
+                };
+            },
+            CommandNode::Argument(arg) => {
+                if !child.can_use(source) {
+                    continue;
+                }
+                let start = reader.cursor();
+                let result = match parse_argument(reader, &arg.argument_type) {
+                    Ok(r) => r,
+                    Err(e) if current.children().len() == 1 => {
+                        *reader = StringReader::new(input, start);
+                        return ChildMatch::Error(e);
+                    },
+                    Err(_) => {
+                        *reader = StringReader::new(input, start);
+                        continue;
+                    },
+                };
+                let range = StringRange::new(start, reader.cursor());
+                arguments.insert(arg.name.clone(), ParsedArgument { range, result });
+                return ChildMatch::Matched {
+                    node: child,
+                    cmd: child.command().cloned(),
+                };
+            },
+            CommandNode::Root(_) => {},
+        }
+    }
+
+    ChildMatch::NoMatch
+}
+
 /// Recursively collects suggestions from child nodes.
 ///
 /// `offset` is the character position in the original input where
@@ -280,8 +303,7 @@ fn collect_child_suggestions<S>(
     }
 
     // We're at the last word — suggest matching children.
-    let range_start = offset;
-    let range_end = offset + current_word.len();
+    let range = StringRange::new(offset, offset + current_word.len());
     let mut suggestions = Vec::new();
     for child in node.children().values() {
         if !child.can_use(source) {
@@ -291,52 +313,71 @@ fn collect_child_suggestions<S>(
             CommandNode::Literal(lit) => {
                 if lit.literal.starts_with(current_word) {
                     suggestions.push(Suggestion {
-                        range: StringRange::new(range_start, range_end),
+                        range,
                         text: lit.literal.clone(),
                         tooltip: None,
                     });
                 }
             },
-            CommandNode::Argument(arg) => match &arg.argument_type {
-                ArgumentType::Entity { .. } | ArgumentType::GameProfile => {
-                    // Suggest entity selectors when input starts with '@'
-                    if current_word.starts_with('@') || current_word.is_empty() {
-                        for sel in &["@a", "@e", "@p", "@r", "@s", "@n"] {
-                            if sel.starts_with(current_word) {
-                                suggestions.push(Suggestion {
-                                    range: StringRange::new(range_start, range_end),
-                                    text: (*sel).to_string(),
-                                    tooltip: None,
-                                });
-                            }
-                        }
-                    }
-                    // Also suggest player names
-                    for name in player_names {
-                        if name
-                            .to_lowercase()
-                            .starts_with(&current_word.to_lowercase())
-                        {
-                            suggestions.push(Suggestion {
-                                range: StringRange::new(range_start, range_end),
-                                text: name.clone(),
-                                tooltip: None,
-                            });
-                        }
-                    }
-                },
-                _ => {
-                    suggestions.push(Suggestion {
-                        range: StringRange::new(range_start, range_end),
-                        text: format!("<{}>", arg.name),
-                        tooltip: None,
-                    });
-                },
+            CommandNode::Argument(arg) => {
+                suggest_for_argument(
+                    &arg.argument_type,
+                    &arg.name,
+                    current_word,
+                    range,
+                    player_names,
+                    &mut suggestions,
+                );
             },
             _ => {},
         }
     }
     suggestions
+}
+
+/// Builds suggestions for an argument node based on its type.
+fn suggest_for_argument(
+    arg_type: &ArgumentType,
+    arg_name: &str,
+    current_word: &str,
+    range: StringRange,
+    player_names: &[String],
+    suggestions: &mut Vec<Suggestion>,
+) {
+    let is_entity = matches!(
+        arg_type,
+        ArgumentType::Entity { .. } | ArgumentType::GameProfile
+    );
+    if !is_entity {
+        suggestions.push(Suggestion {
+            range,
+            text: format!("<{arg_name}>"),
+            tooltip: None,
+        });
+        return;
+    }
+
+    if current_word.starts_with('@') || current_word.is_empty() {
+        for sel in &["@a", "@e", "@p", "@r", "@s", "@n"] {
+            if sel.starts_with(current_word) {
+                suggestions.push(Suggestion {
+                    range,
+                    text: (*sel).to_string(),
+                    tooltip: None,
+                });
+            }
+        }
+    }
+    let lower = current_word.to_lowercase();
+    for name in player_names {
+        if name.to_lowercase().starts_with(&lower) {
+            suggestions.push(Suggestion {
+                range,
+                text: name.clone(),
+                tooltip: None,
+            });
+        }
+    }
 }
 
 #[cfg(test)]

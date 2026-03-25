@@ -387,205 +387,216 @@ async fn broadcast_player_join(
 ) -> Result<(), ConnectionError> {
     // Send the joining player their own tab list entry (the login sequence
     // was built before the player was added to the list, so it's missing).
-    {
-        let self_info = {
-            let p = player_arc.read();
-            ClientboundPlayerInfoUpdatePacket {
-                actions: PlayerInfoActions(
-                    PlayerInfoActions::ADD_PLAYER
-                        | PlayerInfoActions::INITIALIZE_CHAT
-                        | PlayerInfoActions::UPDATE_GAME_MODE
-                        | PlayerInfoActions::UPDATE_LISTED
-                        | PlayerInfoActions::UPDATE_LATENCY
-                        | PlayerInfoActions::UPDATE_DISPLAY_NAME
-                        | PlayerInfoActions::UPDATE_LIST_ORDER
-                        | PlayerInfoActions::UPDATE_HAT,
-                ),
-                entries: vec![PlayerInfoEntry {
-                    uuid,
-                    name: player_name.to_owned(),
-                    properties: p.profile.properties().to_vec(),
-                    game_mode: p.game_mode as i32,
-                    latency: 0,
-                    is_listed: true,
-                    has_display_name: false,
-                    display_name: None,
-                    is_hat_visible: false,
-                    list_order: 0,
-                }],
-            }
-        };
-        conn_handle.send_packet(&self_info).await?;
-    }
+    let self_info = build_player_info_packet(player_arc, player_name, uuid);
+    conn_handle.send_packet(&self_info).await?;
 
     // Broadcast the new player to all existing players' tab lists.
-    {
-        let p = player_arc.read();
-        let join_info = ClientboundPlayerInfoUpdatePacket {
-            actions: PlayerInfoActions(
-                PlayerInfoActions::ADD_PLAYER
-                    | PlayerInfoActions::INITIALIZE_CHAT
-                    | PlayerInfoActions::UPDATE_GAME_MODE
-                    | PlayerInfoActions::UPDATE_LISTED
-                    | PlayerInfoActions::UPDATE_LATENCY
-                    | PlayerInfoActions::UPDATE_DISPLAY_NAME
-                    | PlayerInfoActions::UPDATE_LIST_ORDER
-                    | PlayerInfoActions::UPDATE_HAT,
-            ),
-            entries: vec![PlayerInfoEntry {
-                uuid,
-                name: player_name.to_owned(),
-                properties: p.profile.properties().to_vec(),
-                game_mode: p.game_mode as i32,
-                latency: 0,
-                is_listed: true,
-                has_display_name: false,
-                display_name: None,
-                is_hat_visible: false,
-                list_order: 0,
-            }],
-        };
-        drop(p);
-        let encoded = join_info.encode();
-        let broadcast = BroadcastMessage {
-            packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: Some(entity_id),
-            target_entity: None,
-        };
-        server_ctx.broadcast(broadcast);
-    }
+    broadcast_player_info(server_ctx, player_arc, player_name, uuid, entity_id);
 
-    // Broadcast the new player's entity to all existing players, and send
-    // all existing players' entities to the joining player.
-    {
-        let add_entity = {
-            let p = player_arc.read();
-            ClientboundAddEntityPacket {
-                entity_id,
-                uuid,
-                entity_type: PLAYER_ENTITY_TYPE_ID,
-                x: p.movement.pos.x,
-                y: p.movement.pos.y,
-                z: p.movement.pos.z,
-                vx: 0.0,
-                vy: 0.0,
-                vz: 0.0,
-                x_rot: pack_angle(p.movement.pitch),
-                y_rot: pack_angle(p.movement.yaw),
-                y_head_rot: pack_angle(p.movement.yaw),
-                data: 0,
-            }
-        };
-
-        // Broadcast new player entity to existing players.
-        let encoded = add_entity.encode();
-        let broadcast = BroadcastMessage {
-            packet_id: ClientboundAddEntityPacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: Some(entity_id),
-            target_entity: None,
-        };
-        server_ctx.broadcast(broadcast);
-
-        // Broadcast new player's equipment to existing players.
-        {
-            let equip_pkt = {
-                let p = player_arc.read();
-                build_equipment_packet(&p)
-            };
-            let encoded = equip_pkt.encode();
-            server_ctx.broadcast(BroadcastMessage {
-                packet_id: ClientboundSetEquipmentPacket::PACKET_ID,
-                data: encoded.freeze(),
-                exclude_entity: Some(entity_id),
-                target_entity: None,
-            });
-        }
-
-        // Broadcast new player's skin customisation to existing players.
-        {
-            let skin = player_arc.read().connection.model_customisation;
-            let pkt = ClientboundSetEntityDataPacket::single_byte(
-                entity_id,
-                DATA_PLAYER_MODE_CUSTOMISATION,
-                skin,
-            );
-            let encoded = pkt.encode();
-            server_ctx.broadcast(BroadcastMessage {
-                packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
-                data: encoded.freeze(),
-                exclude_entity: Some(entity_id),
-                target_entity: None,
-            });
-        }
-
-        // Collect existing players' entity + equipment + skin packets (no locks
-        // held across await).
-        let other_entities: Vec<(
-            ClientboundAddEntityPacket,
-            ClientboundSetEquipmentPacket,
-            ClientboundSetEntityDataPacket,
-        )> = {
-            let player_list = server_ctx.network.player_list.read();
-            player_list
-                .iter()
-                .filter_map(|other_arc| {
-                    let other = other_arc.read();
-                    if other.entity_id == entity_id {
-                        return None;
-                    }
-                    let add = ClientboundAddEntityPacket {
-                        entity_id: other.entity_id,
-                        uuid: other.uuid,
-                        entity_type: PLAYER_ENTITY_TYPE_ID,
-                        x: other.movement.pos.x,
-                        y: other.movement.pos.y,
-                        z: other.movement.pos.z,
-                        vx: 0.0,
-                        vy: 0.0,
-                        vz: 0.0,
-                        x_rot: pack_angle(other.movement.pitch),
-                        y_rot: pack_angle(other.movement.yaw),
-                        y_head_rot: pack_angle(other.movement.yaw),
-                        data: 0,
-                    };
-                    let equip = build_equipment_packet(&other);
-                    let skin = ClientboundSetEntityDataPacket::single_byte(
-                        other.entity_id,
-                        DATA_PLAYER_MODE_CUSTOMISATION,
-                        other.connection.model_customisation,
-                    );
-                    Some((add, equip, skin))
-                })
-                .collect()
-        };
-
-        // Send existing player entities + equipment + skin to the joining player.
-        for (add_pkt, equip_pkt, skin_pkt) in &other_entities {
-            conn_handle.send_packet(add_pkt).await?;
-            conn_handle.send_packet(equip_pkt).await?;
-            conn_handle.send_packet(skin_pkt).await?;
-        }
-    }
+    // Broadcast the new player's entity, equipment, and skin to all existing
+    // players, and send all existing players' entities to the joining player.
+    broadcast_and_collect_entities(
+        conn_handle,
+        player_arc,
+        uuid,
+        entity_id,
+        server_ctx,
+    )
+    .await?;
 
     // Broadcast "Player joined the game" system message (vanilla yellow text).
-    {
-        let join_msg = ClientboundSystemChatPacket {
-            content: Component::translatable(
-                "multiplayer.player.joined",
-                vec![Component::text(player_name)],
-            ),
-            is_overlay: false,
-        };
-        let encoded = join_msg.encode();
-        server_ctx.broadcast(BroadcastMessage {
-            packet_id: ClientboundSystemChatPacket::PACKET_ID,
-            data: encoded.freeze(),
-            exclude_entity: None,
-            target_entity: None,
-        });
+    let join_msg = ClientboundSystemChatPacket {
+        content: Component::translatable(
+            "multiplayer.player.joined",
+            vec![Component::text(player_name)],
+        ),
+        is_overlay: false,
+    };
+    let encoded = join_msg.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundSystemChatPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: None,
+        target_entity: None,
+    });
+
+    Ok(())
+}
+
+/// Builds the full `PlayerInfoUpdate` packet for the joining player.
+fn build_player_info_packet(
+    player_arc: &Arc<RwLock<ServerPlayer>>,
+    player_name: &str,
+    uuid: Uuid,
+) -> ClientboundPlayerInfoUpdatePacket {
+    let p = player_arc.read();
+    ClientboundPlayerInfoUpdatePacket {
+        actions: all_info_actions(),
+        entries: vec![PlayerInfoEntry {
+            uuid,
+            name: player_name.to_owned(),
+            properties: p.profile.properties().to_vec(),
+            game_mode: p.game_mode as i32,
+            latency: 0,
+            is_listed: true,
+            has_display_name: false,
+            display_name: None,
+            is_hat_visible: false,
+            list_order: 0,
+        }],
+    }
+}
+
+/// Returns the combined action flags used for join-time player info packets.
+fn all_info_actions() -> PlayerInfoActions {
+    PlayerInfoActions(
+        PlayerInfoActions::ADD_PLAYER
+            | PlayerInfoActions::INITIALIZE_CHAT
+            | PlayerInfoActions::UPDATE_GAME_MODE
+            | PlayerInfoActions::UPDATE_LISTED
+            | PlayerInfoActions::UPDATE_LATENCY
+            | PlayerInfoActions::UPDATE_DISPLAY_NAME
+            | PlayerInfoActions::UPDATE_LIST_ORDER
+            | PlayerInfoActions::UPDATE_HAT,
+    )
+}
+
+/// Broadcasts the joining player's tab-list entry to all existing players.
+fn broadcast_player_info(
+    server_ctx: &Arc<ServerContext>,
+    player_arc: &Arc<RwLock<ServerPlayer>>,
+    player_name: &str,
+    uuid: Uuid,
+    entity_id: i32,
+) {
+    let join_info = build_player_info_packet(player_arc, player_name, uuid);
+    let encoded = join_info.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: Some(entity_id),
+        target_entity: None,
+    });
+}
+
+/// Broadcasts the new player's entity/equipment/skin to existing players, and
+/// sends all existing players' entity data to the joining player.
+async fn broadcast_and_collect_entities(
+    conn_handle: &ConnectionHandle,
+    player_arc: &Arc<RwLock<ServerPlayer>>,
+    uuid: Uuid,
+    entity_id: i32,
+    server_ctx: &Arc<ServerContext>,
+) -> Result<(), ConnectionError> {
+    // Broadcast new player entity to existing players.
+    let add_entity = {
+        let p = player_arc.read();
+        ClientboundAddEntityPacket {
+            entity_id,
+            uuid,
+            entity_type: PLAYER_ENTITY_TYPE_ID,
+            x: p.movement.pos.x,
+            y: p.movement.pos.y,
+            z: p.movement.pos.z,
+            vx: 0.0,
+            vy: 0.0,
+            vz: 0.0,
+            x_rot: pack_angle(p.movement.pitch),
+            y_rot: pack_angle(p.movement.yaw),
+            y_head_rot: pack_angle(p.movement.yaw),
+            data: 0,
+        }
+    };
+    let encoded = add_entity.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundAddEntityPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: Some(entity_id),
+        target_entity: None,
+    });
+
+    // Broadcast new player's equipment to existing players.
+    let equip_pkt = {
+        let p = player_arc.read();
+        build_equipment_packet(&p)
+    };
+    let encoded = equip_pkt.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundSetEquipmentPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: Some(entity_id),
+        target_entity: None,
+    });
+
+    // Broadcast new player's skin customisation to existing players.
+    let skin = player_arc.read().connection.model_customisation;
+    let pkt = ClientboundSetEntityDataPacket::single_byte(
+        entity_id,
+        DATA_PLAYER_MODE_CUSTOMISATION,
+        skin,
+    );
+    let encoded = pkt.encode();
+    server_ctx.broadcast(BroadcastMessage {
+        packet_id: ClientboundSetEntityDataPacket::PACKET_ID,
+        data: encoded.freeze(),
+        exclude_entity: Some(entity_id),
+        target_entity: None,
+    });
+
+    // Collect existing players' entity + equipment + skin packets (no locks
+    // held across await).
+    let other_entities = collect_existing_player_data(server_ctx, entity_id);
+
+    // Send existing player entities + equipment + skin to the joining player.
+    for (add_pkt, equip_pkt, skin_pkt) in &other_entities {
+        conn_handle.send_packet(add_pkt).await?;
+        conn_handle.send_packet(equip_pkt).await?;
+        conn_handle.send_packet(skin_pkt).await?;
     }
 
     Ok(())
+}
+
+/// Collects entity, equipment, and skin data for all players except
+/// `exclude_entity_id`, without holding locks across await points.
+fn collect_existing_player_data(
+    server_ctx: &Arc<ServerContext>,
+    exclude_entity_id: i32,
+) -> Vec<(
+    ClientboundAddEntityPacket,
+    ClientboundSetEquipmentPacket,
+    ClientboundSetEntityDataPacket,
+)> {
+    let player_list = server_ctx.network.player_list.read();
+    player_list
+        .iter()
+        .filter_map(|other_arc| {
+            let other = other_arc.read();
+            if other.entity_id == exclude_entity_id {
+                return None;
+            }
+            let add = ClientboundAddEntityPacket {
+                entity_id: other.entity_id,
+                uuid: other.uuid,
+                entity_type: PLAYER_ENTITY_TYPE_ID,
+                x: other.movement.pos.x,
+                y: other.movement.pos.y,
+                z: other.movement.pos.z,
+                vx: 0.0,
+                vy: 0.0,
+                vz: 0.0,
+                x_rot: pack_angle(other.movement.pitch),
+                y_rot: pack_angle(other.movement.yaw),
+                y_head_rot: pack_angle(other.movement.yaw),
+                data: 0,
+            };
+            let equip = build_equipment_packet(&other);
+            let skin = ClientboundSetEntityDataPacket::single_byte(
+                other.entity_id,
+                DATA_PLAYER_MODE_CUSTOMISATION,
+                other.connection.model_customisation,
+            );
+            Some((add, equip, skin))
+        })
+        .collect()
 }
