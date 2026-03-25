@@ -2,7 +2,7 @@
 
 ## Overview
 
-Oxidized is built in **38 phases**, each producing a small but tangible reward
+Oxidized is built in **38+ phases**, each producing a small but tangible reward
 (something visible/testable). Phases are sequenced so every phase builds on a
 working foundation.
 
@@ -32,12 +32,14 @@ P01──P07 Core Types
                                          │             └─P15 Entity Framework
                                          │                    ├─P16 Physics
                                          │                    │      └─P22 Block Interaction
+                                         │                    │      │      ├─P23b ECS Runtime ← "entities in bevy_ecs"
+                                         │                    │      │      │      ├─P23c Dropped Items ← "blocks drop loot"
+                                         │                    │      │      │      │      └─P34 Loot Tables
+                                         │                    │      │      │      └─P24 Combat
+                                         │                    │      │      │             ├─P25 Hostile Mobs
+                                         │                    │      │      │             └─P27 Animals
                                          │                    │      │      ├─P28 Redstone
                                          │                    │      │      └─P30 Block Entities
-                                         │                    │      └─P24 Combat
-                                         │                    │             ├─P25 Hostile Mobs
-                                         │                    │             │      └─P34 Loot Tables
-                                         │                    │             └─P27 Animals
                                          │                    └─P19 World Ticking
                                          │                           ├─P20 World Saving
                                          │                           └─P38 Performance
@@ -82,6 +84,9 @@ P01──P07 Core Types
 | [21](phase-21-inventory.md) | Inventory | `game` | ✅ Complete | Inventory visible |
 | [22](phase-22-block-interaction.md) | Block Interaction | `game` | ✅ Complete | Break/place blocks |
 | [23](phase-23-flat-worldgen.md) | Flat World Generation | `world` | ✅ Complete | New worlds generate |
+| [23a](phase-23a-lighting.md) | Lighting Engine | `game`, `world`, `protocol`, `server` | ✅ Complete | Correct sky & block light |
+| [23b](phase-23b-ecs-runtime.md) | ECS Runtime Integration | `game`, `server` | 📋 Planned | bevy_ecs World drives entity tick |
+| [23c](phase-23c-dropped-items.md) | Dropped Items | `game`, `server`, `protocol` | 📋 Planned | Blocks/players drop items |
 | [24](phase-24-combat.md) | Combat | `game` | 📋 Planned | Take damage, die, respawn |
 | [25](phase-25-hostile-mobs.md) | Hostile Mobs | `game` | 📋 Planned | Zombies attack you |
 | [26](phase-26-noise-worldgen.md) | Noise World Gen | `world` | 📋 Planned | Full terrain generation |
@@ -116,6 +121,8 @@ P01──P07 Core Types
 | P18 | Run `/tp`, `/gamemode`, `/stop` |
 | P20 | Restart and keep all progress |
 | P22 | Play basic survival (dig, place) |
+| P23b | Entity tick loop powered by bevy_ecs |
+| P23c | Dropped items from blocks/players, pickup with animation |
 | P25 | Play with mob danger |
 | P29 | Craft tools and weapons |
 | P38 | Host a public server |
