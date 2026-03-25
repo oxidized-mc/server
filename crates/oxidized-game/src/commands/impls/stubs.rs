@@ -85,15 +85,15 @@ fn register_one(
     description: &'static str,
     permission_level: u32,
 ) {
-    let mut builder = literal(name)
-        .description(description)
-        .executes(move |ctx: &CommandContext<CommandSourceStack>| {
+    let mut builder = literal(name).description(description).executes(
+        move |ctx: &CommandContext<CommandSourceStack>| {
             ctx.source
                 .send_translatable_failure("commands.help.failed", vec![]);
             ctx.source
                 .send_failure(&Component::text(format!("/{name} is not yet implemented")));
             Ok(0)
-        });
+        },
+    );
     if permission_level > 0 {
         builder = builder.requires_op_level(permission_level);
     }

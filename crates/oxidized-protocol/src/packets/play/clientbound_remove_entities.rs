@@ -37,11 +37,7 @@ impl Packet for ClientboundRemoveEntitiesPacket {
             )));
         }
         let count = count as usize;
-        types::ensure_remaining(
-            &data,
-            count,
-            "RemoveEntitiesPacket entity data",
-        )?;
+        types::ensure_remaining(&data, count, "RemoveEntitiesPacket entity data")?;
         let mut entity_ids = Vec::with_capacity(count);
         for _ in 0..count {
             entity_ids.push(varint::read_varint_buf(&mut data)?);

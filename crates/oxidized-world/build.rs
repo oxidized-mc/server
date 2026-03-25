@@ -875,11 +875,8 @@ fn generate_item_ids(items_path: &Path) -> String {
         .read_to_string(&mut json_str)
         .expect("Failed to decompress items.json.gz");
 
-    let root: serde_json::Value =
-        serde_json::from_str(&json_str).expect("Invalid items.json");
-    let obj = root
-        .as_object()
-        .expect("items.json root must be an object");
+    let root: serde_json::Value = serde_json::from_str(&json_str).expect("Invalid items.json");
+    let obj = root.as_object().expect("items.json root must be an object");
 
     struct ItemData {
         name: String,
@@ -893,17 +890,15 @@ fn generate_item_ids(items_path: &Path) -> String {
             .get("max_stack_size")
             .and_then(|v| v.as_u64())
             .unwrap_or(64);
-        let max_stack_size = u8::try_from(raw_stack).unwrap_or_else(|_| {
-            panic!("item '{name}' has invalid max_stack_size: {raw_stack}")
-        });
+        let max_stack_size = u8::try_from(raw_stack)
+            .unwrap_or_else(|_| panic!("item '{name}' has invalid max_stack_size: {raw_stack}"));
 
         let raw_damage = value
             .get("max_damage")
             .and_then(|v| v.as_u64())
             .unwrap_or(0);
-        let max_damage = u16::try_from(raw_damage).unwrap_or_else(|_| {
-            panic!("item '{name}' has invalid max_damage: {raw_damage}")
-        });
+        let max_damage = u16::try_from(raw_damage)
+            .unwrap_or_else(|_| panic!("item '{name}' has invalid max_damage: {raw_damage}"));
 
         items.push(ItemData {
             name: name.clone(),
@@ -932,10 +927,7 @@ fn generate_item_ids(items_path: &Path) -> String {
         out,
         "/// Item names in vanilla registration order (index = protocol ID)."
     );
-    let _ = writeln!(
-        out,
-        "pub static ITEM_NAMES: [&str; ITEM_COUNT] = ["
-    );
+    let _ = writeln!(out, "pub static ITEM_NAMES: [&str; ITEM_COUNT] = [");
     for item in &items {
         let _ = writeln!(out, "    {:?},", item.name);
     }
@@ -946,10 +938,7 @@ fn generate_item_ids(items_path: &Path) -> String {
         out,
         "/// Maximum stack size per item (same order as ITEM_NAMES)."
     );
-    let _ = writeln!(
-        out,
-        "pub static ITEM_MAX_STACK_SIZES: [u8; ITEM_COUNT] = ["
-    );
+    let _ = writeln!(out, "pub static ITEM_MAX_STACK_SIZES: [u8; ITEM_COUNT] = [");
     for chunk in items.chunks(20) {
         let _ = write!(out, "    ");
         for (i, item) in chunk.iter().enumerate() {
@@ -963,14 +952,8 @@ fn generate_item_ids(items_path: &Path) -> String {
     let _ = writeln!(out, "];\n");
 
     // ITEM_MAX_DAMAGES
-    let _ = writeln!(
-        out,
-        "/// Maximum durability per item (0 = no durability)."
-    );
-    let _ = writeln!(
-        out,
-        "pub static ITEM_MAX_DAMAGES: [u16; ITEM_COUNT] = ["
-    );
+    let _ = writeln!(out, "/// Maximum durability per item (0 = no durability).");
+    let _ = writeln!(out, "pub static ITEM_MAX_DAMAGES: [u16; ITEM_COUNT] = [");
     for chunk in items.chunks(20) {
         let _ = write!(out, "    ");
         for (i, item) in chunk.iter().enumerate() {

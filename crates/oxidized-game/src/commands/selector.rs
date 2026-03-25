@@ -413,9 +413,8 @@ pub fn resolve_selector(
 
     // Apply gamemode filters.
     for (mode_name, is_negated) in &filters.gamemode {
-        let mode = GameMode::from_name(mode_name).ok_or_else(|| {
-            CommandError::Parse(format!("Invalid game mode: '{mode_name}'"))
-        })?;
+        let mode = GameMode::from_name(mode_name)
+            .ok_or_else(|| CommandError::Parse(format!("Invalid game mode: '{mode_name}'")))?;
         targets.retain(|t| {
             let player_mode = source.server.get_player_game_mode(&t.uuid);
             match player_mode {
@@ -429,8 +428,7 @@ pub fn resolve_selector(
     // Apply type filters. Currently only players exist, so "player" /
     // "minecraft:player" matches and everything else excludes.
     for (type_name, is_negated) in &filters.entity_type {
-        let is_player_type =
-            type_name == "player" || type_name == "minecraft:player";
+        let is_player_type = type_name == "player" || type_name == "minecraft:player";
         if is_player_type == *is_negated {
             // type=player,negated → exclude all players → empty
             // type=!zombie → is_player=false, negated=true → keep all
@@ -873,10 +871,7 @@ mod tests {
                 .find(|p| &p.uuid == uuid)
                 .map(|p| p.game_mode)
         }
-        fn get_player_position(
-            &self,
-            uuid: &uuid::Uuid,
-        ) -> Option<(f64, f64, f64)> {
+        fn get_player_position(&self, uuid: &uuid::Uuid) -> Option<(f64, f64, f64)> {
             self.players
                 .iter()
                 .find(|p| &p.uuid == uuid)
@@ -1030,8 +1025,7 @@ mod tests {
         let server = Arc::new(MockServer::new(test_players()));
         let src = make_source(server);
         // gamemode=survival + distance within 200
-        let sel =
-            parse_selector("@a[gamemode=survival,distance=..200]").unwrap();
+        let sel = parse_selector("@a[gamemode=survival,distance=..200]").unwrap();
         let result = resolve_selector(&sel, &src).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].name, "Bob");
@@ -1041,8 +1035,7 @@ mod tests {
     fn resolve_limit_with_gamemode() {
         let server = Arc::new(MockServer::new(test_players()));
         let src = make_source(server);
-        let sel =
-            parse_selector("@a[gamemode=!spectator,limit=1]").unwrap();
+        let sel = parse_selector("@a[gamemode=!spectator,limit=1]").unwrap();
         let result = resolve_selector(&sel, &src).unwrap();
         assert_eq!(result.len(), 1);
     }

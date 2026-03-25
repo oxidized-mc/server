@@ -77,14 +77,14 @@ impl OpsStore {
                             entries.insert(op.uuid, op);
                         }
                         info!(count, path = %path.display(), "Loaded ops.json");
-                    }
+                    },
                     Err(e) => {
                         warn!(
                             error = %e,
                             path = %path.display(),
                             "Failed to parse ops.json; starting with empty ops list"
                         );
-                    }
+                    },
                 },
                 Err(e) => {
                     warn!(
@@ -92,7 +92,7 @@ impl OpsStore {
                         path = %path.display(),
                         "Failed to read ops.json; starting with empty ops list"
                     );
-                }
+                },
             }
         } else {
             info!(path = %path.display(), "No ops.json found; starting with empty ops list");
@@ -114,10 +114,7 @@ impl OpsStore {
     ///
     /// Returns 0 if the player is not an operator.
     pub fn get_permission_level(&self, uuid: &Uuid) -> i32 {
-        self.entries
-            .get(uuid)
-            .map(|e| e.level)
-            .unwrap_or(0)
+        self.entries.get(uuid).map(|e| e.level).unwrap_or(0)
     }
 
     /// Returns a clone of the operator entry for the given UUID, if any.
@@ -191,10 +188,10 @@ impl OpsStore {
                         "Failed to write ops.json"
                     );
                 }
-            }
+            },
             Err(e) => {
                 warn!(error = %e, "Failed to serialize ops.json");
-            }
+            },
         }
     }
 }
@@ -234,9 +231,7 @@ mod tests {
 
         let store = OpsStore::load(file.path(), 4);
         assert_eq!(store.len(), 2);
-        assert!(store.is_op(
-            &Uuid::parse_str("069a79f4-44e9-4726-a5be-fca90e38aaf5").unwrap()
-        ));
+        assert!(store.is_op(&Uuid::parse_str("069a79f4-44e9-4726-a5be-fca90e38aaf5").unwrap()));
         assert_eq!(
             store.get_permission_level(
                 &Uuid::parse_str("069a79f4-44e9-4726-a5be-fca90e38aaf5").unwrap()

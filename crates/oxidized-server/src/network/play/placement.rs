@@ -311,9 +311,7 @@ pub async fn handle_use_item(
 /// Decrements the held item count by one and syncs the slot to the client.
 ///
 /// Used after block placement in survival/adventure modes.
-async fn decrement_held_item(
-    play_ctx: &mut PlayContext<'_>,
-) -> Result<(), ConnectionError> {
+async fn decrement_held_item(play_ctx: &mut PlayContext<'_>) -> Result<(), ConnectionError> {
     let (slot_idx, updated) = {
         let mut player = play_ctx.player.write();
         let slot = player.inventory.selected_slot as usize;

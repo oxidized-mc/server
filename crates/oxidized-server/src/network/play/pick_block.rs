@@ -49,7 +49,8 @@ pub async fn handle_pick_item_from_block(
     // Resolve block state to item name.
     let item_name = match play_ctx
         .server_ctx
-        .world.block_registry
+        .world
+        .block_registry
         .block_name_from_state_id(block_state)
     {
         Some(name) => name.to_owned(),

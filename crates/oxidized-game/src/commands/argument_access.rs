@@ -219,7 +219,10 @@ pub fn for_each_target<F>(
     mut action: F,
 ) -> Result<i32, CommandError>
 where
-    F: FnMut(&CommandSourceStack, &crate::commands::selector::SelectorTarget) -> Result<(), CommandError>,
+    F: FnMut(
+        &CommandSourceStack,
+        &crate::commands::selector::SelectorTarget,
+    ) -> Result<(), CommandError>,
 {
     let targets = get_entities(ctx, selector_name)?;
     let mut count = 0;

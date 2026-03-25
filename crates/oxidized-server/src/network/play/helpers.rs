@@ -36,7 +36,8 @@ pub(super) async fn get_or_create_chunk(
     match server_ctx.world.chunk_loader.load_chunk(pos.x, pos.z).await {
         Ok(Some(chunk)) => {
             return server_ctx
-                .world.chunks
+                .world
+                .chunks
                 .entry(pos)
                 .or_insert_with(|| Arc::new(RwLock::new(chunk)))
                 .clone();
@@ -51,7 +52,8 @@ pub(super) async fn get_or_create_chunk(
 
     // Generate a new chunk.
     server_ctx
-        .world.chunks
+        .world
+        .chunks
         .entry(pos)
         .or_insert_with(|| {
             let chunk = server_ctx.world.chunk_generator.generate_chunk(pos);

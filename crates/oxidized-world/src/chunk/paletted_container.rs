@@ -437,7 +437,8 @@ impl PalettedContainer {
         if bits_per_entry == 0 {
             // Single value — no data longs on wire
             let raw = read_varint(data)?;
-            let value = u32::try_from(raw).map_err(|_| PalettedContainerError::NegativeValue(raw))?;
+            let value =
+                u32::try_from(raw).map_err(|_| PalettedContainerError::NegativeValue(raw))?;
             Ok(Self {
                 strategy,
                 data: PaletteData::Single(SingleValuePalette::with_value(value)),

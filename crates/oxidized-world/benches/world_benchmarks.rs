@@ -96,10 +96,7 @@ fn bench_tag_contains_hit(c: &mut Criterion) {
     // Block type 1 is stone — check if it's in "minecraft:mineable/pickaxe"
     c.bench_function("tag_contains_hit", |b| {
         b.iter(|| {
-            black_box(tags.contains(
-                black_box("minecraft:mineable/pickaxe"),
-                black_box(1),
-            ));
+            black_box(tags.contains(black_box("minecraft:mineable/pickaxe"), black_box(1)));
         });
     });
 }

@@ -69,9 +69,7 @@ fn read_varlong(data: &mut Bytes) -> Result<i64, PacketDecodeError> {
     let mut shift = 0u32;
     loop {
         if !data.has_remaining() {
-            return Err(PacketDecodeError::InvalidData(
-                "VarLong truncated".into(),
-            ));
+            return Err(PacketDecodeError::InvalidData("VarLong truncated".into()));
         }
         let byte = data.get_u8();
         result |= i64::from(byte & 0x7F) << shift;

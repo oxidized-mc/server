@@ -92,10 +92,7 @@ pub const PLAINS_BIOME_ID: u32 = 40;
 /// assert_eq!(biome_name_to_id("minecraft:nonexistent"), None);
 /// ```
 pub fn biome_name_to_id(name: &str) -> Option<u32> {
-    BIOME_NAMES
-        .binary_search(&name)
-        .ok()
-        .map(|idx| idx as u32)
+    BIOME_NAMES.binary_search(&name).ok().map(|idx| idx as u32)
 }
 
 /// Returns the biome resource name for a protocol ID, or `None` if out of range.

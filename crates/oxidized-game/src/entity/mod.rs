@@ -25,9 +25,9 @@ use uuid::Uuid;
 use self::data_slots::*;
 use self::id::next_entity_id;
 use self::synched_data::{DataSerializerType, SynchedEntityData};
+use oxidized_protocol::types::Vec3;
 use oxidized_protocol::types::aabb::Aabb;
 use oxidized_protocol::types::resource_location::ResourceLocation;
-use oxidized_protocol::types::Vec3;
 
 /// Entity rotation in degrees (yaw, pitch, and head yaw).
 ///

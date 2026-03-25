@@ -166,10 +166,8 @@ pub async fn handle_play_split(
     let (reader, writer) = conn.into_split();
 
     // Create bounded channels (ADR-006: configurable capacity).
-    let (inbound_tx, mut inbound_rx) =
-        mpsc::channel(server_ctx.settings.inbound_channel_capacity);
-    let (outbound_tx, outbound_rx) =
-        mpsc::channel(server_ctx.settings.outbound_channel_capacity);
+    let (inbound_tx, mut inbound_rx) = mpsc::channel(server_ctx.settings.inbound_channel_capacity);
+    let (outbound_tx, outbound_rx) = mpsc::channel(server_ctx.settings.outbound_channel_capacity);
 
     // Spawn reader and writer tasks.
     let reader_handle = tokio::spawn(reader_loop(reader, inbound_tx));
@@ -473,7 +471,13 @@ pub async fn handle_play_split(
 
     // Player disconnected or was kicked — clean up.
     cleanup_disconnected_player(
-        &conn_handle, &player_arc, &player_name, uuid, entity_id, addr, server_ctx,
+        &conn_handle,
+        &player_arc,
+        &player_name,
+        uuid,
+        entity_id,
+        addr,
+        server_ctx,
     )
     .await;
 
@@ -575,14 +579,10 @@ async fn dispatch_chat_command(
 }
 
 /// Decodes and broadcasts a swing animation to other players.
-fn handle_swing_packet(
-    data: bytes::Bytes,
-    ctx: &PlayContext<'_>,
-    server_ctx: &Arc<ServerContext>,
-) {
-    let Ok(swing) = decode_packet::<ServerboundSwingPacket>(
-        data, ctx.addr, ctx.player_name, "Swing",
-    ) else {
+fn handle_swing_packet(data: bytes::Bytes, ctx: &PlayContext<'_>, server_ctx: &Arc<ServerContext>) {
+    let Ok(swing) =
+        decode_packet::<ServerboundSwingPacket>(data, ctx.addr, ctx.player_name, "Swing")
+    else {
         return;
     };
     let entity_id = ctx.player.read().entity_id;
@@ -600,7 +600,10 @@ fn handle_swing_packet(
 /// Updates the player's flying state from a client abilities packet.
 fn handle_abilities_packet(data: bytes::Bytes, ctx: &PlayContext<'_>) {
     let Ok(pkt) = decode_packet::<ServerboundPlayerAbilitiesPacket>(
-        data, ctx.addr, ctx.player_name, "PlayerAbilities",
+        data,
+        ctx.addr,
+        ctx.player_name,
+        "PlayerAbilities",
     ) else {
         return;
     };
@@ -624,7 +627,10 @@ async fn handle_client_information_packet(
     server_ctx: &Arc<ServerContext>,
 ) -> Result<(), ()> {
     let Ok(info_pkt) = decode_packet::<ServerboundClientInformationPlayPacket>(
-        data, play_ctx.addr, play_ctx.player_name, "ClientInformation",
+        data,
+        play_ctx.addr,
+        play_ctx.player_name,
+        "ClientInformation",
     ) else {
         return Ok(());
     };
@@ -657,11 +663,13 @@ async fn handle_client_information_packet(
     }
 
     if new_view_distance != old_view_distance {
-        let (to_load, to_unload) = play_ctx.chunk_tracker.update_view_distance(new_view_distance);
+        let (to_load, to_unload) = play_ctx
+            .chunk_tracker
+            .update_view_distance(new_view_distance);
         let center = play_ctx.chunk_tracker.center;
         if !to_load.is_empty() || !to_unload.is_empty() {
-            if let Err(e) = movement::send_chunk_updates(play_ctx, center, &to_load, &to_unload)
-                .await
+            if let Err(e) =
+                movement::send_chunk_updates(play_ctx, center, &to_load, &to_unload).await
             {
                 debug!(
                     peer = %play_ctx.addr,

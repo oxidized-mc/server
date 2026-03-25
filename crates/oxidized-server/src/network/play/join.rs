@@ -130,7 +130,8 @@ pub(super) async fn send_join_sequence(
     // Assign a teleport ID for the initial position packet.
     let teleport_id = player.teleport.next_id();
     player
-        .teleport.pending
+        .teleport
+        .pending
         .push_back((teleport_id, player.movement.pos, Instant::now()));
 
     let player_name = player.name.clone();
@@ -404,14 +405,7 @@ async fn broadcast_player_join(
 
     // Broadcast the new player's entity, equipment, and skin to all existing
     // players, and send all existing players' entities to the joining player.
-    broadcast_and_collect_entities(
-        conn_handle,
-        player_arc,
-        uuid,
-        entity_id,
-        server_ctx,
-    )
-    .await?;
+    broadcast_and_collect_entities(conn_handle, player_arc, uuid, entity_id, server_ctx).await?;
 
     // Broadcast "Player joined the game" system message (vanilla yellow text).
     let join_msg = ClientboundSystemChatPacket {

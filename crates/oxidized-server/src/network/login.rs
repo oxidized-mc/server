@@ -44,8 +44,7 @@ pub async fn handle_login(
     ctx: &LoginContext,
 ) -> Result<auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
-    let login_timeout =
-        Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
+    let login_timeout = Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
 
     // 1. Decode ServerboundHelloPacket (the first Login packet).
     if hello_pkt.id != ServerboundHelloPacket::PACKET_ID {
@@ -160,8 +159,7 @@ async fn authenticate_online(
     ctx: &LoginContext,
 ) -> Result<auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
-    let login_timeout =
-        Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
+    let login_timeout = Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
 
     // a. Generate 4-byte challenge.
     let challenge = generate_challenge();

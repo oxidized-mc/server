@@ -320,7 +320,10 @@ mod tests {
         // In water: buoyancy pushes up, no gravity.
         assert!(entity.velocity.y > 0.0, "Water buoyancy should push upward");
         // Horizontal drag: vx should be reduced.
-        assert!(entity.velocity.x < 1.0, "Water should reduce horizontal velocity");
+        assert!(
+            entity.velocity.x < 1.0,
+            "Water should reduce horizontal velocity"
+        );
     }
 
     #[test]

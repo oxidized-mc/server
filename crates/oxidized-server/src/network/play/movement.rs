@@ -152,7 +152,8 @@ pub async fn handle_movement(
             let mut p = ctx.player.write();
             let teleport_id = p.teleport.next_id();
             let pos = p.movement.pos;
-            p.teleport.pending
+            p.teleport
+                .pending
                 .push_back((teleport_id, pos, Instant::now()));
             ClientboundPlayerPositionPacket {
                 teleport_id,

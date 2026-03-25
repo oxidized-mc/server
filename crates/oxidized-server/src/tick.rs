@@ -407,7 +407,8 @@ pub fn save_dirty_chunks_blocking(
     }
 
     let region_dir = ctx
-        .world.storage
+        .world
+        .storage
         .region_dir(oxidized_world::storage::Dimension::Overworld);
 
     // Group chunks by region coordinates.
@@ -496,7 +497,8 @@ pub async fn save_dirty_chunks(
     }
 
     let region_dir = ctx
-        .world.storage
+        .world
+        .storage
         .region_dir(oxidized_world::storage::Dimension::Overworld);
     let serializer = ctx.world.chunk_serializer.clone();
 
@@ -599,18 +601,14 @@ mod tests {
                 level_data: RwLock::new(
                     PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
                 ),
-                dimensions: vec![
-                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
-                ],
+                dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
                 chunks: dashmap::DashMap::new(),
                 dirty_chunks: dashmap::DashSet::new(),
                 storage: LevelStorageSource::new(""),
                 block_registry: block_registry.clone(),
-                chunk_generator: Arc::new(
-                    oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                        oxidized_game::worldgen::flat::FlatWorldConfig::default(),
-                    ),
-                ),
+                chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                )),
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
@@ -689,7 +687,8 @@ mod tests {
     #[test]
     fn test_daylight_cycle_respects_gamerule() {
         let ctx = test_ctx();
-        ctx.world.game_rules
+        ctx.world
+            .game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceTime, false);
         let initial_day = ctx.world.level_data.read().time.day_time;
@@ -706,7 +705,8 @@ mod tests {
     #[test]
     fn test_weather_cycle_respects_gamerule() {
         let ctx = test_ctx();
-        ctx.world.game_rules
+        ctx.world
+            .game_rules
             .write()
             .set_bool(GameRuleKey::AdvanceWeather, false);
         ctx.world.level_data.write().weather.rain_time = 1; // would flip without gamerule
@@ -725,7 +725,10 @@ mod tests {
         ctx.world.level_data.write().weather.is_raining = false;
         ctx.world.level_data.write().weather.rain_time = 1;
         tick_weather(&ctx, &mut test_rng(), &mut test_weather());
-        assert!(ctx.world.level_data.read().weather.is_raining, "should start raining");
+        assert!(
+            ctx.world.level_data.read().weather.is_raining,
+            "should start raining"
+        );
     }
 
     #[test]
@@ -761,7 +764,10 @@ mod tests {
         tick_weather(&ctx, &mut test_rng(), &mut test_weather());
         let ld = ctx.world.level_data.read();
         assert!(!ld.weather.is_raining, "clear weather should stop rain");
-        assert!(!ld.weather.is_thundering, "clear weather should stop thunder");
+        assert!(
+            !ld.weather.is_thundering,
+            "clear weather should stop thunder"
+        );
         assert_eq!(
             ld.weather.clear_weather_time, 99,
             "clear weather timer should decrement"
@@ -787,7 +793,8 @@ mod tests {
         assert!(
             (w.rain_duration_min..=w.rain_duration_max).contains(&rain_time),
             "rain duration {rain_time} should be in range {}..={}",
-            w.rain_duration_min, w.rain_duration_max
+            w.rain_duration_min,
+            w.rain_duration_max
         );
     }
 

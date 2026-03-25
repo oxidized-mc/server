@@ -369,8 +369,7 @@ fn suggest_for_argument(
 
         if let Some((key, value_part)) = last_segment.split_once('=') {
             // We're after `key=`, suggest values for this key.
-            let prefix_before =
-                &current_word[..current_word.len() - value_part.len()];
+            let prefix_before = &current_word[..current_word.len() - value_part.len()];
             let value_range = StringRange {
                 start: range.start + prefix_before.len(),
                 end: range.end,
@@ -404,8 +403,7 @@ fn suggest_for_argument(
             }
         } else {
             // We're typing a key (no `=` yet), suggest filter keys.
-            let prefix_before =
-                &current_word[..current_word.len() - last_segment.len()];
+            let prefix_before = &current_word[..current_word.len() - last_segment.len()];
             let key_range = StringRange {
                 start: range.start + prefix_before.len(),
                 end: range.end,

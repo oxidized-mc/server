@@ -114,10 +114,7 @@ impl PrimaryLevelData {
                 clear_weather_time: data.get_int("clearWeatherTime").unwrap_or(0),
             },
             settings: WorldSettings {
-                level_name: data
-                    .get_string("LevelName")
-                    .unwrap_or("Unnamed")
-                    .to_owned(),
+                level_name: data.get_string("LevelName").unwrap_or("Unnamed").to_owned(),
                 data_version: data.get_int("DataVersion").unwrap_or(0),
                 game_type: data.get_int("GameType").unwrap_or(0),
                 is_hardcore: data.get_byte("hardcore").unwrap_or(0) != 0,
@@ -388,7 +385,10 @@ mod tests {
             level2.settings.is_commands_allowed,
             level.settings.is_commands_allowed
         );
-        assert_eq!(level2.settings.is_initialized, level.settings.is_initialized);
+        assert_eq!(
+            level2.settings.is_initialized,
+            level.settings.is_initialized
+        );
         assert_eq!(level2.settings.sea_level, level.settings.sea_level);
         assert_eq!(
             level2.settings.is_difficulty_locked,
@@ -454,11 +454,17 @@ mod tests {
 
         // Backup should contain original data
         let backup = PrimaryLevelData::load(&old_path).unwrap();
-        assert_eq!(backup.time.game_time, 24000, "backup should have original time");
+        assert_eq!(
+            backup.time.game_time, 24000,
+            "backup should have original time"
+        );
 
         // New file should contain updated data
         let current = PrimaryLevelData::load(&path).unwrap();
-        assert_eq!(current.time.game_time, 48000, "current should have updated time");
+        assert_eq!(
+            current.time.game_time, 48000,
+            "current should have updated time"
+        );
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(&old_path);

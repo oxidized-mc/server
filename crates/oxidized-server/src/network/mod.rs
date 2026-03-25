@@ -218,7 +218,7 @@ impl ServerContext {
                 Some(p) => {
                     let player = p.read();
                     (player.entity_id, player.name.clone())
-                }
+                },
                 None => return,
             }
         };
@@ -270,7 +270,8 @@ impl ServerHandle for ServerContext {
     }
 
     fn online_player_names(&self) -> Vec<String> {
-        self.network.player_list
+        self.network
+            .player_list
             .read()
             .iter()
             .map(|p| p.read().name.clone())
@@ -650,7 +651,8 @@ impl ServerHandle for ServerContext {
         let chunk_ref = self.world.chunks.get(&chunk_pos)?;
         let chunk = chunk_ref.read();
         let state_id = chunk.get_block_state(x, y, z).ok()?;
-        self.world.block_registry
+        self.world
+            .block_registry
             .block_name_from_state_id(state_id)
             .map(String::from)
     }
@@ -1014,9 +1016,7 @@ mod tests {
                     level_data: RwLock::new(
                         PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
                     ),
-                    dimensions: vec![
-                        ResourceLocation::from_string("minecraft:overworld").unwrap(),
-                    ],
+                    dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
                     chunks: dashmap::DashMap::new(),
                     dirty_chunks: dashmap::DashSet::new(),
                     storage: LevelStorageSource::new(""),

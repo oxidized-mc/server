@@ -403,8 +403,7 @@ impl ServerPlayer {
         self.combat.score = nbt.get_int("Score").unwrap_or(0);
 
         // Absorption
-        self.combat.absorption_amount =
-            nbt.get_float("AbsorptionAmount").unwrap_or(0.0).max(0.0);
+        self.combat.absorption_amount = nbt.get_float("AbsorptionAmount").unwrap_or(0.0).max(0.0);
 
         // Fall-flying (elytra glide state)
         self.movement.is_fall_flying = nbt.get_byte("FallFlying").unwrap_or(0) != 0;

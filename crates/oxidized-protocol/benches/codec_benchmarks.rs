@@ -56,7 +56,18 @@ fn bench_varint_decode_large(c: &mut Criterion) {
 }
 
 fn bench_varint_roundtrip(c: &mut Criterion) {
-    let values = [0, 1, 127, 128, 255, 25565, 2_097_151, i32::MAX, -1, i32::MIN];
+    let values = [
+        0,
+        1,
+        127,
+        128,
+        255,
+        25565,
+        2_097_151,
+        i32::MAX,
+        -1,
+        i32::MIN,
+    ];
 
     c.bench_function("varint_roundtrip_10_values", |b| {
         b.iter(|| {

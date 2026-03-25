@@ -149,9 +149,7 @@ pub fn get_registry_entry_index(
     entries
         .get_index_of(entry_name)
         .map(|idx| idx as i32)
-        .ok_or_else(|| {
-            RegistryError::UnknownRegistry(format!("{registry_name}/{entry_name}"))
-        })
+        .ok_or_else(|| RegistryError::UnknownRegistry(format!("{registry_name}/{entry_name}")))
 }
 
 /// Builds a [`ClientboundUpdateTagsPacket`] from the bundled tag data.
@@ -472,7 +470,10 @@ mod tests {
     fn test_dimension_type_overworld_is_index_zero() {
         let idx = get_registry_entry_index("minecraft:dimension_type", "minecraft:overworld")
             .expect("overworld should exist in dimension_type registry");
-        assert_eq!(idx, 0, "overworld must be index 0 in dimension_type registry");
+        assert_eq!(
+            idx, 0,
+            "overworld must be index 0 in dimension_type registry"
+        );
     }
 
     #[test]

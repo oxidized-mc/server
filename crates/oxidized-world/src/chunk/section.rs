@@ -543,10 +543,7 @@ mod tests {
         section.set_block_state(1, 0, 0, grass).unwrap();
 
         // Rebuild from parts — counters should be fully recalculated.
-        let rebuilt = LevelChunkSection::from_parts(
-            section.states_clone(),
-            section.biomes_clone(),
-        );
+        let rebuilt = LevelChunkSection::from_parts(section.states_clone(), section.biomes_clone());
         assert_eq!(rebuilt.non_empty_block_count(), 2);
         assert_eq!(rebuilt.fluid_count(), 1);
         assert_eq!(rebuilt.ticking_block_count(), 1);

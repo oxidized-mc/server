@@ -335,7 +335,8 @@ fn build_position_packet(player: &ServerPlayer, teleport_id: i32) -> EncodedPack
 /// (unexpected or duplicate confirmation).
 pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) -> bool {
     if let Some(idx) = player
-        .teleport.pending
+        .teleport
+        .pending
         .iter()
         .position(|&(id, _, _)| id == teleport_id)
     {
@@ -633,10 +634,12 @@ mod tests {
         use std::time::Instant;
         let mut player = make_player(1, "Test");
         player
-            .teleport.pending
+            .teleport
+            .pending
             .push_back((1, Vec3::ZERO, Instant::now()));
         player
-            .teleport.pending
+            .teleport
+            .pending
             .push_back((2, Vec3::ZERO, Instant::now()));
 
         assert!(handle_accept_teleportation(&mut player, 1));
@@ -649,7 +652,8 @@ mod tests {
         use std::time::Instant;
         let mut player = make_player(1, "Test");
         player
-            .teleport.pending
+            .teleport
+            .pending
             .push_back((1, Vec3::ZERO, Instant::now()));
 
         assert!(!handle_accept_teleportation(&mut player, 99));
@@ -667,13 +671,16 @@ mod tests {
         use std::time::Instant;
         let mut player = make_player(1, "Test");
         player
-            .teleport.pending
+            .teleport
+            .pending
             .push_back((1, Vec3::ZERO, Instant::now()));
         player
-            .teleport.pending
+            .teleport
+            .pending
             .push_back((2, Vec3::ZERO, Instant::now()));
         player
-            .teleport.pending
+            .teleport
+            .pending
             .push_back((3, Vec3::ZERO, Instant::now()));
 
         assert!(handle_accept_teleportation(&mut player, 1));

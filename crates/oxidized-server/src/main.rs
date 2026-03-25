@@ -242,9 +242,7 @@ fn main() -> anyhow::Result<()> {
                 chunk_generator,
                 chunk_loader,
                 chunk_serializer,
-                game_rules: parking_lot::RwLock::new(
-                    oxidized_game::level::GameRules::default(),
-                ),
+                game_rules: parking_lot::RwLock::new(oxidized_game::level::GameRules::default()),
             },
             network: NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,

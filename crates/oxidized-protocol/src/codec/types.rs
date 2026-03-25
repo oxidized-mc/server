@@ -370,11 +370,7 @@ pub fn read_list<T>(
 ///
 /// Writes the element count as a VarInt, then calls `write_element` for
 /// each item.
-pub fn write_list<T>(
-    buf: &mut BytesMut,
-    items: &[T],
-    write_element: impl Fn(&mut BytesMut, &T),
-) {
+pub fn write_list<T>(buf: &mut BytesMut, items: &[T], write_element: impl Fn(&mut BytesMut, &T)) {
     #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     varint::write_varint_buf(items.len() as i32, buf);
     for item in items {
@@ -590,7 +586,10 @@ mod tests {
         let err = ensure_remaining(&buf, 4, "MyPacket").unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("MyPacket"), "expected context in error: {msg}");
-        assert!(msg.contains("need 4"), "expected byte count in error: {msg}");
+        assert!(
+            msg.contains("need 4"),
+            "expected byte count in error: {msg}"
+        );
         assert!(msg.contains("have 2"), "expected remaining in error: {msg}");
     }
 
@@ -622,7 +621,8 @@ mod tests {
         let mut out = BytesMut::new();
         varint::write_varint_buf(-1, &mut out);
         let mut input = out.freeze();
-        let err = read_list::<i32>(&mut input, |buf| Ok(varint::read_varint_buf(buf)?)).unwrap_err();
+        let err =
+            read_list::<i32>(&mut input, |buf| Ok(varint::read_varint_buf(buf)?)).unwrap_err();
         assert!(err.to_string().contains("negative"));
     }
 

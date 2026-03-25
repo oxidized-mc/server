@@ -33,10 +33,17 @@ pub async fn handle_command_suggestion(
 
     let (pos, rot) = {
         let p = ctx.player.read();
-        ((p.movement.pos.x, p.movement.pos.y, p.movement.pos.z), (p.movement.yaw, p.movement.pitch))
+        (
+            (p.movement.pos.x, p.movement.pos.y, p.movement.pos.z),
+            (p.movement.yaw, p.movement.pitch),
+        )
     };
     let (feedback_tx, _) = std::sync::mpsc::channel::<Component>();
-    let perm_level = ctx.server_ctx.ops.get_permission_level(&ctx.player_uuid).clamp(0, 4) as u32;
+    let perm_level = ctx
+        .server_ctx
+        .ops
+        .get_permission_level(&ctx.player_uuid)
+        .clamp(0, 4) as u32;
     let source = make_command_source_for_player(
         ctx.player_name,
         ctx.player_uuid,
@@ -104,7 +111,11 @@ pub fn make_command_source(
             name: player_name.to_string(),
             uuid,
         },
-        position: (player.movement.pos.x, player.movement.pos.y, player.movement.pos.z),
+        position: (
+            player.movement.pos.x,
+            player.movement.pos.y,
+            player.movement.pos.z,
+        ),
         rotation: (player.movement.yaw, player.movement.pitch),
         permission_level: perm_level,
         display_name: player_name.to_string(),

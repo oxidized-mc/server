@@ -50,8 +50,16 @@ pub(super) const MAX_BUILD_HEIGHT: i32 = OVERWORLD_MAX_Y - 1;
 /// of the given block.
 pub(super) fn player_distance_to_block_sq(play_ctx: &PlayContext<'_>, pos: BlockPos) -> f64 {
     let player = play_ctx.player.read();
-    let eye_height = if player.movement.is_sneaking { 1.27 } else { 1.62 };
-    let eye = Vec3::new(player.movement.pos.x, player.movement.pos.y + eye_height, player.movement.pos.z);
+    let eye_height = if player.movement.is_sneaking {
+        1.27
+    } else {
+        1.62
+    };
+    let eye = Vec3::new(
+        player.movement.pos.x,
+        player.movement.pos.y + eye_height,
+        player.movement.pos.z,
+    );
     let block_center = Vec3::new(pos.x as f64 + 0.5, pos.y as f64 + 0.5, pos.z as f64 + 0.5);
     eye.distance_to_sqr(block_center)
 }
@@ -258,7 +266,8 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.world.chunks
+        ctx.world
+            .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
@@ -278,7 +287,8 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.world.chunks
+        ctx.world
+            .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
@@ -361,40 +371,72 @@ mod tests {
     #[test]
     fn test_spawn_protection_disabled_when_radius_zero() {
         let ctx = test_server_ctx_with_spawn_protection(0);
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &non_op_uuid()));
+        assert!(!is_spawn_protected(
+            &ctx,
+            BlockPos::new(0, 64, 0),
+            &non_op_uuid()
+        ));
     }
 
     #[test]
     fn test_spawn_protection_at_spawn_origin() {
         let ctx = test_server_ctx_with_spawn_protection(16);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &non_op_uuid()));
+        assert!(is_spawn_protected(
+            &ctx,
+            BlockPos::new(0, 64, 0),
+            &non_op_uuid()
+        ));
     }
 
     #[test]
     fn test_spawn_protection_at_boundary() {
         let ctx = test_server_ctx_with_spawn_protection(16);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(15, 64, 0), &non_op_uuid()));
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(16, 64, 0), &non_op_uuid()));
+        assert!(is_spawn_protected(
+            &ctx,
+            BlockPos::new(15, 64, 0),
+            &non_op_uuid()
+        ));
+        assert!(!is_spawn_protected(
+            &ctx,
+            BlockPos::new(16, 64, 0),
+            &non_op_uuid()
+        ));
     }
 
     #[test]
     fn test_spawn_protection_diagonal() {
         let ctx = test_server_ctx_with_spawn_protection(10);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(9, 64, 9), &non_op_uuid()));
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(10, 64, 10), &non_op_uuid()));
+        assert!(is_spawn_protected(
+            &ctx,
+            BlockPos::new(9, 64, 9),
+            &non_op_uuid()
+        ));
+        assert!(!is_spawn_protected(
+            &ctx,
+            BlockPos::new(10, 64, 10),
+            &non_op_uuid()
+        ));
     }
 
     #[test]
     fn test_spawn_protection_negative_coords() {
         let ctx = test_server_ctx_with_spawn_protection(16);
-        assert!(is_spawn_protected(&ctx, BlockPos::new(-15, 64, -15), &non_op_uuid()));
+        assert!(is_spawn_protected(
+            &ctx,
+            BlockPos::new(-15, 64, -15),
+            &non_op_uuid()
+        ));
     }
 
     #[test]
     fn test_spawn_protection_bypassed_for_operator() {
         let ctx = test_server_ctx_with_spawn_protection(16);
         // The dummy op (Uuid::nil) should bypass spawn protection.
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &uuid::Uuid::nil()));
+        assert!(!is_spawn_protected(
+            &ctx,
+            BlockPos::new(0, 64, 0),
+            &uuid::Uuid::nil()
+        ));
     }
 
     #[test]
@@ -402,7 +444,11 @@ mod tests {
         // Build a context with spawn protection but an empty ops list.
         let ctx = test_server_ctx_with_spawn_protection(16);
         ctx.ops.remove(&uuid::Uuid::nil()); // remove the dummy op
-        assert!(!is_spawn_protected(&ctx, BlockPos::new(0, 64, 0), &non_op_uuid()));
+        assert!(!is_spawn_protected(
+            &ctx,
+            BlockPos::new(0, 64, 0),
+            &non_op_uuid()
+        ));
     }
 
     // -- Block access tests --
@@ -412,7 +458,8 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.world.chunks
+        ctx.world
+            .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
@@ -425,7 +472,8 @@ mod tests {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
         let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
-        ctx.world.chunks
+        ctx.world
+            .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
 
         let pos = BlockPos::new(0, 64, 0);
@@ -451,18 +499,14 @@ mod tests {
                 level_data: RwLock::new(
                     PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
                 ),
-                dimensions: vec![
-                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
-                ],
+                dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
                 chunks: dashmap::DashMap::new(),
                 dirty_chunks: dashmap::DashSet::new(),
                 storage: LevelStorageSource::new(""),
                 block_registry: block_registry.clone(),
-                chunk_generator: Arc::new(
-                    oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                        oxidized_game::worldgen::flat::FlatWorldConfig::default(),
-                    ),
-                ),
+                chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                )),
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
@@ -522,18 +566,14 @@ mod tests {
                 level_data: RwLock::new(
                     PrimaryLevelData::from_nbt(&oxidized_nbt::NbtCompound::new()).unwrap(),
                 ),
-                dimensions: vec![
-                    ResourceLocation::from_string("minecraft:overworld").unwrap(),
-                ],
+                dimensions: vec![ResourceLocation::from_string("minecraft:overworld").unwrap()],
                 chunks: dashmap::DashMap::new(),
                 dirty_chunks: dashmap::DashSet::new(),
                 storage: LevelStorageSource::new(""),
                 block_registry: block_registry.clone(),
-                chunk_generator: Arc::new(
-                    oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                        oxidized_game::worldgen::flat::FlatWorldConfig::default(),
-                    ),
-                ),
+                chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
+                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                )),
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
