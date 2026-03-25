@@ -15,16 +15,18 @@ use oxidized_protocol::packets::play::{
 use oxidized_protocol::types::BlockPos;
 use oxidized_protocol::types::direction::{Axis, Direction};
 use oxidized_world::chunk::level_chunk::OVERWORLD_MAX_Y;
-use oxidized_world::registry::{AIR, BlockRegistry, BlockStateId};
+use oxidized_world::registry::{BlockRegistry, BlockStateId, BlockTags};
 
 use super::PlayContext;
 use super::block_interaction::{
     MIN_BUILD_HEIGHT, broadcast_block_update, get_block, is_spawn_protected,
     is_within_build_height, is_within_reach, resync_block, send_ack, send_actionbar, set_block,
 };
+use crate::network::ConnectionError;
 use crate::network::helpers::decode_packet;
-use crate::network::{ConnectionError, ServerContext};
-use std::sync::Arc;
+
+/// Block name for air, used to avoid magic strings.
+const AIR_BLOCK_NAME: &str = "minecraft:air";
 
 /// Handles `ServerboundUseItemOnPacket` (0x42) — block placement / interaction.
 ///
@@ -162,7 +164,7 @@ pub async fn handle_use_item_on(
     let suppress_use = is_sneaking && has_items;
     if !suppress_use {
         if let Some(state) = clicked_block {
-            if is_interactable_block(play_ctx.server_ctx, state) {
+            if is_interactable_block(state) {
                 send_ack(play_ctx, pkt.sequence).await?;
                 return Ok(());
             }
@@ -195,7 +197,7 @@ pub async fn handle_use_item_on(
     // Allow placement if target is air or a replaceable block (tall grass, water, etc.)
     let existing = get_block(play_ctx.server_ctx, place_pos);
     let is_replaceable = match existing {
-        Some(state) => is_replaceable_block(play_ctx.server_ctx, state),
+        Some(state) => is_replaceable_block(state),
         None => false,
     };
     if !is_replaceable {
@@ -296,12 +298,11 @@ pub async fn handle_use_item_on(
             // Only place companion if the target is air or replaceable.
             let companion_existing = get_block(play_ctx.server_ctx, companion_pos);
             let companion_replaceable = match companion_existing {
-                Some(state) => is_replaceable_block(play_ctx.server_ctx, state),
+                Some(state) => is_replaceable_block(state),
                 None => false,
             };
             if companion_replaceable {
-                let companion_ok =
-                    set_block(play_ctx.server_ctx, companion_pos, companion_state);
+                let companion_ok = set_block(play_ctx.server_ctx, companion_pos, companion_state);
                 if companion_ok {
                     broadcast_block_update(
                         play_ctx.server_ctx,
@@ -360,45 +361,8 @@ pub async fn handle_use_item(
 ///
 /// Replaceable blocks can be overwritten by block placement without the player
 /// needing to break them first (e.g., tall grass, water, snow layer, fire).
-/// Since our registry doesn't store this flag, we use the block name.
-fn is_replaceable_block(ctx: &Arc<ServerContext>, state_id: u32) -> bool {
-    if state_id == u32::from(AIR.0) {
-        return true;
-    }
-
-    let bsid = oxidized_world::registry::BlockStateId(state_id as u16);
-    let block_name = if (bsid.0 as usize) < ctx.block_registry.state_count() {
-        bsid.block_name()
-    } else {
-        return false;
-    };
-
-    matches!(
-        block_name,
-        "minecraft:air"
-            | "minecraft:cave_air"
-            | "minecraft:void_air"
-            | "minecraft:water"
-            | "minecraft:lava"
-            | "minecraft:short_grass"
-            | "minecraft:tall_grass"
-            | "minecraft:seagrass"
-            | "minecraft:tall_seagrass"
-            | "minecraft:fire"
-            | "minecraft:soul_fire"
-            | "minecraft:snow"
-            | "minecraft:vine"
-            | "minecraft:dead_bush"
-            | "minecraft:fern"
-            | "minecraft:large_fern"
-            | "minecraft:structure_void"
-            | "minecraft:light"
-            | "minecraft:crimson_roots"
-            | "minecraft:warped_roots"
-            | "minecraft:nether_sprouts"
-            | "minecraft:hanging_roots"
-            | "minecraft:glow_lichen"
-    )
+fn is_replaceable_block(state_id: u32) -> bool {
+    BlockStateId(state_id as u16).is_replaceable()
 }
 
 /// Maps a held item name to a block state ID for placement, applying
@@ -419,7 +383,7 @@ fn held_item_to_block_state(
     clicked_face: Direction,
     cursor_y: f32,
 ) -> Option<u32> {
-    if item_name.is_empty() || item_name == "minecraft:air" {
+    if item_name.is_empty() || item_name == AIR_BLOCK_NAME {
         return None;
     }
 
@@ -465,17 +429,19 @@ fn held_item_to_block_state(
     Some(u32::from(state.0))
 }
 
+/// Returns the block type index for a block/item name, used for tag lookups.
+fn block_type_id_from_name(name: &str) -> Option<u16> {
+    let def = BlockRegistry::new().get_block_def(name)?;
+    Some(BlockStateId(def.default_state).data().block_type)
+}
+
 /// Determines the facing direction for block placement.
 ///
 /// Most blocks face *opposite* to the player's look direction (toward the
 /// player), matching vanilla `HorizontalDirectionalBlock.getStateForPlacement`.
 /// Blocks like stairs, doors, and beds override this to face in the player's
 /// look direction. Wall-mounted blocks use the clicked face.
-fn facing_for_placement(
-    item_name: &str,
-    player_yaw: f32,
-    clicked_face: Direction,
-) -> Direction {
+fn facing_for_placement(item_name: &str, player_yaw: f32, clicked_face: Direction) -> Direction {
     // Wall-mounted blocks face the direction of the clicked face
     if is_wall_mountable(item_name) && clicked_face.is_horizontal() {
         return clicked_face;
@@ -497,15 +463,9 @@ fn facing_for_placement(
 /// Returns `true` for blocks that mount on a wall surface rather than being
 /// placed freestanding.
 fn is_wall_mountable(item_name: &str) -> bool {
-    item_name.contains("button")
-        || item_name.contains("lever")
-        || item_name.contains("wall_torch")
-        || item_name.contains("wall_sign")
-        || item_name.contains("wall_banner")
-        || item_name.contains("wall_head")
-        || item_name.contains("wall_skull")
-        || item_name.contains("wall_fan")
-        || item_name.contains("item_frame")
+    let tags = BlockTags;
+    block_type_id_from_name(item_name)
+        .is_some_and(|id| tags.contains("oxidized:wall_mountable", id))
 }
 
 /// Returns `true` for blocks whose `facing` property should match the
@@ -515,13 +475,9 @@ fn is_wall_mountable(item_name: &str) -> bool {
 /// `getHorizontalDirection().getOpposite()` (toward the player), but many
 /// subclasses override placement to use `getHorizontalDirection()` directly.
 fn is_player_direction_block(item_name: &str) -> bool {
-    item_name.ends_with("_bed")
-        || item_name.ends_with("_door")
-        || item_name.contains("stairs")
-        || item_name.contains("fence_gate")
-        || item_name.contains("trapdoor")
-        || item_name.contains("repeater")
-        || item_name.contains("comparator")
+    let tags = BlockTags;
+    block_type_id_from_name(item_name)
+        .is_some_and(|id| tags.contains("oxidized:player_direction", id))
 }
 
 /// Maps a clicked face direction to the corresponding axis for log-type blocks.
@@ -562,7 +518,8 @@ fn slab_type_from_cursor(cursor_y: f32, clicked_face: Direction) -> &'static str
 
 /// Returns `true` if the item name represents a sign block.
 fn is_sign_block(item_name: &str) -> bool {
-    item_name.contains("sign") && !item_name.contains("signal")
+    let tags = BlockTags;
+    block_type_id_from_name(item_name).is_some_and(|id| tags.contains("minecraft:all_signs", id))
 }
 
 /// Computes the companion block position and state for double-block items.
@@ -611,27 +568,20 @@ fn double_block_companion(
 
 /// Returns `true` if the item is a door block (any wood type or iron).
 fn is_door_block(item_name: &str) -> bool {
-    item_name.ends_with("_door")
+    let tags = BlockTags;
+    block_type_id_from_name(item_name).is_some_and(|id| tags.contains("minecraft:doors", id))
 }
 
 /// Returns `true` if the item is a bed block (any color).
 fn is_bed_block(item_name: &str) -> bool {
-    item_name.ends_with("_bed")
+    let tags = BlockTags;
+    block_type_id_from_name(item_name).is_some_and(|id| tags.contains("minecraft:beds", id))
 }
 
 /// Returns `true` if the item is a tall double-height plant.
 fn is_tall_plant(item_name: &str) -> bool {
-    matches!(
-        item_name,
-        "minecraft:sunflower"
-            | "minecraft:lilac"
-            | "minecraft:rose_bush"
-            | "minecraft:peony"
-            | "minecraft:tall_grass"
-            | "minecraft:large_fern"
-            | "minecraft:pitcher_plant"
-            | "minecraft:tall_seagrass"
-    )
+    let tags = BlockTags;
+    block_type_id_from_name(item_name).is_some_and(|id| tags.contains("oxidized:tall_plants", id))
 }
 
 /// Computes the companion break position for double-block items.
@@ -657,8 +607,10 @@ pub(super) fn double_block_break_companion(
     } else if is_bed_block(block_name) {
         // Beds use "part": "head"/"foot" and "facing" for direction
         let part = props.iter().find(|&&(k, _)| k == "part").map(|&(_, v)| v)?;
-        let facing_name =
-            props.iter().find(|&&(k, _)| k == "facing").map(|&(_, v)| v)?;
+        let facing_name = props
+            .iter()
+            .find(|&&(k, _)| k == "facing")
+            .map(|&(_, v)| v)?;
         let facing = direction_from_name(facing_name)?;
         match part {
             "head" => Some(pos.relative(facing.opposite())),
@@ -689,55 +641,13 @@ fn direction_from_name(name: &str) -> Option<Direction> {
 /// "use" action when right-clicked. Vanilla processes `state.useItemOn()`
 /// before item placement; if the block is interactable and the player is
 /// not sneaking, placement is suppressed.
-fn is_interactable_block(ctx: &Arc<ServerContext>, state_id: u32) -> bool {
+///
+/// Uses the `IS_INTERACTABLE` flag for most blocks. Beds are a special case:
+/// vanilla data does not flag them as interactable (sleeping is conditional),
+/// but placement must still be suppressed.
+fn is_interactable_block(state_id: u32) -> bool {
     let bsid = BlockStateId(state_id as u16);
-    if (bsid.0 as usize) >= ctx.block_registry.state_count() {
-        return false;
-    }
-    let name = bsid.block_name();
-    matches!(
-        name,
-        "minecraft:crafting_table"
-            | "minecraft:chest"
-            | "minecraft:trapped_chest"
-            | "minecraft:ender_chest"
-            | "minecraft:furnace"
-            | "minecraft:blast_furnace"
-            | "minecraft:smoker"
-            | "minecraft:enchanting_table"
-            | "minecraft:anvil"
-            | "minecraft:chipped_anvil"
-            | "minecraft:damaged_anvil"
-            | "minecraft:cartography_table"
-            | "minecraft:grindstone"
-            | "minecraft:loom"
-            | "minecraft:stonecutter"
-            | "minecraft:smithing_table"
-            | "minecraft:brewing_stand"
-            | "minecraft:barrel"
-            | "minecraft:hopper"
-            | "minecraft:dropper"
-            | "minecraft:dispenser"
-            | "minecraft:lever"
-            | "minecraft:repeater"
-            | "minecraft:comparator"
-            | "minecraft:daylight_detector"
-            | "minecraft:note_block"
-            | "minecraft:jukebox"
-            | "minecraft:beacon"
-            | "minecraft:shulker_box"
-            | "minecraft:lectern"
-            | "minecraft:bell"
-            | "minecraft:respawn_anchor"
-            | "minecraft:decorated_pot"
-            | "minecraft:crafter"
-    ) || name.ends_with("_bed")
-        || name.ends_with("_door")
-        || name.ends_with("_fence_gate")
-        || name.ends_with("_trapdoor")
-        || name.ends_with("_button")
-        || name.ends_with("_shulker_box")
-        || name.contains("sign")
+    bsid.is_interactable() || BlockTags.contains("minecraft:beds", bsid.data().block_type)
 }
 
 /// Player half-width (vanilla: 0.3 from center).
@@ -780,4 +690,333 @@ fn block_intersects_player(play_ctx: &PlayContext<'_>, pos: BlockPos) -> bool {
         && player_max_y > by
         && player_min_z < bz + 1.0
         && player_max_z > bz
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use oxidized_world::registry::BlockRegistry;
+
+    // ── is_replaceable_block ────────────────────────────────────────────
+
+    #[test]
+    fn test_replaceable_air_is_replaceable() {
+        let reg = BlockRegistry::new();
+        let air = reg.default_state("minecraft:air").unwrap();
+        assert!(is_replaceable_block(u32::from(air.0)));
+    }
+
+    #[test]
+    fn test_replaceable_cave_air() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:cave_air").unwrap();
+        assert!(is_replaceable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_replaceable_water() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:water").unwrap();
+        assert!(is_replaceable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_replaceable_tall_grass() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:tall_grass").unwrap();
+        assert!(is_replaceable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_replaceable_fire() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:fire").unwrap();
+        assert!(is_replaceable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_replaceable_snow() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:snow").unwrap();
+        assert!(is_replaceable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_replaceable_vine() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:vine").unwrap();
+        assert!(is_replaceable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_replaceable_stone_is_not_replaceable() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:stone").unwrap();
+        assert!(!is_replaceable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_replaceable_oak_planks_is_not_replaceable() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:oak_planks").unwrap();
+        assert!(!is_replaceable_block(u32::from(state.0)));
+    }
+
+    // ── is_interactable_block ───────────────────────────────────────────
+
+    #[test]
+    fn test_interactable_crafting_table() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:crafting_table").unwrap();
+        assert!(is_interactable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_interactable_chest() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:chest").unwrap();
+        assert!(is_interactable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_interactable_lever() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:lever").unwrap();
+        assert!(is_interactable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_interactable_oak_door() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:oak_door").unwrap();
+        assert!(is_interactable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_interactable_white_bed() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:white_bed").unwrap();
+        assert!(is_interactable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_interactable_oak_button() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:oak_button").unwrap();
+        assert!(is_interactable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_interactable_stone_is_not_interactable() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:stone").unwrap();
+        assert!(!is_interactable_block(u32::from(state.0)));
+    }
+
+    #[test]
+    fn test_interactable_air_is_not_interactable() {
+        let reg = BlockRegistry::new();
+        let state = reg.default_state("minecraft:air").unwrap();
+        assert!(!is_interactable_block(u32::from(state.0)));
+    }
+
+    // ── is_wall_mountable ───────────────────────────────────────────────
+
+    #[test]
+    fn test_wall_mountable_oak_button() {
+        assert!(is_wall_mountable("minecraft:oak_button"));
+    }
+
+    #[test]
+    fn test_wall_mountable_lever() {
+        assert!(is_wall_mountable("minecraft:lever"));
+    }
+
+    #[test]
+    fn test_wall_mountable_wall_torch() {
+        assert!(is_wall_mountable("minecraft:wall_torch"));
+    }
+
+    #[test]
+    fn test_wall_mountable_oak_wall_sign() {
+        assert!(is_wall_mountable("minecraft:oak_wall_sign"));
+    }
+
+    #[test]
+    fn test_wall_mountable_stone_is_not() {
+        assert!(!is_wall_mountable("minecraft:stone"));
+    }
+
+    #[test]
+    fn test_wall_mountable_oak_door_is_not() {
+        assert!(!is_wall_mountable("minecraft:oak_door"));
+    }
+
+    // ── is_player_direction_block ───────────────────────────────────────
+
+    #[test]
+    fn test_player_direction_oak_door() {
+        assert!(is_player_direction_block("minecraft:oak_door"));
+    }
+
+    #[test]
+    fn test_player_direction_white_bed() {
+        assert!(is_player_direction_block("minecraft:white_bed"));
+    }
+
+    #[test]
+    fn test_player_direction_oak_stairs() {
+        assert!(is_player_direction_block("minecraft:oak_stairs"));
+    }
+
+    #[test]
+    fn test_player_direction_oak_fence_gate() {
+        assert!(is_player_direction_block("minecraft:oak_fence_gate"));
+    }
+
+    #[test]
+    fn test_player_direction_oak_trapdoor() {
+        assert!(is_player_direction_block("minecraft:oak_trapdoor"));
+    }
+
+    #[test]
+    fn test_player_direction_repeater() {
+        assert!(is_player_direction_block("minecraft:repeater"));
+    }
+
+    #[test]
+    fn test_player_direction_comparator() {
+        assert!(is_player_direction_block("minecraft:comparator"));
+    }
+
+    #[test]
+    fn test_player_direction_stone_is_not() {
+        assert!(!is_player_direction_block("minecraft:stone"));
+    }
+
+    // ── is_sign_block ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_sign_block_oak_sign() {
+        assert!(is_sign_block("minecraft:oak_sign"));
+    }
+
+    #[test]
+    fn test_sign_block_oak_wall_sign() {
+        assert!(is_sign_block("minecraft:oak_wall_sign"));
+    }
+
+    #[test]
+    fn test_sign_block_spruce_sign() {
+        assert!(is_sign_block("minecraft:spruce_sign"));
+    }
+
+    #[test]
+    fn test_sign_block_stone_is_not() {
+        assert!(!is_sign_block("minecraft:stone"));
+    }
+
+    // ── is_door_block ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_door_block_oak_door() {
+        assert!(is_door_block("minecraft:oak_door"));
+    }
+
+    #[test]
+    fn test_door_block_iron_door() {
+        assert!(is_door_block("minecraft:iron_door"));
+    }
+
+    #[test]
+    fn test_door_block_spruce_door() {
+        assert!(is_door_block("minecraft:spruce_door"));
+    }
+
+    #[test]
+    fn test_door_block_stone_is_not() {
+        assert!(!is_door_block("minecraft:stone"));
+    }
+
+    // ── is_bed_block ────────────────────────────────────────────────────
+
+    #[test]
+    fn test_bed_block_white_bed() {
+        assert!(is_bed_block("minecraft:white_bed"));
+    }
+
+    #[test]
+    fn test_bed_block_red_bed() {
+        assert!(is_bed_block("minecraft:red_bed"));
+    }
+
+    #[test]
+    fn test_bed_block_stone_is_not() {
+        assert!(!is_bed_block("minecraft:stone"));
+    }
+
+    // ── is_tall_plant ───────────────────────────────────────────────────
+
+    #[test]
+    fn test_tall_plant_sunflower() {
+        assert!(is_tall_plant("minecraft:sunflower"));
+    }
+
+    #[test]
+    fn test_tall_plant_lilac() {
+        assert!(is_tall_plant("minecraft:lilac"));
+    }
+
+    #[test]
+    fn test_tall_plant_rose_bush() {
+        assert!(is_tall_plant("minecraft:rose_bush"));
+    }
+
+    #[test]
+    fn test_tall_plant_peony() {
+        assert!(is_tall_plant("minecraft:peony"));
+    }
+
+    #[test]
+    fn test_tall_plant_tall_grass() {
+        assert!(is_tall_plant("minecraft:tall_grass"));
+    }
+
+    #[test]
+    fn test_tall_plant_large_fern() {
+        assert!(is_tall_plant("minecraft:large_fern"));
+    }
+
+    #[test]
+    fn test_tall_plant_pitcher_plant() {
+        assert!(is_tall_plant("minecraft:pitcher_plant"));
+    }
+
+    #[test]
+    fn test_tall_plant_tall_seagrass() {
+        assert!(is_tall_plant("minecraft:tall_seagrass"));
+    }
+
+    #[test]
+    fn test_tall_plant_stone_is_not() {
+        assert!(!is_tall_plant("minecraft:stone"));
+    }
+
+    #[test]
+    fn test_tall_plant_short_grass_is_not() {
+        assert!(!is_tall_plant("minecraft:short_grass"));
+    }
+
+    // ── block_type_id_from_name ─────────────────────────────────────────
+
+    #[test]
+    fn test_block_type_id_from_name_known() {
+        assert!(block_type_id_from_name("minecraft:stone").is_some());
+    }
+
+    #[test]
+    fn test_block_type_id_from_name_unknown() {
+        assert!(block_type_id_from_name("minecraft:nonexistent").is_none());
+    }
 }

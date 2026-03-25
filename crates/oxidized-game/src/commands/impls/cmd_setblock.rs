@@ -7,6 +7,10 @@ use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
 use oxidized_protocol::chat::Component;
+use oxidized_world::registry::BlockStateId;
+
+/// Block name for air, used to avoid magic strings.
+const AIR_BLOCK_NAME: &str = "minecraft:air";
 
 /// Registers the `/setblock` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -82,8 +86,8 @@ fn setblock_keep(
     let (x, y, z) = get_block_pos(ctx, "pos")?;
     let block_name = resolve_block_name(ctx)?;
 
-    if let Some(existing) = ctx.source.server.get_block(x, y, z) {
-        if existing != "minecraft:air" {
+    if let Some(state_id) = ctx.source.server.get_block_state_id(x, y, z) {
+        if !BlockStateId(state_id as u16).is_air() {
             send_setblock_failure(ctx);
             return Ok(0);
         }
@@ -107,9 +111,9 @@ fn setblock_destroy(
 
     // Destroy the existing block first (set to air).
     // TODO: When item drops are implemented, drop items here.
-    ctx.source.server.set_block(x, y, z, "minecraft:air");
+    ctx.source.server.set_block(x, y, z, AIR_BLOCK_NAME);
 
-    if block_name == "minecraft:air" {
+    if block_name == AIR_BLOCK_NAME {
         send_setblock_success(ctx, x, y, z);
         return Ok(1);
     }

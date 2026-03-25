@@ -43,10 +43,13 @@ pub enum ItemError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ItemId(pub String);
 
+/// Block name for air, used to avoid magic strings in item identity checks.
+const AIR_ITEM_NAME: &str = "minecraft:air";
+
 impl ItemId {
     /// Returns `true` if this is an empty/air item ID.
     pub fn is_empty(&self) -> bool {
-        self.0.is_empty() || self.0 == "minecraft:air"
+        self.0.is_empty() || self.0 == AIR_ITEM_NAME
     }
 }
 

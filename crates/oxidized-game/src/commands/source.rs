@@ -140,6 +140,12 @@ pub trait ServerHandle: Send + Sync {
         None
     }
 
+    /// Returns the raw block state ID at the given position, or `None` if the
+    /// chunk is not loaded or the position is out of bounds.
+    fn get_block_state_id(&self, _x: i32, _y: i32, _z: i32) -> Option<u32> {
+        None
+    }
+
     /// Sends a system chat message to a specific player by UUID.
     fn send_system_message_to_player(&self, _uuid: uuid::Uuid, _message: &Component) {}
 }

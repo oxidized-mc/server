@@ -16,7 +16,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.1 | Enrich BlockStateFlags (ADR-012 compliance) | ✅ Done |
 | R5.2 | Enrich BlockStateEntry with block properties | ✅ Done |
 | R5.3 | Implement block tag loading from vanilla data | ✅ Done |
-| R5.4 | Replace string-based block categorization with flags/tags | 📋 Planned |
+| R5.4 | Replace string-based block categorization with flags/tags | ✅ Done |
 | R5.5 | Replace hardcoded physics properties with registry data | 📋 Planned |
 | R5.6 | Replace hardcoded biome resolution with registry lookup | 📋 Planned |
 | R5.7 | Compile-time item ID codegen (like blocks) | 📋 Planned |
@@ -537,6 +537,8 @@ Runtime tag loading (Option B) deferred to Phase 34 (data packs).
 
 ### R5.4: Replace String-Based Block Categorization With Flags/Tags
 
+**Status:** ✅ Done
+
 **Targets:** `crates/oxidized-server/src/network/play/placement.rs`,
 `crates/oxidized-server/src/network/play/block_interaction.rs`,
 `crates/oxidized-game/src/inventory/item_stack.rs`,
@@ -616,6 +618,25 @@ Runtime tag loading (Option B) deferred to Phase 34 (data packs).
 - `cargo test --workspace` — all existing tests pass
 - Manual smoke test: place blocks, interact with containers, verify behavior
   unchanged
+
+**Completion notes:**
+- `is_replaceable_block()` → `BlockStateId::is_replaceable()` flag (O(1))
+- `is_interactable_block()` → `BlockStateId::is_interactable()` flag + beds via
+  `minecraft:beds` tag (vanilla data omits beds from interactable; sleeping is
+  conditional)
+- `is_wall_mountable()` → `oxidized:wall_mountable` tag
+- `is_player_direction_block()` → `oxidized:player_direction` tag
+- `is_sign_block()` → `minecraft:all_signs` tag
+- `is_door_block()` → `minecraft:doors` tag
+- `is_bed_block()` → `minecraft:beds` tag
+- `is_tall_plant()` → `oxidized:tall_plants` tag
+- `item_stack.rs` air check → `AIR_ITEM_NAME` constant
+- `cmd_setblock.rs` keep-mode air check → `get_block_state_id()` +
+  `BlockStateId::is_air()` (now correctly handles cave_air and void_air)
+- Added `get_block_state_id()` to `ServerHandle` trait for state-based queries
+- Added `block_type_id_from_name()` helper for name→tag-ID conversion
+- 56 regression tests added covering all 8 replaced functions
+- Zero `matches!("minecraft:..."` patterns remain in production code
 
 ---
 
