@@ -628,14 +628,14 @@ tests pass. `cargo check --workspace` — rayon compiles without warnings.
    - Verify BitSet mask encoding for various section patterns
    - Roundtrip test: build → serialize → deserialize → compare
 
-**What remains for Phase 23a (Lighting Engine):**
-- BFS sky light initialization from heightmap
-- BFS block light propagation from emitters
-- Incremental update processing (block place/break → light recalc)
-- Cross-chunk boundary propagation
-- Parallel section processing (even/odd Y-layer passes)
-- Integration with block state opacity values
-- Performance: < 1 ms per chunk full lighting, < 50 µs incremental
+**What remains for Phase 23a (Lighting Engine):** ✅ All implemented in Phase 23a.
+- ~~BFS sky light initialization from heightmap~~
+- ~~BFS block light propagation from emitters~~
+- ~~Incremental update processing (block place/break → light recalc)~~
+- ~~Cross-chunk boundary propagation~~
+- ~~Parallel section processing (even/odd Y-layer passes)~~
+- ~~Integration with block state opacity values~~
+- ~~Performance: < 1 ms per chunk full lighting, < 50 µs incremental~~
 
 **Verification:** `cargo test -p oxidized-game` — DataLayer property tests pass.
 `cargo test -p oxidized-game` — light packet compliance tests pass.

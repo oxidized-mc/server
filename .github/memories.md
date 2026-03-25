@@ -2115,3 +2115,25 @@ scheduled block ticking infrastructure, and `/tick` command family. Completed th
 - **Vanilla angle range is [-180, 180)**: All angle normalization must use this range
 - **Config ordering matters**: Brand first, features before registries — clients may process in strict order
 - **PlayerInfo needs ALL 8 flags**: Missing flags cause invisible hat layers, wrong list ordering, missing display names
+
+---
+
+### 2026-03 — Phase 23a: Lighting Engine (Retrospective)
+
+**Context:** Full BFS lighting engine implemented across 4 crates (game, world, protocol, server). 8 modules, 29 unit tests, 2 roundtrip tests, 13 integration tests, 2 property tests.
+
+### What Went Well
+- **Template optimization for flat worldgen**: Pre-computing sky light as a cloneable template (rather than running BFS per chunk) is correct for flat terrain and significantly faster. The general `light_chunk()` BFS path exists for future noise worldgen.
+- **ADR-017 design held up**: Batched decrease-then-increase BFS pattern cleanly handles all cases (emission changes, opacity changes, combined changes).
+- **Clean module separation**: propagation (core BFS), sky (vertical+horizontal), block_light (emitter scan), cross_chunk (boundary), parallel (even/odd layers), engine (orchestrator), queue (pending updates) — each module is focused and testable.
+- **Integration was straightforward**: Block change hook in `block_interaction.rs`, tick processing in `tick.rs`, `WorldContext.pending_light_updates` field — all wired cleanly.
+
+### Gotchas
+- **Light serialization `None` vs `Some(zeros)`**: `None` sections must be omitted from masks entirely. Only `Some(all-zeros)` sets the `empty_mask` bit. This was caught during R3.9 scaffolding.
+- **Sky light section indexing**: Use `div_ceil` (not floor division) for computing which section the surface falls in, otherwise the surface section gets incorrect light.
+- **Cross-chunk propagation scope**: Currently handles light crossing horizontal boundaries. Vertical cross-section propagation is handled implicitly by the BFS operating on world Y coordinates within a chunk column.
+
+### Patterns
+- **`LightEngine::light_chunk()` for worldgen, `process_updates()` for gameplay**: Two distinct codepaths — full initialization vs incremental update.
+- **`ClientboundLightUpdatePacket` (0x30) for incremental, light data embedded in `LevelChunkWithLightPacket` for full chunks**: Clients receive light differently depending on context.
+- **`pending_light_updates` uses `parking_lot::Mutex<Vec<(ChunkPos, LightUpdate)>>`**: Network threads push, tick thread drains — simple producer-consumer pattern.
