@@ -21,7 +21,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.6 | Replace hardcoded biome resolution with registry lookup | ✅ Done |
 | R5.7 | Compile-time item ID codegen (like blocks) | ✅ Done |
 | R5.8 | Extract packet codec helpers & roundtrip test macro | ✅ Done |
-| R5.9 | Extract command registration helpers | 📋 Planned |
+| R5.9 | Extract command registration helpers | ✅ Done |
 | R5.10 | Standardize packet decoder error handling | 📋 Planned |
 | R5.11 | Decompose oversized structs | 📋 Planned |
 | R5.12 | Break down long functions & reduce nesting | 📋 Planned |
@@ -841,7 +841,7 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 ---
 
-### R5.9: Extract Command Registration Helpers
+### R5.9: Extract Command Registration Helpers ✅
 
 **Targets:** `crates/oxidized-game/src/commands/impls/*.rs`
 
@@ -903,6 +903,17 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 - `cargo test -p oxidized-game` — all command tests pass
 - Manual smoke test: run `/kick`, `/gamemode`, `/time`, `/difficulty` etc.
 - No behavioral change
+
+**Completion notes:**
+- Implemented `send_translatable_success()` and `send_translatable_failure()` as
+  methods on `CommandSourceStack` (more idiomatic than standalone functions).
+- Added `for_each_target()` to `argument_access.rs` (uses `&SelectorTarget`, not
+  `&Entity`, since that is the actual resolved type).
+- Migrated all 14 command impl files. The `/kick` command was further deduplicated
+  by extracting `kick_targets()` to collapse two near-identical closures.
+- 16 files changed, +144 / -153. Net: -9 lines (modest because most call sites
+  still pass `Component::text(...)` args). The real win is reduced nesting and
+  consistency.
 
 ---
 
@@ -1142,7 +1153,7 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 | R5.6 | 1-2 | +10, -20 |
 | R5.7 | 5-8 | +300, -150 |
 | R5.8 | 40-60 | +200, -800 |
-| R5.9 | 17-20 | +80, -400 |
+| R5.9 | 16 | +144, -153 |
 | R5.10 | 20-30 | +100, -150 |
 | R5.11 | 10-15 | +200, -50 |
 | R5.12 | 8-12 | +100, -0 |
