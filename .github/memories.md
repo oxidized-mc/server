@@ -1066,19 +1066,21 @@ Vanilla sends `GameEvent(13, 0.0)` after initial chunk batch — signals client 
 #### Technical Debt (Resolved)
 - ~~Block friction/speed lookups are stubbed~~ → **RESOLVED**: `PhysicsBlockProperties` dense lookup table wired to `BlockRegistry` (commit 0901789)
 - ~~Slime block bounce not implemented~~ → **RESOLVED**: Negates vy on landing when on slime block (commit 0901789)
+- ~~`PhysicsBlockProperties` dense lookup table with hardcoded overrides~~ → **SUPERSEDED** (R5.5): Physics properties now read directly from compile-time block registry via `BlockStateId::friction()`, `speed_factor()`, `jump_factor()`. No runtime construction needed.
 
 #### Technical Debt (Remaining)
 - No step-up algorithm yet — Entity default is 0.0, LivingEntity uses STEP_HEIGHT attribute (0.6)
 - No entity-entity collision (boats, minecarts, mob pushing)
 - Honey block sticky sliding not implemented
 - Cobweb/sweet berry/bubble column velocity modifiers not implemented
+- Powder snow speed reduction needs entity-block interaction system (`makeStuckInBlock`), not block speed_factor property
 
-#### Pattern: PhysicsBlockProperties
-- Dense `Vec<f64>` arrays indexed by block state ID for O(1) friction/speed/jump lookups
-- Built from `BlockRegistry` at startup via `PhysicsBlockProperties::from_registry()`
-- `PhysicsBlockProperties::defaults()` returns empty vecs (all lookups return defaults) — use in tests that don't care about block-specific physics
-- Located in `crates/oxidized-game/src/physics/block_properties.rs`
-- Add new block overrides to `PHYSICS_OVERRIDES` const array
+#### Pattern: Block Physics Lookups (R5.5)
+- Physics properties (friction, speed_factor, jump_factor) are read directly from the compile-time block registry via `BlockStateId` methods
+- No runtime construction or dense lookup tables needed — the static data is already O(1) indexed by state ID
+- Slime block detection uses `BlockStateId::block_name() == "minecraft:slime_block"`
+- Powder snow speed reduction (0.9) is NOT a block property — it comes from `PowderSnowBlock::makeStuckInBlock()` runtime behavior
+- Located in `crates/oxidized-game/src/physics/tick.rs` and `slow_blocks.rs`
 
 ### Phase 17 — Chat System (2025-07)
 

@@ -17,7 +17,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.2 | Enrich BlockStateEntry with block properties | ✅ Done |
 | R5.3 | Implement block tag loading from vanilla data | ✅ Done |
 | R5.4 | Replace string-based block categorization with flags/tags | ✅ Done |
-| R5.5 | Replace hardcoded physics properties with registry data | 📋 Planned |
+| R5.5 | Replace hardcoded physics properties with registry data | ✅ Done |
 | R5.6 | Replace hardcoded biome resolution with registry lookup | 📋 Planned |
 | R5.7 | Compile-time item ID codegen (like blocks) | 📋 Planned |
 | R5.8 | Extract packet codec helpers & roundtrip test macro | 📋 Planned |
@@ -642,60 +642,52 @@ Runtime tag loading (Option B) deferred to Phase 34 (data packs).
 
 ### R5.5: Replace Hardcoded Physics Properties With Registry Data
 
-**Targets:** `crates/oxidized-game/src/physics/block_properties.rs`,
+**Status:** ✅ Done
+
+**Targets:** `crates/oxidized-game/src/physics/block_properties.rs` (deleted),
 `crates/oxidized-game/src/physics/constants.rs`
 
-**Current problems:**
-- `PHYSICS_OVERRIDES` static array matches 8 blocks by `"minecraft:..."` name
-- `from_registry()` iterates this array doing string comparisons
-- Physics constants like `ICE_FRICTION`, `BLUE_ICE_FRICTION` duplicate values
-  that should come from the block registry
+**What was done:**
 
-**Steps:**
+1. **Deleted `block_properties.rs` entirely** — removed `PhysicsBlockProperties`
+   struct, `PHYSICS_OVERRIDES` array, `PhysicsOverride` struct, `from_registry()`,
+   and `defaults()`. The intermediate dense lookup table is no longer needed since
+   `BlockStateId` already provides O(1) static array access.
 
-1. **Delete `PHYSICS_OVERRIDES` array** and the `from_registry()` function that
-   uses it
+2. **Replaced all lookups with direct `BlockStateId` methods** in `tick.rs` and
+   `slow_blocks.rs`:
+   - `block_physics.friction(state_id)` → `BlockStateId(state_id as u16).friction()`
+   - `block_physics.speed_factor(state_id)` → `BlockStateId(state_id as u16).speed_factor()`
+   - `block_physics.is_slime_block(state_id)` → `BlockStateId(state_id as u16).block_name() == "minecraft:slime_block"`
 
-2. **Replace with registry property lookups**:
-   ```rust
-   // Before:
-   let friction = physics_overrides.get(block_name)
-       .map(|o| o.friction)
-       .unwrap_or(BLOCK_FRICTION_DEFAULT);
+3. **Removed 7 redundant physics constants** from `constants.rs`:
+   `ICE_FRICTION`, `BLUE_ICE_FRICTION`, `SLIME_FRICTION`, `SOUL_SAND_SPEED_FACTOR`,
+   `HONEY_BLOCK_SPEED_FACTOR`, `HONEY_BLOCK_JUMP_FACTOR`, `POWDER_SNOW_SPEED_FACTOR`.
+   Kept `BLOCK_FRICTION_DEFAULT` as error fallback for unloaded chunks.
 
-   // After:
-   let friction = block_state_id.friction();  // From BlockStateEntry
-   ```
+4. **Removed `block_physics: &PhysicsBlockProperties` parameter** from
+   `physics_tick()`, `block_speed_factor()`, and `block_jump_factor()` — simplifying
+   all call sites.
 
-3. **Remove redundant physics constants** that duplicate block registry data:
-   - `ICE_FRICTION`, `BLUE_ICE_FRICTION`, `SLIME_FRICTION` etc. are no longer
-     needed — the values come from the block state table
-   - Keep `BLOCK_FRICTION_DEFAULT` only if needed as a fallback (it shouldn't be
-     — every block state has a friction value in the table)
+5. **Fixed powder snow misconception**: The old `PHYSICS_OVERRIDES` treated powder
+   snow as having `speed_factor = 0.9`, but vanilla's powder snow has
+   `speed_factor = 1.0`. The 0.9 slowdown comes from `PowderSnowBlock::makeStuckInBlock()`
+   runtime behavior, not the block property.
 
-4. **Update `PhysicsBlockData`** to read from `BlockStateId` methods:
-   ```rust
-   impl PhysicsBlockData {
-       pub fn from_state(state: BlockStateId) -> Self {
-           Self {
-               friction: state.friction(),
-               speed_factor: state.speed_factor(),
-               jump_factor: state.jump_factor(),
-               is_slime: state.block_name() == "minecraft:slime_block", // or use tag
-               is_honey: state.block_name() == "minecraft:honey_block", // or use tag
-           }
-       }
-   }
-   ```
-   For `is_slime` and `is_honey` (bounce/stick behavior), consider a
-   `BOUNCE_BEHAVIOR` or `STICKY` flag in `BlockStateFlags` if these are hot-path
-   checks. Otherwise a tag is fine.
+6. **Updated `memories.md`** with the new physics pattern and powder snow note.
 
-**Verification:**
-- Physics behavior tests: player walks on ice (friction 0.98), soul sand
-  (speed 0.4), honey block (speed 0.4, jump 0.5), blue ice (friction 0.989)
-- Values match vanilla within epsilon (f64 precision from fixed-point encoding)
-- No `PHYSICS_OVERRIDES` or block name strings remain in physics code
+**Verification (47 tests passing):**
+- Ice/packed ice/frosted ice friction = 0.98 ✓
+- Blue ice friction = 0.989 ✓
+- Soul sand speed_factor = 0.4 ✓
+- Honey block speed_factor = 0.4, jump_factor = 0.5 ✓
+- Slime block friction = 0.8, bounce works ✓
+- Frosted ice all 4 states have 0.98 friction ✓
+- Stone has default physics (0.6 / 1.0 / 1.0) ✓
+- No `PHYSICS_OVERRIDES` or block name strings in physics lookup code ✓
+
+**Net change:** +100 lines, −250 lines (deleted `block_properties.rs`, simplified
+`tick.rs`, `slow_blocks.rs`, `constants.rs`, `jump.rs`, `mod.rs`)
 
 ---
 

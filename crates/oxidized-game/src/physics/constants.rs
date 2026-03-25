@@ -31,16 +31,8 @@ pub const VERTICAL_DRAG: f64 = 0.98;
 /// Default block friction. Most solid blocks use this value.
 ///
 /// Effective ground drag = `block_friction * HORIZONTAL_DRAG` = 0.6 × 0.91 = 0.546.
+/// Used as fallback when the block state is unavailable (unloaded chunks).
 pub const BLOCK_FRICTION_DEFAULT: f64 = 0.6;
-
-/// Friction for ice, packed ice, and frosted ice blocks.
-pub const ICE_FRICTION: f64 = 0.98;
-
-/// Friction for blue ice blocks (slightly more slippery than regular ice).
-pub const BLUE_ICE_FRICTION: f64 = 0.989;
-
-/// Friction for slime blocks.
-pub const SLIME_FRICTION: f64 = 0.8;
 
 // --- Jump ---
 
@@ -70,22 +62,6 @@ pub const WATER_DRAG: f64 = 0.8;
 
 /// Velocity drag multiplier when in lava.
 pub const LAVA_DRAG: f64 = 0.5;
-
-// --- Slow block speed multipliers ---
-
-/// Soul sand horizontal speed multiplier.
-pub const SOUL_SAND_SPEED_FACTOR: f64 = 0.4;
-
-/// Honey block horizontal speed multiplier.
-pub const HONEY_BLOCK_SPEED_FACTOR: f64 = 0.4;
-
-/// Honey block jump factor (reduces jump height).
-pub const HONEY_BLOCK_JUMP_FACTOR: f64 = 0.5;
-
-/// Powder snow stuck-in-block multiplier (horizontal).
-///
-/// Applied via `makeStuckInBlock(Vec3(0.9, 1.5, 0.9))` in Java.
-pub const POWDER_SNOW_SPEED_FACTOR: f64 = 0.9;
 
 // --- Movement speeds (blocks/tick, before friction) ---
 

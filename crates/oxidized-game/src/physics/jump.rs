@@ -83,8 +83,9 @@ mod tests {
     #[test]
     fn test_jump_honey_block_factor() {
         let mut entity = make_entity_on_ground();
-        apply_jump(&mut entity, 0, HONEY_BLOCK_JUMP_FACTOR);
-        let expected = JUMP_POWER * HONEY_BLOCK_JUMP_FACTOR;
+        // Honey block jump factor is 0.5 (from block registry).
+        apply_jump(&mut entity, 0, 0.5);
+        let expected = JUMP_POWER * 0.5;
         assert!(
             (entity.vy - expected).abs() < 0.0001,
             "Honey jump vy {} ≠ {}",
