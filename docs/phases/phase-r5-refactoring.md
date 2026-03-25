@@ -18,7 +18,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.3 | Implement block tag loading from vanilla data | ✅ Done |
 | R5.4 | Replace string-based block categorization with flags/tags | ✅ Done |
 | R5.5 | Replace hardcoded physics properties with registry data | ✅ Done |
-| R5.6 | Replace hardcoded biome resolution with registry lookup | 📋 Planned |
+| R5.6 | Replace hardcoded biome resolution with registry lookup | ✅ Done |
 | R5.7 | Compile-time item ID codegen (like blocks) | 📋 Planned |
 | R5.8 | Extract packet codec helpers & roundtrip test macro | 📋 Planned |
 | R5.9 | Extract command registration helpers | 📋 Planned |
@@ -691,47 +691,37 @@ Runtime tag loading (Option B) deferred to Phase 34 (data packs).
 
 ---
 
-### R5.6: Replace Hardcoded Biome Resolution With Registry Lookup
+### R5.6: Replace Hardcoded Biome Resolution With Registry Lookup ✅
+
+**Status:** Done
 
 **Targets:** `crates/oxidized-game/src/worldgen/flat/generator.rs`
 
-**Current problems:**
-- `resolve_biome_id()` matches only 5 biome names with hardcoded IDs
-- Falls back to plains for all unknown biomes
-- Any new biome requires a code change
+**What was done:**
 
-**Steps:**
+1. **Created `crates/oxidized-world/src/registry/biome_registry.rs`** — new module
+   with `BIOME_NAMES` (65 vanilla biomes, alphabetically sorted), `PLAINS_BIOME_ID`,
+   `biome_name_to_id()` (binary search, O(log n)), `biome_id_to_name()`, and
+   `biome_count()`. Full unit + doc test coverage.
 
-1. **Use the biome registry** (already exists in `oxidized-world`):
-   ```rust
-   // Before:
-   fn resolve_biome_id(biome_key: &str) -> u32 {
-       match biome_key {
-           "minecraft:plains" => PLAINS_BIOME_ID,
-           "minecraft:desert" => 14,
-           // ... 3 more hardcoded
-           _ => PLAINS_BIOME_ID,
-       }
-   }
+2. **Updated `crates/oxidized-world/src/registry/mod.rs`** — registered and
+   re-exported the biome registry public API.
 
-   // After:
-   fn resolve_biome_id(biome_key: &str) -> u32 {
-       biome_registry::biome_name_to_id(biome_key)
-           .unwrap_or(biome_registry::PLAINS_BIOME_ID)
-   }
-   ```
+3. **Updated `crates/oxidized-game/src/worldgen/flat/generator.rs`** — replaced
+   the 5-entry hardcoded match with `biome_name_to_id()` registry lookup.
+   Removed local `PLAINS_BIOME_ID` constant in favor of the registry's.
 
-2. **Verify the biome registry** supports all ~64 vanilla biomes with correct
-   alphabetically-assigned IDs (per memory: biome IDs are alphabetical).
+4. **Updated `crates/oxidized-world/src/anvil/chunk_serializer.rs`** — removed
+   the local `BIOME_NAMES` static; `biome_name()` now delegates to
+   `biome_id_to_name()`.
 
-3. **Remove the hardcoded match statement entirely**.
+5. **Updated `crates/oxidized-world/src/anvil/chunk_loader.rs`** — replaced
+   `.position()` linear scan with `biome_name_to_id()` binary search.
 
-**Verification:**
-- `resolve_biome_id("minecraft:plains")` returns 40 (alphabetical index)
-- `resolve_biome_id("minecraft:desert")` returns 14
-- `resolve_biome_id("minecraft:the_void")` returns 57
-- All 64 vanilla biomes resolve correctly
-- Unknown biome falls back to plains
+**Files changed:** 5 (+120, -85)
+
+**Verification:** All 65 vanilla biomes resolve correctly. Unknown biomes fall
+back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 ---
 

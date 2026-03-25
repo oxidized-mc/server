@@ -13,14 +13,10 @@ use oxidized_world::chunk::level_chunk::{
 };
 use oxidized_world::chunk::section::LevelChunkSection;
 use oxidized_world::chunk::{ChunkPos, DataLayer, LevelChunk};
+use oxidized_world::registry::{PLAINS_BIOME_ID, biome_name_to_id};
 
 use super::config::FlatWorldConfig;
 use crate::worldgen::ChunkGenerator;
-
-/// Default biome ID for `minecraft:plains` in the alphabetically-sorted
-/// biome registry. The client receives biome entries sorted by name;
-/// plains is index 40.
-const PLAINS_BIOME_ID: u32 = 40;
 
 /// Sea level for flat worlds (vanilla: −63).
 const FLAT_SEA_LEVEL: i32 = -63;
@@ -34,27 +30,15 @@ struct ChunkTemplate {
 }
 
 /// Resolves a biome resource key (e.g. `"minecraft:plains"`) to its
-/// registry ID using alphabetical ordering (matching the protocol).
+/// registry ID using the biome registry.
 fn resolve_biome_id(biome_key: &str) -> u32 {
-    // The biome registry is sent to clients in alphabetical order.
-    // Rather than loading the full registry JSON at runtime, we maintain
-    // a lookup for the most common flat-world biomes and fall back to
-    // PLAINS_BIOME_ID for unknown keys. When a full BiomeRegistry is
-    // added (future phase), this should delegate to it.
-    match biome_key {
-        "minecraft:plains" => PLAINS_BIOME_ID,
-        "minecraft:desert" => 14,
-        "minecraft:the_void" => 57,
-        "minecraft:snowy_plains" => 46,
-        "minecraft:mushroom_fields" => 33,
-        _ => {
-            tracing::warn!(
-                biome_key,
-                "unknown biome key, falling back to minecraft:plains"
-            );
-            PLAINS_BIOME_ID
-        },
-    }
+    biome_name_to_id(biome_key).unwrap_or_else(|| {
+        tracing::warn!(
+            biome_key,
+            "unknown biome key, falling back to minecraft:plains"
+        );
+        PLAINS_BIOME_ID
+    })
 }
 
 /// Builds the pre-computed chunk template from configuration.

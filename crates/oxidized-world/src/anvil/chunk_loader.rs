@@ -244,10 +244,8 @@ impl AnvilChunkLoader {
                 oxidized_nbt::NbtTag::String(s) => s.as_str(),
                 _ => "minecraft:plains",
             };
-            let biome_id = super::chunk_serializer::BIOME_NAMES
-                .iter()
-                .position(|&name| name == biome_name)
-                .unwrap_or(40) as u32; // 40 = plains
+            let biome_id = crate::registry::biome_name_to_id(biome_name)
+                .unwrap_or(crate::registry::PLAINS_BIOME_ID);
             palette_ids.push(biome_id);
         }
 
