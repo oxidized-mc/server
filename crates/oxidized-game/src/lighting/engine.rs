@@ -9,6 +9,7 @@ use std::collections::VecDeque;
 use ahash::AHashMap;
 use oxidized_protocol::types::SectionPos;
 use oxidized_world::chunk::LevelChunk;
+use oxidized_world::registry::BlockStateId;
 
 use super::block_light::initialize_block_light;
 use super::propagation::{
@@ -175,7 +176,8 @@ impl LightEngine {
         }
 
         // After decrease completes, handle opacity decreases (block broken)
-        // by checking neighbors for light that can now flow through.
+        // by checking neighbors for light that can now flow through,
+        // and re-seeding sky light downward through the column.
         for update in &updates {
             if update.new_opacity < update.old_opacity {
                 let local_x = update.pos.x & 15;
@@ -191,6 +193,12 @@ impl LightEngine {
                     &mut sky_increase,
                     &mut block_increase,
                 );
+
+                // Simplified sky column re-seeding: if the block above has
+                // sky light 15, this column was a sky source. Re-fill downward
+                // through air until we hit an opaque block.
+                reseed_sky_column(chunk, local_x, y, local_z, &mut sky_increase, &mut changed_sections);
+
                 changed_sections.insert(section_pos, ());
             }
         }
@@ -288,6 +296,64 @@ fn check_neighbor_light_sources(
                 z: nz,
                 level: block,
             });
+        }
+    }
+}
+
+/// Simplified sky light column re-seeding after a block is broken.
+///
+/// When a block is removed and the block above it has sky light 15,
+/// the broken position and all positions below it (until an opaque block
+/// or the bottom of the world) should also have sky light 15. This mimics
+/// vanilla's `updateSourcesInColumn` / `addSourcesAbove` behavior for the
+/// common case of breaking surface blocks.
+///
+/// Each restored position is also seeded into the BFS increase queue
+/// so sky light can propagate horizontally into adjacent caves.
+fn reseed_sky_column(
+    chunk: &mut LevelChunk,
+    x: i32,
+    y: i32,
+    z: i32,
+    sky_increase: &mut VecDeque<LightEntry>,
+    changed_sections: &mut AHashMap<SectionPos, ()>,
+) {
+    let above_y = y + 1;
+    if above_y >= chunk.max_y() {
+        // Above world — this position should be sky-lit 15.
+    } else {
+        let above_sky = chunk.get_sky_light_at(x, above_y, z);
+        if above_sky != 15 {
+            return; // Not a sky source column — nothing to re-seed.
+        }
+    }
+
+    // Walk downward from the broken block's position, restoring sky light 15
+    // through transparent blocks.
+    let min_y = chunk.min_y();
+    for cur_y in (min_y..=y).rev() {
+        let state_id = chunk.get_block_state(x & 15, cur_y, z & 15).unwrap_or(0);
+        #[allow(clippy::cast_possible_truncation)]
+        let opacity = BlockStateId(state_id as u16).light_opacity();
+        if opacity >= 15 {
+            break; // Hit an opaque block — stop.
+        }
+
+        let current = chunk.get_sky_light_at(x, cur_y, z);
+        if current < 15 {
+            chunk.set_sky_light_at(x, cur_y, z, 15);
+            sky_increase.push_back(LightEntry {
+                x,
+                y: cur_y,
+                z,
+                level: 15,
+            });
+            let section_pos = SectionPos::new(
+                chunk.pos.x,
+                cur_y >> 4,
+                chunk.pos.z,
+            );
+            changed_sections.insert(section_pos, ());
         }
     }
 }
@@ -481,5 +547,31 @@ mod tests {
         });
         let changed = engine.process_updates(&mut chunk).unwrap();
         assert!(!changed.is_empty());
+    }
+
+    #[test]
+    fn test_break_surface_block_reseeds_sky_column() {
+        let mut engine = LightEngine::new();
+        let mut chunk = flat_chunk();
+        engine.light_chunk(&mut chunk).unwrap();
+
+        // Verify sky light above surface is 15 and inside grass is 0.
+        assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y + 4, 8), 15);
+        assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y + 3, 8), 0);
+
+        // Break the grass block (opacity → 0).
+        let grass_opacity = BlockStateId(GRASS_BLOCK.0).light_opacity();
+        chunk.set_block_state(8, OVERWORLD_MIN_Y + 3, 8, 0).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(8, OVERWORLD_MIN_Y + 3, 8),
+            old_emission: 0,
+            new_emission: 0,
+            old_opacity: grass_opacity,
+            new_opacity: 0,
+        });
+        engine.process_updates(&mut chunk).unwrap();
+
+        // The broken block's position should now have sky light 15.
+        assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y + 3, 8), 15);
     }
 }

@@ -102,13 +102,14 @@ pub(crate) fn propagate_block_light_increase(
             let ny = entry.y + dy;
             let nz = entry.z + dz;
 
-            // Check for cross-chunk boundary.
+            // Check for cross-chunk boundary. Pass source level un-attenuated;
+            // the cross-chunk code reads the target block's actual opacity.
             if !(0..16).contains(&nx) || !(0..16).contains(&nz) {
                 boundary.push(BoundaryEntry {
                     world_x: chunk_base_x + nx,
                     world_y: ny,
                     world_z: chunk_base_z + nz,
-                    level: entry.level - 1,
+                    level: entry.level,
                 });
                 continue;
             }
@@ -186,13 +187,32 @@ pub(crate) fn propagate_block_light_decrease(
 
             if neighbor_level < entry.old_level {
                 // This neighbor's light was dependent on the removed source.
+                let state_id = chunk.get_block_state(nx & 15, ny, nz & 15).unwrap_or(0);
+                #[allow(clippy::cast_possible_truncation)]
+                let emission = BlockStateId(state_id as u16).light_emission();
+
                 chunk.set_block_light_at(nx, ny, nz, 0);
-                decrease_queue.push_back(DecreaseEntry {
-                    x: nx,
-                    y: ny,
-                    z: nz,
-                    old_level: neighbor_level,
-                });
+
+                // Only continue decrease if the block's own emission didn't
+                // account for its light level (vanilla: toEmission < toLevel).
+                if emission < neighbor_level {
+                    decrease_queue.push_back(DecreaseEntry {
+                        x: nx,
+                        y: ny,
+                        z: nz,
+                        old_level: neighbor_level,
+                    });
+                }
+
+                // Always re-seed emitters so they restore their own light.
+                if emission > 0 {
+                    increase_queue.push_back(LightEntry {
+                        x: nx,
+                        y: ny,
+                        z: nz,
+                        level: emission,
+                    });
+                }
             } else {
                 // Neighbor has an equal or brighter independent source;
                 // re-seed the increase queue so it can re-propagate.
@@ -236,7 +256,7 @@ pub(crate) fn propagate_sky_light_increase(
                     world_x: chunk_base_x + nx,
                     world_y: ny,
                     world_z: chunk_base_z + nz,
-                    level: entry.level - 1,
+                    level: entry.level,
                 });
                 continue;
             }
@@ -498,6 +518,46 @@ mod tests {
         // Distance from (5,64,8) = 3 → level 11
         // Distance from (11,64,8) = 3 → level 11
         // Both give 11, so max = 11.
+        assert_eq!(chunk.get_block_light_at(8, 64, 8), 11);
+    }
+
+    #[test]
+    fn test_decrease_preserves_nearby_dimmer_emitter() {
+        let mut chunk = air_chunk();
+        // Simulate glowstone (emission=15) at (8,64,8) and a torch (emission=14)
+        // at (5,64,8). We need the torch to be a real emitting block.
+        let torch_id = u32::from(
+            BlockRegistry
+                .default_state("minecraft:torch")
+                .expect("torch missing")
+                .0,
+        );
+        chunk.set_block_state(5, 64, 8, torch_id).unwrap();
+
+        // Light both sources via BFS.
+        chunk.set_block_light_at(8, 64, 8, 15);
+        chunk.set_block_light_at(5, 64, 8, 14);
+        let mut queue = VecDeque::new();
+        queue.push_back(LightEntry { x: 8, y: 64, z: 8, level: 15 });
+        queue.push_back(LightEntry { x: 5, y: 64, z: 8, level: 14 });
+        propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
+
+        // Now remove the glowstone (decrease from 15).
+        chunk.set_block_light_at(8, 64, 8, 0);
+        let mut decrease_queue = VecDeque::new();
+        let mut increase_queue = VecDeque::new();
+        decrease_queue.push_back(DecreaseEntry { x: 8, y: 64, z: 8, old_level: 15 });
+        propagate_block_light_decrease(
+            &mut chunk, &mut decrease_queue, &mut increase_queue, 0, 0,
+        );
+        propagate_block_light_increase(&mut chunk, &mut increase_queue, 0, 0);
+
+        // The torch at (5,64,8) should still have its own emission level.
+        assert_eq!(chunk.get_block_light_at(5, 64, 8), 14);
+        // And it should propagate: distance 1 from torch = 13.
+        assert_eq!(chunk.get_block_light_at(6, 64, 8), 13);
+        // The removed glowstone position should now be lit by the torch.
+        // Distance from torch (5) to (8) = 3, so level = 14 - 3 = 11.
         assert_eq!(chunk.get_block_light_at(8, 64, 8), 11);
     }
 }

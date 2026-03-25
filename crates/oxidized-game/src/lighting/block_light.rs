@@ -56,7 +56,9 @@ pub fn initialize_block_light(chunk: &mut LevelChunk) {
 
     // BFS propagation from all emitters.
     if !queue.is_empty() {
-        let _boundary = propagate_block_light_increase(chunk, &mut queue, 0, 0);
+        let chunk_base_x = chunk.pos.x * 16;
+        let chunk_base_z = chunk.pos.z * 16;
+        let _boundary = propagate_block_light_increase(chunk, &mut queue, chunk_base_x, chunk_base_z);
     }
 }
 

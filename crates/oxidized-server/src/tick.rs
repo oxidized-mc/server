@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_game::lighting::engine::LightEngine;
-use oxidized_game::net::light_serializer::build_light_data;
+use oxidized_game::net::light_serializer::build_light_data_filtered;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::constants::TICKS_PER_SECOND;
 use oxidized_protocol::packets::play::{
@@ -239,8 +239,12 @@ fn process_light_updates(ctx: &ServerContext) {
 
         match engine.process_updates(&mut chunk) {
             Ok(changed_sections) if !changed_sections.is_empty() => {
-                let light_data =
-                    build_light_data(chunk.sky_light_layers(), chunk.block_light_layers());
+                let light_data = build_light_data_filtered(
+                    chunk.sky_light_layers(),
+                    chunk.block_light_layers(),
+                    &changed_sections,
+                    chunk.min_y(),
+                );
                 drop(chunk); // Release write lock before broadcasting.
                 let pkt = ClientboundLightUpdatePacket {
                     chunk_x: chunk_pos.x,

@@ -72,7 +72,9 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) {
     }
 
     // Phase 2: Horizontal BFS for sky light bleeding into caves.
-    let _boundary = propagate_sky_light_increase(chunk, &mut bfs_seeds, 0, 0);
+    let chunk_base_x = chunk.pos.x * 16;
+    let chunk_base_z = chunk.pos.z * 16;
+    let _boundary = propagate_sky_light_increase(chunk, &mut bfs_seeds, chunk_base_x, chunk_base_z);
 }
 
 /// Returns the highest Y coordinate at which blocks exist in this column,
