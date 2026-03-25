@@ -162,6 +162,12 @@ pub struct RawPlayerNbt {
 
 /// Runtime state for a single connected player.
 ///
+/// **Network-side cache (phase 23b).** The source of truth for entity state
+/// is the ECS entity on the tick thread. `ServerPlayer` retains a subset
+/// of that state for packet handlers that need immediate access without
+/// crossing threads. Will be fully removed when packet handlers migrate
+/// to ECS queries.
+///
 /// # Examples
 ///
 /// ```
@@ -194,24 +200,38 @@ pub struct ServerPlayer {
     /// Full Mojang profile (UUID, name, skin textures).
     pub profile: GameProfile,
 
+    // -- ECS cross-reference --
+    /// The corresponding `bevy_ecs` entity on the tick thread.
+    ///
+    /// Set after the `SpawnPlayer` command is processed by the ECS.
+    /// `None` before the first tick drains the command.
+    // TODO(23b): migrate to ECS-only — ServerPlayer will be removed
+    pub ecs_entity: Option<bevy_ecs::entity::Entity>,
+
     // -- Position / rotation / movement flags --
     /// Movement state (position, rotation, on-ground, sneak, sprint, elytra).
+    // TODO(23b): migrate to ECS-only
     pub movement: PlayerMovement,
 
     // -- Game state --
     /// Current game mode.
+    // TODO(23b): migrate to ECS-only
     pub game_mode: GameMode,
     /// Previous game mode (for respawn packets). `None` = no previous.
     pub previous_game_mode: Option<GameMode>,
     /// Current abilities derived from game mode.
+    // TODO(23b): migrate to ECS-only
     pub abilities: PlayerAbilities,
     /// Player inventory (46 slots).
+    // TODO(23b): migrate to ECS-only
     pub inventory: PlayerInventory,
 
     // -- Grouped sub-structs --
     /// Health, food, score, absorption, and death tracking.
+    // TODO(23b): migrate to ECS-only
     pub combat: CombatStats,
     /// Experience levels, progress, and enchanting seed.
+    // TODO(23b): migrate to ECS-only
     pub experience: PlayerExperience,
     /// Current dimension and personal spawn point.
     pub spawn: SpawnInfo,
@@ -247,6 +267,7 @@ impl ServerPlayer {
             uuid,
             name,
             profile,
+            ecs_entity: None,
             movement: PlayerMovement {
                 pos: Vec3::ZERO,
                 yaw: 0.0,

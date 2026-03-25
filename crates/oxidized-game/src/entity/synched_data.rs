@@ -346,6 +346,57 @@ pub struct DirtyDataValue<'a> {
     pub value: &'a Box<dyn Any + Send + Sync>,
 }
 
+impl DirtyDataValue<'_> {
+    /// Encodes the value payload bytes for this data slot.
+    ///
+    /// Downcasts the type-erased value based on `serializer_type` and
+    /// produces the wire-format bytes (excluding slot and type prefix).
+    /// Returns an empty `Vec` for unsupported or unrecognized types.
+    pub fn encode_value(&self) -> Vec<u8> {
+        use bytes::{BufMut, BytesMut};
+        match self.serializer_type {
+            DataSerializerType::Byte => {
+                self.value.downcast_ref::<u8>().map(|v| vec![*v]).unwrap_or_default()
+            },
+            DataSerializerType::Int | DataSerializerType::Pose => {
+                if let Some(&v) = self.value.downcast_ref::<i32>() {
+                    let mut buf = BytesMut::with_capacity(5);
+                    oxidized_protocol::codec::varint::write_varint_buf(v, &mut buf);
+                    buf.to_vec()
+                } else {
+                    Vec::new()
+                }
+            },
+            DataSerializerType::Float => {
+                if let Some(&v) = self.value.downcast_ref::<f32>() {
+                    let mut buf = Vec::with_capacity(4);
+                    buf.put_f32(v);
+                    buf
+                } else {
+                    Vec::new()
+                }
+            },
+            DataSerializerType::Boolean => {
+                self.value
+                    .downcast_ref::<bool>()
+                    .map(|v| vec![u8::from(*v)])
+                    .unwrap_or_default()
+            },
+            DataSerializerType::OptionalComponent => {
+                // Optional<Component>: boolean false = absent
+                if self.value.downcast_ref::<Option<String>>() == Some(&None) {
+                    vec![0]
+                } else {
+                    Vec::new()
+                }
+            },
+            // Other types need full encoding infrastructure; return empty for now.
+            // Future phases add encoders as entity types need them.
+            _ => Vec::new(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]

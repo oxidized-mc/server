@@ -1,14 +1,39 @@
-//! Tick phase enum for entity system scheduling.
+//! Tick phase enum and schedule labels for entity system scheduling.
 //!
 //! Defines the strict phase order within each server tick as specified
 //! by [ADR-018 §System Scheduling]. Within each phase, `bevy_ecs`
 //! automatically parallelizes non-conflicting systems.
 //!
-//! **This is scaffolding only.** The phase enum is defined here for
-//! use in future system scheduling. Actual system registration happens
-//! in feature phases.
+//! Each [`TickPhase`] maps to a [`PhaseSchedule`] label via
+//! [`TickPhase::label()`], allowing registration of systems into
+//! the appropriate per-tick schedule.
 //!
 //! [ADR-018 §System Scheduling]: ../../../docs/adr/adr-018-entity-system.md
+
+use bevy_ecs::schedule::ScheduleLabel;
+use bevy_ecs::prelude::SystemSet;
+
+/// Schedule label newtype for [`TickPhase`].
+///
+/// `bevy_ecs` requires [`ScheduleLabel`] on schedule identifiers.
+/// We wrap `TickPhase` rather than deriving directly on it to keep
+/// the phase enum decoupled from bevy scheduling details.
+#[derive(ScheduleLabel, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PhaseSchedule(pub TickPhase);
+
+/// Ordering sets within the [`TickPhase::EntityBehavior`] phase.
+///
+/// Systems can use `.before(BehaviorOrder::Pickup)` etc. to declare
+/// ordering constraints within the behavior phase.
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BehaviorOrder {
+    /// Decrement pickup delays, despawn timers, etc.
+    Timers,
+    /// Merge nearby identical entities (e.g. item stacks).
+    Merge,
+    /// Pickup / collection logic.
+    Pickup,
+}
 
 /// Phases within a single server tick, in execution order.
 ///
@@ -58,6 +83,11 @@ impl TickPhase {
         TickPhase::PostTick,
         TickPhase::NetworkSync,
     ];
+
+    /// Returns the corresponding [`PhaseSchedule`] label for this phase.
+    pub fn label(self) -> PhaseSchedule {
+        PhaseSchedule(self)
+    }
 }
 
 #[cfg(test)]
@@ -121,5 +151,26 @@ mod tests {
             assert!(set.insert(phase), "duplicate phase: {phase:?}");
         }
         assert_eq!(set.len(), 7);
+    }
+
+    #[test]
+    fn test_phase_schedule_label() {
+        let label = TickPhase::Physics.label();
+        assert_eq!(label.0, TickPhase::Physics);
+    }
+
+    #[test]
+    fn test_all_phases_produce_distinct_labels() {
+        use std::collections::HashSet;
+        let labels: HashSet<_> = TickPhase::ALL.iter().map(|p| p.label()).collect();
+        assert_eq!(labels.len(), 7);
+    }
+
+    #[test]
+    fn test_behavior_order_is_system_set() {
+        // Verify the enum variants are distinct for use as system ordering constraints.
+        assert_ne!(BehaviorOrder::Timers, BehaviorOrder::Merge);
+        assert_ne!(BehaviorOrder::Merge, BehaviorOrder::Pickup);
+        assert_ne!(BehaviorOrder::Timers, BehaviorOrder::Pickup);
     }
 }

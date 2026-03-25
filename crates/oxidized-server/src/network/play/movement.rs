@@ -183,6 +183,21 @@ pub async fn handle_movement(
             }
         }
 
+        // Forward movement to the ECS world (ADR-020).
+        let _ = ctx.entity_cmd_tx.try_send(
+            oxidized_game::entity::commands::EntityCommand::PlayerMoved {
+                uuid: ctx.player_uuid,
+                position: glam::DVec3::new(
+                    result.new_pos.x,
+                    result.new_pos.y,
+                    result.new_pos.z,
+                ),
+                yaw: result.new_yaw,
+                pitch: result.new_pitch,
+                on_ground: move_pkt.is_on_ground,
+            },
+        );
+
         trace!(
             peer = %ctx.addr,
             name = %ctx.player_name,

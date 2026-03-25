@@ -4,14 +4,18 @@
 //! individual `bevy_ecs` components per [ADR-018]. Each field in vanilla's
 //! `Entity`, `LivingEntity`, and `Player` classes maps to a named component.
 //!
-//! **This is scaffolding only.** The monolithic [`super::Entity`] struct
-//! remains in use. These types will be adopted incrementally during
-//! feature phases (P15/P24/P25/P27).
-//!
 //! [ADR-018]: ../../../docs/adr/adr-018-entity-system.md
 
 use bevy_ecs::prelude::*;
 use glam::DVec3;
+use uuid::Uuid;
+
+use crate::entity::synched_data::SynchedEntityData;
+use crate::player::GameMode;
+use oxidized_protocol::auth::GameProfile;
+use oxidized_protocol::types::BlockPos;
+use oxidized_protocol::types::aabb::Aabb;
+use oxidized_protocol::types::resource_location::ResourceLocation;
 
 // ---------------------------------------------------------------------------
 // Entity base (vanilla Entity.java fields)
@@ -64,6 +68,32 @@ pub struct FallDistance(pub f32);
 /// - 7: fall flying (elytra)
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EntityFlags(pub u8);
+
+impl EntityFlags {
+    /// Returns `true` if the given flag bit is set.
+    ///
+    /// # Panics
+    ///
+    /// Debug-asserts that `bit < 8`.
+    pub fn get(self, bit: u8) -> bool {
+        debug_assert!(bit < 8, "flag bit index {bit} out of range 0..8");
+        self.0 & (1 << bit) != 0
+    }
+
+    /// Sets or clears the given flag bit.
+    ///
+    /// # Panics
+    ///
+    /// Debug-asserts that `bit < 8`.
+    pub fn set(&mut self, bit: u8, value: bool) {
+        debug_assert!(bit < 8, "flag bit index {bit} out of range 0..8");
+        if value {
+            self.0 |= 1 << bit;
+        } else {
+            self.0 &= !(1 << bit);
+        }
+    }
+}
 
 /// Marker: entity is unaffected by gravity.
 ///
@@ -149,6 +179,111 @@ pub struct ExperienceData {
     /// Total lifetime experience points.
     pub total: i32,
 }
+
+// ---------------------------------------------------------------------------
+// Entity identity (from Entity / ServerPlayer)
+// ---------------------------------------------------------------------------
+
+/// Network entity ID (unique per session, never recycled).
+///
+/// All entities get this — used in every network packet that references
+/// an entity by ID.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NetworkId(pub i32);
+
+/// Entity UUID (persistent across sessions for players).
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct EntityUuid(pub Uuid);
+
+/// Entity type (e.g., `minecraft:player`, `minecraft:zombie`).
+#[derive(Component, Debug, Clone, PartialEq, Eq)]
+pub struct EntityTypeName(pub ResourceLocation);
+
+/// Player's authenticated game profile (name + UUID + properties).
+#[derive(Component, Debug, Clone)]
+pub struct Profile(pub GameProfile);
+
+// ---------------------------------------------------------------------------
+// Player game state (from ServerPlayer sub-structs)
+// ---------------------------------------------------------------------------
+
+/// Player's game mode (survival, creative, adventure, spectator).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GameModeComponent {
+    /// Current active game mode.
+    pub current: GameMode,
+    /// Previous game mode (for F3+N toggle).
+    pub previous: Option<GameMode>,
+}
+
+/// Player abilities derived from game mode.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct Abilities(pub crate::player::abilities::PlayerAbilities);
+
+/// Player inventory (46 protocol slots).
+#[derive(Component, Debug, Clone)]
+pub struct Inventory(pub crate::player::inventory::PlayerInventory);
+
+/// Combat stats: food, saturation, score, last death location.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct CombatData {
+    /// Food level (0–20).
+    pub food_level: i32,
+    /// Saturation (hidden hunger buffer).
+    pub food_saturation: f32,
+    /// Player score (displayed on death screen).
+    pub score: i32,
+    /// Last death location (dimension, packed block pos).
+    pub last_death_location: Option<(ResourceLocation, i64)>,
+}
+
+/// Player spawn point and current dimension.
+#[derive(Component, Debug, Clone, PartialEq)]
+pub struct SpawnData {
+    /// Dimension the player is in.
+    pub dimension: ResourceLocation,
+    /// Spawn point block position.
+    pub spawn_pos: BlockPos,
+    /// Spawn point yaw angle.
+    pub spawn_angle: f32,
+}
+
+/// Skin model customisation byte (visible parts bitmask).
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelCustomisation(pub u8);
+
+// ---------------------------------------------------------------------------
+// Entity physics (replacing Entity struct fields)
+// ---------------------------------------------------------------------------
+
+/// Axis-aligned bounding box for collision.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct BoundingBox(pub Aabb);
+
+/// Entity hitbox width and height.
+#[derive(Component, Debug, Clone, Copy, PartialEq)]
+pub struct Dimensions {
+    /// Width of the hitbox (meters).
+    pub width: f32,
+    /// Height of the hitbox (meters).
+    pub height: f32,
+}
+
+/// Dirty-tracked entity data slots for network sync.
+#[derive(Component)]
+pub struct SynchedData(pub SynchedEntityData);
+
+impl std::fmt::Debug for SynchedData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("SynchedData")
+            .field(&format_args!("({} slots)", self.0.len()))
+            .finish()
+    }
+}
+
+/// Marker indicating the entity has been scheduled for removal.
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Removed;
 
 #[cfg(test)]
 mod tests {
@@ -241,6 +376,69 @@ mod tests {
         let mut world = World::new();
         let entity = world.spawn(NoGravity).id();
         assert!(world.get::<NoGravity>(entity).is_some());
+    }
+
+    #[test]
+    fn test_network_id_insert_and_query() {
+        let mut world = World::new();
+        let entity = world.spawn(NetworkId(42)).id();
+        assert_eq!(world.get::<NetworkId>(entity).unwrap().0, 42);
+    }
+
+    #[test]
+    fn test_entity_uuid_insert_and_query() {
+        let mut world = World::new();
+        let id = Uuid::new_v4();
+        let entity = world.spawn(EntityUuid(id)).id();
+        assert_eq!(world.get::<EntityUuid>(entity).unwrap().0, id);
+    }
+
+    #[test]
+    fn test_game_mode_component() {
+        let gm = GameModeComponent {
+            current: GameMode::Survival,
+            previous: Some(GameMode::Creative),
+        };
+        assert_eq!(gm.current, GameMode::Survival);
+        assert_eq!(gm.previous, Some(GameMode::Creative));
+    }
+
+    #[test]
+    fn test_combat_data_defaults() {
+        let cd = CombatData {
+            food_level: 20,
+            food_saturation: 5.0,
+            score: 0,
+            last_death_location: None,
+        };
+        assert_eq!(cd.food_level, 20);
+        assert!(cd.last_death_location.is_none());
+    }
+
+    #[test]
+    fn test_bounding_box_component() {
+        use oxidized_protocol::types::aabb::Aabb;
+        let bbox = BoundingBox(Aabb::from_center(0.0, 0.0, 0.0, 0.6, 1.8));
+        let mut world = World::new();
+        let entity = world.spawn(bbox).id();
+        assert!(world.get::<BoundingBox>(entity).is_some());
+    }
+
+    #[test]
+    fn test_dimensions_component() {
+        let dims = Dimensions {
+            width: 0.6,
+            height: 1.8,
+        };
+        assert!((dims.width - 0.6).abs() < 1e-6);
+        assert!((dims.height - 1.8).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_removed_marker() {
+        let mut world = World::new();
+        let entity = world.spawn(Removed).id();
+        assert!(world.get::<Removed>(entity).is_some());
     }
 
     #[test]

@@ -23,6 +23,8 @@ oxidized-nbt      = { workspace = true }
 oxidized-world    = { workspace = true }
 oxidized-game     = { workspace = true }
 
+bevy_ecs          = { workspace = true }
+glam              = { workspace = true }
 tokio             = { workspace = true }
 bytes             = { workspace = true }
 parking_lot       = { workspace = true }

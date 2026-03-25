@@ -3,7 +3,7 @@
 //! Implements jump impulse application matching
 //! `LivingEntity.jumpFromGround()` from vanilla.
 
-use crate::entity::Entity;
+use crate::entity::components::Velocity;
 
 use super::constants::*;
 
@@ -13,30 +13,35 @@ use super::constants::*;
 /// by `jump_boost_level` (0 = no effect, 1 = Jump Boost I, etc.) and
 /// `jump_factor` (from block below, e.g. 0.5 for honey blocks).
 ///
-/// If the entity is sprinting, also applies a horizontal boost of 0.2
-/// in the entity's facing direction.
+/// If `is_sprinting` is true, also applies a horizontal boost of 0.2
+/// in the entity's facing direction (based on `yaw`).
 ///
 /// # Examples
 ///
 /// ```
-/// use oxidized_game::entity::Entity;
+/// use oxidized_game::entity::components::Velocity;
 /// use oxidized_game::physics::jump::apply_jump;
-/// use oxidized_protocol::types::resource_location::ResourceLocation;
+/// use glam::DVec3;
 ///
-/// let mut entity = Entity::new(ResourceLocation::minecraft("player"), 0.6, 1.8);
-/// entity.is_on_ground = true;
-/// apply_jump(&mut entity, 0, 1.0);
-/// assert!((entity.velocity.y - 0.42).abs() < 0.001);
+/// let mut vel = Velocity(DVec3::ZERO);
+/// apply_jump(&mut vel, 0.0, false, 0, 1.0);
+/// assert!((vel.0.y - 0.42).abs() < 0.001);
 /// ```
-pub fn apply_jump(entity: &mut Entity, jump_boost_level: u8, jump_factor: f64) {
+pub fn apply_jump(
+    vel: &mut Velocity,
+    yaw: f32,
+    is_sprinting: bool,
+    jump_boost_level: u8,
+    jump_factor: f64,
+) {
     let base = JUMP_POWER * jump_factor + f64::from(jump_boost_level) * JUMP_BOOST_PER_LEVEL;
-    entity.velocity.y = base;
+    vel.0.y = base;
 
-    if entity.is_sprinting() {
-        // Sprint-is_jumping: horizontal boost in facing direction.
-        let yaw_rad = f64::from(entity.rotation.yaw).to_radians();
-        entity.velocity.x -= yaw_rad.sin() * SPRINT_JUMP_BOOST;
-        entity.velocity.z += yaw_rad.cos() * SPRINT_JUMP_BOOST;
+    if is_sprinting {
+        // Sprint-jumping: horizontal boost in facing direction.
+        let yaw_rad = f64::from(yaw).to_radians();
+        vel.0.x -= yaw_rad.sin() * SPRINT_JUMP_BOOST;
+        vel.0.z += yaw_rad.cos() * SPRINT_JUMP_BOOST;
     }
 }
 
@@ -45,94 +50,77 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
-    use crate::entity::data_slots::FLAG_SPRINTING;
-    use oxidized_protocol::types::resource_location::ResourceLocation;
-
-    fn make_entity_on_ground() -> Entity {
-        let mut e = Entity::new(ResourceLocation::minecraft("pig"), 0.6, 1.8);
-        e.set_pos(0.5, 1.0, 0.5);
-        e.is_on_ground = true;
-        e
-    }
+    use glam::DVec3;
 
     #[test]
     fn test_jump_no_boost() {
-        let mut entity = make_entity_on_ground();
-        apply_jump(&mut entity, 0, 1.0);
+        let mut vel = Velocity(DVec3::ZERO);
+        apply_jump(&mut vel, 0.0, false, 0, 1.0);
         assert!(
-            (entity.velocity.y - JUMP_POWER).abs() < 0.0001,
+            (vel.0.y - JUMP_POWER).abs() < 0.0001,
             "Jump vy {} ≠ {}",
-            entity.velocity.y,
+            vel.0.y,
             JUMP_POWER
         );
     }
 
     #[test]
     fn test_jump_with_boost_ii() {
-        let mut entity = make_entity_on_ground();
-        apply_jump(&mut entity, 2, 1.0);
+        let mut vel = Velocity(DVec3::ZERO);
+        apply_jump(&mut vel, 0.0, false, 2, 1.0);
         let expected = JUMP_POWER + 2.0 * JUMP_BOOST_PER_LEVEL;
         assert!(
-            (entity.velocity.y - expected).abs() < 0.0001,
+            (vel.0.y - expected).abs() < 0.0001,
             "Jump Boost II vy {} ≠ {}",
-            entity.velocity.y,
+            vel.0.y,
             expected
         );
     }
 
     #[test]
     fn test_jump_honey_block_factor() {
-        let mut entity = make_entity_on_ground();
+        let mut vel = Velocity(DVec3::ZERO);
         // Honey block jump factor is 0.5 (from block registry).
-        apply_jump(&mut entity, 0, 0.5);
+        apply_jump(&mut vel, 0.0, false, 0, 0.5);
         let expected = JUMP_POWER * 0.5;
         assert!(
-            (entity.velocity.y - expected).abs() < 0.0001,
+            (vel.0.y - expected).abs() < 0.0001,
             "Honey jump vy {} ≠ {}",
-            entity.velocity.y,
+            vel.0.y,
             expected
         );
     }
 
     #[test]
     fn test_sprint_jump_adds_horizontal_boost() {
-        let mut entity = make_entity_on_ground();
-        entity.set_flag(FLAG_SPRINTING, true);
-        entity.rotation.yaw = 0.0; // facing +Z
-        entity.velocity.x = 0.0;
-        entity.velocity.z = 0.0;
-
-        apply_jump(&mut entity, 0, 1.0);
+        let mut vel = Velocity(DVec3::ZERO);
+        apply_jump(&mut vel, 0.0, true, 0, 1.0);
 
         // Facing 0° (yaw=0): sin(0)=0, cos(0)=1
         // vx -= 0 * 0.2 = 0, vz += 1 * 0.2 = 0.2
         assert!(
-            entity.velocity.x.abs() < 0.001,
+            vel.0.x.abs() < 0.001,
             "vx should be ~0 at yaw=0: {}",
-            entity.velocity.x
+            vel.0.x
         );
         assert!(
-            (entity.velocity.z - SPRINT_JUMP_BOOST).abs() < 0.001,
+            (vel.0.z - SPRINT_JUMP_BOOST).abs() < 0.001,
             "vz should be ~0.2 at yaw=0: {}",
-            entity.velocity.z
+            vel.0.z
         );
     }
 
     #[test]
     fn test_no_sprint_boost_when_not_sprinting() {
-        let mut entity = make_entity_on_ground();
-        entity.rotation.yaw = 90.0;
-        entity.velocity.x = 0.0;
-        entity.velocity.z = 0.0;
-
-        apply_jump(&mut entity, 0, 1.0);
+        let mut vel = Velocity(DVec3::ZERO);
+        apply_jump(&mut vel, 90.0, false, 0, 1.0);
 
         assert!(
-            entity.velocity.x.abs() < 0.0001,
+            vel.0.x.abs() < 0.0001,
             "No horizontal boost without sprint"
         );
         assert!(
-            entity.velocity.z.abs() < 0.0001,
+            vel.0.z.abs() < 0.0001,
             "No horizontal boost without sprint"
         );
     }

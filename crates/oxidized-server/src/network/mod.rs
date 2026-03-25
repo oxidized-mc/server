@@ -60,6 +60,8 @@ pub struct LoginContext {
     pub http_client: reqwest::Client,
     /// Shared game server state for PLAY-state operations.
     pub server_ctx: Arc<ServerContext>,
+    /// Sender for entity commands to the tick thread's ECS world (ADR-020).
+    pub entity_cmd_tx: oxidized_game::entity::commands::EntityCommandSender,
 }
 
 // ---------------------------------------------------------------------------
@@ -1018,6 +1020,7 @@ mod tests {
             compression_threshold: -1,
             is_preventing_proxy_connections: false,
             http_client: reqwest::Client::new(),
+            entity_cmd_tx: oxidized_game::entity::commands::entity_command_channel(64).0,
             server_ctx: Arc::new(ServerContext {
                 world: WorldContext {
                     level_data: RwLock::new(

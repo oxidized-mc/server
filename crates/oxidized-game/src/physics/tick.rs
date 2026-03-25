@@ -14,7 +14,8 @@
 //! 7. Apply horizontal and vertical drag
 //! 8. Track fall distance
 
-use crate::entity::Entity;
+use crate::entity::EntityDimensions;
+use crate::entity::components::{BoundingBox, FallDistance, OnGround, Position, Velocity};
 use crate::level::traits::BlockGetter;
 
 use super::collision::{collect_obstacles, collide_with_shapes};
@@ -22,6 +23,7 @@ use super::constants::*;
 use super::voxel_shape::BlockShapeProvider;
 
 use oxidized_protocol::types::BlockPos;
+use oxidized_protocol::types::aabb::Aabb;
 use oxidized_world::registry::BlockStateId;
 
 /// Applies one tick of physics to an entity.
@@ -36,32 +38,37 @@ use oxidized_world::registry::BlockStateId;
 /// This function does **not** handle player input, step-up, or
 /// knockback — those are applied externally before calling this.
 pub fn physics_tick(
-    entity: &mut Entity,
+    pos: &mut Position,
+    vel: &mut Velocity,
+    bbox: &mut BoundingBox,
+    on_ground: &mut OnGround,
+    fall_distance: &mut FallDistance,
+    dims: &EntityDimensions,
     level: &impl BlockGetter,
     shape_provider: &impl BlockShapeProvider,
     in_water: bool,
     in_lava: bool,
 ) {
     // 1. Determine block friction (from block below entity feet).
-    let block_friction = get_block_friction(level, entity);
+    let block_friction = get_block_friction(level, pos.0.x, bbox.0.min_y, pos.0.z, on_ground.0);
 
     // 2. Apply gravity (or fluid modifiers).
     if in_water {
-        entity.velocity.y += WATER_BUOYANCY;
+        vel.0.y += WATER_BUOYANCY;
     } else if in_lava {
-        entity.velocity.y += LAVA_BUOYANCY;
+        vel.0.y += LAVA_BUOYANCY;
     } else {
-        entity.velocity.y -= GRAVITY;
+        vel.0.y -= GRAVITY;
     }
 
     // Apply block speed factor (e.g., soul sand, honey) BEFORE collision.
-    let speed_factor = get_block_speed_factor(level, entity);
-    entity.velocity.x *= speed_factor;
-    entity.velocity.z *= speed_factor;
+    let speed_factor = get_block_speed_factor(level, pos.0.x, bbox.0.min_y, pos.0.z);
+    vel.0.x *= speed_factor;
+    vel.0.z *= speed_factor;
 
-    let mut dx = entity.velocity.x;
-    let dy = entity.velocity.y;
-    let mut dz = entity.velocity.z;
+    let mut dx = vel.0.x;
+    let dy = vel.0.y;
+    let mut dz = vel.0.z;
 
     // Apply fluid drag to the movement delta.
     if in_water {
@@ -73,55 +80,62 @@ pub fn physics_tick(
     }
 
     // 3. Swept AABB collision with movement-dependent axis ordering.
-    let bbox = entity.bounding_box;
-    let obstacles = collect_obstacles(level, &bbox, dx, dy, dz, shape_provider);
-    let (actual_dx, actual_dy, actual_dz) = collide_with_shapes(&bbox, dx, dy, dz, &obstacles);
+    let obstacles = collect_obstacles(level, &bbox.0, dx, dy, dz, shape_provider);
+    let (actual_dx, actual_dy, actual_dz) = collide_with_shapes(&bbox.0, dx, dy, dz, &obstacles);
 
     // 4. Apply resolved movement.
-    entity.set_pos(
-        entity.pos.x + actual_dx,
-        entity.pos.y + actual_dy,
-        entity.pos.z + actual_dz,
+    let new_x = pos.0.x + actual_dx;
+    let new_y = pos.0.y + actual_dy;
+    let new_z = pos.0.z + actual_dz;
+    pos.0.x = new_x;
+    pos.0.y = new_y;
+    pos.0.z = new_z;
+    bbox.0 = Aabb::from_center(
+        new_x,
+        new_y,
+        new_z,
+        f64::from(dims.width),
+        f64::from(dims.height),
     );
 
     // 5. Detect on_ground: downward movement was reduced by collision.
-    entity.is_on_ground = dy < 0.0 && (actual_dy - dy).abs() > COLLISION_EPSILON;
+    on_ground.0 = dy < 0.0 && (actual_dy - dy).abs() > COLLISION_EPSILON;
 
     // 6. Zero velocity on collision axes, with slime bounce for Y.
     if (actual_dx - dx).abs() > COLLISION_EPSILON {
-        entity.velocity.x = 0.0;
+        vel.0.x = 0.0;
     }
     if (actual_dy - dy).abs() > COLLISION_EPSILON {
         // Check for slime bounce: if landing on a slime block, negate Y velocity.
-        if entity.is_on_ground && is_on_slime(level, entity) {
-            entity.velocity.y = -entity.velocity.y;
+        if on_ground.0 && is_on_slime(level, pos.0.x, bbox.0.min_y, pos.0.z) {
+            vel.0.y = -vel.0.y;
         } else {
-            entity.velocity.y = 0.0;
+            vel.0.y = 0.0;
         }
     }
     if (actual_dz - dz).abs() > COLLISION_EPSILON {
-        entity.velocity.z = 0.0;
+        vel.0.z = 0.0;
     }
 
     // 7. Apply drag.
-    let h_drag = if entity.is_on_ground {
+    let h_drag = if on_ground.0 {
         block_friction * HORIZONTAL_DRAG
     } else {
         HORIZONTAL_DRAG
     };
 
-    entity.velocity.x *= h_drag;
-    entity.velocity.y *= VERTICAL_DRAG;
-    entity.velocity.z *= h_drag;
+    vel.0.x *= h_drag;
+    vel.0.y *= VERTICAL_DRAG;
+    vel.0.z *= h_drag;
 
     // 8. Fall distance tracking.
-    if !entity.is_on_ground && actual_dy < 0.0 {
+    if !on_ground.0 && actual_dy < 0.0 {
         // Accumulate downward distance (actual_dy is negative, so negate).
-        entity.fall_distance -= actual_dy as f32;
-    } else if entity.is_on_ground {
+        fall_distance.0 -= actual_dy as f32;
+    } else if on_ground.0 {
         // Reset on landing (damage would be calculated before this reset
         // in a full implementation).
-        entity.fall_distance = 0.0;
+        fall_distance.0 = 0.0;
     }
 }
 
@@ -129,15 +143,21 @@ pub fn physics_tick(
 ///
 /// Reads directly from the block registry via [`BlockStateId`].
 /// Returns 1.0 when not on ground (no block friction applies in air).
-fn get_block_friction(level: &impl BlockGetter, entity: &Entity) -> f64 {
-    if !entity.is_on_ground {
+fn get_block_friction(
+    level: &impl BlockGetter,
+    pos_x: f64,
+    bbox_min_y: f64,
+    pos_z: f64,
+    is_on_ground: bool,
+) -> f64 {
+    if !is_on_ground {
         return 1.0;
     }
 
     let below = BlockPos::new(
-        entity.pos.x.floor() as i32,
-        (entity.bounding_box.min_y - 0.5000001).floor() as i32,
-        entity.pos.z.floor() as i32,
+        pos_x.floor() as i32,
+        (bbox_min_y - 0.5000001).floor() as i32,
+        pos_z.floor() as i32,
     );
 
     match level.get_block_state(below) {
@@ -147,11 +167,11 @@ fn get_block_friction(level: &impl BlockGetter, entity: &Entity) -> f64 {
 }
 
 /// Returns `true` if the block below the entity's feet is a slime block.
-fn is_on_slime(level: &impl BlockGetter, entity: &Entity) -> bool {
+fn is_on_slime(level: &impl BlockGetter, pos_x: f64, bbox_min_y: f64, pos_z: f64) -> bool {
     let below = BlockPos::new(
-        entity.pos.x.floor() as i32,
-        (entity.bounding_box.min_y - 0.5000001).floor() as i32,
-        entity.pos.z.floor() as i32,
+        pos_x.floor() as i32,
+        (bbox_min_y - 0.5000001).floor() as i32,
+        pos_z.floor() as i32,
     );
 
     match level.get_block_state(below) {
@@ -165,11 +185,16 @@ fn is_on_slime(level: &impl BlockGetter, entity: &Entity) -> bool {
 /// Reads directly from the block registry via [`BlockStateId`].
 /// Returns 1.0 for normal blocks and < 1.0 for slow blocks (e.g.,
 /// soul sand at 0.4, honey at 0.4, powder snow at 0.9).
-fn get_block_speed_factor(level: &impl BlockGetter, entity: &Entity) -> f64 {
+fn get_block_speed_factor(
+    level: &impl BlockGetter,
+    pos_x: f64,
+    bbox_min_y: f64,
+    pos_z: f64,
+) -> f64 {
     let below = BlockPos::new(
-        entity.pos.x.floor() as i32,
-        (entity.bounding_box.min_y - 0.5000001).floor() as i32,
-        entity.pos.z.floor() as i32,
+        pos_x.floor() as i32,
+        (bbox_min_y - 0.5000001).floor() as i32,
+        pos_z.floor() as i32,
     );
 
     match level.get_block_state(below) {
@@ -191,9 +216,10 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used)]
 
     use super::*;
+    use crate::entity::EntityDimensions;
     use crate::level::error::LevelError;
     use crate::physics::voxel_shape::FullCubeShapeProvider;
-    use oxidized_protocol::types::resource_location::ResourceLocation;
+    use glam::DVec3;
     use oxidized_world::registry::BlockRegistry;
 
     /// A level with no blocks (everything is air / unloaded).
@@ -249,79 +275,105 @@ mod tests {
         }
     }
 
-    fn make_floating_entity() -> Entity {
-        let mut e = Entity::new(ResourceLocation::minecraft("pig"), 0.6, 1.8);
-        e.set_pos(8.0, 100.0, 8.0);
-        e
+    /// Physics state for a pig-sized entity (0.6 × 1.8).
+    const PIG_DIMS: EntityDimensions = EntityDimensions {
+        width: 0.6,
+        height: 1.8,
+    };
+
+    fn make_floating_state() -> (Position, Velocity, BoundingBox, OnGround, FallDistance) {
+        let p = DVec3::new(8.0, 100.0, 8.0);
+        (
+            Position(p),
+            Velocity(DVec3::ZERO),
+            BoundingBox(Aabb::from_center(p.x, p.y, p.z, 0.6, 1.8)),
+            OnGround(false),
+            FallDistance(0.0),
+        )
     }
 
-    fn make_entity_above_floor(height: f64) -> Entity {
-        let mut e = Entity::new(ResourceLocation::minecraft("pig"), 0.6, 1.8);
+    fn make_above_floor_state(
+        height: f64,
+    ) -> (Position, Velocity, BoundingBox, OnGround, FallDistance) {
         // Floor is at y=0..1 (full cube). Entity feet at y = 1.0 + height.
-        e.set_pos(0.5, 1.0 + height, 0.5);
-        e
+        let p = DVec3::new(0.5, 1.0 + height, 0.5);
+        (
+            Position(p),
+            Velocity(DVec3::ZERO),
+            BoundingBox(Aabb::from_center(p.x, p.y, p.z, 0.6, 1.8)),
+            OnGround(false),
+            FallDistance(0.0),
+        )
     }
 
     #[test]
     fn test_gravity_acceleration() {
         let shapes = FullCubeShapeProvider::new();
-        let mut entity = make_floating_entity();
-        entity.velocity.y = 0.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_floating_state();
 
         // Tick 1: gravity: vy = 0 - 0.08 = -0.08
         // After drag: vy = -0.08 * 0.98 = -0.0784
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
+            false, false,
+        );
         assert!(
-            (entity.velocity.y - (-0.0784)).abs() < 0.0001,
+            (vel.0.y - (-0.0784)).abs() < 0.0001,
             "After tick 1: vy = {} (expected ≈ -0.0784)",
-            entity.velocity.y
+            vel.0.y
         );
 
         // Tick 2: gravity: vy = -0.0784 - 0.08 = -0.1584
         // After drag: vy ≈ -0.1584 * 0.98 ≈ -0.155232
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
+            false, false,
+        );
         assert!(
-            entity.velocity.y < -0.15,
+            vel.0.y < -0.15,
             "After tick 2: vy = {} (should be < -0.15)",
-            entity.velocity.y
+            vel.0.y
         );
     }
 
     #[test]
     fn test_collision_stops_downward_movement() {
         let shapes = FullCubeShapeProvider::new();
-        let mut entity = make_entity_above_floor(0.5);
-        entity.velocity.y = -5.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_above_floor_state(0.5);
+        vel.0.y = -5.0;
 
-        physics_tick(&mut entity, &FloorLevel, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &FloorLevel, &shapes,
+            false, false,
+        );
 
-        assert!(entity.is_on_ground, "Entity should be on ground");
+        assert!(og.0, "Entity should be on ground");
         assert!(
-            entity.velocity.y.abs() < 0.001,
+            vel.0.y.abs() < 0.001,
             "vy should be zeroed: {}",
-            entity.velocity.y
+            vel.0.y
         );
         assert!(
-            entity.pos.y >= 1.0 - 0.001,
+            pos.0.y >= 1.0 - 0.001,
             "Entity should not pass through floor: y={}",
-            entity.pos.y
+            pos.0.y
         );
     }
 
     #[test]
     fn test_water_buoyancy() {
         let shapes = FullCubeShapeProvider::new();
-        let mut entity = make_floating_entity();
-        entity.velocity.y = 0.0;
-        entity.velocity.x = 1.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_floating_state();
+        vel.0.x = 1.0;
 
-        physics_tick(&mut entity, &EmptyLevel, &shapes, true, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
+            true, false,
+        );
 
-        // In water: buoyancy pushes up, no gravity.
-        assert!(entity.velocity.y > 0.0, "Water buoyancy should push upward");
-        // Horizontal drag: vx should be reduced.
+        assert!(vel.0.y > 0.0, "Water buoyancy should push upward");
         assert!(
-            entity.velocity.x < 1.0,
+            vel.0.x < 1.0,
             "Water should reduce horizontal velocity"
         );
     }
@@ -329,19 +381,24 @@ mod tests {
     #[test]
     fn test_fall_distance_accumulates() {
         let shapes = FullCubeShapeProvider::new();
-        let mut entity = make_floating_entity();
-        entity.velocity.y = 0.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_floating_state();
 
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
+            false, false,
+        );
         assert!(
-            entity.fall_distance > 0.0,
+            fd.0 > 0.0,
             "Fall distance should increase while falling"
         );
 
-        let fd1 = entity.fall_distance;
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, false);
+        let fd1 = fd.0;
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
+            false, false,
+        );
         assert!(
-            entity.fall_distance > fd1,
+            fd.0 > fd1,
             "Fall distance should keep increasing"
         );
     }
@@ -349,17 +406,20 @@ mod tests {
     #[test]
     fn test_fall_distance_resets_on_landing() {
         let shapes = FullCubeShapeProvider::new();
-        let mut entity = make_entity_above_floor(0.5);
-        entity.velocity.y = -1.0;
-        entity.fall_distance = 5.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_above_floor_state(0.5);
+        vel.0.y = -1.0;
+        fd.0 = 5.0;
 
-        physics_tick(&mut entity, &FloorLevel, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &FloorLevel, &shapes,
+            false, false,
+        );
 
-        assert!(entity.is_on_ground, "Entity should land");
+        assert!(og.0, "Entity should land");
         assert!(
-            (entity.fall_distance).abs() < 0.001,
+            fd.0.abs() < 0.001,
             "Fall distance should reset on landing: {}",
-            entity.fall_distance
+            fd.0
         );
     }
 
@@ -382,37 +442,37 @@ mod tests {
     #[test]
     fn test_entity_at_rest_on_ground() {
         let shapes = FullCubeShapeProvider::new();
-        let mut entity = make_entity_above_floor(0.0);
-        entity.is_on_ground = true;
-        entity.velocity.x = 0.0;
-        entity.velocity.y = 0.0;
-        entity.velocity.z = 0.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_above_floor_state(0.0);
+        og.0 = true;
 
-        let y_before = entity.pos.y;
-        physics_tick(&mut entity, &FloorLevel, &shapes, false, false);
+        let y_before = pos.0.y;
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &FloorLevel, &shapes,
+            false, false,
+        );
 
-        // Entity should stay on ground (gravity pulls down, floor stops it).
-        assert!(entity.is_on_ground, "Entity should remain on ground");
+        assert!(og.0, "Entity should remain on ground");
         assert!(
-            (entity.pos.y - y_before).abs() < 0.01,
+            (pos.0.y - y_before).abs() < 0.01,
             "Entity should stay near same Y: before={y_before}, after={}",
-            entity.pos.y
+            pos.0.y
         );
     }
 
     #[test]
     fn test_lava_buoyancy() {
         let shapes = FullCubeShapeProvider::new();
-        let mut entity = make_floating_entity();
-        entity.velocity.y = 0.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_floating_state();
 
-        physics_tick(&mut entity, &EmptyLevel, &shapes, false, true);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
+            false, true,
+        );
 
-        // Lava buoyancy is less than water.
         assert!(
-            entity.velocity.y > 0.0,
+            vel.0.y > 0.0,
             "Lava buoyancy should push upward: vy={}",
-            entity.velocity.y
+            vel.0.y
         );
     }
 
@@ -424,18 +484,23 @@ mod tests {
             state_id: 1, // stone
         };
 
-        // Entity above the single block, falling.
-        let mut entity = Entity::new(ResourceLocation::minecraft("pig"), 0.6, 1.8);
-        entity.set_pos(0.5, 1.5, 0.5);
-        entity.velocity.y = -5.0;
+        let p = DVec3::new(0.5, 1.5, 0.5);
+        let mut pos = Position(p);
+        let mut vel = Velocity(DVec3::new(0.0, -5.0, 0.0));
+        let mut bbox = BoundingBox(Aabb::from_center(p.x, p.y, p.z, 0.6, 1.8));
+        let mut og = OnGround(false);
+        let mut fd = FallDistance(0.0);
 
-        physics_tick(&mut entity, &level, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &level, &shapes, false,
+            false,
+        );
 
-        assert!(entity.is_on_ground, "Entity should land on single block");
+        assert!(og.0, "Entity should land on single block");
         assert!(
-            entity.pos.y >= 1.0 - 0.001,
+            pos.0.y >= 1.0 - 0.001,
             "Entity should not pass through block: y={}",
-            entity.pos.y
+            pos.0.y
         );
     }
 
@@ -448,32 +513,34 @@ mod tests {
             floor_state_id: ice_id,
         };
 
-        let mut entity = make_entity_above_floor(0.0);
-        entity.is_on_ground = true;
-        entity.velocity.x = 1.0;
-        entity.velocity.y = 0.0;
-        entity.velocity.z = 0.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_above_floor_state(0.0);
+        og.0 = true;
+        vel.0.x = 1.0;
 
-        physics_tick(&mut entity, &ice_level, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &ice_level, &shapes,
+            false, false,
+        );
 
         // On ice: drag = 0.98 * 0.91 = 0.8918
         // On normal: drag = 0.6 * 0.91 = 0.546
         // Ice should preserve more velocity.
-        let ice_vx = entity.velocity.x;
+        let ice_vx = vel.0.x;
         assert!(
             ice_vx > 0.8,
             "Ice should preserve high velocity: vx={ice_vx}"
         );
 
         // Compare with stone floor.
-        let mut entity2 = make_entity_above_floor(0.0);
-        entity2.is_on_ground = true;
-        entity2.velocity.x = 1.0;
-        entity2.velocity.y = 0.0;
-        entity2.velocity.z = 0.0;
+        let (mut pos2, mut vel2, mut bbox2, mut og2, mut fd2) = make_above_floor_state(0.0);
+        og2.0 = true;
+        vel2.0.x = 1.0;
 
-        physics_tick(&mut entity2, &FloorLevel, &shapes, false, false);
-        let stone_vx = entity2.velocity.x;
+        physics_tick(
+            &mut pos2, &mut vel2, &mut bbox2, &mut og2, &mut fd2, &PIG_DIMS, &FloorLevel, &shapes,
+            false, false,
+        );
+        let stone_vx = vel2.0.x;
 
         assert!(
             ice_vx > stone_vx,
@@ -490,19 +557,19 @@ mod tests {
             floor_state_id: slime_id,
         };
 
-        let mut entity = make_entity_above_floor(0.5);
-        entity.velocity.y = -1.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_above_floor_state(0.5);
+        vel.0.y = -1.0;
 
-        physics_tick(&mut entity, &slime_level, &shapes, false, false);
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &slime_level, &shapes,
+            false, false,
+        );
 
-        // Entity should bounce: vy negated then drag applied.
-        // Pre-bounce vy was some negative value after gravity.
-        // After negate, it should be positive. After * VERTICAL_DRAG, still positive.
-        assert!(entity.is_on_ground, "Entity should land on slime");
+        assert!(og.0, "Entity should land on slime");
         assert!(
-            entity.velocity.y > 0.0,
+            vel.0.y > 0.0,
             "Slime should bounce entity upward: vy={}",
-            entity.velocity.y
+            vel.0.y
         );
     }
 
@@ -515,24 +582,26 @@ mod tests {
             floor_state_id: soul_id,
         };
 
-        let mut entity = make_entity_above_floor(0.0);
-        entity.is_on_ground = true;
-        entity.velocity.x = 1.0;
-        entity.velocity.y = 0.0;
-        entity.velocity.z = 0.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_above_floor_state(0.0);
+        og.0 = true;
+        vel.0.x = 1.0;
 
-        physics_tick(&mut entity, &soul_level, &shapes, false, false);
-        let soul_vx = entity.velocity.x;
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &soul_level, &shapes,
+            false, false,
+        );
+        let soul_vx = vel.0.x;
 
         // Compare with normal floor.
-        let mut entity2 = make_entity_above_floor(0.0);
-        entity2.is_on_ground = true;
-        entity2.velocity.x = 1.0;
-        entity2.velocity.y = 0.0;
-        entity2.velocity.z = 0.0;
+        let (mut pos2, mut vel2, mut bbox2, mut og2, mut fd2) = make_above_floor_state(0.0);
+        og2.0 = true;
+        vel2.0.x = 1.0;
 
-        physics_tick(&mut entity2, &FloorLevel, &shapes, false, false);
-        let normal_vx = entity2.velocity.x;
+        physics_tick(
+            &mut pos2, &mut vel2, &mut bbox2, &mut og2, &mut fd2, &PIG_DIMS, &FloorLevel, &shapes,
+            false, false,
+        );
+        let normal_vx = vel2.0.x;
 
         assert!(
             soul_vx < normal_vx,
@@ -549,24 +618,26 @@ mod tests {
             floor_state_id: honey_id,
         };
 
-        let mut entity = make_entity_above_floor(0.0);
-        entity.is_on_ground = true;
-        entity.velocity.x = 1.0;
-        entity.velocity.y = 0.0;
-        entity.velocity.z = 0.0;
+        let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_above_floor_state(0.0);
+        og.0 = true;
+        vel.0.x = 1.0;
 
-        physics_tick(&mut entity, &honey_level, &shapes, false, false);
-        let honey_vx = entity.velocity.x;
+        physics_tick(
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &honey_level, &shapes,
+            false, false,
+        );
+        let honey_vx = vel.0.x;
 
         // Compare with normal floor.
-        let mut entity2 = make_entity_above_floor(0.0);
-        entity2.is_on_ground = true;
-        entity2.velocity.x = 1.0;
-        entity2.velocity.y = 0.0;
-        entity2.velocity.z = 0.0;
+        let (mut pos2, mut vel2, mut bbox2, mut og2, mut fd2) = make_above_floor_state(0.0);
+        og2.0 = true;
+        vel2.0.x = 1.0;
 
-        physics_tick(&mut entity2, &FloorLevel, &shapes, false, false);
-        let normal_vx = entity2.velocity.x;
+        physics_tick(
+            &mut pos2, &mut vel2, &mut bbox2, &mut og2, &mut fd2, &PIG_DIMS, &FloorLevel, &shapes,
+            false, false,
+        );
+        let normal_vx = vel2.0.x;
 
         assert!(
             honey_vx < normal_vx,

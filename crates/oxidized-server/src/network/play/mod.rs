@@ -87,6 +87,8 @@ pub struct PlayContext<'a> {
     pub chunk_tracker: &'a mut PlayerChunkTracker,
     /// Per-player chat rate limiter.
     pub rate_limiter: &'a mut ChatRateLimiter,
+    /// Channel to send entity commands to the tick thread (ADR-020).
+    pub entity_cmd_tx: &'a oxidized_game::entity::commands::EntityCommandSender,
 }
 
 /// Entity type registry ID for players (`minecraft:player`).
@@ -188,6 +190,40 @@ pub async fn handle_play_split(
     let uuid = join_state.uuid;
     let entity_id = join_state.entity_id;
 
+    // Send SpawnPlayer command to the tick thread's ECS world (ADR-020).
+    {
+        use oxidized_game::entity::commands::EntityCommand;
+        use oxidized_game::entity::components::{ExperienceData, SpawnData};
+        use oxidized_protocol::types::BlockPos;
+
+        let p = player_arc.read();
+        let _ = ctx.entity_cmd_tx.try_send(EntityCommand::SpawnPlayer {
+            network_id: entity_id,
+            uuid,
+            profile: p.profile.clone(),
+            position: glam::DVec3::new(p.movement.pos.x, p.movement.pos.y, p.movement.pos.z),
+            rotation: (p.movement.yaw, p.movement.pitch),
+            game_mode: p.game_mode,
+            inventory: p.inventory.clone(),
+            health: p.combat.health,
+            food_level: p.combat.food_level,
+            experience: ExperienceData {
+                level: p.experience.xp_level,
+                progress: p.experience.xp_progress,
+                total: p.experience.xp_total,
+            },
+            spawn_data: SpawnData {
+                dimension: p.spawn.dimension.clone(),
+                spawn_pos: BlockPos::new(
+                    p.spawn.spawn_pos.x,
+                    p.spawn.spawn_pos.y,
+                    p.spawn.spawn_pos.z,
+                ),
+                spawn_angle: p.spawn.spawn_angle,
+            },
+        });
+    }
+
     // Track which chunks the player has loaded.
     let initial_chunk =
         ChunkPos::from_block_coords(join_state.initial_chunk_x, join_state.initial_chunk_z);
@@ -230,6 +266,7 @@ pub async fn handle_play_split(
         addr,
         chunk_tracker: &mut chunk_tracker,
         rate_limiter: &mut rate_limiter,
+        entity_cmd_tx: &ctx.entity_cmd_tx,
     };
 
     // PLAY read loop — reads from inbound channel instead of socket (ADR-006).
@@ -473,6 +510,11 @@ pub async fn handle_play_split(
     }
 
     // Player disconnected or was kicked — clean up.
+    // Send DespawnPlayer command to the tick thread's ECS world.
+    let _ = ctx.entity_cmd_tx.try_send(
+        oxidized_game::entity::commands::EntityCommand::DespawnPlayer { uuid },
+    );
+
     cleanup_disconnected_player(
         &conn_handle,
         &player_arc,

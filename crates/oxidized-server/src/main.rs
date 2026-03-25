@@ -32,7 +32,7 @@ use oxidized_server::config::ServerConfig;
 use oxidized_server::network::{
     LoginContext, NetworkContext, ServerContext, ServerSettings, WorldContext,
 };
-use oxidized_server::{app, network, tick};
+use oxidized_server::{app, ecs, network, tick};
 
 /// Use mimalloc as the global allocator for improved throughput and
 /// reduced fragmentation under the server's allocation patterns.
@@ -279,6 +279,38 @@ fn main() -> anyhow::Result<()> {
         });
         server_ctx.init_self_ref();
 
+        // Create the entity command channel (ADR-020: network ↔ tick bridge).
+        let (entity_cmd_tx, entity_cmd_rx) =
+            oxidized_game::entity::commands::entity_command_channel(
+                oxidized_game::entity::commands::DEFAULT_COMMAND_CHANNEL_CAPACITY,
+            );
+
+        // Build the ECS context with the receiver end of the command channel.
+        let mut ecs_ctx = ecs::EcsContext::new(entity_cmd_rx);
+
+        // Register ECS systems in their respective tick phases.
+        {
+            use bevy_ecs::schedule::IntoScheduleConfigs;
+            use oxidized_game::entity::phases::TickPhase;
+            use oxidized_game::entity::systems;
+
+            ecs_ctx
+                .schedule_mut(TickPhase::PreTick)
+                .add_systems(ecs::drain_entity_commands);
+            ecs_ctx
+                .schedule_mut(TickPhase::PreTick)
+                .add_systems(systems::tick_count_system);
+            ecs_ctx
+                .schedule_mut(TickPhase::Physics)
+                .add_systems((systems::gravity_system, systems::velocity_apply_system).chain());
+            ecs_ctx
+                .schedule_mut(TickPhase::PostTick)
+                .add_systems(systems::bounding_box_update_system);
+            ecs_ctx
+                .schedule_mut(TickPhase::NetworkSync)
+                .add_systems(systems::entity_data_sync_system);
+        }
+
         // Build the shared login context.
         let login_ctx = Arc::new(LoginContext {
             server_status,
@@ -288,6 +320,7 @@ fn main() -> anyhow::Result<()> {
             is_preventing_proxy_connections: config.network.is_preventing_proxy_connections,
             http_client: reqwest::Client::new(),
             server_ctx,
+            entity_cmd_tx,
         });
 
         // --- Plugin initialization hook ---
@@ -311,7 +344,7 @@ fn main() -> anyhow::Result<()> {
         let tick_thread = std::thread::Builder::new()
             .name("tick".into())
             .spawn(move || {
-                tick::run_tick_loop(&tick_ctx, &tick_shutdown_clone);
+                tick::run_tick_loop(&tick_ctx, ecs_ctx, &tick_shutdown_clone);
             })
             .map_err(|e| anyhow::anyhow!("failed to spawn tick thread: {e}"))?;
 

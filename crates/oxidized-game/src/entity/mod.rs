@@ -12,12 +12,14 @@
 //! Corresponds to `net.minecraft.world.entity.Entity` and related classes.
 
 pub mod bundles;
+pub mod commands;
 pub mod components;
 pub mod data_slots;
 pub mod id;
 pub mod markers;
 pub mod phases;
 pub mod synched_data;
+pub mod systems;
 pub mod tracker;
 
 use uuid::Uuid;
@@ -63,10 +65,12 @@ pub struct EntityDimensions {
 
 /// Base entity containing all fields common to every entity type.
 ///
-/// Mirrors `net.minecraft.world.entity.Entity`. In the future ECS
-/// architecture (ADR-018), these fields will be decomposed into
-/// individual `bevy_ecs` components. For now this struct serves as
-/// the data container.
+/// **Deprecated (phase 23b):** This monolithic struct is superseded by
+/// individual ECS components in [`components`]. Physics code now takes
+/// component references directly. This struct is retained for existing
+/// tests and will be removed in a future phase.
+///
+/// Mirrors `net.minecraft.world.entity.Entity`.
 ///
 /// # Examples
 ///

@@ -65,10 +65,14 @@ struct WeatherLevels {
 ///     .name("tick".into())
 ///     .spawn({
 ///         let shutdown = shutdown.clone();
-///         move || tick::run_tick_loop(&ctx, &shutdown)
+///         move || tick::run_tick_loop(&ctx, ecs, &shutdown)
 ///     })?;
 /// ```
-pub fn run_tick_loop(ctx: &ServerContext, shutdown: &AtomicBool) {
+pub fn run_tick_loop(
+    ctx: &ServerContext,
+    mut ecs: crate::ecs::EcsContext,
+    shutdown: &AtomicBool,
+) {
     let mut tick_count: u64 = 0;
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -108,6 +112,13 @@ pub fn run_tick_loop(ctx: &ServerContext, shutdown: &AtomicBool) {
 
         if should_tick {
             do_tick(ctx, tick_count, &mut rng, &mut weather);
+
+            // Run all 7 ECS phases sequentially (ADR-018, ADR-019).
+            ecs.run_tick();
+
+            // Drain outbound entity packets and broadcast them.
+            drain_outbound_entity_packets(ctx, &mut ecs);
+
             tick_count += 1;
         }
 
@@ -251,6 +262,27 @@ fn process_light_updates(ctx: &ServerContext) {
         }
     }
 }
+
+/// Drains outbound entity packets produced by ECS systems and broadcasts
+/// them to all connected players.
+fn drain_outbound_entity_packets(ctx: &ServerContext, ecs: &mut crate::ecs::EcsContext) {
+    use oxidized_game::entity::systems::OutboundEntityPackets;
+
+    let packets = {
+        let mut res = ecs.world.resource_mut::<OutboundEntityPackets>();
+        std::mem::take(&mut res.0)
+    };
+
+    for pkt in packets {
+        ctx.broadcast(BroadcastMessage {
+            packet_id: pkt.packet_id,
+            data: pkt.data,
+            exclude_entity: None,
+            target_entity: None,
+        });
+    }
+}
+
 /// Advances weather countdown timers, transitions weather states, interpolates
 /// visual levels, and broadcasts changes to clients.
 ///
@@ -868,7 +900,9 @@ mod tests {
         let handle = std::thread::Builder::new()
             .name("tick-test".into())
             .spawn(move || {
-                run_tick_loop(&ctx, &shutdown_clone);
+                let (_tx, rx) = oxidized_game::entity::commands::entity_command_channel(64);
+                let ecs = crate::ecs::EcsContext::new(rx);
+                run_tick_loop(&ctx, ecs, &shutdown_clone);
             })
             .expect("failed to spawn tick thread");
 
@@ -895,7 +929,9 @@ mod tests {
             .spawn(move || {
                 // Capture thread name before entering the loop.
                 *name_capture.lock().unwrap() = std::thread::current().name().map(String::from);
-                run_tick_loop(&ctx, &shutdown_clone);
+                let (_tx, rx) = oxidized_game::entity::commands::entity_command_channel(64);
+                let ecs = crate::ecs::EcsContext::new(rx);
+                run_tick_loop(&ctx, ecs, &shutdown_clone);
             })
             .expect("failed to spawn tick thread");
 
