@@ -19,6 +19,20 @@ use crate::types::resource_location::ResourceLocationError;
 /// This unified error type replaces the per-packet error enums (e.g.
 /// `HelloError`, `PingError`, `IntentionError`) that previously existed
 /// on each packet struct.
+///
+/// # Error variant conventions
+///
+/// - **[`InvalidData`](Self::InvalidData)** — buffer underruns (not enough
+///   data) and semantic validation failures. The message **must** include the
+///   packet/field name and the expected vs. actual byte count where applicable.
+///   Use [`ensure_remaining()`](super::types::ensure_remaining) for the common
+///   "need N bytes, have M" pattern.
+/// - **[`Type`](Self::Type)** — low-level wire-primitive read failures that
+///   propagate automatically through the `?` operator (e.g. reading an `i32`
+///   from a truncated buffer). Do **not** construct this variant directly in
+///   packet decoders.
+/// - **[`Io`](Self::Io)** — genuine I/O errors only (e.g. a read from an
+///   async socket). Never use this for in-memory buffer underruns.
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum PacketDecodeError {

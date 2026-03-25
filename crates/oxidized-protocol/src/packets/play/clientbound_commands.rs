@@ -6,7 +6,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::packet::{Packet, PacketDecodeError};
-use crate::codec::types::{read_string, write_string};
+use crate::codec::types::{ensure_remaining, read_string, write_string};
 use crate::codec::varint::{read_varint_buf, write_varint_buf};
 
 /// Maximum string length in the Minecraft protocol (characters).
@@ -216,21 +216,21 @@ fn read_parser_properties(parser_id: i32, buf: &mut Bytes) -> Result<Vec<u8>, Pa
         },
         // minecraft:entity — 1 byte flags
         6 => {
-            ensure_remaining(buf, 1)?;
+            ensure_remaining(buf, 1, "entity parser flags")?;
             buf.advance(1);
         },
         // minecraft:game_profile through minecraft:nbt_path — no properties
         7..=29 => {},
         // minecraft:score_holder — 1 byte flags
         30 => {
-            ensure_remaining(buf, 1)?;
+            ensure_remaining(buf, 1, "score_holder parser flags")?;
             buf.advance(1);
         },
         // minecraft:swizzle through minecraft:gamemode — no properties
         31..=41 => {},
         // minecraft:time — 1 i32 (minimum)
         42 => {
-            ensure_remaining(buf, 4)?;
+            ensure_remaining(buf, 4, "time parser minimum")?;
             buf.advance(4);
         },
         // resource/tag variants — 1 ResourceLocation (VarInt-prefixed string)
@@ -250,29 +250,18 @@ fn read_parser_properties(parser_id: i32, buf: &mut Bytes) -> Result<Vec<u8>, Pa
     Ok(before[..consumed].to_vec())
 }
 
-/// Ensures `buf` has at least `needed` bytes remaining.
-fn ensure_remaining(buf: &Bytes, needed: usize) -> Result<(), PacketDecodeError> {
-    if buf.remaining() < needed {
-        return Err(PacketDecodeError::InvalidData(format!(
-            "buffer underflow: need {needed} bytes, have {}",
-            buf.remaining()
-        )));
-    }
-    Ok(())
-}
-
 /// Skips a numeric parser's flags byte and optional min/max values.
 ///
 /// `value_size` is 4 for `f32`/`i32` and 8 for `f64`/`i64`.
 fn skip_number_parser(buf: &mut Bytes, value_size: usize) -> Result<(), PacketDecodeError> {
-    ensure_remaining(buf, 1)?;
+    ensure_remaining(buf, 1, "number parser flags")?;
     let flags = buf.get_u8();
     if flags & 0x01 != 0 {
-        ensure_remaining(buf, value_size)?;
+        ensure_remaining(buf, value_size, "number parser min")?;
         buf.advance(value_size);
     }
     if flags & 0x02 != 0 {
-        ensure_remaining(buf, value_size)?;
+        ensure_remaining(buf, value_size, "number parser max")?;
         buf.advance(value_size);
     }
     Ok(())

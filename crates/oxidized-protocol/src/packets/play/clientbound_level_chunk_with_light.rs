@@ -8,7 +8,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::packet::{Packet, PacketDecodeError};
-use crate::codec::types::{TypeError, read_i32, read_i64};
+use crate::codec::types::{ensure_remaining, read_i32, read_i64};
 use crate::codec::varint;
 
 /// A full chunk + light packet.
@@ -153,12 +153,7 @@ impl ChunkPacketData {
 
         // Buffer: VarInt(length) + raw bytes
         let buffer_len = read_non_negative_varint(buf, "chunk buffer length")?;
-        if buf.remaining() < buffer_len {
-            return Err(PacketDecodeError::Type(TypeError::UnexpectedEof {
-                need: buffer_len,
-                have: buf.remaining(),
-            }));
-        }
+        ensure_remaining(buf, buffer_len, "chunk buffer data")?;
         let buffer = buf.copy_to_bytes(buffer_len).to_vec();
 
         // Block entities: VarInt(count) — skip for now
@@ -269,12 +264,7 @@ fn read_byte_arrays(buf: &mut Bytes) -> Result<Vec<Vec<u8>>, PacketDecodeError> 
     let mut arrays = Vec::with_capacity(count);
     for _ in 0..count {
         let len = read_non_negative_varint(buf, "byte array length")?;
-        if buf.remaining() < len {
-            return Err(PacketDecodeError::Type(TypeError::UnexpectedEof {
-                need: len,
-                have: buf.remaining(),
-            }));
-        }
+        ensure_remaining(buf, len, "light byte array")?;
         arrays.push(buf.copy_to_bytes(len).to_vec());
     }
     Ok(arrays)

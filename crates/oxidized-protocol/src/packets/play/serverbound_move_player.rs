@@ -15,18 +15,14 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::codec::Packet;
 use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{read_f32, read_f64, write_f32, write_f64};
+use crate::codec::types::{ensure_remaining, read_f32, read_f64, write_f32, write_f64};
 
 const FLAG_ON_GROUND: u8 = 0x01;
 const FLAG_HORIZONTAL_COLLISION: u8 = 0x02;
 
 /// Reads the one-byte flags field, returning `(is_on_ground, has_horizontal_collision)`.
 fn read_flags(buf: &mut Bytes) -> Result<(bool, bool), PacketDecodeError> {
-    if !buf.has_remaining() {
-        return Err(PacketDecodeError::Type(
-            crate::codec::types::TypeError::UnexpectedEof { need: 1, have: 0 },
-        ));
-    }
+    ensure_remaining(buf, 1, "MovePlayer flags")?;
     let flags = buf.get_u8();
     Ok((
         flags & FLAG_ON_GROUND != 0,

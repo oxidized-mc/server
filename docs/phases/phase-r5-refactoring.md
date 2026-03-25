@@ -22,7 +22,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.7 | Compile-time item ID codegen (like blocks) | ✅ Done |
 | R5.8 | Extract packet codec helpers & roundtrip test macro | ✅ Done |
 | R5.9 | Extract command registration helpers | ✅ Done |
-| R5.10 | Standardize packet decoder error handling | 📋 Planned |
+| R5.10 | Standardize packet decoder error handling | ✅ Done |
 | R5.11 | Decompose oversized structs | 📋 Planned |
 | R5.12 | Break down long functions & reduce nesting | 📋 Planned |
 | R5.13 | Replace magic numbers with named constants | 📋 Planned |
@@ -917,7 +917,7 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 ---
 
-### R5.10: Standardize Packet Decoder Error Handling
+### R5.10: Standardize Packet Decoder Error Handling ✅
 
 **Targets:** `crates/oxidized-protocol/src/packets/**/*.rs`
 
@@ -944,6 +944,20 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 - `grep -rn "UnexpectedEof" crates/oxidized-protocol/src/packets/` returns zero
   results (all converted to `InvalidData`)
 - `cargo test -p oxidized-protocol` passes
+
+**Completed:**
+
+- `#[non_exhaustive]` was already present — no change needed.
+- Added error variant convention doc comment to `PacketDecodeError` in
+  `codec/packet.rs` documenting when to use `InvalidData`, `Type`, and `Io`.
+- Replaced 3 direct `PacketDecodeError::Type(TypeError::UnexpectedEof{..})`
+  constructions with `ensure_remaining()` calls in `serverbound_move_player.rs`
+  (1 site) and `clientbound_level_chunk_with_light.rs` (2 sites).
+- Removed private `ensure_remaining()` duplicate in `clientbound_commands.rs`,
+  replaced all 7 call sites with the public `ensure_remaining()` from
+  `codec::types` (adding context labels to each call).
+- No `PacketDecodeError::Io` misuse found — 0 occurrences in packets dir.
+- All 1015 protocol tests pass; workspace compiles cleanly.
 
 ---
 
