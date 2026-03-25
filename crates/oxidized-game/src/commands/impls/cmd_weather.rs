@@ -10,7 +10,6 @@ use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
 use crate::commands::source::CommandSourceStack;
 use crate::level::weather::WeatherType;
-use oxidized_protocol::chat::Component;
 
 /// Registers the `/weather` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -67,8 +66,7 @@ fn weather_fn(
 {
     move |ctx| {
         ctx.source.server.set_weather(weather, None);
-        ctx.source
-            .send_success(&Component::translatable(key, vec![]), true);
+        ctx.source.send_translatable_success(key, vec![], true);
         Ok(1)
     }
 }
@@ -81,8 +79,7 @@ fn weather_with_duration_fn(
     move |ctx| {
         let duration = get_time(ctx, "duration")?;
         ctx.source.server.set_weather(weather, Some(duration));
-        ctx.source
-            .send_success(&Component::translatable(key, vec![]), true);
+        ctx.source.send_translatable_success(key, vec![], true);
         Ok(1)
     }
 }

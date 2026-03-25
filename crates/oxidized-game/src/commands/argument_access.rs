@@ -203,3 +203,29 @@ pub fn get_vec3(
         ))),
     }
 }
+
+/// Resolves an entity selector argument and invokes `action` for each target.
+///
+/// Returns the number of targets that were successfully processed. The loop
+/// exits early if `action` returns an error.
+///
+/// # Errors
+///
+/// Returns [`CommandError`] if the selector cannot be resolved or if `action`
+/// returns an error for any target.
+pub fn for_each_target<F>(
+    ctx: &CommandContext<CommandSourceStack>,
+    selector_name: &str,
+    mut action: F,
+) -> Result<i32, CommandError>
+where
+    F: FnMut(&CommandSourceStack, &crate::commands::selector::SelectorTarget) -> Result<(), CommandError>,
+{
+    let targets = get_entities(ctx, selector_name)?;
+    let mut count = 0;
+    for target in &targets {
+        action(&ctx.source, target)?;
+        count += 1;
+    }
+    Ok(count)
+}

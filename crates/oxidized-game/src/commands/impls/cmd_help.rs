@@ -46,7 +46,7 @@ fn show_help(
     let descs = ctx.source.server.command_descriptions();
     if descs.is_empty() {
         ctx.source
-            .send_failure(&Component::translatable("commands.help.failed", vec![]));
+            .send_translatable_failure("commands.help.failed", vec![]);
         return Ok(0);
     }
 
@@ -74,7 +74,7 @@ fn show_help(
     let total_pages = paginated.page_count();
     if page > total_pages {
         ctx.source
-            .send_failure(&Component::translatable("commands.help.failed", vec![]));
+            .send_translatable_failure("commands.help.failed", vec![]);
         return Ok(0);
     }
 

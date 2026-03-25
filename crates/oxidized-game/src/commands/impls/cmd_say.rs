@@ -23,14 +23,12 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     |ctx: &CommandContext<CommandSourceStack>| {
                         let message = get_string(ctx, "message")?;
                         // Broadcast using SAY_COMMAND chat type format
-                        ctx.source.send_success(
-                            &Component::translatable(
-                                "chat.type.announcement",
-                                vec![
-                                    Component::text(&ctx.source.display_name),
-                                    Component::text(message),
-                                ],
-                            ),
+                        ctx.source.send_translatable_success(
+                            "chat.type.announcement",
+                            vec![
+                                Component::text(&ctx.source.display_name),
+                                Component::text(message),
+                            ],
                             true,
                         );
                         Ok(1)
@@ -47,14 +45,12 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     |ctx: &CommandContext<CommandSourceStack>| {
                         let action = get_string(ctx, "action")?;
                         // Broadcast using EMOTE_COMMAND chat type format
-                        ctx.source.send_success(
-                            &Component::translatable(
-                                "chat.type.emote",
-                                vec![
-                                    Component::text(&ctx.source.display_name),
-                                    Component::text(action),
-                                ],
-                            ),
+                        ctx.source.send_translatable_success(
+                            "chat.type.emote",
+                            vec![
+                                Component::text(&ctx.source.display_name),
+                                Component::text(action),
+                            ],
                             true,
                         );
                         Ok(1)

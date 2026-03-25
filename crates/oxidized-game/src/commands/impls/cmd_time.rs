@@ -30,11 +30,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         |ctx: &CommandContext<CommandSourceStack>| {
                             let t = get_time(ctx, "time")?;
                             ctx.source.server.set_day_time(i64::from(t));
-                            ctx.source.send_success(
-                                &Component::translatable(
-                                    "commands.time.set",
-                                    vec![Component::text(t.to_string())],
-                                ),
+                            ctx.source.send_translatable_success(
+                                "commands.time.set",
+                                vec![Component::text(t.to_string())],
                                 true,
                             );
                             Ok(t)
@@ -47,11 +45,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     |ctx: &CommandContext<CommandSourceStack>| {
                         let t = get_time(ctx, "time")?;
                         ctx.source.server.add_day_time(i64::from(t));
-                        ctx.source.send_success(
-                            &Component::translatable(
-                                "commands.time.set",
-                                vec![Component::text(t.to_string())],
-                            ),
+                        ctx.source.send_translatable_success(
+                            "commands.time.set",
+                            vec![Component::text(t.to_string())],
                             true,
                         );
                         Ok(t)
@@ -65,11 +61,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         |ctx: &CommandContext<CommandSourceStack>| {
                             let day_time = ctx.source.server.day_time();
                             let display = (day_time % 24000) as i32;
-                            ctx.source.send_success(
-                                &Component::translatable(
-                                    "commands.time.query",
-                                    vec![Component::text(display.to_string())],
-                                ),
+                            ctx.source.send_translatable_success(
+                                "commands.time.query",
+                                vec![Component::text(display.to_string())],
                                 false,
                             );
                             Ok(display)
@@ -79,11 +73,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         |ctx: &CommandContext<CommandSourceStack>| {
                             let game_time = ctx.source.server.game_time();
                             let display = (game_time % i64::from(i32::MAX)) as i32;
-                            ctx.source.send_success(
-                                &Component::translatable(
-                                    "commands.time.query",
-                                    vec![Component::text(display.to_string())],
-                                ),
+                            ctx.source.send_translatable_success(
+                                "commands.time.query",
+                                vec![Component::text(display.to_string())],
                                 false,
                             );
                             Ok(display)
@@ -93,11 +85,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         literal("day").executes(|ctx: &CommandContext<CommandSourceStack>| {
                             let game_time = ctx.source.server.game_time();
                             let day = (game_time / 24000) as i32;
-                            ctx.source.send_success(
-                                &Component::translatable(
-                                    "commands.time.query",
-                                    vec![Component::text(day.to_string())],
-                                ),
+                            ctx.source.send_translatable_success(
+                                "commands.time.query",
+                                vec![Component::text(day.to_string())],
                                 false,
                             );
                             Ok(day)
@@ -114,11 +104,9 @@ fn set_time_fn(
 {
     move |ctx| {
         ctx.source.server.set_day_time(i64::from(ticks));
-        ctx.source.send_success(
-            &Component::translatable(
-                "commands.time.set",
-                vec![Component::text(ticks.to_string())],
-            ),
+        ctx.source.send_translatable_success(
+            "commands.time.set",
+            vec![Component::text(ticks.to_string())],
             true,
         );
         Ok(ticks)

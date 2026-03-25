@@ -33,11 +33,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
             // /difficulty — query current difficulty
             .executes(|ctx: &CommandContext<CommandSourceStack>| {
                 let diff = ctx.source.server.difficulty();
-                ctx.source.send_success(
-                    &Component::translatable(
-                        "commands.difficulty.query",
-                        vec![Component::translatable(difficulty_key(diff), vec![])],
-                    ),
+                ctx.source.send_translatable_success(
+                    "commands.difficulty.query",
+                    vec![Component::translatable(difficulty_key(diff), vec![])],
                     false,
                 );
                 Ok(diff)
@@ -56,10 +54,10 @@ fn difficulty_fn(
     move |ctx| {
         let current = ctx.source.server.difficulty();
         if current == level {
-            ctx.source.send_failure(&Component::translatable(
+            ctx.source.send_translatable_failure(
                 "commands.difficulty.failure",
                 vec![Component::translatable(difficulty_key(level), vec![])],
-            ));
+            );
             return Ok(0);
         }
         // TODO: Actually change the difficulty — requires wrapping

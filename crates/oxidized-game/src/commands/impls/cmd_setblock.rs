@@ -44,15 +44,13 @@ fn resolve_block_name(
 
 /// Sends a success message for setblock.
 fn send_setblock_success(ctx: &CommandContext<CommandSourceStack>, x: i32, y: i32, z: i32) {
-    ctx.source.send_success(
-        &Component::translatable(
-            "commands.setblock.success",
-            vec![
-                Component::text(x.to_string()),
-                Component::text(y.to_string()),
-                Component::text(z.to_string()),
-            ],
-        ),
+    ctx.source.send_translatable_success(
+        "commands.setblock.success",
+        vec![
+            Component::text(x.to_string()),
+            Component::text(y.to_string()),
+            Component::text(z.to_string()),
+        ],
         true,
     );
 }
@@ -60,7 +58,7 @@ fn send_setblock_success(ctx: &CommandContext<CommandSourceStack>, x: i32, y: i3
 /// Sends the standard setblock failure message.
 fn send_setblock_failure(ctx: &CommandContext<CommandSourceStack>) {
     ctx.source
-        .send_failure(&Component::translatable("commands.setblock.failed", vec![]));
+        .send_translatable_failure("commands.setblock.failed", vec![]);
 }
 
 /// `/setblock <pos> <block>` and `/setblock <pos> <block> replace`

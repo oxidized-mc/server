@@ -24,8 +24,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         "chat.copy.click",
                         vec![],
                     ))));
-                ctx.source.send_success(
-                    &Component::translatable("commands.seed.success", vec![seed_text]),
+                ctx.source.send_translatable_success(
+                    "commands.seed.success",
+                    vec![seed_text],
                     false,
                 );
                 Ok(seed as i32)

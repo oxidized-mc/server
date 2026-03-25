@@ -20,8 +20,8 @@ pub mod source;
 pub mod string_reader;
 
 pub use argument_access::{
-    get_block_pos, get_bool, get_double, get_entities, get_entity, get_float, get_game_profile,
-    get_gamemode, get_integer, get_long, get_string, get_time, get_vec3,
+    for_each_target, get_block_pos, get_bool, get_double, get_entities, get_entity, get_float,
+    get_game_profile, get_gamemode, get_integer, get_long, get_string, get_time, get_vec3,
 };
 pub use argument_parser::parse_argument;
 pub use arguments::{ArgumentType, StringKind};

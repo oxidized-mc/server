@@ -211,4 +211,24 @@ impl CommandSourceStack {
     pub fn send_message(&self, component: &Component) {
         (self.feedback_sender)(component);
     }
+
+    /// Sends a translatable success message to the source and optionally
+    /// broadcasts to ops.
+    ///
+    /// Shorthand for `send_success(&Component::translatable(key, args), broadcast)`.
+    pub fn send_translatable_success(
+        &self,
+        key: &str,
+        args: Vec<Component>,
+        broadcast_to_ops: bool,
+    ) {
+        self.send_success(&Component::translatable(key, args), broadcast_to_ops);
+    }
+
+    /// Sends a translatable failure message to the source.
+    ///
+    /// Shorthand for `send_failure(&Component::translatable(key, args))`.
+    pub fn send_translatable_failure(&self, key: &str, args: Vec<Component>) {
+        self.send_failure(&Component::translatable(key, args));
+    }
 }

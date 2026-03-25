@@ -106,8 +106,9 @@ fn set_game_mode(
     let mode_component = Component::translatable(mode_translation_key(mode), vec![]);
 
     if is_self {
-        ctx.source.send_success(
-            &Component::translatable("commands.gamemode.success.self", vec![mode_component]),
+        ctx.source.send_translatable_success(
+            "commands.gamemode.success.self",
+            vec![mode_component],
             true,
         );
     } else {
@@ -116,11 +117,9 @@ fn set_game_mode(
             target_uuid,
             &Component::translatable("gameMode.changed", vec![mode_component.clone()]),
         );
-        ctx.source.send_success(
-            &Component::translatable(
-                "commands.gamemode.success.other",
-                vec![Component::text(target_name), mode_component],
-            ),
+        ctx.source.send_translatable_success(
+            "commands.gamemode.success.other",
+            vec![Component::text(target_name), mode_component],
             true,
         );
     }

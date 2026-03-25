@@ -43,15 +43,13 @@ fn execute_list_impl(
         names.join(", ")
     };
 
-    ctx.source.send_success(
-        &Component::translatable(
-            "commands.list.players",
-            vec![
-                Component::text(count.to_string()),
-                Component::text(max.to_string()),
-                Component::text(player_list),
-            ],
-        ),
+    ctx.source.send_translatable_success(
+        "commands.list.players",
+        vec![
+            Component::text(count.to_string()),
+            Component::text(max.to_string()),
+            Component::text(player_list),
+        ],
         false,
     );
     Ok(count as i32)

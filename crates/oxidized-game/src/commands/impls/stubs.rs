@@ -93,7 +93,7 @@ fn register_one(
             .requires(move |s: &CommandSourceStack| s.has_permission(permission_level))
             .executes(move |ctx: &CommandContext<CommandSourceStack>| {
                 ctx.source
-                    .send_failure(&Component::translatable("commands.help.failed", vec![]));
+                    .send_translatable_failure("commands.help.failed", vec![]);
                 ctx.source
                     .send_failure(&Component::text(format!("/{name} is not yet implemented")));
                 Ok(0)

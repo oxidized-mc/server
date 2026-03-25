@@ -24,11 +24,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         let rule = get_string(ctx, "rule")?;
                         match ctx.source.server.get_game_rule(rule) {
                             Some(value) => {
-                                ctx.source.send_success(
-                                    &Component::translatable(
-                                        "commands.gamerule.query",
-                                        vec![Component::text(rule), Component::text(value)],
-                                    ),
+                                ctx.source.send_translatable_success(
+                                    "commands.gamerule.query",
+                                    vec![Component::text(rule), Component::text(value)],
                                     false,
                                 );
                                 Ok(1)
@@ -49,11 +47,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                                 let value = get_string(ctx, "value")?;
                                 match ctx.source.server.set_game_rule(rule, value) {
                                     Ok(()) => {
-                                        ctx.source.send_success(
-                                            &Component::translatable(
-                                                "commands.gamerule.set",
-                                                vec![Component::text(rule), Component::text(value)],
-                                            ),
+                                        ctx.source.send_translatable_success(
+                                            "commands.gamerule.set",
+                                            vec![Component::text(rule), Component::text(value)],
                                             true,
                                         );
                                         Ok(1)
