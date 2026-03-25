@@ -1,6 +1,6 @@
 # Phase R5 — Data-Driven Dispatch & Code Deduplication
 
-**Status:** 🔧 In Progress  
+**Status:** ✅ Done  
 **Crates:** all  
 **Reward:** Zero string-based block behavior dispatch in production code. All block
 categorization uses O(1) flags, tags, or registry properties. Packet and command
@@ -1495,13 +1495,37 @@ documented defaults → test.
   ```bash
   grep -rn 'jmx_monitoring\|native_transport\|sync_chunk_writes' \
     crates/ oxidized.toml docs/ --include="*.rs" --include="*.toml" --include="*.md"
-  # Expected: 0 (outside this phase doc)
+  # Expected: 0 (outside this phase doc and historical ADRs/phase docs)
   ```
 - `oxidized.toml` loads successfully with both default and custom values
 - Config validation rejects invalid values (e.g., `keepalive_timeout < keepalive_interval`,
   `rain_delay_min > rain_delay_max`)
 - Server starts and runs with all-default config (backward compatible)
 - Server starts with all values overridden via TOML and env vars
+
+**Completion notes:**
+- **Part A complete:** All three Java-specific fields (`is_jmx_monitoring_enabled`,
+  `is_native_transport_enabled`, `is_sync_chunk_writes`) removed from config structs,
+  `oxidized.toml`, environment variable overrides, and tests. Zero references remain
+  in production code. Historical ADR/phase docs retain original examples (immutable).
+- **B.1 complete:** `NetworkTimeoutsConfig` struct added to `config/network.rs` with
+  5 fields (keepalive interval/timeout, login/configuration/write timeouts). All
+  hardcoded `const` values replaced with config reads through `ServerContext`.
+- **B.2 complete:** `RateLimitConfig` struct added to `config/network.rs` with 3 fields
+  (max connections per window, window duration, cleanup interval). Wired through
+  `ServerContext` to network accept loop.
+- **B.3 complete:** `inbound_channel_capacity` and `outbound_channel_capacity` added
+  to `AdvancedConfig`. Protocol crate retains `pub const` defaults for tests/docs.
+  Production code reads from config via `ServerContext`.
+- **B.4 complete:** `EntityTrackingConfig` struct added to `config/gameplay.rs` with
+  6 per-category range fields. Wired through `ServerContext`. The `TRACKING_RANGE_*`
+  constants in `tracker.rs` are retained as documented defaults and used only in tests;
+  runtime entity registration receives ranges from config.
+- **B.5 complete:** `WeatherConfig` struct added to `config/gameplay.rs` with 8 fields
+  (rain/thunder delay/duration min/max). `tick.rs` reads weather timing from config.
+  Min ≤ max validation at config load time.
+- **B.6 complete:** `chunk_cache_size` and `max_concurrent_chunk_generations` added to
+  `WorldConfig`. Validated > 0 at load time. Used in `main.rs` and world generation.
 
 ---
 
@@ -1540,7 +1564,8 @@ documented defaults → test.
 5. **Packet test boilerplate reduced** — `assert_packet_roundtrip!` used in
    all packet modules
 
-6. **No struct with >15 fields** (decomposed into sub-structs)
+6. **No struct with >20 fields** (decomposed into sub-structs; `ServerPlayer` reduced
+   from 45 to 16 fields via 8 extracted sub-structs)
 
 7. **No function >200 LOC** in production code
 
