@@ -66,9 +66,7 @@ pub struct BoundaryEntry {
 
 /// Returns the block state opacity at the given chunk-local position.
 fn get_opacity(chunk: &LevelChunk, x: i32, y: i32, z: i32) -> u8 {
-    let state_id = chunk
-        .get_block_state(x & 15, y, z & 15)
-        .unwrap_or(0);
+    let state_id = chunk.get_block_state(x & 15, y, z & 15).unwrap_or(0);
     #[allow(clippy::cast_possible_truncation)]
     let sid = BlockStateId(state_id as u16);
     sid.light_opacity()
@@ -443,13 +441,7 @@ mod tests {
             z: 8,
             old_level: 14,
         });
-        propagate_block_light_decrease(
-            &mut chunk,
-            &mut decrease_queue,
-            &mut increase_queue,
-            0,
-            0,
-        );
+        propagate_block_light_decrease(&mut chunk, &mut decrease_queue, &mut increase_queue, 0, 0);
         // Re-propagate any re-seeded entries.
         propagate_block_light_increase(&mut chunk, &mut increase_queue, 0, 0);
 

@@ -228,10 +228,8 @@ fn process_light_updates(ctx: &ServerContext) {
 
         match engine.process_updates(&mut chunk) {
             Ok(changed_sections) if !changed_sections.is_empty() => {
-                let light_data = build_light_data(
-                    chunk.sky_light_layers(),
-                    chunk.block_light_layers(),
-                );
+                let light_data =
+                    build_light_data(chunk.sky_light_layers(), chunk.block_light_layers());
                 drop(chunk); // Release write lock before broadcasting.
                 let pkt = ClientboundLightUpdatePacket {
                     chunk_x: chunk_pos.x,
@@ -245,11 +243,11 @@ fn process_light_updates(ctx: &ServerContext) {
                     exclude_entity: None,
                     target_entity: None,
                 });
-            }
+            },
             Err(e) => {
                 warn!(chunk = ?chunk_pos, error = %e, "Light update failed");
-            }
-            _ => {}
+            },
+            _ => {},
         }
     }
 }

@@ -28,7 +28,10 @@ pub fn initialize_block_light(chunk: &mut LevelChunk) {
                 for local_x in 0..16u32 {
                     let state_id = chunk
                         .section(section_idx)
-                        .and_then(|s| s.get_block_state(local_x as usize, local_y as usize, local_z as usize).ok())
+                        .and_then(|s| {
+                            s.get_block_state(local_x as usize, local_y as usize, local_z as usize)
+                                .ok()
+                        })
                         .unwrap_or(0);
 
                     #[allow(clippy::cast_possible_truncation)]

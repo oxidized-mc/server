@@ -7,8 +7,9 @@ use std::collections::VecDeque;
 
 use oxidized_world::chunk::LevelChunk;
 
-use super::propagation::{BoundaryEntry, LightEntry, propagate_block_light_increase,
-    propagate_sky_light_increase};
+use super::propagation::{
+    BoundaryEntry, LightEntry, propagate_block_light_increase, propagate_sky_light_increase,
+};
 
 /// Accessor for the 4 horizontal neighbors of a chunk.
 pub struct ChunkNeighbors<'a> {

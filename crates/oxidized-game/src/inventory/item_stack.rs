@@ -199,9 +199,7 @@ impl ItemStack {
     /// Used by [`crate::player::PlayerInventory::suitable_hotbar_slot`] to
     /// prefer replacing non-enchanted items when all hotbar slots are occupied.
     pub fn is_enchanted(&self) -> bool {
-        self.components
-            .added
-            .contains_key("minecraft:enchantments")
+        self.components.added.contains_key("minecraft:enchantments")
     }
 
     /// Serializes to NBT for disk persistence.

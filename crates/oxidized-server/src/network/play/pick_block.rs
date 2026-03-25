@@ -79,20 +79,20 @@ pub async fn handle_pick_item_from_block(
                 // Item already in hotbar — just select it.
                 player.inventory.selected_slot = slot as u8;
                 vec![]
-            }
+            },
             Some(slot) => {
                 // Item in main inventory — swap to best hotbar slot.
                 let (hotbar, main) = player.inventory.pick_slot(slot);
                 vec![hotbar, main]
-            }
+            },
             None if game_mode == GameMode::Creative => {
                 // Creative: add fresh stack to best hotbar slot.
                 player.inventory.add_and_pick_item(target)
-            }
+            },
             None => {
                 // Survival: item not in inventory — nothing to do.
                 vec![]
-            }
+            },
         };
         (player.inventory.selected_slot, changed)
     };

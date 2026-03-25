@@ -8,8 +8,8 @@
 
 use std::collections::VecDeque;
 
-use oxidized_world::chunk::heightmap::HeightmapType;
 use oxidized_world::chunk::LevelChunk;
+use oxidized_world::chunk::heightmap::HeightmapType;
 use oxidized_world::registry::BlockStateId;
 
 use super::propagation::{LightEntry, propagate_sky_light_increase};

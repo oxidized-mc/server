@@ -300,7 +300,12 @@ impl LevelChunk {
             return;
         };
         let layer = self.ensure_sky_light(si);
-        layer.set((x & 15) as usize, (y & 15) as usize, (z & 15) as usize, level);
+        layer.set(
+            (x & 15) as usize,
+            (y & 15) as usize,
+            (z & 15) as usize,
+            level,
+        );
     }
 
     /// Returns the block light level at a world position (0–15), or 0 if
@@ -325,7 +330,12 @@ impl LevelChunk {
             return;
         };
         let layer = self.ensure_block_light(si);
-        layer.set((x & 15) as usize, (y & 15) as usize, (z & 15) as usize, level);
+        layer.set(
+            (x & 15) as usize,
+            (y & 15) as usize,
+            (z & 15) as usize,
+            level,
+        );
     }
 
     /// Serializes all section data to bytes (for `ClientboundLevelChunkPacketData.buffer`).

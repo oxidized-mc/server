@@ -197,8 +197,12 @@ impl LightEngine {
 
         // Then run increase passes.
         if !block_increase.is_empty() {
-            let _boundary =
-                propagate_block_light_increase(chunk, &mut block_increase, chunk_base_x, chunk_base_z);
+            let _boundary = propagate_block_light_increase(
+                chunk,
+                &mut block_increase,
+                chunk_base_x,
+                chunk_base_z,
+            );
         }
         if !sky_increase.is_empty() {
             let _boundary =

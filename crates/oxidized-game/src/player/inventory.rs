@@ -594,7 +594,10 @@ mod tests {
             assert!(PlayerInventory::is_hotbar_slot(i), "slot {i} is hotbar");
         }
         for i in 9..41 {
-            assert!(!PlayerInventory::is_hotbar_slot(i), "slot {i} is not hotbar");
+            assert!(
+                !PlayerInventory::is_hotbar_slot(i),
+                "slot {i} is not hotbar"
+            );
         }
     }
 
