@@ -12,11 +12,12 @@ use oxidized_world::chunk::level_chunk::{
     OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT,
 };
 use oxidized_world::chunk::section::LevelChunkSection;
-use oxidized_world::chunk::{ChunkPos, DataLayer, LevelChunk};
+use oxidized_world::chunk::{ChunkPos, LevelChunk};
 use oxidized_world::registry::{PLAINS_BIOME_ID, biome_name_to_id};
 
 use super::config::FlatWorldConfig;
 use crate::lighting::block_light::initialize_block_light;
+use crate::lighting::sky::initialize_sky_light;
 use crate::worldgen::ChunkGenerator;
 
 /// Sea level for flat worlds (vanilla: −63).
@@ -27,7 +28,6 @@ const FLAT_SEA_LEVEL: i32 = -63;
 struct ChunkTemplate {
     sections: Vec<LevelChunkSection>,
     heightmaps: Vec<Heightmap>,
-    sky_light: Vec<Option<DataLayer>>,
 }
 
 /// Resolves a biome resource key (e.g. `"minecraft:plains"`) to its
@@ -111,33 +111,9 @@ fn build_template(config: &FlatWorldConfig) -> ChunkTemplate {
         }
     }
 
-    // Build sky light.
-    let mut sky_light = vec![None; OVERWORLD_SECTION_COUNT + 2];
-    let surface_section = total_height.div_ceil(16);
-    // Sections fully above the surface get full brightness.
-    // +1 accounts for the border section at index 0.
-    for slot in &mut sky_light[(surface_section + 1)..] {
-        *slot = Some(DataLayer::filled(15));
-    }
-    // The surface section itself has blocks below and air above.
-    // Air blocks above the surface need sky light 15.
-    let surface_local_y = total_height % 16;
-    if surface_local_y > 0 {
-        let mut layer = DataLayer::new();
-        for y in surface_local_y..16 {
-            for x in 0..16usize {
-                for z in 0..16usize {
-                    layer.set(x, y, z, 15);
-                }
-            }
-        }
-        sky_light[surface_section] = Some(layer);
-    }
-
     ChunkTemplate {
         sections,
         heightmaps,
-        sky_light,
     }
 }
 
@@ -212,14 +188,8 @@ impl ChunkGenerator for FlatChunkGenerator {
             chunk.set_heightmap(hm.clone());
         }
 
-        // Clone template sky light.
-        for (i, light) in self.template.sky_light.iter().enumerate() {
-            if let Some(data) = light {
-                chunk.set_sky_light(i, data.clone());
-            }
-        }
-
-        // Initialize block light from any emitting blocks in the config.
+        // Compute light via the lighting engine (ADR-017).
+        initialize_sky_light(&mut chunk);
         initialize_block_light(&mut chunk);
 
         chunk
