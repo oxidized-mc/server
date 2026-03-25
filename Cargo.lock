@@ -1896,6 +1896,7 @@ dependencies = [
  "bytes",
  "criterion",
  "flate2",
+ "indexmap",
  "insta",
  "md-5",
  "oxidized-macros",

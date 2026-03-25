@@ -59,7 +59,7 @@ anyhow         = "1"
 rayon          = "1"
 
 # Data structures
-indexmap       = "2"
+indexmap       = { version = "2", features = ["serde"] }
 ahash          = "0.8"
 bitflags       = "2"
 parking_lot    = "0.12"

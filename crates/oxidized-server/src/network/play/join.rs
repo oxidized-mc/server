@@ -139,7 +139,16 @@ pub(super) async fn send_join_sequence(
     let player_chunk_z = player.movement.pos.z.floor() as i32;
 
     // Build the login sequence.
-    let dimension_type_id = 0; // overworld = 0 in registry order
+    let dimension_type_id = oxidized_protocol::registry::get_registry_entry_index(
+        "minecraft:dimension_type",
+        "minecraft:overworld",
+    )
+    .map_err(|e| {
+        ConnectionError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("failed to resolve overworld dimension type ID: {e}"),
+        ))
+    })?;
     let is_flat = server_ctx.world.chunk_generator.generator_type() == "minecraft:flat";
     let packets = {
         let level_data = server_ctx.world.level_data.read();

@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
+use indexmap::IndexMap;
 use oxidized_nbt::{NbtCompound, NbtList, NbtTag};
 
 use crate::packets::configuration::clientbound_update_tags::{
@@ -21,7 +22,13 @@ const REGISTRIES_JSON: &str = include_str!("data/registries.json");
 const TAGS_JSON: &str = include_str!("data/tags.json");
 
 /// Registry name → entries (entry name → JSON value).
-type RegistryMap = HashMap<String, HashMap<String, serde_json::Value>>;
+///
+/// The inner map is an [`IndexMap`] to preserve the JSON insertion order,
+/// which matches vanilla's registration order. This is critical because
+/// registry packets assign client-side IDs (0, 1, 2, …) based on the
+/// order entries are received. Using `HashMap` here would randomize the
+/// order on each process start, causing dimension_type mismatches.
+type RegistryMap = HashMap<String, IndexMap<String, serde_json::Value>>;
 
 /// Tag registry name → tag name → entry IDs.
 type TagMap = HashMap<String, HashMap<String, Vec<i32>>>;
@@ -118,6 +125,33 @@ pub fn get_registry_entries(
         result.push((name.clone(), compound));
     }
     Ok(result)
+}
+
+/// Returns the index of an entry within a registry, matching the order
+/// entries are sent to the client in `ClientboundRegistryDataPacket`.
+///
+/// The client assigns IDs (0, 1, 2, …) based on the order entries are
+/// received, so this index is the client-side ID for the entry.
+///
+/// # Errors
+///
+/// Returns [`RegistryError::UnknownRegistry`] if the registry or entry name
+/// is not found.
+pub fn get_registry_entry_index(
+    registry_name: &str,
+    entry_name: &str,
+) -> Result<i32, RegistryError> {
+    let registries = &*REGISTRIES;
+    let entries = registries
+        .get(registry_name)
+        .ok_or_else(|| RegistryError::UnknownRegistry(registry_name.to_string()))?;
+
+    entries
+        .get_index_of(entry_name)
+        .map(|idx| idx as i32)
+        .ok_or_else(|| {
+            RegistryError::UnknownRegistry(format!("{registry_name}/{entry_name}"))
+        })
 }
 
 /// Builds a [`ClientboundUpdateTagsPacket`] from the bundled tag data.
@@ -432,5 +466,37 @@ mod tests {
         let decoded =
             ClientboundUpdateTagsPacket::decode(encoded.freeze()).expect("decode should succeed");
         assert_eq!(decoded, packet);
+    }
+
+    #[test]
+    fn test_dimension_type_overworld_is_index_zero() {
+        let idx = get_registry_entry_index("minecraft:dimension_type", "minecraft:overworld")
+            .expect("overworld should exist in dimension_type registry");
+        assert_eq!(idx, 0, "overworld must be index 0 in dimension_type registry");
+    }
+
+    #[test]
+    fn test_registry_entry_index_preserves_order() {
+        let entries = get_registry_entries("minecraft:dimension_type").unwrap();
+        for (expected_idx, (name, _)) in entries.iter().enumerate() {
+            let actual_idx = get_registry_entry_index("minecraft:dimension_type", name)
+                .unwrap_or_else(|_| panic!("{name} should be found"));
+            assert_eq!(
+                actual_idx, expected_idx as i32,
+                "entry {name} index mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn test_registry_entry_index_unknown_entry() {
+        let result = get_registry_entry_index("minecraft:dimension_type", "minecraft:nonexistent");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_registry_entry_index_unknown_registry() {
+        let result = get_registry_entry_index("minecraft:nonexistent", "minecraft:overworld");
+        assert!(result.is_err());
     }
 }
