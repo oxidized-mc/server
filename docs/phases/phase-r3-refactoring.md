@@ -628,7 +628,7 @@ tests pass. `cargo check --workspace` — rayon compiles without warnings.
    - Verify BitSet mask encoding for various section patterns
    - Roundtrip test: build → serialize → deserialize → compare
 
-**What remains for feature phases (P13/P19):**
+**What remains for Phase 23a (Lighting Engine):**
 - BFS sky light initialization from heightmap
 - BFS block light propagation from emitters
 - Incremental update processing (block place/break → light recalc)

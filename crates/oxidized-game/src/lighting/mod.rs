@@ -10,7 +10,7 @@
 //! # Status
 //!
 //! This module is scaffolding only. The BFS propagation algorithm will be
-//! implemented in Phase P13. See ADR-017 for the full design.
+//! implemented in Phase 23a (Lighting Engine). See ADR-017 for the full design.
 
 pub mod engine;
 pub mod queue;

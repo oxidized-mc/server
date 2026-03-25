@@ -7,7 +7,7 @@
 //! # Status
 //!
 //! This is a skeleton — all methods return `todo!()`. The BFS propagation
-//! logic will be implemented in Phase P13.
+//! logic will be implemented in Phase 23a (Lighting Engine).
 
 use oxidized_protocol::types::SectionPos;
 use oxidized_world::chunk::LevelChunk;
@@ -75,7 +75,7 @@ impl LightEngine {
     ///
     /// Returns [`LightingError`] if a referenced chunk section is unavailable.
     pub fn process_updates(&mut self) -> Result<Vec<SectionPos>, LightingError> {
-        todo!("ADR-017: BFS propagation — implemented in Phase P13")
+        todo!("ADR-017: BFS propagation — implemented in Phase 23a")
     }
 
     /// Computes full sky + block light for a newly generated chunk.
@@ -88,7 +88,7 @@ impl LightEngine {
     ///
     /// Returns [`LightingError`] if a chunk section is unavailable.
     pub fn light_chunk(&mut self, _chunk: &LevelChunk) -> Result<(), LightingError> {
-        todo!("ADR-017: Full chunk lighting — implemented in Phase P13")
+        todo!("ADR-017: Full chunk lighting — implemented in Phase 23a")
     }
 }
 

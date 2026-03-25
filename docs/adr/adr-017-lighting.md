@@ -4,7 +4,7 @@
 |-------|-------|
 | Status | Accepted |
 | Date | 2026-03-17 |
-| Phases | P13, P19 |
+| Phases | P13, P19, P23a |
 | Deciders | Oxidized Core Team |
 
 ## Context
