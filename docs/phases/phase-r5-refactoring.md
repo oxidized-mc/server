@@ -30,6 +30,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.15 | Per-player operator permissions (`ops.json`) | 📋 Planned |
 | R5.16 | Safety hardening & cleanup | 📋 Planned |
 | R5.17 | Entity selector completeness | 📋 Planned |
+| R5.18 | Config cleanup: remove Java leftovers & extract hardcoded values | 📋 Planned |
 
 ---
 
@@ -1294,6 +1295,207 @@ semantics across branches. The macro-generated nesting cannot be decomposed furt
 
 ---
 
+### R5.18: Config Cleanup — Remove Java Leftovers & Extract Hardcoded Values
+
+**Source:** Manual audit of config structs vs. hardcoded constants across all crates
+
+This sub-phase has two parts:
+
+- **Part A** — Remove or convert Java-specific config fields inherited from vanilla
+  `server.properties` that have no meaning in a Rust/Tokio server.
+- **Part B** — Extract server-tunable hardcoded constants into config so operators
+  can adjust them without recompiling.
+
+> **Not in scope:** Vanilla game constants (physics, player dimensions, reach
+> distances, protocol IDs) stay as `const` — they must match vanilla for client
+> compatibility and are not operator-tunable.
+
+---
+
+#### Part A: Remove / Convert Java-Specific Config Fields
+
+Three config fields were copied from vanilla `server.properties` but serve no
+purpose in a Rust server.
+
+| Field | File | Action | Reason |
+|-------|------|--------|--------|
+| `is_jmx_monitoring_enabled` | `config/advanced.rs:75` | **Remove** | JMX is a Java-only monitoring API. Rust uses `tracing` / Prometheus. Not referenced anywhere outside config definition. |
+| `is_native_transport_enabled` | `config/network.rs:20` | **Remove** | Controls Netty's epoll/kqueue selector in Java. Tokio uses native I/O multiplexing unconditionally. Not referenced outside config definition. |
+| `is_sync_chunk_writes` | `config/world.rs:20` | **Remove** | Java threading model toggle. Rust async I/O is neither "sync" nor "async" in the Java sense. Not referenced outside config definition. If a durability knob is needed later, add a Rust-appropriate `flush_strategy` enum (e.g., `Immediate`, `Batched`, `OsDefault`). |
+
+**Steps:**
+
+1. Remove the three fields from their config structs
+2. Remove corresponding entries from `oxidized.toml`
+3. Remove environment variable overrides in `config/mod.rs`
+4. Remove from config tests and snapshot files
+5. Update any documentation that references these fields
+6. Grep for stale references:
+   ```bash
+   grep -rn 'jmx_monitoring\|native_transport\|sync_chunk_writes' \
+     crates/ oxidized.toml docs/ --include="*.rs" --include="*.toml" --include="*.md"
+   ```
+
+---
+
+#### Part B: Extract Hardcoded Constants Into Config
+
+The following values are hardcoded as `const` but are legitimate server-tuning
+parameters that operators should be able to adjust.
+
+##### B.1 — Network Timeouts (new `[network.timeouts]` section)
+
+| Constant | Current Value | File | Line |
+|----------|--------------|------|------|
+| `KEEPALIVE_INTERVAL` | 15 s | `network/play/mod.rs` | 203 |
+| `KEEPALIVE_TIMEOUT` | 30 s | `network/play/mod.rs` | 204 |
+| `LOGIN_TIMEOUT` | 30 s | `network/login.rs` | 23 |
+| `CONFIGURATION_TIMEOUT` | 30 s | `network/configuration.rs` | 51 |
+| `WRITE_TIMEOUT` | 30 s | `network/writer.rs` | 23 |
+
+**Action:** Add a `NetworkTimeoutsConfig` struct under `config/network.rs`:
+
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct NetworkTimeoutsConfig {
+    /// Seconds between keepalive pings (default 15).
+    pub keepalive_interval_secs: u64,
+    /// Seconds before a keepalive timeout disconnects the client (default 30).
+    pub keepalive_timeout_secs: u64,
+    /// Seconds to complete the login phase (default 30).
+    pub login_timeout_secs: u64,
+    /// Seconds to complete the configuration phase (default 30).
+    pub configuration_timeout_secs: u64,
+    /// Seconds before a slow-write client is disconnected (default 30).
+    pub write_timeout_secs: u64,
+}
+```
+
+Replace each `const` with a read from `server_ctx.settings.network.timeouts.*`.
+
+##### B.2 — Rate Limiting (new `[network.rate_limit]` section)
+
+| Constant | Current Value | File | Line |
+|----------|--------------|------|------|
+| `DEFAULT_MAX_CONNECTIONS_PER_WINDOW` | 10 | `network/mod.rs` | 581 |
+| `DEFAULT_RATE_LIMIT_WINDOW` | 10 s | `network/mod.rs` | 584 |
+| `RATE_LIMIT_CLEANUP_INTERVAL` | 60 s | `network/mod.rs` | 587 |
+
+**Action:** Add fields to `NetworkConfig` (or a nested `RateLimitConfig`):
+
+```rust
+pub struct RateLimitConfig {
+    /// Max new connections per IP within the window (default 10).
+    pub max_connections_per_window: u32,
+    /// Duration of the rate-limit window in seconds (default 10).
+    pub window_secs: u64,
+    /// Seconds between stale-entry cleanup passes (default 60).
+    pub cleanup_interval_secs: u64,
+}
+```
+
+##### B.3 — Channel Buffer Sizes (new `[network.buffers]` or `[advanced]`)
+
+| Constant | Current Value | File | Line |
+|----------|--------------|------|------|
+| `INBOUND_CHANNEL_CAPACITY` | 128 | `protocol/.../channel.rs` | 53 |
+| `OUTBOUND_CHANNEL_CAPACITY` | 512 | `protocol/.../channel.rs` | 60 |
+
+**Action:** Move to `AdvancedConfig` (these are expert-level tuning knobs):
+
+```rust
+/// Inbound packet channel capacity per connection (default 128).
+pub inbound_channel_capacity: usize,
+/// Outbound packet channel capacity per connection (default 512).
+pub outbound_channel_capacity: usize,
+```
+
+Pass values through `ServerContext` → network setup code instead of importing
+constants from `oxidized-protocol`. The protocol crate keeps the defaults as
+`pub const` for use in tests and as documented defaults.
+
+##### B.4 — Entity Tracking Ranges (new `[gameplay.entity_tracking]` section)
+
+| Constant | Current Value | File | Line |
+|----------|--------------|------|------|
+| `TRACKING_RANGE_PLAYER` | 512 blocks | `entity/tracker.rs` | 13 |
+| `TRACKING_RANGE_ANIMAL` | 160 blocks | `entity/tracker.rs` | 15 |
+| `TRACKING_RANGE_MONSTER` | 128 blocks | `entity/tracker.rs` | 17 |
+| `TRACKING_RANGE_MISC` | 96 blocks | `entity/tracker.rs` | 19 |
+| `TRACKING_RANGE_PROJECTILE` | 64 blocks | `entity/tracker.rs` | 21 |
+| `TRACKING_RANGE_DEFAULT` | 80 blocks | `entity/tracker.rs` | 23 |
+
+**Action:** Add an `EntityTrackingConfig` with per-category range fields. Keep
+the current constants as documented defaults in the struct's `Default` impl.
+This is a high-impact tuning parameter for server bandwidth and CPU.
+
+##### B.5 — Weather Cycle Timing (new `[gameplay.weather]` section)
+
+| Constant | Current Value | File | Line |
+|----------|--------------|------|------|
+| `RAIN_DELAY_MIN` | 12 000 ticks | `tick.rs` | 37 |
+| `RAIN_DELAY_MAX` | 180 000 ticks | `tick.rs` | 38 |
+| `RAIN_DURATION_MIN` | 12 000 ticks | `tick.rs` | 41 |
+| `RAIN_DURATION_MAX` | 24 000 ticks | `tick.rs` | 42 |
+| `THUNDER_DELAY_MIN` | 12 000 ticks | `tick.rs` | 45 |
+| `THUNDER_DELAY_MAX` | 180 000 ticks | `tick.rs` | 46 |
+| `THUNDER_DURATION_MIN` | 3 600 ticks | `tick.rs` | 49 |
+| `THUNDER_DURATION_MAX` | 15 600 ticks | `tick.rs` | 50 |
+
+**Action:** Add a `WeatherConfig` struct. Values in ticks (document conversion:
+20 ticks = 1 second). Validate min ≤ max at config load time.
+
+##### B.6 — World Tuning (extend existing `[world]` section)
+
+| Constant | Current Value | File | Line |
+|----------|--------------|------|------|
+| `DEFAULT_CACHE_SIZE` | 1 024 chunks | `level/server_level.rs` | 23 |
+| `DEFAULT_MAX_CONCURRENT` | 64 chunks | `worldgen/scheduler.rs` | 26 |
+
+**Action:** Add to `WorldConfig`:
+
+```rust
+/// Maximum chunks kept in the in-memory cache (default 1024).
+pub chunk_cache_size: usize,
+/// Maximum concurrent chunk generation tasks (default 64).
+pub max_concurrent_chunk_generations: usize,
+```
+
+---
+
+#### Implementation Order
+
+1. **Part A first** — pure deletion, low risk, unblocks TOML schema cleanup
+2. **B.1 + B.2** — network timeouts & rate limiting (most operator-visible)
+3. **B.4** — entity tracking ranges (biggest performance impact)
+4. **B.5** — weather cycle timing (gameplay customization)
+5. **B.3 + B.6** — advanced/expert knobs (channel sizes, cache, worldgen concurrency)
+
+Each step: add config field → wire through `ServerContext` / `ServerSettings` →
+replace `const` usage → add config validation → update `oxidized.toml` with
+documented defaults → test.
+
+---
+
+#### Verification
+
+- `cargo test --workspace` — all tests pass
+- `cargo clippy --workspace -- -D warnings` — no new warnings
+- Grep confirms zero references to removed Java fields:
+  ```bash
+  grep -rn 'jmx_monitoring\|native_transport\|sync_chunk_writes' \
+    crates/ oxidized.toml docs/ --include="*.rs" --include="*.toml" --include="*.md"
+  # Expected: 0 (outside this phase doc)
+  ```
+- `oxidized.toml` loads successfully with both default and custom values
+- Config validation rejects invalid values (e.g., `keepalive_timeout < keepalive_interval`,
+  `rain_delay_min > rain_delay_max`)
+- Server starts and runs with all-default config (backward compatible)
+- Server starts with all values overridden via TOML and env vars
+
+---
+
 ## Risk Assessment
 
 | Risk | Likelihood | Impact | Mitigation |
@@ -1306,6 +1508,8 @@ semantics across branches. The macro-generated nesting cannot be decomposed furt
 | ops.json format drift from vanilla | Low | Medium | Test against vanilla-generated ops.json samples |
 | Fuzz targets find deep bugs | Medium | High | Fix bugs before merging; fuzz in CI nightly |
 | reqwest replacement breaks auth | Low | High | Feature-flag behind `light-http`; keep reqwest as fallback |
+| Config removal breaks existing deployments | Medium | Medium | Document migration in CHANGELOG; fail loudly if removed fields found in TOML |
+| Over-configuring creates footgun surface | Low | Medium | Validate all ranges at load time; document safe defaults prominently |
 
 ---
 
@@ -1343,7 +1547,12 @@ semantics across branches. The macro-generated nesting cannot be decomposed furt
 
 13. **Per-player permissions** — `ops.json` loaded and used for command dispatch
 
-14. **No stale TODOs** for items addressed in R5.14–R5.17
+14. **No stale TODOs** for items addressed in R5.14–R5.18
+
+15. **Zero Java-specific config fields** — no JMX, native transport, or sync chunk writes
+
+16. **All server-tunable constants configurable** — network timeouts, entity tracking
+    ranges, weather cycles, channel sizes, and world tuning readable from `oxidized.toml`
 
 ---
 
@@ -1368,9 +1577,10 @@ semantics across branches. The macro-generated nesting cannot be decomposed furt
 | R5.15 | 8-12 | +400, -30 |
 | R5.16 | 8-10 | +150, -60 |
 | R5.17 | 3-5 | +200, -20 |
-| **Total** | ~190-260 | +3330, -2200 |
+| R5.18 | 15-20 | +350, -120 |
+| **Total** | ~210-285 | +3910, -2340 |
 
-Net reduction: ~150 lines for R5.1–R5.13 (original scope). R5.14–R5.17 are net
+Net reduction: ~150 lines for R5.1–R5.13 (original scope). R5.14–R5.18 are net
 additions (new infrastructure, features, and safety improvements). The key metric
 is not LOC but the elimination of string dispatch, runtime overhead, duplication
 patterns, and accumulated tech debt.
