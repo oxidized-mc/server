@@ -968,3 +968,43 @@ fn flat_generator_type_string() {
     let generator = FlatChunkGenerator::new(FlatWorldConfig::default());
     assert_eq!(generator.generator_type(), "minecraft:flat");
 }
+
+// ── Biome registry consistency ─────────────────────────────────────────────
+
+/// Verifies that biome IDs used in chunk data (from `oxidized-world`'s
+/// `BIOME_NAMES`) match the order entries are sent in the
+/// `minecraft:worldgen/biome` registry packet (from `oxidized-protocol`'s
+/// `registries.json`).
+///
+/// If these ever diverge, the client will display wrong biomes because
+/// chunk palette IDs won't correspond to the registry IDs the client
+/// received during configuration.
+#[test]
+fn biome_ids_match_protocol_registry_order() {
+    let protocol_entries =
+        oxidized_protocol::registry::get_registry_entries("minecraft:worldgen/biome")
+            .expect("biome registry should load");
+
+    let protocol_count = protocol_entries.len();
+    let world_count = oxidized_world::registry::biome_count();
+    assert_eq!(
+        protocol_count, world_count,
+        "protocol biome count ({protocol_count}) != world biome count ({world_count})"
+    );
+
+    for (idx, (protocol_name, _)) in protocol_entries.iter().enumerate() {
+        let world_id = oxidized_world::registry::biome_name_to_id(protocol_name);
+        assert_eq!(
+            world_id,
+            Some(idx as u32),
+            "biome {protocol_name}: protocol index={idx} but world ID={world_id:?}"
+        );
+
+        let world_name = oxidized_world::registry::biome_id_to_name(idx as u32);
+        assert_eq!(
+            world_name,
+            Some(protocol_name.as_str()),
+            "biome index {idx}: protocol name={protocol_name} but world name={world_name:?}"
+        );
+    }
+}

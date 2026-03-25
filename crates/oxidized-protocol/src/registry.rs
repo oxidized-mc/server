@@ -499,4 +499,47 @@ mod tests {
         let result = get_registry_entry_index("minecraft:nonexistent", "minecraft:overworld");
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_biome_registry_is_alphabetically_sorted() {
+        let entries = get_registry_entries("minecraft:worldgen/biome").unwrap();
+        let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
+        for window in names.windows(2) {
+            assert!(
+                window[0] < window[1],
+                "biome registry not sorted: {:?} >= {:?}",
+                window[0],
+                window[1]
+            );
+        }
+    }
+
+    #[test]
+    fn test_biome_registry_plains_at_index_40() {
+        let idx = get_registry_entry_index("minecraft:worldgen/biome", "minecraft:plains")
+            .expect("plains biome should exist");
+        assert_eq!(idx, 40, "plains biome must be at index 40");
+    }
+
+    #[test]
+    fn test_all_synchronized_registries_have_stable_order() {
+        // Verify that calling get_registry_entries twice produces the same
+        // order — catches any non-determinism in the underlying map.
+        for &name in SYNCHRONIZED_REGISTRIES {
+            let first: Vec<String> = get_registry_entries(name)
+                .unwrap()
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect();
+            let second: Vec<String> = get_registry_entries(name)
+                .unwrap()
+                .into_iter()
+                .map(|(n, _)| n)
+                .collect();
+            assert_eq!(
+                first, second,
+                "registry {name} produced different entry order on second call"
+            );
+        }
+    }
 }
