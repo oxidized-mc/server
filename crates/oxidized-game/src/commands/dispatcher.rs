@@ -344,6 +344,9 @@ fn suggest_for_argument(
     player_names: &[String],
     suggestions: &mut Vec<Suggestion>,
 ) {
+    use crate::commands::selector::{FILTER_KEYS, SORT_VALUES};
+    use crate::player::game_mode::GameMode;
+
     let is_entity = matches!(
         arg_type,
         ArgumentType::Entity { .. } | ArgumentType::GameProfile
@@ -354,6 +357,72 @@ fn suggest_for_argument(
             text: format!("<{arg_name}>"),
             tooltip: None,
         });
+        return;
+    }
+
+    // Check if we're inside a selector bracket expression like @a[...
+    if let Some(bracket_start) = current_word.find('[') {
+        let inside = &current_word[bracket_start + 1..];
+
+        // Find the last filter segment (after the last comma at depth 0).
+        let last_segment = split_last_segment(inside);
+
+        if let Some((key, value_part)) = last_segment.split_once('=') {
+            // We're after `key=`, suggest values for this key.
+            let prefix_before =
+                &current_word[..current_word.len() - value_part.len()];
+            let value_range = StringRange {
+                start: range.start + prefix_before.len(),
+                end: range.end,
+            };
+            let lower = value_part.to_lowercase();
+
+            match key.trim() {
+                "sort" => {
+                    for val in SORT_VALUES {
+                        if val.starts_with(&lower) {
+                            suggestions.push(Suggestion {
+                                range: value_range,
+                                text: val.to_string(),
+                                tooltip: None,
+                            });
+                        }
+                    }
+                },
+                "gamemode" => {
+                    for val in &GameMode::ALL_NAMES {
+                        if val.starts_with(&lower) {
+                            suggestions.push(Suggestion {
+                                range: value_range,
+                                text: val.to_string(),
+                                tooltip: None,
+                            });
+                        }
+                    }
+                },
+                _ => {},
+            }
+        } else {
+            // We're typing a key (no `=` yet), suggest filter keys.
+            let prefix_before =
+                &current_word[..current_word.len() - last_segment.len()];
+            let key_range = StringRange {
+                start: range.start + prefix_before.len(),
+                end: range.end,
+            };
+            let lower = last_segment.to_lowercase();
+
+            for key in FILTER_KEYS {
+                let with_eq = format!("{key}=");
+                if with_eq.starts_with(&lower) {
+                    suggestions.push(Suggestion {
+                        range: key_range,
+                        text: with_eq,
+                        tooltip: None,
+                    });
+                }
+            }
+        }
         return;
     }
 
@@ -377,6 +446,24 @@ fn suggest_for_argument(
                 tooltip: None,
             });
         }
+    }
+}
+
+/// Returns the last filter segment inside bracket syntax, respecting `{…}` nesting.
+fn split_last_segment(inside: &str) -> &str {
+    let mut depth = 0u32;
+    let mut last_comma = None;
+    for (i, ch) in inside.char_indices() {
+        match ch {
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => last_comma = Some(i),
+            _ => {},
+        }
+    }
+    match last_comma {
+        Some(pos) => &inside[pos + 1..],
+        None => inside,
     }
 }
 
@@ -928,5 +1015,153 @@ mod tests {
             0,
             "Entity arg flags should have suggestions bit set"
         );
+    }
+
+    // ── Selector bracket filter key completion ─────────────────────────
+
+    #[test]
+    fn completions_suggest_filter_keys_after_bracket() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kill").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: false,
+                        player_only: false,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        // "kill @a[" — inside brackets, empty key
+        let completions = d.get_completions("kill @a[", &src, &[]);
+        let texts: Vec<&str> = completions.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"name="), "should suggest name=");
+        assert!(texts.contains(&"limit="), "should suggest limit=");
+        assert!(texts.contains(&"sort="), "should suggest sort=");
+        assert!(texts.contains(&"gamemode="), "should suggest gamemode=");
+        assert!(texts.contains(&"distance="), "should suggest distance=");
+        assert!(texts.contains(&"type="), "should suggest type=");
+    }
+
+    #[test]
+    fn completions_filter_keys_by_prefix() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kill").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: false,
+                        player_only: false,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        // "kill @a[na" — prefix "na" should match "name="
+        let completions = d.get_completions("kill @a[na", &src, &[]);
+        let texts: Vec<&str> = completions.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"name="), "should suggest name=");
+        assert!(!texts.contains(&"limit="), "should not suggest limit=");
+    }
+
+    #[test]
+    fn completions_suggest_sort_values() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kill").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: false,
+                        player_only: false,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        // "kill @a[sort=" — suggest sort values
+        let completions = d.get_completions("kill @a[sort=", &src, &[]);
+        let texts: Vec<&str> = completions.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"nearest"), "should suggest nearest");
+        assert!(texts.contains(&"furthest"), "should suggest furthest");
+        assert!(texts.contains(&"random"), "should suggest random");
+        assert!(texts.contains(&"arbitrary"), "should suggest arbitrary");
+    }
+
+    #[test]
+    fn completions_suggest_gamemode_values() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kill").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: false,
+                        player_only: false,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        // "kill @a[gamemode=" — suggest gamemode values
+        let completions = d.get_completions("kill @a[gamemode=", &src, &[]);
+        let texts: Vec<&str> = completions.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"survival"), "should suggest survival");
+        assert!(texts.contains(&"creative"), "should suggest creative");
+        assert!(texts.contains(&"adventure"), "should suggest adventure");
+        assert!(texts.contains(&"spectator"), "should suggest spectator");
+    }
+
+    #[test]
+    fn completions_suggest_filter_keys_after_comma() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kill").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: false,
+                        player_only: false,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        // "kill @a[name=Steve," — after comma, suggest next keys
+        let completions = d.get_completions("kill @a[name=Steve,", &src, &[]);
+        let texts: Vec<&str> = completions.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"limit="), "should suggest limit=");
+        assert!(texts.contains(&"sort="), "should suggest sort=");
+    }
+
+    #[test]
+    fn completions_gamemode_values_filtered_by_prefix() {
+        let mut d = CommandDispatcher::new();
+        d.register(
+            literal("kill").then(
+                argument(
+                    "target",
+                    ArgumentType::Entity {
+                        single: false,
+                        player_only: false,
+                    },
+                )
+                .executes(|_| Ok(1)),
+            ),
+        );
+        let src = make_source(4);
+        // "kill @a[gamemode=cr" — should match only creative
+        let completions = d.get_completions("kill @a[gamemode=cr", &src, &[]);
+        let texts: Vec<&str> = completions.iter().map(|c| c.text.as_str()).collect();
+        assert!(texts.contains(&"creative"), "should suggest creative");
+        assert_eq!(texts.len(), 1, "only creative should match 'cr' prefix");
     }
 }

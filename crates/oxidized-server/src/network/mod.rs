@@ -698,6 +698,23 @@ impl ServerHandle for ServerContext {
             })
             .collect()
     }
+
+    fn get_player_game_mode(
+        &self,
+        uuid: &uuid::Uuid,
+    ) -> Option<oxidized_game::player::game_mode::GameMode> {
+        let player_list = self.network.player_list.read();
+        let player_arc = player_list.get(uuid)?;
+        Some(player_arc.read().game_mode)
+    }
+
+    fn get_player_position(&self, uuid: &uuid::Uuid) -> Option<(f64, f64, f64)> {
+        let player_list = self.network.player_list.read();
+        let player_arc = player_list.get(uuid)?;
+        let player = player_arc.read();
+        let pos = player.movement.pos;
+        Some((pos.x, pos.y, pos.z))
+    }
 }
 
 /// A packet broadcast to all connected players (or a targeted subset).

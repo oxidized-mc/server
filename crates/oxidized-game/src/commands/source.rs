@@ -188,6 +188,17 @@ pub trait ServerHandle: Send + Sync {
     fn non_op_player_names(&self) -> Vec<String> {
         vec![]
     }
+
+    /// Returns the game mode of a player by UUID, or `None` if not found.
+    fn get_player_game_mode(&self, _uuid: &uuid::Uuid) -> Option<GameMode> {
+        None
+    }
+
+    /// Returns the position `(x, y, z)` of a player by UUID, or `None` if not
+    /// found.
+    fn get_player_position(&self, _uuid: &uuid::Uuid) -> Option<(f64, f64, f64)> {
+        None
+    }
 }
 
 /// The kind of entity that is executing a command.

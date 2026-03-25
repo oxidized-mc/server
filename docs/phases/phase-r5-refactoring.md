@@ -29,7 +29,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.14 | Benchmark & fuzz testing infrastructure | ✅ Done |
 | R5.15 | Per-player operator permissions (`ops.json`) | ✅ Done |
 | R5.16 | Safety hardening & cleanup | ✅ Done |
-| R5.17 | Entity selector completeness | 📋 Planned |
+| R5.17 | Entity selector completeness | ✅ Done |
 | R5.18 | Config cleanup: remove Java leftovers & extract hardcoded values | 📋 Planned |
 
 ---
@@ -1263,40 +1263,44 @@ network input, so the paletted container (which IS on the wire path) was priorit
 
 ### R5.17: Entity Selector Completeness
 
+**Status:** ✅ Done
+
 **Source:** memories.md Phase 18 retrospective, code TODOs
 
-**Current problems:**
-- `@r` selector is deterministic — should be properly randomized
-- Filter syntax `[key=value]` is accepted by the parser (bracket
-  detected) but filters are completely ignored at runtime
-- Both are small, independent improvements to the command system
+**What was done:**
 
-**Steps:**
+1. **`@r` randomization** — already implemented via Fisher-Yates shuffle with
+   `rand::rng()` (verified prior to this sub-phase).
 
-1. **Randomize `@r` selector**:
-   - Replace deterministic selection with `rand::thread_rng().gen_range()`
-   - Add `rand` as a dependency to `oxidized-game` (if not already present)
-   - Test: verify `@r` produces different results across calls (statistical)
+2. **Runtime filter enforcement** — six filters are now applied during
+   `resolve_selector()` (previously only `name`, `limit`, `sort`):
+   - `gamemode=<mode>` / `gamemode=!<mode>` — filters players by game mode.
+     Added `GameMode::from_name()` / `GameMode::name()` for string conversion
+     and `ServerHandle::get_player_game_mode()` to query player state.
+   - `distance=<range>` — filters by Euclidean distance from the command
+     source position. Added `ServerHandle::get_player_position()`.
+   - `type=<entity_type>` / `type=!<entity_type>` — filters by entity type.
+     Currently all entities are players, so `type=player` / `type=minecraft:player`
+     keeps all; other types exclude all.
+   - Remaining filters (`tag`, `nbt`, `scores`, `advancements`, `team`, `level`,
+     coordinates, rotations) are still parsed and stored for future ECS use.
 
-2. **Implement basic `[key=value]` filter processing**:
-   - Parse filter pairs from bracket syntax (already tokenized)
-   - Implement core filters matching vanilla:
-     - `type=<entity_type>` — filter by entity type
-     - `name=<name>` — filter by entity name
-     - `distance=<range>` — filter by distance from source
-     - `limit=<N>` — cap result count
-     - `sort=nearest|furthest|random|arbitrary` — result ordering
-     - `gamemode=<mode>` — filter players by game mode
-   - Each filter is a predicate applied post-resolution
-   - Unrecognized filter keys log a warning and are ignored
+3. **Tab-completion for filter keys** — when a player types `@x[`, the server
+   now suggests all 20 filter keys (`name=`, `limit=`, `sort=`, `gamemode=`,
+   `distance=`, `type=`, etc.). Value-level completions are provided for
+   `sort=` (nearest/furthest/random/arbitrary) and `gamemode=`
+   (survival/creative/adventure/spectator). Keys after commas are also
+   suggested (e.g., `@a[name=Steve,` → suggest next key).
 
-3. **Add tab-completion for filter keys** in entity selector suggestions
+**Files changed:**
+- `crates/oxidized-game/src/player/game_mode.rs` — `name()`, `from_name()`, `ALL_NAMES`
+- `crates/oxidized-game/src/commands/source.rs` — `get_player_game_mode()`, `get_player_position()`
+- `crates/oxidized-game/src/commands/selector.rs` — runtime filters, `FILTER_KEYS`, `SORT_VALUES`
+- `crates/oxidized-game/src/commands/dispatcher.rs` — bracket filter tab-completion
+- `crates/oxidized-server/src/network/mod.rs` — `ServerHandle` impl for new methods
 
-**Verification:**
-- Unit tests: `@r` produces varied results, each filter correctly
-  includes/excludes entities
-- Integration test: `@a[gamemode=creative]` resolves correctly
-- `cargo test -p oxidized-game` passes
+**Tests added:** 17 new tests across selector.rs (12 resolution), dispatcher.rs (6
+tab-completion), game_mode.rs (4 name conversion).
 
 ---
 
@@ -1581,7 +1585,7 @@ documented defaults → test.
 | R5.14 | 10-15 | +600, -0 |
 | R5.15 | 8-12 | +400, -30 |
 | R5.16 | 8-10 | +150, -60 |
-| R5.17 | 3-5 | +200, -20 |
+| R5.17 | 5 | +700, -37 |
 | R5.18 | 15-20 | +350, -120 |
 | **Total** | ~210-285 | +3910, -2340 |
 

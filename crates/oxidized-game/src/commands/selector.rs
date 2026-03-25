@@ -1,15 +1,46 @@
 //! Entity selector parsing and resolution (`@a`, `@e`, `@p`, `@r`, `@s`, `@n`).
 //!
-//! Parses vanilla-compatible filter syntax (`[key=value,…]`) and applies filters
-//! that can be resolved with the current player-only data model. Filters that
-//! require ECS entity queries (e.g. `distance`, `type`, `tag`, `nbt`, `scores`,
-//! `advancements`) are parsed and stored but not yet applied during resolution.
+//! Parses vanilla-compatible filter syntax (`[key=value,…]`) and applies filters.
+//! Filters that can be evaluated with the current player-only data model (`name`,
+//! `limit`, `sort`, `gamemode`, `distance`, `type`) are applied during resolution.
+//! Remaining filters (`tag`, `nbt`, `scores`, `advancements`, `team`, `level`,
+//! rotations, coordinates/volumes) are parsed and stored for future ECS use.
 
 use crate::commands::CommandError;
 use crate::commands::argument_parser::parse_range;
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
+use crate::player::game_mode::GameMode;
 use rand::RngExt;
 use std::str::FromStr;
+
+// ── Constants ──────────────────────────────────────────────────────────
+
+/// All supported filter keys for tab-completion, in alphabetical order.
+pub const FILTER_KEYS: &[&str] = &[
+    "advancements",
+    "distance",
+    "dx",
+    "dy",
+    "dz",
+    "gamemode",
+    "level",
+    "limit",
+    "name",
+    "nbt",
+    "scores",
+    "sort",
+    "tag",
+    "team",
+    "type",
+    "x",
+    "x_rotation",
+    "y",
+    "y_rotation",
+    "z",
+];
+
+/// Valid values for the `sort=` filter.
+pub const SORT_VALUES: &[&str] = &["arbitrary", "furthest", "nearest", "random"];
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -324,8 +355,10 @@ fn parse_f64(value: &str, name: &str) -> Result<f64, CommandError> {
 ///
 /// Returns a list of matching [`SelectorTarget`]s. Only online players are
 /// considered since the ECS entity layer is not yet wired into commands.
-/// Filters that can be applied with player data (`name`, `limit`, `sort`)
-/// are applied. Filters requiring ECS data are stored but not yet enforced.
+///
+/// Applied filters: `name`, `limit`, `sort`, `gamemode`, `distance`, `type`.
+/// Stored but not yet enforced: `tag`, `nbt`, `scores`, `advancements`,
+/// `team`, `level`, `x/y/z/dx/dy/dz`, rotations.
 pub fn resolve_selector(
     selector: &EntitySelector,
     source: &CommandSourceStack,
@@ -376,6 +409,62 @@ pub fn resolve_selector(
         } else {
             targets.retain(|t| t.name == nf.name);
         }
+    }
+
+    // Apply gamemode filters.
+    for (mode_name, is_negated) in &filters.gamemode {
+        let mode = GameMode::from_name(mode_name).ok_or_else(|| {
+            CommandError::Parse(format!("Invalid game mode: '{mode_name}'"))
+        })?;
+        targets.retain(|t| {
+            let player_mode = source.server.get_player_game_mode(&t.uuid);
+            match player_mode {
+                Some(gm) => (gm == mode) != *is_negated,
+                // If we can't determine the game mode, exclude the target.
+                None => false,
+            }
+        });
+    }
+
+    // Apply type filters. Currently only players exist, so "player" /
+    // "minecraft:player" matches and everything else excludes.
+    for (type_name, is_negated) in &filters.entity_type {
+        let is_player_type =
+            type_name == "player" || type_name == "minecraft:player";
+        if is_player_type == *is_negated {
+            // type=player,negated → exclude all players → empty
+            // type=!zombie → is_player=false, negated=true → keep all
+            targets.clear();
+        }
+        // type=player (not negated) or type=!non_player → keep all current targets
+    }
+
+    // Apply distance filter using source position.
+    if let Some(ref distance) = filters.distance {
+        let (sx, sy, sz) = source.position;
+        targets.retain(|t| {
+            let pos = source.server.get_player_position(&t.uuid);
+            match pos {
+                Some((px, py, pz)) => {
+                    let dx = px - sx;
+                    let dy = py - sy;
+                    let dz = pz - sz;
+                    let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+                    if let Some(min) = distance.min {
+                        if dist < min {
+                            return false;
+                        }
+                    }
+                    if let Some(max) = distance.max {
+                        if dist > max {
+                            return false;
+                        }
+                    }
+                    true
+                },
+                None => false,
+            }
+        });
     }
 
     // Apply sort. Without positions, nearest/furthest use natural order.
@@ -711,5 +800,250 @@ mod tests {
         assert!(parse_double_range("abc..10").is_err());
         assert!(parse_double_range("10..abc").is_err());
         assert!(parse_double_range("not_a_number").is_err());
+    }
+
+    // ── Resolution tests ──────────────────────────────────────────────
+
+    use crate::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
+    use crate::player::game_mode::GameMode as GM;
+    use oxidized_protocol::chat::Component;
+    use std::sync::Arc;
+
+    /// Mock player data for resolution tests.
+    struct MockPlayerData {
+        name: String,
+        uuid: uuid::Uuid,
+        game_mode: GM,
+        position: (f64, f64, f64),
+    }
+
+    /// Mock server that supports name, UUID, game mode, and position queries.
+    struct MockServer {
+        players: Vec<MockPlayerData>,
+    }
+
+    impl MockServer {
+        fn new(players: Vec<MockPlayerData>) -> Self {
+            Self { players }
+        }
+    }
+
+    impl ServerHandle for MockServer {
+        fn broadcast_to_ops(&self, _msg: &Component, _min_level: u32) {}
+        fn request_shutdown(&self) {}
+        fn seed(&self) -> i64 {
+            0
+        }
+        fn online_player_names(&self) -> Vec<String> {
+            self.players.iter().map(|p| p.name.clone()).collect()
+        }
+        fn online_player_count(&self) -> usize {
+            self.players.len()
+        }
+        fn max_players(&self) -> usize {
+            20
+        }
+        fn difficulty(&self) -> i32 {
+            2
+        }
+        fn game_time(&self) -> i64 {
+            0
+        }
+        fn day_time(&self) -> i64 {
+            0
+        }
+        fn is_raining(&self) -> bool {
+            false
+        }
+        fn is_thundering(&self) -> bool {
+            false
+        }
+        fn kick_player(&self, _name: &str, _reason: &str) -> bool {
+            false
+        }
+        fn find_player_uuid(&self, name: &str) -> Option<uuid::Uuid> {
+            self.players.iter().find(|p| p.name == name).map(|p| p.uuid)
+        }
+        fn command_descriptions(&self) -> Vec<(String, Option<String>)> {
+            vec![]
+        }
+        fn get_player_game_mode(&self, uuid: &uuid::Uuid) -> Option<GM> {
+            self.players
+                .iter()
+                .find(|p| &p.uuid == uuid)
+                .map(|p| p.game_mode)
+        }
+        fn get_player_position(
+            &self,
+            uuid: &uuid::Uuid,
+        ) -> Option<(f64, f64, f64)> {
+            self.players
+                .iter()
+                .find(|p| &p.uuid == uuid)
+                .map(|p| p.position)
+        }
+    }
+
+    fn make_source(server: Arc<dyn ServerHandle>) -> CommandSourceStack {
+        let players = server.online_player_names();
+        let (name, uuid) = if let Some(first) = players.first() {
+            let uuid = server.find_player_uuid(first).unwrap();
+            (first.clone(), uuid)
+        } else {
+            ("Console".to_string(), uuid::Uuid::nil())
+        };
+        CommandSourceStack {
+            source: CommandSourceKind::Player {
+                name: name.clone(),
+                uuid,
+            },
+            position: (0.0, 64.0, 0.0),
+            rotation: (0.0, 0.0),
+            permission_level: 4,
+            display_name: name,
+            server,
+            feedback_sender: Arc::new(|_| {}),
+            is_silent: false,
+        }
+    }
+
+    fn test_players() -> Vec<MockPlayerData> {
+        vec![
+            MockPlayerData {
+                name: "Alice".into(),
+                uuid: uuid::Uuid::from_u128(1),
+                game_mode: GM::Creative,
+                position: (10.0, 64.0, 10.0),
+            },
+            MockPlayerData {
+                name: "Bob".into(),
+                uuid: uuid::Uuid::from_u128(2),
+                game_mode: GM::Survival,
+                position: (100.0, 64.0, 0.0),
+            },
+            MockPlayerData {
+                name: "Charlie".into(),
+                uuid: uuid::Uuid::from_u128(3),
+                game_mode: GM::Spectator,
+                position: (0.0, 64.0, 0.0),
+            },
+        ]
+    }
+
+    #[test]
+    fn resolve_gamemode_filter_includes() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        let sel = parse_selector("@a[gamemode=creative]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "Alice");
+    }
+
+    #[test]
+    fn resolve_gamemode_filter_excludes() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        let sel = parse_selector("@a[gamemode=!spectator]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        let names: Vec<&str> = result.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&"Alice"));
+        assert!(names.contains(&"Bob"));
+        assert!(!names.contains(&"Charlie"));
+    }
+
+    #[test]
+    fn resolve_gamemode_invalid_mode_errors() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        let sel = parse_selector("@a[gamemode=hardcore]").unwrap();
+        let result = resolve_selector(&sel, &src);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_distance_filter() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        // Source at (0, 64, 0). Alice at (10, 64, 10) = ~14.1 blocks.
+        // Bob at (100, 64, 0) = 100 blocks. Charlie at (0, 64, 0) = 0 blocks.
+        let sel = parse_selector("@a[distance=..20]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        let names: Vec<&str> = result.iter().map(|t| t.name.as_str()).collect();
+        assert!(names.contains(&"Alice"), "Alice is ~14 blocks away");
+        assert!(names.contains(&"Charlie"), "Charlie is 0 blocks away");
+        assert!(!names.contains(&"Bob"), "Bob is 100 blocks away");
+    }
+
+    #[test]
+    fn resolve_distance_filter_min_max() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        // Only Bob at 100 blocks (Alice ~14, Charlie 0)
+        let sel = parse_selector("@a[distance=50..200]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "Bob");
+    }
+
+    #[test]
+    fn resolve_type_filter_player() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        let sel = parse_selector("@e[type=minecraft:player]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn resolve_type_filter_excludes_non_player() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        // type=zombie — no players match
+        let sel = parse_selector("@e[type=zombie]").unwrap();
+        let result = resolve_selector(&sel, &src);
+        assert!(result.is_err()); // "No entities found"
+    }
+
+    #[test]
+    fn resolve_type_filter_negated_player() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        // type=!player — excludes all current entities (all are players)
+        let sel = parse_selector("@e[type=!player]").unwrap();
+        let result = resolve_selector(&sel, &src);
+        assert!(result.is_err()); // "No entities found"
+    }
+
+    #[test]
+    fn resolve_type_filter_negated_non_player() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        // type=!zombie — excludes zombies, keeps all players
+        let sel = parse_selector("@e[type=!zombie]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn resolve_combined_filters() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        // gamemode=survival + distance within 200
+        let sel =
+            parse_selector("@a[gamemode=survival,distance=..200]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].name, "Bob");
+    }
+
+    #[test]
+    fn resolve_limit_with_gamemode() {
+        let server = Arc::new(MockServer::new(test_players()));
+        let src = make_source(server);
+        let sel =
+            parse_selector("@a[gamemode=!spectator,limit=1]").unwrap();
+        let result = resolve_selector(&sel, &src).unwrap();
+        assert_eq!(result.len(), 1);
     }
 }

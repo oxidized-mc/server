@@ -40,6 +40,32 @@ impl GameMode {
         self as i32
     }
 
+    /// Returns the lowercase vanilla name used in commands and selectors.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Survival => "survival",
+            Self::Creative => "creative",
+            Self::Adventure => "adventure",
+            Self::Spectator => "spectator",
+        }
+    }
+
+    /// Parses a game mode from its vanilla command name.
+    ///
+    /// Returns `None` for unrecognized names.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "survival" => Some(Self::Survival),
+            "creative" => Some(Self::Creative),
+            "adventure" => Some(Self::Adventure),
+            "spectator" => Some(Self::Spectator),
+            _ => None,
+        }
+    }
+
+    /// Returns all game mode names, for tab-completion.
+    pub const ALL_NAMES: [&'static str; 4] = ["survival", "creative", "adventure", "spectator"];
+
     /// Returns the "nullable" game mode byte used in login/respawn packets.
     ///
     /// A value of `-1` means "no previous game mode".
@@ -138,5 +164,42 @@ mod tests {
         assert!(!GameMode::Survival.is_creative());
         assert!(GameMode::Creative.is_creative());
         assert!(GameMode::Spectator.is_spectator());
+    }
+
+    #[test]
+    fn test_name_roundtrip() {
+        for mode in [
+            GameMode::Survival,
+            GameMode::Creative,
+            GameMode::Adventure,
+            GameMode::Spectator,
+        ] {
+            let name = mode.name();
+            let parsed = GameMode::from_name(name).unwrap();
+            assert_eq!(parsed, mode);
+        }
+    }
+
+    #[test]
+    fn test_from_name_valid() {
+        assert_eq!(GameMode::from_name("survival"), Some(GameMode::Survival));
+        assert_eq!(GameMode::from_name("creative"), Some(GameMode::Creative));
+        assert_eq!(GameMode::from_name("adventure"), Some(GameMode::Adventure));
+        assert_eq!(GameMode::from_name("spectator"), Some(GameMode::Spectator));
+    }
+
+    #[test]
+    fn test_from_name_invalid() {
+        assert_eq!(GameMode::from_name("hardcore"), None);
+        assert_eq!(GameMode::from_name(""), None);
+        assert_eq!(GameMode::from_name("Survival"), None); // case-sensitive
+    }
+
+    #[test]
+    fn test_all_names() {
+        assert_eq!(
+            GameMode::ALL_NAMES,
+            ["survival", "creative", "adventure", "spectator"]
+        );
     }
 }
