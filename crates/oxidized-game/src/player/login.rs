@@ -36,6 +36,9 @@ use crate::level::game_rules::{GameRuleKey, GameRules};
 use crate::player::PlayerInventory;
 use crate::player::inventory::PROTOCOL_SLOT_COUNT;
 
+/// Bitmask for the hat model part (bit 6) in the model customisation byte.
+const HAT_MASK: u8 = 1 << 6;
+
 /// An encoded packet ready to be sent over the wire.
 ///
 /// Contains the packet ID and the encoded body (without the packet ID
@@ -209,7 +212,7 @@ fn build_player_info_packet(all_players: &PlayerList) -> EncodedPacket {
                 is_listed: true,
                 has_display_name: false,
                 display_name: None,
-                is_hat_visible: false,
+                is_hat_visible: (p.connection.model_customisation & HAT_MASK) != 0,
                 list_order: 0,
             }
         })

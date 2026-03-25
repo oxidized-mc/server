@@ -98,6 +98,9 @@ const PLAYER_ENTITY_TYPE_ID: i32 = 155;
 /// `DATA_PLAYER_MODE_CUSTOMISATION` is Avatar index 16.
 const DATA_PLAYER_MODE_CUSTOMISATION: u8 = 16;
 
+/// Bitmask for the hat model part (bit 6) in the model customisation byte.
+const HAT_MASK: u8 = 1 << 6;
+
 /// Converts a float angle (degrees) to the protocol's packed byte format.
 ///
 /// The packed format maps 0–360° to 0–255, with proper wrapping for
@@ -637,13 +640,18 @@ async fn handle_client_information_packet(
 
     let new_view_distance = i32::from(info_pkt.information.view_distance)
         .clamp(2, server_ctx.settings.max_view_distance);
-    let (old_view_distance, skin_changed) = {
+    let (old_view_distance, skin_changed, hat_changed) = {
         let mut p = play_ctx.player.write();
         let old_vd = p.connection.view_distance;
         p.connection.view_distance = new_view_distance;
         let old_skin = p.connection.model_customisation;
         p.connection.model_customisation = info_pkt.information.model_customisation;
-        (old_vd, old_skin != p.connection.model_customisation)
+        let new_skin = p.connection.model_customisation;
+        (
+            old_vd,
+            old_skin != new_skin,
+            (old_skin & HAT_MASK) != (new_skin & HAT_MASK),
+        )
     };
 
     if skin_changed {
@@ -660,6 +668,25 @@ async fn handle_client_information_packet(
             exclude_entity: Some(entity_id),
             target_entity: None,
         });
+
+        // Broadcast hat visibility update to tab list (vanilla parity).
+        if hat_changed {
+            let hat_update = ClientboundPlayerInfoUpdatePacket {
+                actions: PlayerInfoActions(PlayerInfoActions::UPDATE_HAT),
+                entries: vec![PlayerInfoEntry {
+                    uuid: play_ctx.player_uuid,
+                    is_hat_visible: (skin & HAT_MASK) != 0,
+                    ..Default::default()
+                }],
+            };
+            let encoded = hat_update.encode();
+            server_ctx.broadcast(BroadcastMessage {
+                packet_id: ClientboundPlayerInfoUpdatePacket::PACKET_ID,
+                data: encoded.into(),
+                exclude_entity: None,
+                target_entity: None,
+            });
+        }
     }
 
     if new_view_distance != old_view_distance {

@@ -31,7 +31,8 @@ use oxidized_game::player::{
 use super::commands;
 use super::helpers;
 use super::{
-    DATA_PLAYER_MODE_CUSTOMISATION, PLAYER_ENTITY_TYPE_ID, build_equipment_packet, pack_angle,
+    DATA_PLAYER_MODE_CUSTOMISATION, HAT_MASK, PLAYER_ENTITY_TYPE_ID, build_equipment_packet,
+    pack_angle,
 };
 
 /// State returned by the join sequence, consumed by the play loop.
@@ -444,7 +445,7 @@ fn build_player_info_packet(
             is_listed: true,
             has_display_name: false,
             display_name: None,
-            is_hat_visible: false,
+            is_hat_visible: (p.connection.model_customisation & HAT_MASK) != 0,
             list_order: 0,
         }],
     }
