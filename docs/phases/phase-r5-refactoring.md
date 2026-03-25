@@ -19,7 +19,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.4 | Replace string-based block categorization with flags/tags | ✅ Done |
 | R5.5 | Replace hardcoded physics properties with registry data | ✅ Done |
 | R5.6 | Replace hardcoded biome resolution with registry lookup | ✅ Done |
-| R5.7 | Compile-time item ID codegen (like blocks) | 📋 Planned |
+| R5.7 | Compile-time item ID codegen (like blocks) | ✅ Done |
 | R5.8 | Extract packet codec helpers & roundtrip test macro | 📋 Planned |
 | R5.9 | Extract command registration helpers | 📋 Planned |
 | R5.10 | Standardize packet decoder error handling | 📋 Planned |
@@ -727,54 +727,56 @@ back to plains. 969 tests pass across oxidized-world and oxidized-game.
 
 ### R5.7: Compile-Time Item ID Codegen (Like Blocks)
 
+**Status:** ✅ Done
+
 **Targets:** `crates/oxidized-world/build.rs`,
 `crates/oxidized-world/src/registry/item_registry.rs`,
+`crates/oxidized-world/src/registry/item_generated.rs` (new),
 `crates/oxidized-game/src/inventory/item_ids.rs`
 
-**Current problems:**
-- `ItemRegistry::load()` decompresses `items.json.gz` and builds a `Vec<Item>` +
+**Problems solved:**
+- `ItemRegistry::load()` decompressed `items.json.gz` and built a `Vec<Item>` +
   `AHashMap<String, usize>` at runtime on first access (via `LazyLock`)
-- Every `item_name_to_id()` call does an `AHashMap` lookup instead of O(1) access
+- Every `item_name_to_id()` call did an `AHashMap` lookup
 - Decompression + hashmap construction at startup, not compile time
-- Blocks use compile-time codegen with pre-computed arrays; items use runtime
-  loading — no reason for the inconsistency
+- Blocks used compile-time codegen; items used runtime loading
 
-**Steps:**
+**What was done:**
 
-1. **Extend `build.rs`** to generate item registration data from `items.json.gz`:
-   ```rust
-   // Generated in $OUT_DIR/item_ids_generated.rs
-   const ITEM_NAMES: &[&str] = &[
-       "minecraft:air",
-       "minecraft:stone",
-       // ... 1504 more in vanilla registration order
-   ];
-   const ITEM_MAX_STACK_SIZES: &[u8] = &[64, 64, 64, /* ... */];
-   const ITEM_MAX_DAMAGES: &[u16] = &[0, 0, 0, /* ... */];
-   ```
+1. **Extended `build.rs`** with `generate_item_ids()` that parses `items.json.gz`
+   and writes `$OUT_DIR/item_ids_generated.rs` containing:
+   - `ITEM_COUNT: usize` — total items (1506)
+   - `ITEM_NAMES: [&str; ITEM_COUNT]` — vanilla registration order
+   - `ITEM_MAX_STACK_SIZES: [u8; ITEM_COUNT]`
+   - `ITEM_MAX_DAMAGES: [u16; ITEM_COUNT]`
+   - `ITEM_NAMES_SORTED: [(&str, u16); ITEM_COUNT]` — alphabetical for binary search
 
-2. **Generate a compile-time perfect hash** (`phf` crate) for name → ID lookup.
-   With 1506 items, linear search is too slow for hot paths. `phf` gives O(1)
-   with zero runtime cost, matching the block codegen's zero-overhead approach.
+2. **Used sorted array + binary search** for name → ID lookup instead of `phf`.
+   This matches the existing `BLOCK_NAMES_SORTED` pattern — O(log₂ 1506) ≈ 11
+   comparisons, no new dependency, consistent with blocks.
 
-3. **Rewrite `ItemRegistry`** to wrap the generated arrays:
-   - Replace `Vec<Item>` with references to static arrays
-   - Replace `AHashMap<String, usize>` with the generated `phf::Map`
-   - Keep the same public API: `name_to_id()`, `id_to_name()`, `max_stack_size()`
+3. **Rewrote `ItemRegistry`** as a zero-sized struct (like `BlockRegistry`):
+   - `const fn new()` — usable in `const` context
+   - `load()` kept for backward compatibility (always succeeds)
+   - Same public API: `name_to_id()`, `id_to_name()`, `max_stack_size()`, `get()`
+   - `get()` return type changed from `Option<&Item>` to `Option<Item>` (constructs
+     from static arrays)
 
-4. **Update `crates/oxidized-game/src/inventory/item_ids.rs`**:
-   - Remove `LazyLock<ItemRegistry>` — call generated functions directly
-   - Preserve return values (`-1` for unknown items, `"minecraft:air"` for
-     unknown IDs)
+4. **Updated `item_ids.rs`**:
+   - Replaced `LazyLock<ItemRegistry>` with `const REGISTRY: ItemRegistry`
+   - Preserved all return-value semantics (`-1` for unknown, `"minecraft:air"` for OOB)
+   - All 3 doc tests pass unchanged
 
-5. **Add verification tests**:
+5. **Added verification tests** (12 total in `item_registry`, 6 in `item_ids`):
    - Snapshot test: `insta::assert_snapshot!` over all 1506 item names
-   - Round-trip: for each name in `ITEM_NAMES`, verify `name_to_id` → `id_to_name`
-   - Spot-check known items: stone, diamond_sword, ender_pearl
+   - Full round-trip: all 1506 items name → id → name
+   - Spot-check: stone, diamond_sword, ender_pearl with property verification
 
 **Verification:**
-- `cargo build -p oxidized-world` — generated code compiles
-- `cargo test -p oxidized-game inventory::item_ids` — all existing tests pass
+- `cargo build -p oxidized-world` — generated code compiles ✅
+- `cargo test -p oxidized-world -- item_registry` — 12 tests pass ✅
+- `cargo test -p oxidized-game -- item_ids` — 6 unit + 3 doc tests pass ✅
+- `cargo check --workspace` — clean compile ✅
 - Zero startup latency (no decompression, no hashmap construction)
 - Generated file lives in `$OUT_DIR/`, never in source tree
 

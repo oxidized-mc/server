@@ -1,78 +1,43 @@
-//! Item registry: lookup of items by name.
-
-use std::io::Read;
-
-use ahash::AHashMap;
-use flate2::read::GzDecoder;
+//! Item registry: O(1) lookup of items backed by compile-time generated static data.
 
 use super::error::RegistryError;
 use super::item::Item;
-
-/// The compressed `items.json` data, embedded at compile time.
-const ITEMS_DATA_GZ: &[u8] = include_bytes!("../data/items.json.gz");
+use super::item_generated;
 
 /// Registry of all item types.
 ///
-/// Provides O(1) lookup of item definitions by name.
-pub struct ItemRegistry {
-    /// All items in registration order.
-    items: Vec<Item>,
-    /// Name → item index lookup.
-    by_name: AHashMap<String, usize>,
-}
+/// All data is generated at compile time in the `item_generated` module. This
+/// struct is zero-sized and acts as a convenient handle with the same API
+/// surface that consumers already use.
+pub struct ItemRegistry;
 
 impl ItemRegistry {
-    /// Load the item registry from the embedded compressed JSON data.
+    /// Create a new item registry.
+    ///
+    /// This is a no-op — all data is static.
+    pub const fn new() -> Self {
+        Self
+    }
+
+    /// Backward-compatible load method.
+    ///
+    /// Always succeeds since data is compiled-in.
     ///
     /// # Errors
     ///
-    /// Returns [`RegistryError::Decompress`] if decompression fails, or
-    /// [`RegistryError::Json`] if the JSON is malformed.
+    /// Never fails. Signature is kept for API compatibility.
     pub fn load() -> Result<Self, RegistryError> {
-        let mut decoder = GzDecoder::new(ITEMS_DATA_GZ);
-        let mut json_str = String::new();
-        decoder.read_to_string(&mut json_str)?;
-
-        let root: serde_json::Value = serde_json::from_str(&json_str)?;
-        let empty_map = serde_json::Map::new();
-        let obj = root.as_object().unwrap_or(&empty_map);
-
-        let mut items = Vec::with_capacity(obj.len());
-        let mut by_name = AHashMap::with_capacity(obj.len());
-
-        for (name, value) in obj {
-            let raw_stack = value
-                .get("max_stack_size")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(64);
-            let max_stack_size = u8::try_from(raw_stack).map_err(|_| {
-                RegistryError::InvalidItemProperty(name.clone(), "max_stack_size", raw_stack)
-            })?;
-
-            let raw_damage = value
-                .get("max_damage")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0);
-            let max_damage = u16::try_from(raw_damage).map_err(|_| {
-                RegistryError::InvalidItemProperty(name.clone(), "max_damage", raw_damage)
-            })?;
-
-            let idx = items.len();
-            by_name.insert(name.clone(), idx);
-
-            items.push(Item {
-                name: name.clone(),
-                max_stack_size,
-                max_damage,
-            });
-        }
-
-        Ok(Self { items, by_name })
+        Ok(Self)
     }
 
     /// Get an item definition by its registry name (e.g., `"minecraft:stone"`).
-    pub fn get(&self, name: &str) -> Option<&Item> {
-        self.by_name.get(name).map(|&idx| &self.items[idx])
+    pub fn get(&self, name: &str) -> Option<Item> {
+        let idx = self.name_to_id_usize(name)?;
+        Some(Item {
+            name: item_generated::ITEM_NAMES[idx].to_owned(),
+            max_stack_size: item_generated::ITEM_MAX_STACK_SIZES[idx],
+            max_damage: item_generated::ITEM_MAX_DAMAGES[idx],
+        })
     }
 
     /// Returns the protocol numeric ID for an item name, or `None` if unknown.
@@ -80,27 +45,42 @@ impl ItemRegistry {
     /// The ID is the item's index in the vanilla registration-order list.
     /// Empty strings return `None`.
     pub fn name_to_id(&self, name: &str) -> Option<i32> {
-        self.by_name.get(name).map(|&idx| idx as i32)
+        self.name_to_id_usize(name).map(|idx| idx as i32)
     }
 
     /// Returns the item name for a protocol numeric ID, or `None` if out of range.
-    pub fn id_to_name(&self, id: i32) -> Option<&str> {
+    pub fn id_to_name(&self, id: i32) -> Option<&'static str> {
         if id < 0 {
             return None;
         }
-        self.items.get(id as usize).map(|item| item.name.as_str())
+        item_generated::ITEM_NAMES.get(id as usize).copied()
     }
 
     /// Returns the maximum stack size for an item by name.
     ///
     /// Returns `64` (the vanilla default) if the item is not found.
     pub fn max_stack_size(&self, name: &str) -> u8 {
-        self.get(name).map_or(64, |item| item.max_stack_size)
+        self.name_to_id_usize(name)
+            .map_or(64, |idx| item_generated::ITEM_MAX_STACK_SIZES[idx])
     }
 
     /// Total number of items in the registry.
     pub fn item_count(&self) -> usize {
-        self.items.len()
+        item_generated::ITEM_COUNT
+    }
+
+    /// Binary search lookup: name → registration-order index.
+    fn name_to_id_usize(&self, name: &str) -> Option<usize> {
+        item_generated::ITEM_NAMES_SORTED
+            .binary_search_by_key(&name, |&(n, _)| n)
+            .ok()
+            .map(|pos| item_generated::ITEM_NAMES_SORTED[pos].1 as usize)
+    }
+}
+
+impl Default for ItemRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -110,12 +90,12 @@ mod tests {
     use super::*;
 
     fn registry() -> ItemRegistry {
-        ItemRegistry::load().expect("failed to load item registry")
+        ItemRegistry::new()
     }
 
     #[test]
     fn test_load_items() {
-        let _ = registry();
+        let _ = ItemRegistry::load().expect("load should never fail");
     }
 
     #[test]
@@ -179,5 +159,36 @@ mod tests {
         assert_eq!(reg.max_stack_size("minecraft:ender_pearl"), 16);
         // Unknown item → default 64
         assert_eq!(reg.max_stack_size("minecraft:nonexistent"), 64);
+    }
+
+    #[test]
+    fn test_all_items_roundtrip() {
+        let reg = registry();
+        for id in 0..reg.item_count() as i32 {
+            let name = reg.id_to_name(id).expect("id should be valid");
+            let back = reg.name_to_id(name).expect("name should be valid");
+            assert_eq!(back, id, "roundtrip failed for {name} (id {id})");
+        }
+    }
+
+    #[test]
+    fn test_spot_check_known_items() {
+        let reg = registry();
+        // Verify specific well-known items exist and have correct properties
+        assert!(reg.get("minecraft:stone").is_some());
+        assert!(reg.get("minecraft:diamond_sword").is_some());
+        assert!(reg.get("minecraft:ender_pearl").is_some());
+
+        let pearl = reg.get("minecraft:ender_pearl").expect("ender_pearl");
+        assert_eq!(pearl.max_stack_size, 16);
+        assert_eq!(pearl.max_damage, 0);
+    }
+
+    #[test]
+    fn test_snapshot_item_names() {
+        let names: Vec<&str> = (0..item_generated::ITEM_COUNT)
+            .map(|i| item_generated::ITEM_NAMES[i])
+            .collect();
+        insta::assert_snapshot!(names.join("\n"));
     }
 }

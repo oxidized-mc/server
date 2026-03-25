@@ -11,6 +11,7 @@ mod constants;
 mod error;
 pub(crate) mod generated;
 mod item;
+mod item_generated;
 mod item_registry;
 mod tags;
 

@@ -1,17 +1,13 @@
 //! Item ID ↔ name mapping backed by the vanilla item registry.
 //!
-//! Uses [`oxidized_world::registry::ItemRegistry`] loaded from the embedded
-//! `items.json.gz` data (1 506 items in vanilla registration order).
-//! The item's index in the alphabetical list equals its protocol numeric ID.
-
-use std::sync::LazyLock;
+//! Uses [`oxidized_world::registry::ItemRegistry`] which wraps compile-time
+//! generated static arrays (1 506 items in vanilla registration order).
+//! Zero startup cost — no decompression, no hashmap construction.
 
 use oxidized_world::registry::ItemRegistry;
 
-/// Lazily-loaded item registry shared by all callers in this process.
-#[allow(clippy::expect_used)] // Static init — no way to propagate errors.
-static REGISTRY: LazyLock<ItemRegistry> =
-    LazyLock::new(|| ItemRegistry::load().expect("failed to load embedded item registry"));
+/// Zero-sized registry handle (all data is static).
+const REGISTRY: ItemRegistry = ItemRegistry::new();
 
 /// Converts an item resource name to its vanilla protocol numeric ID.
 ///
