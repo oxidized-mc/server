@@ -118,6 +118,22 @@ pub struct ServerSettings {
     pub spawn_protection: u32,
     /// Alternate color code prefix character, or `None` if disabled.
     pub color_char: Option<char>,
+    /// Network timeout configuration.
+    pub timeouts: crate::config::NetworkTimeoutsConfig,
+    /// Connection rate-limiting configuration.
+    pub connection_rate_limit: crate::config::RateLimitConfig,
+    /// Per-category entity tracking ranges.
+    pub entity_tracking: crate::config::EntityTrackingConfig,
+    /// Weather cycle timing.
+    pub weather: crate::config::WeatherConfig,
+    /// Inbound packet channel capacity per connection.
+    pub inbound_channel_capacity: usize,
+    /// Outbound packet channel capacity per connection.
+    pub outbound_channel_capacity: usize,
+    /// Maximum chunks kept in the in-memory cache.
+    pub chunk_cache_size: usize,
+    /// Maximum concurrent chunk generation tasks.
+    pub max_concurrent_chunk_generations: usize,
 }
 
 /// Shared game server state accessible to all connection handlers.
@@ -739,15 +755,6 @@ pub struct BroadcastMessage {
 /// There are 69 registered serverbound packets (IDs 0x00–0x44).
 const MAX_SERVERBOUND_PLAY_ID: i32 = 0x44;
 
-/// Default maximum connections per IP within the rate-limiting window.
-const DEFAULT_MAX_CONNECTIONS_PER_WINDOW: u32 = 10;
-
-/// Default rate-limiting window duration.
-const DEFAULT_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(10);
-
-/// How often to clean up stale rate limiter entries.
-const RATE_LIMIT_CLEANUP_INTERVAL: Duration = Duration::from_secs(60);
-
 /// Simple per-IP connection rate limiter.
 ///
 /// Tracks connection attempts within a sliding time window and rejects
@@ -805,10 +812,12 @@ pub async fn listen(
     mut shutdown_rx: broadcast::Receiver<()>,
 ) -> std::io::Result<()> {
     let listener = TcpListener::bind(addr).await?;
+    let rl_cfg = &ctx.server_ctx.settings.connection_rate_limit;
     let rate_limiter = ConnectionRateLimiter::new(
-        DEFAULT_MAX_CONNECTIONS_PER_WINDOW,
-        DEFAULT_RATE_LIMIT_WINDOW,
+        rl_cfg.max_connections_per_window,
+        Duration::from_secs(rl_cfg.window_secs),
     );
+    let cleanup_interval = Duration::from_secs(rl_cfg.cleanup_interval_secs);
     let mut last_cleanup = Instant::now();
     info!(address = %addr, "Listening for connections");
 
@@ -825,7 +834,7 @@ pub async fn listen(
                 match result {
                     Ok((stream, peer_addr)) => {
                         // Periodic cleanup of stale rate limiter entries.
-                        if last_cleanup.elapsed() > RATE_LIMIT_CLEANUP_INTERVAL {
+                        if last_cleanup.elapsed() > cleanup_interval {
                             rate_limiter.cleanup();
                             last_cleanup = Instant::now();
                         }
@@ -903,7 +912,12 @@ async fn handle_connection(
                     },
                     ConnectionState::Login => {
                         let profile = login::handle_login(&mut conn, pkt, ctx).await?;
-                        let client_info = configuration::handle_configuration(&mut conn).await?;
+                        let configuration_timeout = Duration::from_secs(
+                            ctx.server_ctx.settings.timeouts.configuration_timeout_secs,
+                        );
+                        let client_info =
+                            configuration::handle_configuration(&mut conn, configuration_timeout)
+                                .await?;
 
                         // Vanilla: if a player with the same UUID is already online,
                         // kick the OLD connection and let the new one proceed.
@@ -1031,6 +1045,14 @@ mod tests {
                     op_permission_level: 4,
                     spawn_protection: 16,
                     color_char: Some('&'),
+                    timeouts: crate::config::NetworkTimeoutsConfig::default(),
+                    connection_rate_limit: crate::config::RateLimitConfig::default(),
+                    entity_tracking: crate::config::EntityTrackingConfig::default(),
+                    weather: crate::config::WeatherConfig::default(),
+                    inbound_channel_capacity: 128,
+                    outbound_channel_capacity: 512,
+                    chunk_cache_size: 1024,
+                    max_concurrent_chunk_generations: 64,
                 },
                 commands: oxidized_game::commands::Commands::new(),
                 event_bus: oxidized_game::event::EventBus::new(),

@@ -68,11 +68,9 @@ impl Default for PacksConfig {
 }
 
 /// Advanced / diagnostic settings.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct AdvancedConfig {
-    /// Enable JMX monitoring beans (default `false`).
-    pub is_jmx_monitoring_enabled: bool,
     /// External text-filtering service config path (default `""`).
     pub text_filtering_config: String,
     /// Text-filtering protocol version (default `0`).
@@ -81,4 +79,34 @@ pub struct AdvancedConfig {
     pub is_code_of_conduct_enabled: bool,
     /// Link to the server's bug report page (default `""`).
     pub bug_report_link: String,
+    /// Inbound packet channel capacity per connection (default `128`).
+    ///
+    /// Backpressure: when game logic is slow to consume packets, the reader
+    /// task blocks, triggering TCP flow control on the client.
+    pub inbound_channel_capacity: usize,
+    /// Outbound packet channel capacity per connection (default `512`).
+    ///
+    /// Sized for burst traffic (join sequence, chunk loading). If the writer
+    /// cannot drain fast enough (slow client), senders see backpressure.
+    pub outbound_channel_capacity: usize,
+}
+
+impl AdvancedConfig {
+    /// Default inbound channel capacity (matches protocol crate default).
+    pub const DEFAULT_INBOUND_CHANNEL_CAPACITY: usize = 128;
+    /// Default outbound channel capacity (matches protocol crate default).
+    pub const DEFAULT_OUTBOUND_CHANNEL_CAPACITY: usize = 512;
+}
+
+impl Default for AdvancedConfig {
+    fn default() -> Self {
+        Self {
+            text_filtering_config: String::new(),
+            text_filtering_version: 0,
+            is_code_of_conduct_enabled: false,
+            bug_report_link: String::new(),
+            inbound_channel_capacity: Self::DEFAULT_INBOUND_CHANNEL_CAPACITY,
+            outbound_channel_capacity: Self::DEFAULT_OUTBOUND_CHANNEL_CAPACITY,
+        }
+    }
 }

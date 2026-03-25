@@ -16,11 +16,11 @@ use oxidized_protocol::transport::connection::{ConnectionError, ConnectionWriter
 use tokio::sync::mpsc;
 use tracing::debug;
 
-/// Timeout for a single TCP write operation.
+/// Default timeout for a single TCP write operation.
 ///
 /// If the client cannot accept data within this window, it is
 /// considered a slow client and the connection is terminated.
-const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
+pub const DEFAULT_WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Runs the writer task for a single client connection.
 ///
@@ -51,6 +51,7 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 pub async fn writer_loop(
     mut writer: ConnectionWriter,
     mut outbound_rx: mpsc::Receiver<OutboundPacket>,
+    write_timeout: Duration,
 ) -> Result<(), ConnectionError> {
     loop {
         // Block until at least one packet arrives
@@ -85,13 +86,13 @@ pub async fn writer_loop(
         }
 
         // Encrypt + write + flush the entire batch (with timeout)
-        match tokio::time::timeout(WRITE_TIMEOUT, writer.flush_batch()).await {
+        match tokio::time::timeout(write_timeout, writer.flush_batch()).await {
             Ok(Ok(())) => {},
             Ok(Err(e)) => return Err(e),
             Err(_) => {
                 debug!(
                     peer = %writer.remote_addr(),
-                    "Writer task: write timeout ({WRITE_TIMEOUT:?})"
+                    "Writer task: write timeout ({write_timeout:?})"
                 );
                 return Err(ConnectionError::Io(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
@@ -135,7 +136,7 @@ mod tests {
         let (writer, mut client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(16);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         tx.send(OutboundPacket {
             id: 0x01,
@@ -159,7 +160,7 @@ mod tests {
         let (writer, mut client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(64);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         for i in 0..10 {
             tx.send(OutboundPacket {
@@ -186,7 +187,7 @@ mod tests {
         let (writer, _client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(16);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Drop all senders — writer task should exit cleanly
         drop(tx);
@@ -199,7 +200,7 @@ mod tests {
         let (writer, mut client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(16);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Cycle 1: single packet
         tx.send(OutboundPacket {
@@ -235,7 +236,7 @@ mod tests {
         let (writer, client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(1024);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Close the client side — the kernel may buffer the first few
         // writes, so we send many packets until the OS detects the RST.
@@ -282,7 +283,7 @@ mod tests {
         let (_reader, writer) = server.into_split();
         let (tx, rx) = mpsc::channel(16);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         tx.send(OutboundPacket {
             id: 0x05,
@@ -318,7 +319,7 @@ mod tests {
         let (_reader, writer) = server.into_split();
         let (tx, rx) = mpsc::channel(16);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Large payload (above threshold)
         let payload = vec![0xAB; 256];
@@ -371,7 +372,7 @@ mod tests {
         let (_reader, writer) = server.into_split();
         let (tx, rx) = mpsc::channel(16);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         let large = vec![0xCD; 512];
         tx.send(OutboundPacket {
@@ -405,7 +406,7 @@ mod tests {
         let (writer, _client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(1024);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Fill the channel with huge packets that exceed 256 KB combined.
         // Each packet is 64 KB of data, so 5 should exceed the budget.
@@ -446,7 +447,7 @@ mod tests {
         // to advance time without waiting the full 30 seconds.
         tokio::time::pause();
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Fill the TCP send buffer to force write_all to block.
         // TCP send buffer is typically ~128 KB, so we send large payloads.
@@ -485,7 +486,7 @@ mod tests {
         let (writer, mut client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(256);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Send 200 small packets (~100 bytes each) — well under 256 KB budget.
         // This verifies normal traffic isn't affected by the memory check.
@@ -518,7 +519,7 @@ mod tests {
         let (writer, mut client) = writer_pair().await;
         let (tx, rx) = mpsc::channel(256);
 
-        let handle = tokio::spawn(writer_loop(writer, rx));
+        let handle = tokio::spawn(writer_loop(writer, rx, DEFAULT_WRITE_TIMEOUT));
 
         // Send 100 packets with sequential IDs
         for i in 0..100 {

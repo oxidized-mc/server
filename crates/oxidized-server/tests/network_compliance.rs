@@ -19,7 +19,7 @@ use oxidized_protocol::channel::{
 use oxidized_protocol::connection::Connection;
 use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_server::network::reader::reader_loop;
-use oxidized_server::network::writer::writer_loop;
+use oxidized_server::network::writer::{DEFAULT_WRITE_TIMEOUT, writer_loop};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 
@@ -51,7 +51,7 @@ async fn setup_task_pair() -> TaskPairFixture {
     let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_CHANNEL_CAPACITY);
 
     let reader_handle = tokio::spawn(reader_loop(reader, inbound_tx));
-    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx));
+    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx, DEFAULT_WRITE_TIMEOUT));
 
     let conn_handle = ConnectionHandle::new(outbound_tx.clone(), peer_addr);
 
@@ -85,7 +85,7 @@ async fn setup_encrypted_task_pair() -> TaskPairFixture {
     let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_CHANNEL_CAPACITY);
 
     let reader_handle = tokio::spawn(reader_loop(reader, inbound_tx));
-    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx));
+    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx, DEFAULT_WRITE_TIMEOUT));
 
     let conn_handle = ConnectionHandle::new(outbound_tx.clone(), peer_addr);
 
@@ -213,7 +213,7 @@ async fn compliance_backpressure_slow_client() {
     let (_reader, writer) = server.into_split();
     let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_CHANNEL_CAPACITY);
 
-    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx));
+    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx, DEFAULT_WRITE_TIMEOUT));
 
     // Flood the writer from a separate task so we don't block the test
     // if the channel fills before the writer detects budget overflow.

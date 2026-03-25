@@ -19,9 +19,6 @@ use oxidized_protocol::packets::login::{
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
-/// Vanilla login timeout: 600 ticks at 20 TPS = 30 seconds.
-const LOGIN_TIMEOUT: Duration = Duration::from_secs(30);
-
 use super::LoginContext;
 use super::helpers::{decode_packet, disconnect, disconnect_err};
 
@@ -47,6 +44,8 @@ pub async fn handle_login(
     ctx: &LoginContext,
 ) -> Result<auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
+    let login_timeout =
+        Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
 
     // 1. Decode ServerboundHelloPacket (the first Login packet).
     if hello_pkt.id != ServerboundHelloPacket::PACKET_ID {
@@ -125,7 +124,7 @@ pub async fn handle_login(
     debug!(peer = %addr, uuid = %uuid, name = %username, "Login finished sent");
 
     // 6. Wait for LoginAcknowledged.
-    let ack_pkt = timeout(LOGIN_TIMEOUT, conn.read_raw_packet())
+    let ack_pkt = timeout(login_timeout, conn.read_raw_packet())
         .await
         .map_err(|_| {
             ConnectionError::Io(std::io::Error::new(
@@ -161,6 +160,8 @@ async fn authenticate_online(
     ctx: &LoginContext,
 ) -> Result<auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
+    let login_timeout =
+        Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
 
     // a. Generate 4-byte challenge.
     let challenge = generate_challenge();
@@ -177,7 +178,7 @@ async fn authenticate_online(
     debug!(peer = %addr, "Encryption request sent");
 
     // c. Read ServerboundKeyPacket.
-    let key_pkt = timeout(LOGIN_TIMEOUT, conn.read_raw_packet())
+    let key_pkt = timeout(login_timeout, conn.read_raw_packet())
         .await
         .map_err(|_| {
             ConnectionError::Io(std::io::Error::new(

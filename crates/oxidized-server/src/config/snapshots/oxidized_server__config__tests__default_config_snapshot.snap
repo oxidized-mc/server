@@ -1,6 +1,5 @@
 ---
 source: crates/oxidized-server/src/config/mod.rs
-assertion_line: 571
 expression: toml_str
 ---
 [network]
@@ -9,9 +8,20 @@ ip = ""
 is_online_mode = true
 is_preventing_proxy_connections = false
 compression_threshold = 256
-is_native_transport_enabled = true
 rate_limit = 0
 is_accepting_transfers = false
+
+[network.timeouts]
+keepalive_interval_secs = 15
+keepalive_timeout_secs = 30
+login_timeout_secs = 30
+configuration_timeout_secs = 30
+write_timeout_secs = 30
+
+[network.connection_rate_limit]
+max_connections_per_window = 10
+window_secs = 10
+cleanup_interval_secs = 60
 
 [gameplay]
 gamemode = "survival"
@@ -29,14 +39,33 @@ is_nether_allowed = true
 max_chained_neighbor_updates = 1000000
 is_pvp_enabled = true
 
+[gameplay.entity_tracking]
+player = 512
+animal = 160
+monster = 128
+misc = 96
+projectile = 64
+default = 80
+
+[gameplay.weather]
+rain_delay_min = 12000
+rain_delay_max = 180000
+rain_duration_min = 12000
+rain_duration_max = 24000
+thunder_delay_min = 12000
+thunder_delay_max = 180000
+thunder_duration_min = 3600
+thunder_duration_max = 15600
+
 [world]
 name = "world"
 seed = ""
 is_generating_structures = true
 view_distance = 10
 simulation_distance = 10
-is_sync_chunk_writes = true
 region_file_compression = "deflate"
+chunk_cache_size = 1024
+max_concurrent_chunk_generations = 64
 
 [display]
 motd = "An Oxidized Minecraft Server"
@@ -88,8 +117,9 @@ initial_enabled = "vanilla"
 initial_disabled = ""
 
 [advanced]
-is_jmx_monitoring_enabled = false
 text_filtering_config = ""
 text_filtering_version = 0
 is_code_of_conduct_enabled = false
 bug_report_link = ""
+inbound_channel_capacity = 128
+outbound_channel_capacity = 512

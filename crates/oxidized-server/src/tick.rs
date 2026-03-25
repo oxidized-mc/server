@@ -34,22 +34,6 @@ const OVERLOAD_WARNING_THRESHOLD: Duration = Duration::from_millis(100);
 /// Critical threshold — if a single tick exceeds this, log an error.
 const OVERLOAD_CRITICAL_THRESHOLD: Duration = Duration::from_millis(500);
 
-/// Delay before rain starts (12 000–180 000 ticks = 10 min–2.5 hours).
-const RAIN_DELAY_MIN: i32 = 12_000;
-const RAIN_DELAY_MAX: i32 = 180_000;
-
-/// Duration rain lasts once started (12 000–24 000 ticks = 10–20 min).
-const RAIN_DURATION_MIN: i32 = 12_000;
-const RAIN_DURATION_MAX: i32 = 24_000;
-
-/// Delay before thunder starts (12 000–180 000 ticks = 10 min–2.5 hours).
-const THUNDER_DELAY_MIN: i32 = 12_000;
-const THUNDER_DELAY_MAX: i32 = 180_000;
-
-/// Duration thunder lasts once started (3 600–15 600 ticks = 3–13 min).
-const THUNDER_DURATION_MIN: i32 = 3_600;
-const THUNDER_DURATION_MAX: i32 = 15_600;
-
 /// Per-tick delta for rain/thunder visual level interpolation.
 const WEATHER_LEVEL_DELTA: f32 = 0.01;
 
@@ -213,6 +197,7 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
 /// Mirrors `ServerLevel.advanceWeatherCycle()` from vanilla 26.1.
 fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLevels) {
     let was_raining;
+    let w = &ctx.settings.weather;
     {
         let mut ld = ctx.world.level_data.write();
         was_raining = ld.weather.is_raining;
@@ -238,9 +223,9 @@ fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLe
                     thundering = !thundering;
                 }
             } else if thundering {
-                thunder_time = rng.random_range(THUNDER_DURATION_MIN..=THUNDER_DURATION_MAX);
+                thunder_time = rng.random_range(w.thunder_duration_min..=w.thunder_duration_max);
             } else {
-                thunder_time = rng.random_range(THUNDER_DELAY_MIN..=THUNDER_DELAY_MAX);
+                thunder_time = rng.random_range(w.thunder_delay_min..=w.thunder_delay_max);
             }
 
             // Rain state machine.
@@ -250,9 +235,9 @@ fn tick_weather(ctx: &ServerContext, rng: &mut impl Rng, weather: &mut WeatherLe
                     raining = !raining;
                 }
             } else if raining {
-                rain_time = rng.random_range(RAIN_DURATION_MIN..=RAIN_DURATION_MAX);
+                rain_time = rng.random_range(w.rain_duration_min..=w.rain_duration_max);
             } else {
-                rain_time = rng.random_range(RAIN_DELAY_MIN..=RAIN_DELAY_MAX);
+                rain_time = rng.random_range(w.rain_delay_min..=w.rain_delay_max);
             }
         }
 
@@ -643,6 +628,14 @@ mod tests {
                 op_permission_level: 4,
                 spawn_protection: 16,
                 color_char: None,
+                timeouts: crate::config::NetworkTimeoutsConfig::default(),
+                connection_rate_limit: crate::config::RateLimitConfig::default(),
+                entity_tracking: crate::config::EntityTrackingConfig::default(),
+                weather: crate::config::WeatherConfig::default(),
+                inbound_channel_capacity: 128,
+                outbound_channel_capacity: 512,
+                chunk_cache_size: 1024,
+                max_concurrent_chunk_generations: 64,
             },
             commands: oxidized_game::commands::Commands::new(),
             event_bus: oxidized_game::event::EventBus::new(),
@@ -790,9 +783,11 @@ mod tests {
             &mut test_weather(),
         );
         let rain_time = ctx.world.level_data.read().weather.rain_time;
+        let w = &ctx.settings.weather;
         assert!(
-            (RAIN_DURATION_MIN..=RAIN_DURATION_MAX).contains(&rain_time),
-            "rain duration {rain_time} should be in range {RAIN_DURATION_MIN}..={RAIN_DURATION_MAX}"
+            (w.rain_duration_min..=w.rain_duration_max).contains(&rain_time),
+            "rain duration {rain_time} should be in range {}..={}",
+            w.rain_duration_min, w.rain_duration_max
         );
     }
 

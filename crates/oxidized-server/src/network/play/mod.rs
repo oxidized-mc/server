@@ -35,7 +35,6 @@ use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::player::{ServerPlayer, handle_accept_teleportation};
 use oxidized_protocol::auth;
-use oxidized_protocol::channel::{INBOUND_CHANNEL_CAPACITY, OUTBOUND_CHANNEL_CAPACITY};
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::codec::slot::SlotData;
@@ -166,13 +165,16 @@ pub async fn handle_play_split(
     // Split connection into reader/writer halves (ADR-006).
     let (reader, writer) = conn.into_split();
 
-    // Create bounded channels (ADR-006: inbound=128, outbound=512).
-    let (inbound_tx, mut inbound_rx) = mpsc::channel(INBOUND_CHANNEL_CAPACITY);
-    let (outbound_tx, outbound_rx) = mpsc::channel(OUTBOUND_CHANNEL_CAPACITY);
+    // Create bounded channels (ADR-006: configurable capacity).
+    let (inbound_tx, mut inbound_rx) =
+        mpsc::channel(server_ctx.settings.inbound_channel_capacity);
+    let (outbound_tx, outbound_rx) =
+        mpsc::channel(server_ctx.settings.outbound_channel_capacity);
 
     // Spawn reader and writer tasks.
     let reader_handle = tokio::spawn(reader_loop(reader, inbound_tx));
-    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx));
+    let write_timeout = Duration::from_secs(server_ctx.settings.timeouts.write_timeout_secs);
+    let writer_handle = tokio::spawn(writer_loop(writer, outbound_rx, write_timeout));
 
     // Create the connection handle for sending packets.
     let conn_handle = ConnectionHandle::new(outbound_tx, addr);
@@ -200,12 +202,14 @@ pub async fn handle_play_split(
     // Per-player chat rate limiter.
     let mut rate_limiter = ChatRateLimiter::new();
 
-    // Keepalive state — send a ping every 15 seconds, timeout after 30.
-    const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(15);
-    const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(30);
+    // Keepalive state — configurable ping interval and timeout.
+    let keepalive_interval =
+        Duration::from_secs(server_ctx.settings.timeouts.keepalive_interval_secs);
+    let keepalive_timeout =
+        Duration::from_secs(server_ctx.settings.timeouts.keepalive_timeout_secs);
     // Vanilla resends unconfirmed teleports every 20 ticks (~1 second).
     const TELEPORT_RESEND_INTERVAL: Duration = Duration::from_secs(1);
-    let mut keepalive_timer = tokio::time::interval(KEEPALIVE_INTERVAL);
+    let mut keepalive_timer = tokio::time::interval(keepalive_interval);
     keepalive_timer.tick().await; // consume the immediate first tick
     let mut keepalive_pending = false;
     let mut keepalive_challenge: i64 = 0;
@@ -243,7 +247,7 @@ pub async fn handle_play_split(
             _ = keepalive_timer.tick() => {
                 if keepalive_pending {
                     let elapsed = keepalive_sent_at.elapsed();
-                    if elapsed >= KEEPALIVE_TIMEOUT {
+                    if elapsed >= keepalive_timeout {
                         info!(peer = %addr, name = %player_name, "Keepalive timeout — disconnecting");
                         break;
                     }

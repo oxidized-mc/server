@@ -15,8 +15,8 @@ pub use admin::{AdminConfig, QueryConfig, RconConfig};
 pub use advanced::{AdvancedConfig, ManagementConfig, PacksConfig, ResourcePackConfig};
 pub use display::{ChatConfig, DisplayConfig};
 pub use error::ConfigError;
-pub use gameplay::GameplayConfig;
-pub use network::NetworkConfig;
+pub use gameplay::{EntityTrackingConfig, GameplayConfig, WeatherConfig};
+pub use network::{NetworkConfig, NetworkTimeoutsConfig, RateLimitConfig};
 pub use world::WorldConfig;
 
 use std::collections::BTreeMap;
@@ -143,6 +143,56 @@ impl ServerConfig {
                 return Err(ConfigError::InvalidColorChar(self.chat.color_char.clone()));
             }
         }
+        // Network timeouts: keepalive_timeout must be >= keepalive_interval
+        let t = &self.network.timeouts;
+        if t.keepalive_timeout_secs < t.keepalive_interval_secs {
+            return Err(ConfigError::InvalidTimeout(format!(
+                "keepalive_timeout_secs ({}) must be >= keepalive_interval_secs ({})",
+                t.keepalive_timeout_secs, t.keepalive_interval_secs
+            )));
+        }
+        if t.keepalive_interval_secs == 0 {
+            return Err(ConfigError::InvalidTimeout(
+                "keepalive_interval_secs must be > 0".to_string(),
+            ));
+        }
+        // Weather timing: min must be <= max for each pair
+        let w = &self.gameplay.weather;
+        if w.rain_delay_min > w.rain_delay_max {
+            return Err(ConfigError::InvalidWeatherTiming(format!(
+                "rain_delay_min ({}) must be <= rain_delay_max ({})",
+                w.rain_delay_min, w.rain_delay_max
+            )));
+        }
+        if w.rain_duration_min > w.rain_duration_max {
+            return Err(ConfigError::InvalidWeatherTiming(format!(
+                "rain_duration_min ({}) must be <= rain_duration_max ({})",
+                w.rain_duration_min, w.rain_duration_max
+            )));
+        }
+        if w.thunder_delay_min > w.thunder_delay_max {
+            return Err(ConfigError::InvalidWeatherTiming(format!(
+                "thunder_delay_min ({}) must be <= thunder_delay_max ({})",
+                w.thunder_delay_min, w.thunder_delay_max
+            )));
+        }
+        if w.thunder_duration_min > w.thunder_duration_max {
+            return Err(ConfigError::InvalidWeatherTiming(format!(
+                "thunder_duration_min ({}) must be <= thunder_duration_max ({})",
+                w.thunder_duration_min, w.thunder_duration_max
+            )));
+        }
+        // World tuning: cache size and concurrent generations must be > 0
+        if self.world.chunk_cache_size == 0 {
+            return Err(ConfigError::InvalidWorldTuning(
+                "chunk_cache_size must be > 0".to_string(),
+            ));
+        }
+        if self.world.max_concurrent_chunk_generations == 0 {
+            return Err(ConfigError::InvalidWorldTuning(
+                "max_concurrent_chunk_generations must be > 0".to_string(),
+            ));
+        }
         Ok(())
     }
 
@@ -192,7 +242,6 @@ impl ServerConfig {
         env_override!(self, network.is_online_mode, bool);
         env_override!(self, network.is_preventing_proxy_connections, bool);
         env_override!(self, network.compression_threshold, i32);
-        env_override!(self, network.is_native_transport_enabled, bool);
         env_override!(self, network.rate_limit, i32);
         env_override!(self, network.is_accepting_transfers, bool);
 
@@ -218,8 +267,9 @@ impl ServerConfig {
         env_override!(self, world.is_generating_structures, bool);
         env_override!(self, world.view_distance, u32);
         env_override!(self, world.simulation_distance, u32);
-        env_override!(self, world.is_sync_chunk_writes, bool);
         env_override!(self, world.region_file_compression, String);
+        env_override!(self, world.chunk_cache_size, usize);
+        env_override!(self, world.max_concurrent_chunk_generations, usize);
 
         // [display]
         env_override!(self, display.motd, String);
@@ -271,11 +321,12 @@ impl ServerConfig {
         env_override!(self, packs.initial_disabled, String);
 
         // [advanced]
-        env_override!(self, advanced.is_jmx_monitoring_enabled, bool);
         env_override!(self, advanced.text_filtering_config, String);
         env_override!(self, advanced.text_filtering_version, i32);
         env_override!(self, advanced.is_code_of_conduct_enabled, bool);
         env_override!(self, advanced.bug_report_link, String);
+        env_override!(self, advanced.inbound_channel_capacity, usize);
+        env_override!(self, advanced.outbound_channel_capacity, usize);
     }
 }
 
@@ -382,9 +433,20 @@ mod tests {
                 is_online_mode: false,
                 is_preventing_proxy_connections: true,
                 compression_threshold: 512,
-                is_native_transport_enabled: false,
                 rate_limit: 10,
                 is_accepting_transfers: true,
+                timeouts: NetworkTimeoutsConfig {
+                    keepalive_interval_secs: 20,
+                    keepalive_timeout_secs: 45,
+                    login_timeout_secs: 60,
+                    configuration_timeout_secs: 60,
+                    write_timeout_secs: 45,
+                },
+                connection_rate_limit: RateLimitConfig {
+                    max_connections_per_window: 20,
+                    window_secs: 30,
+                    cleanup_interval_secs: 120,
+                },
             },
             gameplay: GameplayConfig {
                 gamemode: "creative".to_string(),
@@ -401,6 +463,24 @@ mod tests {
                 is_nether_allowed: false,
                 max_chained_neighbor_updates: 500_000,
                 is_pvp_enabled: false,
+                entity_tracking: EntityTrackingConfig {
+                    player: 256,
+                    animal: 80,
+                    monster: 64,
+                    misc: 48,
+                    projectile: 32,
+                    default: 40,
+                },
+                weather: WeatherConfig {
+                    rain_delay_min: 6_000,
+                    rain_delay_max: 90_000,
+                    rain_duration_min: 6_000,
+                    rain_duration_max: 12_000,
+                    thunder_delay_min: 6_000,
+                    thunder_delay_max: 90_000,
+                    thunder_duration_min: 1_800,
+                    thunder_duration_max: 7_800,
+                },
             },
             world: WorldConfig {
                 name: "custom_world".to_string(),
@@ -408,8 +488,9 @@ mod tests {
                 is_generating_structures: false,
                 view_distance: 16,
                 simulation_distance: 8,
-                is_sync_chunk_writes: false,
                 region_file_compression: "none".to_string(),
+                chunk_cache_size: 2048,
+                max_concurrent_chunk_generations: 32,
             },
             display: DisplayConfig {
                 motd: "Full Roundtrip Test".to_string(),
@@ -461,11 +542,12 @@ mod tests {
                 initial_disabled: "experimental".to_string(),
             },
             advanced: AdvancedConfig {
-                is_jmx_monitoring_enabled: true,
                 text_filtering_config: "filter.json".to_string(),
                 text_filtering_version: 2,
                 is_code_of_conduct_enabled: true,
                 bug_report_link: "https://bugs.example.com".to_string(),
+                inbound_channel_capacity: 64,
+                outbound_channel_capacity: 256,
             },
             extra: BTreeMap::new(),
         };
@@ -1084,17 +1166,17 @@ is_online_mode   =   false
     #[serial_test::serial]
     fn test_env_override_advanced_fields() {
         let vars = [
-            "OXIDIZED_ADVANCED_IS_JMX_MONITORING_ENABLED",
+            "OXIDIZED_ADVANCED_INBOUND_CHANNEL_CAPACITY",
             "OXIDIZED_ADVANCED_TEXT_FILTERING_VERSION",
         ];
         unsafe {
-            std::env::set_var("OXIDIZED_ADVANCED_IS_JMX_MONITORING_ENABLED", "true");
+            std::env::set_var("OXIDIZED_ADVANCED_INBOUND_CHANNEL_CAPACITY", "64");
             std::env::set_var("OXIDIZED_ADVANCED_TEXT_FILTERING_VERSION", "3");
         }
 
         let mut config = ServerConfig::default();
         config.apply_env_overrides();
-        assert!(config.advanced.is_jmx_monitoring_enabled);
+        assert_eq!(config.advanced.inbound_channel_capacity, 64);
         assert_eq!(config.advanced.text_filtering_version, 3);
 
         remove_env_vars(&vars);

@@ -42,13 +42,10 @@ use super::helpers::{decode_packet, disconnect_err};
 /// Returns a [`ConnectionError`] if any I/O, decoding, or protocol step fails.
 pub async fn handle_configuration(
     conn: &mut Connection,
+    configuration_timeout: Duration,
 ) -> Result<ClientInformation, ConnectionError> {
     let addr = conn.remote_addr();
     let mut client_info: Option<ClientInformation> = None;
-
-    /// Configuration phase timeout — matches vanilla login timeout (30 seconds).
-    /// Prevents malicious clients from holding connections open indefinitely.
-    const CONFIGURATION_TIMEOUT: Duration = Duration::from_secs(30);
 
     // 1. Send server brand as first configuration packet (vanilla requirement).
     {
@@ -93,7 +90,7 @@ pub async fn handle_configuration(
     //    (0x02, e.g. minecraft:brand) before responding.
     const SB_CUSTOM_PAYLOAD: i32 = 0x02;
     loop {
-        let pkt = timeout(CONFIGURATION_TIMEOUT, conn.read_raw_packet())
+        let pkt = timeout(configuration_timeout, conn.read_raw_packet())
             .await
             .map_err(|_| {
                 ConnectionError::Io(std::io::Error::new(
@@ -194,7 +191,7 @@ pub async fn handle_configuration(
     // 8. Wait for client FinishConfiguration acknowledgement.
     //    The client may send ClientInformation or CustomPayload again.
     loop {
-        let finish_pkt = timeout(CONFIGURATION_TIMEOUT, conn.read_raw_packet())
+        let finish_pkt = timeout(configuration_timeout, conn.read_raw_packet())
             .await
             .map_err(|_| {
                 ConnectionError::Io(std::io::Error::new(

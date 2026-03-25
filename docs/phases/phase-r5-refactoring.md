@@ -30,7 +30,7 @@ The codebase is clean, data-driven, and ready to scale through Phase 38.
 | R5.15 | Per-player operator permissions (`ops.json`) | ✅ Done |
 | R5.16 | Safety hardening & cleanup | ✅ Done |
 | R5.17 | Entity selector completeness | ✅ Done |
-| R5.18 | Config cleanup: remove Java leftovers & extract hardcoded values | 📋 Planned |
+| R5.18 | Config cleanup: remove Java leftovers & extract hardcoded values | ✅ Done |
 
 ---
 

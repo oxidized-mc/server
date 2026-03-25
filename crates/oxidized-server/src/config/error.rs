@@ -24,4 +24,16 @@ pub enum ConfigError {
     /// Color char must be a single non-alphanumeric ASCII character (or empty to disable).
     #[error("invalid color_char: \"{0}\" (must be a single non-alphanumeric ASCII char or empty)")]
     InvalidColorChar(String),
+
+    /// A network timeout value is invalid.
+    #[error("invalid timeout: {0}")]
+    InvalidTimeout(String),
+
+    /// A weather timing value is invalid (min > max).
+    #[error("invalid weather timing: {0}")]
+    InvalidWeatherTiming(String),
+
+    /// A world tuning value is invalid.
+    #[error("invalid world tuning: {0}")]
+    InvalidWorldTuning(String),
 }

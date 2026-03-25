@@ -16,10 +16,12 @@ pub struct WorldConfig {
     pub view_distance: u32,
     /// Simulation distance in chunks (default `10`).
     pub simulation_distance: u32,
-    /// Synchronous chunk writes for data safety (default `true`).
-    pub is_sync_chunk_writes: bool,
     /// Region file compression algorithm (default `"deflate"`).
     pub region_file_compression: String,
+    /// Maximum chunks kept in the in-memory cache (default `1024`).
+    pub chunk_cache_size: usize,
+    /// Maximum concurrent chunk generation tasks (default `64`).
+    pub max_concurrent_chunk_generations: usize,
 }
 
 impl Default for WorldConfig {
@@ -30,8 +32,9 @@ impl Default for WorldConfig {
             is_generating_structures: true,
             view_distance: 10,
             simulation_distance: 10,
-            is_sync_chunk_writes: true,
             region_file_compression: "deflate".to_string(),
+            chunk_cache_size: 1024,
+            max_concurrent_chunk_generations: 64,
         }
     }
 }
