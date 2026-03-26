@@ -204,7 +204,7 @@ pub async fn handle_play_split(
             position: glam::DVec3::new(p.movement.pos.x, p.movement.pos.y, p.movement.pos.z),
             rotation: (p.movement.yaw, p.movement.pitch),
             game_mode: p.game_mode,
-            inventory: p.inventory.clone(),
+            inventory: Box::new(p.inventory.clone()),
             health: p.combat.health,
             food_level: p.combat.food_level,
             experience: ExperienceData {

@@ -88,6 +88,7 @@ impl Default for TrackerResource {
 /// Processes all pending [`EntityCommand`]s from the channel, spawning/
 /// despawning entities and updating component state. Uses `try_recv`
 /// to drain without blocking.
+#[allow(clippy::too_many_arguments)]
 pub fn drain_entity_commands(
     mut commands: Commands,
     mut queue: ResMut<CommandQueue>,
@@ -120,7 +121,7 @@ pub fn drain_entity_commands(
                 spawn_data,
             } => {
                 let bundle = PlayerBundle::from_spawn_data(
-                    network_id, uuid, profile, position, rotation, game_mode, inventory, health,
+                    network_id, uuid, profile, position, rotation, game_mode, *inventory, health,
                     food_level, experience, spawn_data,
                 );
                 let entity = commands.spawn(bundle).id();
@@ -237,7 +238,7 @@ mod tests {
             position: glam::DVec3::new(0.0, 64.0, 0.0),
             rotation: (90.0, 0.0),
             game_mode: oxidized_game::player::GameMode::Survival,
-            inventory: oxidized_game::player::inventory::PlayerInventory::new(),
+            inventory: Box::new(oxidized_game::player::inventory::PlayerInventory::new()),
             health: 20.0,
             food_level: 20,
             experience: oxidized_game::entity::components::ExperienceData {
@@ -320,7 +321,7 @@ mod tests {
             position: glam::DVec3::ZERO,
             rotation: (0.0, 0.0),
             game_mode: oxidized_game::player::GameMode::Survival,
-            inventory: oxidized_game::player::inventory::PlayerInventory::new(),
+            inventory: Box::new(oxidized_game::player::inventory::PlayerInventory::new()),
             health: 20.0,
             food_level: 20,
             experience: oxidized_game::entity::components::ExperienceData {
@@ -378,7 +379,7 @@ mod tests {
             position: glam::DVec3::ZERO,
             rotation: (0.0, 0.0),
             game_mode: oxidized_game::player::GameMode::Survival,
-            inventory: oxidized_game::player::inventory::PlayerInventory::new(),
+            inventory: Box::new(oxidized_game::player::inventory::PlayerInventory::new()),
             health: 20.0,
             food_level: 20,
             experience: oxidized_game::entity::components::ExperienceData {

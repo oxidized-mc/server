@@ -591,7 +591,7 @@ mod tests {
             .spawn(PlayerBundle::from_spawn_data(
                 42,
                 uuid,
-                profile.clone(),
+                profile,
                 DVec3::new(100.0, 72.0, -50.0),
                 (90.0, -15.0),
                 GameMode::Creative,

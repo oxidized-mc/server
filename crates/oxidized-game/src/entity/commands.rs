@@ -39,7 +39,7 @@ pub enum EntityCommand {
         /// Starting game mode.
         game_mode: GameMode,
         /// Player's inventory.
-        inventory: PlayerInventory,
+        inventory: Box<PlayerInventory>,
         /// Starting health.
         health: f32,
         /// Starting food level.
@@ -103,7 +103,7 @@ pub fn entity_command_channel(capacity: usize) -> (EntityCommandSender, EntityCo
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, clippy::expect_used)]
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
     use oxidized_protocol::auth::GameProfile;
@@ -123,7 +123,7 @@ mod tests {
                 position: DVec3::new(0.0, 64.0, 0.0),
                 rotation: (0.0, 0.0),
                 game_mode: GameMode::Survival,
-                inventory: PlayerInventory::new(),
+                inventory: Box::new(PlayerInventory::new()),
                 health: 20.0,
                 food_level: 20,
                 experience: ExperienceData {

@@ -37,6 +37,7 @@ use oxidized_world::registry::BlockStateId;
 ///
 /// This function does **not** handle player input, step-up, or
 /// knockback — those are applied externally before calling this.
+#[allow(clippy::too_many_arguments)]
 pub fn physics_tick(
     pos: &mut Position,
     vel: &mut Velocity,

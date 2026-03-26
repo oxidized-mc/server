@@ -257,8 +257,6 @@ mod tests {
 
     #[test]
     fn test_bulk_filled_sections_use_lazy_datalayer() {
-        use oxidized_world::chunk::data_layer::DataLayer;
-
         let mut chunk = flat_chunk();
         initialize_sky_light(&mut chunk);
 
