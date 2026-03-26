@@ -13,7 +13,7 @@ use oxidized_world::chunk::LevelChunk;
 use oxidized_world::chunk::sky_light_sources::ChunkSkyLightSources;
 use oxidized_world::registry::BlockStateId;
 
-use super::propagation::{BoundaryEntry, LightEntry, propagate_sky_light_increase};
+use super::propagation::{ALL_DIRECTIONS, BoundaryEntry, LightEntry, propagate_sky_light_increase};
 
 /// Initializes sky light for a newly generated chunk.
 ///
@@ -66,6 +66,7 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
                             y,
                             z,
                             level: sky,
+                            directions: ALL_DIRECTIONS,
                         });
                     }
                     if sky == 0 {

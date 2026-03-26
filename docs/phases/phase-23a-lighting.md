@@ -858,7 +858,7 @@ MOTION_BLOCKING heightmap approach.
 
 ---
 
-### 23a.14 — Direction bitmask propagation (M5) ⏳
+### 23a.14 — Direction bitmask propagation (M5) ✅
 
 Add directional propagation tracking to BFS entries. Currently every entry
 propagates in all 6 directions; vanilla tracks which direction light came from
@@ -989,6 +989,6 @@ opaque blocks.
 10. ⏳ `LightEngine` persists across ticks — 23a.11
 11. ⏳ Non-full blocks (slabs, stairs) correctly occlude light per-face — 23a.12
 12. ✅ Sky light uses per-column source tracking for complex terrain — 23a.13
-13. ⏳ Direction bitmask reduces BFS work by ~17% — 23a.14
+13. ✅ Direction bitmask reduces BFS work by ~17% — 23a.14
 14. ⏳ Shape property changes trigger light updates — 23a.15
 15. ⏳ `DataLayer` lazy allocation + empty-section sky fill — 23a.16

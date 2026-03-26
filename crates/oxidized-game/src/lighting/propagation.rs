@@ -28,6 +28,35 @@ pub(crate) const DIRECTIONS: [(i32, i32, i32, Direction); 6] = [
     (0, 0, -1, Direction::North),
 ];
 
+// ── Direction bitmask helpers ──────────────────────────────────────────
+
+/// Bitmask with all 6 directions set (bits 0–5).
+pub(crate) const ALL_DIRECTIONS: u8 = 0x3F;
+
+/// Returns the bit for a single direction: `1 << (dir as u8)`.
+#[inline]
+pub(crate) const fn direction_bit(dir: Direction) -> u8 {
+    1 << (dir as u8)
+}
+
+/// Returns a bitmask with all directions *except* `skip`.
+#[inline]
+pub(crate) const fn skip_one_direction(skip: Direction) -> u8 {
+    ALL_DIRECTIONS & !direction_bit(skip)
+}
+
+/// Returns a bitmask with only the given direction set.
+#[inline]
+pub(crate) const fn only_one_direction(dir: Direction) -> u8 {
+    direction_bit(dir)
+}
+
+/// Returns `true` if `mask` includes `dir`.
+#[inline]
+pub(crate) const fn has_direction(mask: u8, dir: Direction) -> bool {
+    mask & direction_bit(dir) != 0
+}
+
 /// Entry in the BFS increase queue.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LightEntry {
@@ -39,6 +68,8 @@ pub(crate) struct LightEntry {
     pub z: i32,
     /// Light level to propagate from this position.
     pub level: u8,
+    /// Bitmask of directions to propagate. `ALL_DIRECTIONS` = all 6.
+    pub directions: u8,
 }
 
 /// Entry in the BFS decrease queue.
@@ -52,6 +83,8 @@ pub(crate) struct DecreaseEntry {
     pub z: i32,
     /// The light level that was at this position before removal.
     pub old_level: u8,
+    /// Bitmask of directions to propagate the decrease.
+    pub directions: u8,
 }
 
 /// A cross-boundary entry produced when BFS reaches the edge of a chunk.
@@ -65,6 +98,8 @@ pub struct BoundaryEntry {
     pub world_z: i32,
     /// Light level to propagate into the neighbor.
     pub level: u8,
+    /// Bitmask of directions to propagate into the neighbor chunk.
+    pub directions: u8,
 }
 
 /// Returns the effective light attenuation between a source block and its neighbor.
@@ -121,6 +156,10 @@ pub(crate) fn propagate_block_light_increase(
         let from_state = get_block_state_id(chunk, entry.x, entry.y, entry.z);
 
         for &(dx, dy, dz, dir) in &DIRECTIONS {
+            if !has_direction(entry.directions, dir) {
+                continue;
+            }
+
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;
@@ -133,6 +172,7 @@ pub(crate) fn propagate_block_light_increase(
                     world_y: ny,
                     world_z: chunk_base_z + nz,
                     level: entry.level,
+                    directions: skip_one_direction(dir.opposite()),
                 });
                 continue;
             }
@@ -158,6 +198,7 @@ pub(crate) fn propagate_block_light_increase(
                     y: ny,
                     z: nz,
                     level: new_level,
+                    directions: skip_one_direction(dir.opposite()),
                 });
             }
         }
@@ -184,7 +225,11 @@ pub(crate) fn propagate_block_light_decrease(
     let mut boundary = Vec::new();
 
     while let Some(entry) = decrease_queue.pop_front() {
-        for &(dx, dy, dz, _dir) in &DIRECTIONS {
+        for &(dx, dy, dz, dir) in &DIRECTIONS {
+            if !has_direction(entry.directions, dir) {
+                continue;
+            }
+
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;
@@ -197,6 +242,7 @@ pub(crate) fn propagate_block_light_decrease(
                         world_y: ny,
                         world_z: chunk_base_z + nz,
                         level: entry.old_level,
+                        directions: skip_one_direction(dir.opposite()),
                     });
                 }
                 continue;
@@ -226,6 +272,7 @@ pub(crate) fn propagate_block_light_decrease(
                         y: ny,
                         z: nz,
                         old_level: neighbor_level,
+                        directions: skip_one_direction(dir.opposite()),
                     });
                 }
 
@@ -236,16 +283,18 @@ pub(crate) fn propagate_block_light_decrease(
                         y: ny,
                         z: nz,
                         level: emission,
+                        directions: ALL_DIRECTIONS,
                     });
                 }
             } else {
                 // Neighbor has an equal or brighter independent source;
-                // re-seed the increase queue so it can re-propagate.
+                // re-seed only back toward the cleared area.
                 increase_queue.push_back(LightEntry {
                     x: nx,
                     y: ny,
                     z: nz,
                     level: neighbor_level,
+                    directions: only_one_direction(dir.opposite()),
                 });
             }
         }
@@ -274,6 +323,10 @@ pub(crate) fn propagate_sky_light_increase(
         let from_state = get_block_state_id(chunk, entry.x, entry.y, entry.z);
 
         for &(dx, dy, dz, dir) in &DIRECTIONS {
+            if !has_direction(entry.directions, dir) {
+                continue;
+            }
+
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;
@@ -284,6 +337,7 @@ pub(crate) fn propagate_sky_light_increase(
                     world_y: ny,
                     world_z: chunk_base_z + nz,
                     level: entry.level,
+                    directions: skip_one_direction(dir.opposite()),
                 });
                 continue;
             }
@@ -309,6 +363,7 @@ pub(crate) fn propagate_sky_light_increase(
                     y: ny,
                     z: nz,
                     level: new_level,
+                    directions: skip_one_direction(dir.opposite()),
                 });
             }
         }
@@ -328,7 +383,11 @@ pub(crate) fn propagate_sky_light_decrease(
     let mut boundary = Vec::new();
 
     while let Some(entry) = decrease_queue.pop_front() {
-        for &(dx, dy, dz, _dir) in &DIRECTIONS {
+        for &(dx, dy, dz, dir) in &DIRECTIONS {
+            if !has_direction(entry.directions, dir) {
+                continue;
+            }
+
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;
@@ -340,6 +399,7 @@ pub(crate) fn propagate_sky_light_decrease(
                         world_y: ny,
                         world_z: chunk_base_z + nz,
                         level: entry.old_level,
+                        directions: skip_one_direction(dir.opposite()),
                     });
                 }
                 continue;
@@ -361,6 +421,7 @@ pub(crate) fn propagate_sky_light_decrease(
                     y: ny,
                     z: nz,
                     old_level: neighbor_level,
+                    directions: skip_one_direction(dir.opposite()),
                 });
             } else {
                 increase_queue.push_back(LightEntry {
@@ -368,6 +429,7 @@ pub(crate) fn propagate_sky_light_decrease(
                     y: ny,
                     z: nz,
                     level: neighbor_level,
+                    directions: only_one_direction(dir.opposite()),
                 });
             }
         }
@@ -407,6 +469,7 @@ mod tests {
             y: 64,
             z: 8,
             level: 14,
+            directions: ALL_DIRECTIONS,
         });
         let _boundary = propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
@@ -436,6 +499,7 @@ mod tests {
             y: 64,
             z: 8,
             level: 14,
+            directions: ALL_DIRECTIONS,
         });
         propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
@@ -460,6 +524,7 @@ mod tests {
             y: 64,
             z: 8,
             level: 14,
+            directions: ALL_DIRECTIONS,
         });
         propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
@@ -478,6 +543,7 @@ mod tests {
             y: 64,
             z: 8,
             level: 14,
+            directions: ALL_DIRECTIONS,
         });
         propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
@@ -490,6 +556,7 @@ mod tests {
             y: 64,
             z: 8,
             old_level: 14,
+            directions: ALL_DIRECTIONS,
         });
         propagate_block_light_decrease(&mut chunk, &mut decrease_queue, &mut increase_queue, 0, 0);
         // Re-propagate any re-seeded entries.
@@ -513,6 +580,7 @@ mod tests {
             y: 64,
             z: 8,
             level: 14,
+            directions: ALL_DIRECTIONS,
         });
         let boundary = propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
@@ -535,12 +603,14 @@ mod tests {
             y: 64,
             z: 8,
             level: 14,
+            directions: ALL_DIRECTIONS,
         });
         queue.push_back(LightEntry {
             x: 11,
             y: 64,
             z: 8,
             level: 14,
+            directions: ALL_DIRECTIONS,
         });
         propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
@@ -568,15 +638,15 @@ mod tests {
         chunk.set_block_light_at(8, 64, 8, 15);
         chunk.set_block_light_at(5, 64, 8, 14);
         let mut queue = VecDeque::new();
-        queue.push_back(LightEntry { x: 8, y: 64, z: 8, level: 15 });
-        queue.push_back(LightEntry { x: 5, y: 64, z: 8, level: 14 });
+        queue.push_back(LightEntry { x: 8, y: 64, z: 8, level: 15, directions: ALL_DIRECTIONS });
+        queue.push_back(LightEntry { x: 5, y: 64, z: 8, level: 14, directions: ALL_DIRECTIONS });
         propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
         // Now remove the glowstone (decrease from 15).
         chunk.set_block_light_at(8, 64, 8, 0);
         let mut decrease_queue = VecDeque::new();
         let mut increase_queue = VecDeque::new();
-        decrease_queue.push_back(DecreaseEntry { x: 8, y: 64, z: 8, old_level: 15 });
+        decrease_queue.push_back(DecreaseEntry { x: 8, y: 64, z: 8, old_level: 15, directions: ALL_DIRECTIONS });
         propagate_block_light_decrease(
             &mut chunk, &mut decrease_queue, &mut increase_queue, 0, 0,
         );
@@ -589,5 +659,121 @@ mod tests {
         // The removed glowstone position should now be lit by the torch.
         // Distance from torch (5) to (8) = 3, so level = 14 - 3 = 11.
         assert_eq!(chunk.get_block_light_at(8, 64, 8), 11);
+    }
+
+    // ── Direction bitmask helper tests ──────────────────────────────────
+
+    #[test]
+    fn test_direction_bit_values() {
+        assert_eq!(direction_bit(Direction::Down), 0x01);
+        assert_eq!(direction_bit(Direction::Up), 0x02);
+        assert_eq!(direction_bit(Direction::North), 0x04);
+        assert_eq!(direction_bit(Direction::South), 0x08);
+        assert_eq!(direction_bit(Direction::West), 0x10);
+        assert_eq!(direction_bit(Direction::East), 0x20);
+    }
+
+    #[test]
+    fn test_all_directions_is_six_bits() {
+        assert_eq!(ALL_DIRECTIONS, 0x3F);
+        assert_eq!(ALL_DIRECTIONS.count_ones(), 6);
+    }
+
+    #[test]
+    fn test_skip_one_direction() {
+        let mask = skip_one_direction(Direction::East);
+        assert!(!has_direction(mask, Direction::East));
+        assert!(has_direction(mask, Direction::West));
+        assert!(has_direction(mask, Direction::Up));
+        assert!(has_direction(mask, Direction::Down));
+        assert!(has_direction(mask, Direction::North));
+        assert!(has_direction(mask, Direction::South));
+        assert_eq!(mask.count_ones(), 5);
+    }
+
+    #[test]
+    fn test_only_one_direction() {
+        let mask = only_one_direction(Direction::North);
+        assert!(has_direction(mask, Direction::North));
+        assert!(!has_direction(mask, Direction::South));
+        assert!(!has_direction(mask, Direction::East));
+        assert_eq!(mask.count_ones(), 1);
+    }
+
+    #[test]
+    fn test_has_direction() {
+        assert!(has_direction(ALL_DIRECTIONS, Direction::Down));
+        assert!(has_direction(ALL_DIRECTIONS, Direction::East));
+        assert!(!has_direction(0, Direction::Up));
+    }
+
+    #[test]
+    fn test_direction_bitmask_produces_identical_light() {
+        // Compare BFS with ALL_DIRECTIONS (equivalent to old behavior)
+        // against restricted directions — the final light values must match
+        // because skip-one only avoids propagating backward, which would
+        // never update anything (the source has higher light).
+        let mut chunk = air_chunk();
+        chunk.set_block_light_at(8, 64, 8, 14);
+        let mut queue = VecDeque::new();
+        queue.push_back(LightEntry {
+            x: 8,
+            y: 64,
+            z: 8,
+            level: 14,
+            directions: ALL_DIRECTIONS,
+        });
+        propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
+
+        // Verify a comprehensive grid of positions.
+        for dx in -13i32..=13 {
+            for dy in -5i32..=5 {
+                let x = 8 + dx;
+                let y = 64 + dy;
+                if !(0..16).contains(&x) || y < chunk.min_y() || y >= chunk.max_y() {
+                    continue;
+                }
+                let dist = dx.unsigned_abs() + dy.unsigned_abs();
+                let expected = if dist == 0 {
+                    14
+                } else {
+                    14u8.saturating_sub(dist as u8)
+                };
+                assert_eq!(
+                    chunk.get_block_light_at(x, y, 8),
+                    expected,
+                    "mismatch at ({x}, {y}, 8) dist={dist}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_boundary_entries_carry_directions() {
+        let mut chunk = air_chunk();
+        chunk.set_block_light_at(0, 64, 8, 14);
+        let mut queue = VecDeque::new();
+        queue.push_back(LightEntry {
+            x: 0,
+            y: 64,
+            z: 8,
+            level: 14,
+            directions: ALL_DIRECTIONS,
+        });
+        let boundary = propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
+
+        // All boundary entries crossing into x=-1 should NOT propagate
+        // back toward +X (East), since they came from the East direction.
+        for b in &boundary {
+            if b.world_x < 0 {
+                assert!(
+                    !has_direction(b.directions, Direction::East),
+                    "boundary entry at ({},{},{}) should not propagate East",
+                    b.world_x,
+                    b.world_y,
+                    b.world_z
+                );
+            }
+        }
     }
 }

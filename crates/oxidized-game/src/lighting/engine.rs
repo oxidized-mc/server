@@ -14,7 +14,7 @@ use oxidized_world::registry::BlockStateId;
 
 use super::block_light::initialize_block_light;
 use super::propagation::{
-    BoundaryEntry, DecreaseEntry, LightEntry, propagate_block_light_decrease,
+    ALL_DIRECTIONS, BoundaryEntry, DecreaseEntry, LightEntry, propagate_block_light_decrease,
     propagate_block_light_increase, propagate_sky_light_decrease, propagate_sky_light_increase,
 };
 use super::queue::LightUpdateQueue;
@@ -130,6 +130,7 @@ impl LightEngine {
                         y,
                         z: local_z,
                         old_level: update.old_emission,
+                        directions: ALL_DIRECTIONS,
                     });
                 }
                 if update.new_emission > 0 {
@@ -140,6 +141,7 @@ impl LightEngine {
                         y,
                         z: local_z,
                         level: update.new_emission,
+                        directions: ALL_DIRECTIONS,
                     });
                 }
                 changed_sections.insert(section_pos, ());
@@ -157,6 +159,7 @@ impl LightEngine {
                         y,
                         z: local_z,
                         old_level: sky_level,
+                        directions: ALL_DIRECTIONS,
                     });
                 }
                 if block_level > 0 && update.new_emission == 0 {
@@ -166,6 +169,7 @@ impl LightEngine {
                         y,
                         z: local_z,
                         old_level: block_level,
+                        directions: ALL_DIRECTIONS,
                     });
                 }
                 changed_sections.insert(section_pos, ());
@@ -321,6 +325,7 @@ fn check_neighbor_light_sources(
                 y: ny,
                 z: nz,
                 level: sky,
+                directions: ALL_DIRECTIONS,
             });
         }
 
@@ -331,6 +336,7 @@ fn check_neighbor_light_sources(
                 y: ny,
                 z: nz,
                 level: block,
+                directions: ALL_DIRECTIONS,
             });
         }
     }
@@ -385,6 +391,7 @@ fn reseed_sky_column(
                 y: cur_y,
                 z,
                 level: 15,
+                directions: ALL_DIRECTIONS,
             });
             let section_pos = SectionPos::new(
                 chunk.pos.x,

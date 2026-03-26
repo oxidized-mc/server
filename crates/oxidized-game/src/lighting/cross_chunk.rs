@@ -84,6 +84,7 @@ fn propagate_boundary_block_light(
             y: entry.world_y,
             z: local_z,
             level: attenuated,
+            directions: entry.directions,
         });
         let _further = propagate_block_light_increase(chunk, &mut queue, base_x, base_z);
         // Further cross-chunk propagation is not pursued recursively;
@@ -121,6 +122,7 @@ fn propagate_boundary_sky_light(
             y: entry.world_y,
             z: local_z,
             level: attenuated,
+            directions: entry.directions,
         });
         let _further = propagate_sky_light_increase(chunk, &mut queue, base_x, base_z);
     }
@@ -161,6 +163,7 @@ fn resolve_neighbor<'a>(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::lighting::propagation::ALL_DIRECTIONS;
     use oxidized_world::chunk::{ChunkPos, LevelChunk};
 
     #[test]
@@ -176,6 +179,7 @@ mod tests {
             world_y: 64,
             world_z: 8,
             level: 13,
+            directions: ALL_DIRECTIONS,
         }];
         // Should not panic. Center chunk is (0, 0).
         propagate_block_light_cross_chunk(&mut neighbors, &entries, 0, 0);
@@ -190,6 +194,7 @@ mod tests {
             world_y: 64,
             world_z: 8,
             level: 13,
+            directions: ALL_DIRECTIONS,
         }];
 
         let mut neighbors = ChunkNeighbors {
@@ -215,6 +220,7 @@ mod tests {
             world_y: 64,
             world_z: 56, // 3*16 + 8 = 56
             level: 10,
+            directions: ALL_DIRECTIONS,
         }];
 
         let mut neighbors = ChunkNeighbors {

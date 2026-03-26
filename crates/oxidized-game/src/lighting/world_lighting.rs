@@ -131,6 +131,7 @@ impl Default for WorldLighting {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::lighting::propagation::ALL_DIRECTIONS;
     use crate::lighting::queue::LightUpdate;
     use oxidized_protocol::types::BlockPos;
 
@@ -176,6 +177,7 @@ mod tests {
             world_y: 64,
             world_z: 8,
             level: 12,
+            directions: ALL_DIRECTIONS,
         }];
         wl.queue_boundaries(ChunkPos::new(1, 0), entries, vec![]);
         assert!(wl.has_pending_work());
@@ -198,6 +200,7 @@ mod tests {
                 world_y: 64,
                 world_z: 8,
                 level: 12,
+                directions: ALL_DIRECTIONS,
             }],
             vec![],
         );
@@ -209,6 +212,7 @@ mod tests {
                 world_y: 70,
                 world_z: 16,
                 level: 14,
+                directions: ALL_DIRECTIONS,
             }],
         );
 
@@ -230,6 +234,7 @@ mod tests {
                 world_y: 64,
                 world_z: 8,
                 level: 12,
+                directions: ALL_DIRECTIONS,
             }],
             vec![],
         );
@@ -240,6 +245,7 @@ mod tests {
                 world_y: 65,
                 world_z: 8,
                 level: 11,
+                directions: ALL_DIRECTIONS,
             }],
             vec![],
         );
@@ -274,6 +280,7 @@ mod tests {
                 world_y: 64,
                 world_z: 8,
                 level: 12,
+                directions: ALL_DIRECTIONS,
             }],
             vec![],
         );
