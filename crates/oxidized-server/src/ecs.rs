@@ -8,13 +8,13 @@
 //! `bevy_ecs::World` is `!Sync` — it cannot be shared behind `Arc`.
 //! This matches ADR-019 (dedicated tick thread) and ADR-020 (channel bridge).
 
-use std::collections::HashMap;
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::Schedule;
 use oxidized_game::entity::commands::EntityCommandReceiver;
 use oxidized_game::entity::phases::TickPhase;
 use oxidized_game::entity::systems::OutboundEntityPackets;
 use oxidized_game::entity::tracker::EntityTracker;
+use std::collections::HashMap;
 
 /// ECS world and per-phase schedules, owned exclusively by the tick thread.
 ///
@@ -120,8 +120,8 @@ pub fn drain_entity_commands(
                 spawn_data,
             } => {
                 let bundle = PlayerBundle::from_spawn_data(
-                    network_id, uuid, profile, position, rotation, game_mode, inventory,
-                    health, food_level, experience, spawn_data,
+                    network_id, uuid, profile, position, rotation, game_mode, inventory, health,
+                    food_level, experience, spawn_data,
                 );
                 let entity = commands.spawn(bundle).id();
                 player_map.0.insert(uuid, entity);
@@ -160,7 +160,10 @@ pub fn drain_entity_commands(
                     }
                 }
             },
-            EntityCommand::PlayerAction { uuid, flags: new_flags } => {
+            EntityCommand::PlayerAction {
+                uuid,
+                flags: new_flags,
+            } => {
                 if let Some(&entity) = player_map.0.get(&uuid) {
                     if let Ok(mut f) = flags.get_mut(entity) {
                         f.0 = new_flags;
@@ -336,13 +339,23 @@ mod tests {
         .unwrap();
         ecs.run_tick();
 
-        assert!(ecs.world.resource::<PlayerEntityMap>().0.contains_key(&uuid));
+        assert!(
+            ecs.world
+                .resource::<PlayerEntityMap>()
+                .0
+                .contains_key(&uuid)
+        );
 
         // Despawn.
         tx.try_send(EntityCommand::DespawnPlayer { uuid }).unwrap();
         ecs.run_tick();
 
-        assert!(!ecs.world.resource::<PlayerEntityMap>().0.contains_key(&uuid));
+        assert!(
+            !ecs.world
+                .resource::<PlayerEntityMap>()
+                .0
+                .contains_key(&uuid)
+        );
     }
 
     #[test]

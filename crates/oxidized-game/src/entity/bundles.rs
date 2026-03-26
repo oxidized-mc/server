@@ -549,7 +549,11 @@ mod tests {
         let mut world = World::new();
         let uuid = uuid::Uuid::new_v4();
         let entity = world
-            .spawn(PlayerBundle::with_identity(DVec3::new(0.0, 64.0, 0.0), 42, uuid))
+            .spawn(PlayerBundle::with_identity(
+                DVec3::new(0.0, 64.0, 0.0),
+                42,
+                uuid,
+            ))
             .id();
 
         assert_eq!(world.get::<NetworkId>(entity).unwrap().0, 42);

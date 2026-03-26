@@ -140,7 +140,7 @@ impl DataLayer {
                 } else {
                     (data[byte_pos] >> 4) & 0x0F
                 }
-            }
+            },
         }
     }
 
@@ -203,7 +203,7 @@ impl DataLayer {
             Some(data) => {
                 let boxed_slice: Box<[u8]> = data;
                 boxed_slice.into_vec()
-            }
+            },
             None => FILLED_DATA[self.default_value as usize].to_vec(),
         }
     }

@@ -64,7 +64,7 @@ impl ChunkSkyLightSources {
             None => {
                 // All sections empty (all air) — sources extend to world bottom.
                 self.lowest_y.fill(self.min_y);
-            }
+            },
             Some(top_idx) => {
                 for z in 0..16usize {
                     for x in 0..16usize {
@@ -73,7 +73,7 @@ impl ChunkSkyLightSources {
                         self.lowest_y[index(x, z)] = y;
                     }
                 }
-            }
+            },
         }
     }
 
@@ -120,7 +120,11 @@ impl ChunkSkyLightSources {
                 max_raw = v;
             }
         }
-        if max_raw == self.min_y { i32::MIN } else { max_raw }
+        if max_raw == self.min_y {
+            i32::MIN
+        } else {
+            max_raw
+        }
     }
 
     /// Returns the raw stored value for a column (without sentinel expansion).
@@ -277,7 +281,7 @@ mod tests {
     use crate::chunk::heightmap::{Heightmap, HeightmapType};
     use crate::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
     use crate::chunk::{ChunkPos, LevelChunk};
-    use crate::registry::{BlockRegistry, BEDROCK, DIRT, GRASS_BLOCK};
+    use crate::registry::{BEDROCK, BlockRegistry, DIRT, GRASS_BLOCK};
 
     /// Creates a standard flat world chunk: bedrock, 2 dirt, grass, air above.
     fn flat_chunk() -> LevelChunk {
@@ -288,10 +292,18 @@ mod tests {
 
         for x in 0..16i32 {
             for z in 0..16i32 {
-                chunk.set_block_state(x, OVERWORLD_MIN_Y, z, bedrock).unwrap();
-                chunk.set_block_state(x, OVERWORLD_MIN_Y + 1, z, dirt).unwrap();
-                chunk.set_block_state(x, OVERWORLD_MIN_Y + 2, z, dirt).unwrap();
-                chunk.set_block_state(x, OVERWORLD_MIN_Y + 3, z, grass).unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y, z, bedrock)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 1, z, dirt)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 2, z, dirt)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 3, z, grass)
+                    .unwrap();
             }
         }
 
@@ -368,9 +380,7 @@ mod tests {
         let mut sources = ChunkSkyLightSources::from_chunk(&chunk);
 
         // Break the grass block at (4, -61, 4).
-        chunk
-            .set_block_state(4, OVERWORLD_MIN_Y + 3, 4, 0)
-            .unwrap();
+        chunk.set_block_state(4, OVERWORLD_MIN_Y + 3, 4, 0).unwrap();
         let changed = sources.update(&chunk, 4, OVERWORLD_MIN_Y + 3, 4);
 
         assert!(changed, "source should change when surface block broken");
@@ -391,7 +401,9 @@ mod tests {
 
         // Place stone at (4, -60, 4) — above where the surface was.
         let stone = u32::from(state_id("minecraft:stone").0);
-        chunk.set_block_state(4, OVERWORLD_MIN_Y + 4, 4, stone).unwrap();
+        chunk
+            .set_block_state(4, OVERWORLD_MIN_Y + 4, 4, stone)
+            .unwrap();
         let changed = sources.update(&chunk, 4, OVERWORLD_MIN_Y + 4, 4);
 
         assert!(changed, "source should change when block placed over hole");
@@ -515,6 +527,9 @@ mod tests {
         // Source Y is at Y=2 (above the slab). With C2 (VoxelShape, 23a.12),
         // this would be Y=1 since bottom slabs don't actually block from above.
         let source_y = sources.get_lowest_source_y(8, 8);
-        assert_eq!(source_y, 2, "source at slab top (opacity-based, C2 would lower this)");
+        assert_eq!(
+            source_y, 2,
+            "source at slab top (opacity-based, C2 would lower this)"
+        );
     }
 }

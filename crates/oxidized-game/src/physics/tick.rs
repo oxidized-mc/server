@@ -314,8 +314,16 @@ mod tests {
         // Tick 1: gravity: vy = 0 - 0.08 = -0.08
         // After drag: vy = -0.08 * 0.98 = -0.0784
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &EmptyLevel,
+            &shapes,
+            false,
+            false,
         );
         assert!(
             (vel.0.y - (-0.0784)).abs() < 0.0001,
@@ -326,8 +334,16 @@ mod tests {
         // Tick 2: gravity: vy = -0.0784 - 0.08 = -0.1584
         // After drag: vy ≈ -0.1584 * 0.98 ≈ -0.155232
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &EmptyLevel,
+            &shapes,
+            false,
+            false,
         );
         assert!(
             vel.0.y < -0.15,
@@ -343,16 +359,20 @@ mod tests {
         vel.0.y = -5.0;
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &FloorLevel, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &FloorLevel,
+            &shapes,
+            false,
+            false,
         );
 
         assert!(og.0, "Entity should be on ground");
-        assert!(
-            vel.0.y.abs() < 0.001,
-            "vy should be zeroed: {}",
-            vel.0.y
-        );
+        assert!(vel.0.y.abs() < 0.001, "vy should be zeroed: {}", vel.0.y);
         assert!(
             pos.0.y >= 1.0 - 0.001,
             "Entity should not pass through floor: y={}",
@@ -367,15 +387,20 @@ mod tests {
         vel.0.x = 1.0;
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
-            true, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &EmptyLevel,
+            &shapes,
+            true,
+            false,
         );
 
         assert!(vel.0.y > 0.0, "Water buoyancy should push upward");
-        assert!(
-            vel.0.x < 1.0,
-            "Water should reduce horizontal velocity"
-        );
+        assert!(vel.0.x < 1.0, "Water should reduce horizontal velocity");
     }
 
     #[test]
@@ -384,23 +409,33 @@ mod tests {
         let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_floating_state();
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &EmptyLevel,
+            &shapes,
+            false,
+            false,
         );
-        assert!(
-            fd.0 > 0.0,
-            "Fall distance should increase while falling"
-        );
+        assert!(fd.0 > 0.0, "Fall distance should increase while falling");
 
         let fd1 = fd.0;
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &EmptyLevel,
+            &shapes,
+            false,
+            false,
         );
-        assert!(
-            fd.0 > fd1,
-            "Fall distance should keep increasing"
-        );
+        assert!(fd.0 > fd1, "Fall distance should keep increasing");
     }
 
     #[test]
@@ -411,8 +446,16 @@ mod tests {
         fd.0 = 5.0;
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &FloorLevel, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &FloorLevel,
+            &shapes,
+            false,
+            false,
         );
 
         assert!(og.0, "Entity should land");
@@ -447,8 +490,16 @@ mod tests {
 
         let y_before = pos.0.y;
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &FloorLevel, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &FloorLevel,
+            &shapes,
+            false,
+            false,
         );
 
         assert!(og.0, "Entity should remain on ground");
@@ -465,8 +516,16 @@ mod tests {
         let (mut pos, mut vel, mut bbox, mut og, mut fd) = make_floating_state();
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &EmptyLevel, &shapes,
-            false, true,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &EmptyLevel,
+            &shapes,
+            false,
+            true,
         );
 
         assert!(
@@ -518,8 +577,8 @@ mod tests {
         vel.0.x = 1.0;
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &ice_level, &shapes,
-            false, false,
+            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &ice_level, &shapes, false,
+            false,
         );
 
         // On ice: drag = 0.98 * 0.91 = 0.8918
@@ -537,8 +596,16 @@ mod tests {
         vel2.0.x = 1.0;
 
         physics_tick(
-            &mut pos2, &mut vel2, &mut bbox2, &mut og2, &mut fd2, &PIG_DIMS, &FloorLevel, &shapes,
-            false, false,
+            &mut pos2,
+            &mut vel2,
+            &mut bbox2,
+            &mut og2,
+            &mut fd2,
+            &PIG_DIMS,
+            &FloorLevel,
+            &shapes,
+            false,
+            false,
         );
         let stone_vx = vel2.0.x;
 
@@ -561,8 +628,16 @@ mod tests {
         vel.0.y = -1.0;
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &slime_level, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &slime_level,
+            &shapes,
+            false,
+            false,
         );
 
         assert!(og.0, "Entity should land on slime");
@@ -587,8 +662,16 @@ mod tests {
         vel.0.x = 1.0;
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &soul_level, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &soul_level,
+            &shapes,
+            false,
+            false,
         );
         let soul_vx = vel.0.x;
 
@@ -598,8 +681,16 @@ mod tests {
         vel2.0.x = 1.0;
 
         physics_tick(
-            &mut pos2, &mut vel2, &mut bbox2, &mut og2, &mut fd2, &PIG_DIMS, &FloorLevel, &shapes,
-            false, false,
+            &mut pos2,
+            &mut vel2,
+            &mut bbox2,
+            &mut og2,
+            &mut fd2,
+            &PIG_DIMS,
+            &FloorLevel,
+            &shapes,
+            false,
+            false,
         );
         let normal_vx = vel2.0.x;
 
@@ -623,8 +714,16 @@ mod tests {
         vel.0.x = 1.0;
 
         physics_tick(
-            &mut pos, &mut vel, &mut bbox, &mut og, &mut fd, &PIG_DIMS, &honey_level, &shapes,
-            false, false,
+            &mut pos,
+            &mut vel,
+            &mut bbox,
+            &mut og,
+            &mut fd,
+            &PIG_DIMS,
+            &honey_level,
+            &shapes,
+            false,
+            false,
         );
         let honey_vx = vel.0.x;
 
@@ -634,8 +733,16 @@ mod tests {
         vel2.0.x = 1.0;
 
         physics_tick(
-            &mut pos2, &mut vel2, &mut bbox2, &mut og2, &mut fd2, &PIG_DIMS, &FloorLevel, &shapes,
-            false, false,
+            &mut pos2,
+            &mut vel2,
+            &mut bbox2,
+            &mut og2,
+            &mut fd2,
+            &PIG_DIMS,
+            &FloorLevel,
+            &shapes,
+            false,
+            false,
         );
         let normal_vx = vel2.0.x;
 

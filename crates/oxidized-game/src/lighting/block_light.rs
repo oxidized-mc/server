@@ -8,7 +8,9 @@ use std::collections::VecDeque;
 use oxidized_world::chunk::LevelChunk;
 use oxidized_world::registry::BlockStateId;
 
-use super::propagation::{ALL_DIRECTIONS, BoundaryEntry, LightEntry, propagate_block_light_increase};
+use super::propagation::{
+    ALL_DIRECTIONS, BoundaryEntry, LightEntry, propagate_block_light_increase,
+};
 
 /// Initializes block light for a newly generated chunk.
 ///

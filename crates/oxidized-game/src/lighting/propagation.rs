@@ -650,18 +650,34 @@ mod tests {
         chunk.set_block_light_at(8, 64, 8, 15);
         chunk.set_block_light_at(5, 64, 8, 14);
         let mut queue = VecDeque::new();
-        queue.push_back(LightEntry { x: 8, y: 64, z: 8, level: 15, directions: ALL_DIRECTIONS });
-        queue.push_back(LightEntry { x: 5, y: 64, z: 8, level: 14, directions: ALL_DIRECTIONS });
+        queue.push_back(LightEntry {
+            x: 8,
+            y: 64,
+            z: 8,
+            level: 15,
+            directions: ALL_DIRECTIONS,
+        });
+        queue.push_back(LightEntry {
+            x: 5,
+            y: 64,
+            z: 8,
+            level: 14,
+            directions: ALL_DIRECTIONS,
+        });
         propagate_block_light_increase(&mut chunk, &mut queue, 0, 0);
 
         // Now remove the glowstone (decrease from 15).
         chunk.set_block_light_at(8, 64, 8, 0);
         let mut decrease_queue = VecDeque::new();
         let mut increase_queue = VecDeque::new();
-        decrease_queue.push_back(DecreaseEntry { x: 8, y: 64, z: 8, old_level: 15, directions: ALL_DIRECTIONS });
-        propagate_block_light_decrease(
-            &mut chunk, &mut decrease_queue, &mut increase_queue, 0, 0,
-        );
+        decrease_queue.push_back(DecreaseEntry {
+            x: 8,
+            y: 64,
+            z: 8,
+            old_level: 15,
+            directions: ALL_DIRECTIONS,
+        });
+        propagate_block_light_decrease(&mut chunk, &mut decrease_queue, &mut increase_queue, 0, 0);
         propagate_block_light_increase(&mut chunk, &mut increase_queue, 0, 0);
 
         // The torch at (5,64,8) should still have its own emission level.

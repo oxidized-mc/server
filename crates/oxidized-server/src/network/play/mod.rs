@@ -511,9 +511,9 @@ pub async fn handle_play_split(
 
     // Player disconnected or was kicked — clean up.
     // Send DespawnPlayer command to the tick thread's ECS world.
-    let _ = ctx.entity_cmd_tx.try_send(
-        oxidized_game::entity::commands::EntityCommand::DespawnPlayer { uuid },
-    );
+    let _ = ctx
+        .entity_cmd_tx
+        .try_send(oxidized_game::entity::commands::EntityCommand::DespawnPlayer { uuid });
 
     cleanup_disconnected_player(
         &conn_handle,

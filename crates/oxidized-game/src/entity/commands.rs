@@ -97,9 +97,7 @@ pub const DEFAULT_COMMAND_CHANNEL_CAPACITY: usize = 1024;
 /// The [`EntityCommandSender`] is cloned into each connection's play loop.
 /// The [`EntityCommandReceiver`] is owned by the tick thread and drained
 /// in the `PreTick` phase.
-pub fn entity_command_channel(
-    capacity: usize,
-) -> (EntityCommandSender, EntityCommandReceiver) {
+pub fn entity_command_channel(capacity: usize) -> (EntityCommandSender, EntityCommandReceiver) {
     mpsc::channel(capacity)
 }
 
@@ -134,7 +132,10 @@ mod tests {
                     total: 0,
                 },
                 spawn_data: SpawnData {
-                    dimension: oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld"),
+                    dimension:
+                        oxidized_protocol::types::resource_location::ResourceLocation::minecraft(
+                            "overworld",
+                        ),
                     spawn_pos: BlockPos::new(0, 64, 0),
                     spawn_angle: 0.0,
                 },
@@ -143,7 +144,10 @@ mod tests {
             .unwrap();
 
             let cmd = rx.recv().await.unwrap();
-            assert!(matches!(cmd, EntityCommand::SpawnPlayer { network_id: 1, .. }));
+            assert!(matches!(
+                cmd,
+                EntityCommand::SpawnPlayer { network_id: 1, .. }
+            ));
         });
     }
 
@@ -198,7 +202,7 @@ mod tests {
                     assert_eq!(recv_uuid, uuid);
                     assert!((position.x - 10.0).abs() < 1e-10);
                     assert!(on_ground);
-                }
+                },
                 _ => panic!("Expected PlayerMoved"),
             }
         });

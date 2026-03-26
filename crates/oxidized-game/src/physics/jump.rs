@@ -115,13 +115,7 @@ mod tests {
         let mut vel = Velocity(DVec3::ZERO);
         apply_jump(&mut vel, 90.0, false, 0, 1.0);
 
-        assert!(
-            vel.0.x.abs() < 0.0001,
-            "No horizontal boost without sprint"
-        );
-        assert!(
-            vel.0.z.abs() < 0.0001,
-            "No horizontal boost without sprint"
-        );
+        assert!(vel.0.x.abs() < 0.0001, "No horizontal boost without sprint");
+        assert!(vel.0.z.abs() < 0.0001, "No horizontal boost without sprint");
     }
 }

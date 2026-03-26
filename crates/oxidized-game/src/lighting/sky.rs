@@ -9,8 +9,8 @@
 
 use std::collections::VecDeque;
 
-use oxidized_world::chunk::LevelChunk;
 use oxidized_world::chunk::DataLayer;
+use oxidized_world::chunk::LevelChunk;
 use oxidized_world::chunk::sky_light_sources::ChunkSkyLightSources;
 use oxidized_world::registry::BlockStateId;
 

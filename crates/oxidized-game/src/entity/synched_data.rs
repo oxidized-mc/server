@@ -355,9 +355,11 @@ impl DirtyDataValue<'_> {
     pub fn encode_value(&self) -> Vec<u8> {
         use bytes::{BufMut, BytesMut};
         match self.serializer_type {
-            DataSerializerType::Byte => {
-                self.value.downcast_ref::<u8>().map(|v| vec![*v]).unwrap_or_default()
-            },
+            DataSerializerType::Byte => self
+                .value
+                .downcast_ref::<u8>()
+                .map(|v| vec![*v])
+                .unwrap_or_default(),
             DataSerializerType::Int | DataSerializerType::Pose => {
                 if let Some(&v) = self.value.downcast_ref::<i32>() {
                     let mut buf = BytesMut::with_capacity(5);
@@ -376,12 +378,11 @@ impl DirtyDataValue<'_> {
                     Vec::new()
                 }
             },
-            DataSerializerType::Boolean => {
-                self.value
-                    .downcast_ref::<bool>()
-                    .map(|v| vec![u8::from(*v)])
-                    .unwrap_or_default()
-            },
+            DataSerializerType::Boolean => self
+                .value
+                .downcast_ref::<bool>()
+                .map(|v| vec![u8::from(*v)])
+                .unwrap_or_default(),
             DataSerializerType::OptionalComponent => {
                 // Optional<Component>: boolean false = absent
                 if self.value.downcast_ref::<Option<String>>() == Some(&None) {

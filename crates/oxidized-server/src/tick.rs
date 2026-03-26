@@ -70,11 +70,7 @@ struct WeatherLevels {
 ///         move || tick::run_tick_loop(&ctx, ecs, &shutdown)
 ///     })?;
 /// ```
-pub fn run_tick_loop(
-    ctx: &ServerContext,
-    mut ecs: crate::ecs::EcsContext,
-    shutdown: &AtomicBool,
-) {
+pub fn run_tick_loop(ctx: &ServerContext, mut ecs: crate::ecs::EcsContext, shutdown: &AtomicBool) {
     let mut tick_count: u64 = 0;
     let seed = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -298,8 +294,9 @@ fn propagate_cross_chunk_light(
 
     // Collect neighbor chunks that exist. We get() each from DashMap, clone
     // the Arc, and release the DashMap ref before acquiring write locks.
-    let mut neighbor_arcs: [Option<std::sync::Arc<parking_lot::RwLock<oxidized_world::chunk::LevelChunk>>>; 4] =
-        [None, None, None, None];
+    let mut neighbor_arcs: [Option<
+        std::sync::Arc<parking_lot::RwLock<oxidized_world::chunk::LevelChunk>>,
+    >; 4] = [None, None, None, None];
     for (i, (pos, _)) in neighbor_positions.iter().enumerate() {
         if let Some(arc) = ctx.world.chunks.get(pos) {
             neighbor_arcs[i] = Some(arc.clone());
@@ -323,20 +320,10 @@ fn propagate_cross_chunk_light(
     };
 
     if !block_boundary.is_empty() {
-        further_block = propagate_block_light_cross_chunk(
-            &mut neighbors,
-            block_boundary,
-            cx,
-            cz,
-        );
+        further_block = propagate_block_light_cross_chunk(&mut neighbors, block_boundary, cx, cz);
     }
     if !sky_boundary.is_empty() {
-        further_sky = propagate_sky_light_cross_chunk(
-            &mut neighbors,
-            sky_boundary,
-            cx,
-            cz,
-        );
+        further_sky = propagate_sky_light_cross_chunk(&mut neighbors, sky_boundary, cx, cz);
     }
 
     // Broadcast light updates for each neighbor that was modified.
@@ -356,11 +343,7 @@ fn propagate_cross_chunk_light(
             let section_count = chunk.section_count();
             let all_sections: Vec<oxidized_protocol::types::SectionPos> = (0..section_count)
                 .map(|i| {
-                    oxidized_protocol::types::SectionPos::new(
-                        pos.x,
-                        (min_y >> 4) + i as i32,
-                        pos.z,
-                    )
+                    oxidized_protocol::types::SectionPos::new(pos.x, (min_y >> 4) + i as i32, pos.z)
                 })
                 .collect();
             let light_data = build_light_data_filtered(
@@ -377,20 +360,19 @@ fn propagate_cross_chunk_light(
     // These are entries that reached the edge of a neighbor chunk and
     // need to cascade into the neighbor's neighbors.
     if !further_block.is_empty() || !further_sky.is_empty() {
-        let mut grouped: HashMap<ChunkPos, (Vec<oxidized_game::lighting::propagation::BoundaryEntry>, Vec<oxidized_game::lighting::propagation::BoundaryEntry>)> =
-            HashMap::new();
+        let mut grouped: HashMap<
+            ChunkPos,
+            (
+                Vec<oxidized_game::lighting::propagation::BoundaryEntry>,
+                Vec<oxidized_game::lighting::propagation::BoundaryEntry>,
+            ),
+        > = HashMap::new();
         for entry in further_block {
-            let target = ChunkPos::new(
-                entry.world_x.div_euclid(16),
-                entry.world_z.div_euclid(16),
-            );
+            let target = ChunkPos::new(entry.world_x.div_euclid(16), entry.world_z.div_euclid(16));
             grouped.entry(target).or_default().0.push(entry);
         }
         for entry in further_sky {
-            let target = ChunkPos::new(
-                entry.world_x.div_euclid(16),
-                entry.world_z.div_euclid(16),
-            );
+            let target = ChunkPos::new(entry.world_x.div_euclid(16), entry.world_z.div_euclid(16));
             grouped.entry(target).or_default().1.push(entry);
         }
         let mut lighting = ctx.world.lighting.lock();

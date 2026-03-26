@@ -76,14 +76,21 @@ fn propagate_boundary_block_light(
     center_chunk_x: i32,
     center_chunk_z: i32,
 ) -> Vec<BoundaryEntry> {
-    let (chunk, local_x, local_z, base_x, base_z) =
-        match resolve_neighbor(neighbors, entry.world_x, entry.world_z, center_chunk_x, center_chunk_z) {
-            Some(v) => v,
-            None => return Vec::new(),
-        };
+    let (chunk, local_x, local_z, base_x, base_z) = match resolve_neighbor(
+        neighbors,
+        entry.world_x,
+        entry.world_z,
+        center_chunk_x,
+        center_chunk_z,
+    ) {
+        Some(v) => v,
+        None => return Vec::new(),
+    };
 
     // Attenuate by target block's opacity (not pre-attenuated).
-    let state_id = chunk.get_block_state(local_x, entry.world_y, local_z).unwrap_or(0);
+    let state_id = chunk
+        .get_block_state(local_x, entry.world_y, local_z)
+        .unwrap_or(0);
     #[allow(clippy::cast_possible_truncation)]
     let opacity = BlockStateId(state_id as u16).light_opacity();
     let attenuated = entry.level.saturating_sub(opacity.max(1));
@@ -114,14 +121,21 @@ fn propagate_boundary_sky_light(
     center_chunk_x: i32,
     center_chunk_z: i32,
 ) -> Vec<BoundaryEntry> {
-    let (chunk, local_x, local_z, base_x, base_z) =
-        match resolve_neighbor(neighbors, entry.world_x, entry.world_z, center_chunk_x, center_chunk_z) {
-            Some(v) => v,
-            None => return Vec::new(),
-        };
+    let (chunk, local_x, local_z, base_x, base_z) = match resolve_neighbor(
+        neighbors,
+        entry.world_x,
+        entry.world_z,
+        center_chunk_x,
+        center_chunk_z,
+    ) {
+        Some(v) => v,
+        None => return Vec::new(),
+    };
 
     // Attenuate by target block's opacity.
-    let state_id = chunk.get_block_state(local_x, entry.world_y, local_z).unwrap_or(0);
+    let state_id = chunk
+        .get_block_state(local_x, entry.world_y, local_z)
+        .unwrap_or(0);
     #[allow(clippy::cast_possible_truncation)]
     let opacity = BlockStateId(state_id as u16).light_opacity();
     let attenuated = entry.level.saturating_sub(opacity.max(1));

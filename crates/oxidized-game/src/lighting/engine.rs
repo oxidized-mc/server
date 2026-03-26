@@ -285,7 +285,14 @@ impl LightEngine {
                 // Simplified sky column re-seeding: if the block above has
                 // sky light 15, this column was a sky source. Re-fill downward
                 // through air until we hit an opaque block.
-                reseed_sky_column(chunk, local_x, y, local_z, &mut sky_increase, &mut changed_sections);
+                reseed_sky_column(
+                    chunk,
+                    local_x,
+                    y,
+                    local_z,
+                    &mut sky_increase,
+                    &mut changed_sections,
+                );
 
                 changed_sections.insert(section_pos, ());
             }
@@ -455,11 +462,7 @@ fn reseed_sky_column(
                 level: 15,
                 directions: ALL_DIRECTIONS,
             });
-            let section_pos = SectionPos::new(
-                chunk.pos.x,
-                cur_y >> 4,
-                chunk.pos.z,
-            );
+            let section_pos = SectionPos::new(chunk.pos.x, cur_y >> 4, chunk.pos.z);
             changed_sections.insert(section_pos, ());
         }
     }
@@ -777,7 +780,9 @@ mod tests {
         // Place opaque block at chunk edge above surface to trigger sky decrease.
         let st = stone_id();
         let opacity = BlockStateId(st as u16).light_opacity();
-        chunk.set_block_state(0, OVERWORLD_MIN_Y + 5, 8, st).unwrap();
+        chunk
+            .set_block_state(0, OVERWORLD_MIN_Y + 5, 8, st)
+            .unwrap();
         engine.queue_mut().push(LightUpdate {
             pos: BlockPos::new(0, OVERWORLD_MIN_Y + 5, 8),
             old_emission: 0,

@@ -1258,12 +1258,7 @@ mod cross_chunk_light {
                 east: Some(&mut east),
                 west: None,
             };
-            propagate_sky_light_cross_chunk(
-                &mut neighbors,
-                &center_result.sky_boundary,
-                0,
-                0,
-            );
+            propagate_sky_light_cross_chunk(&mut neighbors, &center_result.sky_boundary, 0, 0);
         }
         // No assertion on specific values — this test verifies the API works
         // end-to-end without panicking.

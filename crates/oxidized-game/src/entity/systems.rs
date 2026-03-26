@@ -181,7 +181,10 @@ mod tests {
         schedule.run(&mut world);
 
         let vel = world.get::<Velocity>(entity).unwrap();
-        assert!((vel.0.y).abs() < 1e-10, "NoGravity entities should not be affected");
+        assert!(
+            (vel.0.y).abs() < 1e-10,
+            "NoGravity entities should not be affected"
+        );
     }
 
     #[test]
@@ -349,6 +352,9 @@ mod tests {
         schedule.run(&mut world);
 
         let outbound = world.resource::<OutboundEntityPackets>();
-        assert!(outbound.0.is_empty(), "Clean data should produce no packets");
+        assert!(
+            outbound.0.is_empty(),
+            "Clean data should produce no packets"
+        );
     }
 }

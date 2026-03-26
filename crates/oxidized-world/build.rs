@@ -387,11 +387,7 @@ fn get_state_prop<'a>(
 /// Returns a u8 where bit N is set if face N (Direction ordinal) is fully
 /// occluding. Returns 0x3F (all faces) if the block should be treated as a
 /// full cube for this state (e.g., double slab).
-fn compute_occlusion_faces(
-    block_name: &str,
-    state: &StateData,
-    block_props: &[PropData],
-) -> u8 {
+fn compute_occlusion_faces(block_name: &str, state: &StateData, block_props: &[PropData]) -> u8 {
     let short = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
 
     // ── Slabs ───────────────────────────────────────────────────────────
@@ -487,11 +483,7 @@ fn compute_stair_occlusion_faces(state: &StateData, block_props: &[PropData]) ->
     let shape = get_state_prop(state, block_props, "shape").unwrap_or("straight");
 
     // The base half-slab always fully covers one Y face.
-    let base_face = if half == "bottom" {
-        DIR_DOWN
-    } else {
-        DIR_UP
-    };
+    let base_face = if half == "bottom" { DIR_DOWN } else { DIR_UP };
     let mut mask = 1u8 << base_face;
 
     // The back face is OPPOSITE the facing direction (facing = step direction,
@@ -507,7 +499,7 @@ fn compute_stair_occlusion_faces(state: &StateData, block_props: &[PropData]) ->
     match shape {
         "straight" => {
             mask |= 1 << back_dir;
-        }
+        },
         "inner_left" | "inner_right" => {
             // Inner corners: back face is full, plus one side face.
             mask |= 1 << back_dir;
@@ -517,9 +509,9 @@ fn compute_stair_occlusion_faces(state: &StateData, block_props: &[PropData]) ->
                 clockwise(back_dir)
             };
             mask |= 1 << side;
-        }
+        },
         // outer_left, outer_right: only the base face is full.
-        _ => {}
+        _ => {},
     }
 
     mask

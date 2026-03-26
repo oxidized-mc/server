@@ -10,8 +10,8 @@
 //!
 //! [ADR-018 §System Scheduling]: ../../../docs/adr/adr-018-entity-system.md
 
-use bevy_ecs::schedule::ScheduleLabel;
 use bevy_ecs::prelude::SystemSet;
+use bevy_ecs::schedule::ScheduleLabel;
 
 /// Schedule label newtype for [`TickPhase`].
 ///

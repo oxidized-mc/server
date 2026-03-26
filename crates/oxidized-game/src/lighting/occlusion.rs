@@ -69,7 +69,7 @@ pub fn get_light_block_into(from: BlockStateId, to: BlockStateId, dir: Direction
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use oxidized_protocol::types::{direction, Direction};
+    use oxidized_protocol::types::{Direction, direction};
     use oxidized_world::registry::BlockRegistry;
 
     fn state(name: &str) -> BlockStateId {
@@ -199,10 +199,7 @@ mod tests {
         let air = BlockStateId(0);
         // Double slabs have use_shape_for_light_occlusion = false
         // (cleared by build.rs when occlusion == 0x3F).
-        assert!(
-            slab.is_empty_shape(),
-            "double slab should have empty shape"
-        );
+        assert!(slab.is_empty_shape(), "double slab should have empty shape");
         // From double slab to air: both have empty shapes, so we use the
         // TARGET's scalar opacity (air = 0). No shape blocking.
         for dir in direction::ALL {
@@ -223,7 +220,11 @@ mod tests {
         // Bottom stairs (half=bottom, shape=straight) should block DOWN.
         let stairs = state_with_props(
             "minecraft:oak_stairs",
-            &[("half", "bottom"), ("shape", "straight"), ("facing", "north")],
+            &[
+                ("half", "bottom"),
+                ("shape", "straight"),
+                ("facing", "north"),
+            ],
         );
 
         assert!(
@@ -237,7 +238,11 @@ mod tests {
         // Facing north → back face is SOUTH.
         let stairs = state_with_props(
             "minecraft:oak_stairs",
-            &[("half", "bottom"), ("shape", "straight"), ("facing", "north")],
+            &[
+                ("half", "bottom"),
+                ("shape", "straight"),
+                ("facing", "north"),
+            ],
         );
 
         assert!(
@@ -251,7 +256,11 @@ mod tests {
         // Facing north → front face is NORTH (step side).
         let stairs = state_with_props(
             "minecraft:oak_stairs",
-            &[("half", "bottom"), ("shape", "straight"), ("facing", "north")],
+            &[
+                ("half", "bottom"),
+                ("shape", "straight"),
+                ("facing", "north"),
+            ],
         );
 
         assert!(
@@ -311,7 +320,11 @@ mod tests {
             state_with_props("minecraft:stone_slab", &[("type", "top")]),
             state_with_props(
                 "minecraft:oak_stairs",
-                &[("half", "bottom"), ("shape", "straight"), ("facing", "north")],
+                &[
+                    ("half", "bottom"),
+                    ("shape", "straight"),
+                    ("facing", "north"),
+                ],
             ),
             state("minecraft:dirt_path"),
         ];
