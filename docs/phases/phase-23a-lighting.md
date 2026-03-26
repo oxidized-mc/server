@@ -1,6 +1,6 @@
 # Phase 23a — Lighting Engine
 
-**Status:** 🔧 In Progress (vanilla compliance hardening)  
+**Status:** ✅ Complete  
 **Crate:** `oxidized-game`, `oxidized-world`, `oxidized-protocol`, `oxidized-server`  
 **Reward:** Chunks have correct sky and block light; placing/breaking light sources updates light in real time; light propagates correctly across chunk boundaries and through non-full blocks.
 
@@ -12,28 +12,32 @@
 
 | Module | File | Description |
 |--------|------|-------------|
-| BFS propagation | `oxidized-game/src/lighting/propagation.rs` | Core BFS increase/decrease algorithms for sky and block light |
-| Sky light init | `oxidized-game/src/lighting/sky.rs` | Top-down sky light calculation with horizontal BFS for caves |
+| BFS propagation | `oxidized-game/src/lighting/propagation.rs` | Core BFS increase/decrease algorithms with direction bitmask tracking |
+| Sky light init | `oxidized-game/src/lighting/sky.rs` | Top-down sky light calculation with horizontal BFS and bulk-fill |
 | Block light init | `oxidized-game/src/lighting/block_light.rs` | Emitter scan + BFS for block light sources |
 | Cross-chunk | `oxidized-game/src/lighting/cross_chunk.rs` | Light propagation across chunk boundaries |
 | Parallel | `oxidized-game/src/lighting/parallel.rs` | Sequential wrapper for full-chunk lighting (parallel deferred) |
-| Engine | `oxidized-game/src/lighting/engine.rs` | `LightEngine` orchestrator — `process_updates()` and `light_chunk()` |
+| Engine | `oxidized-game/src/lighting/engine.rs` | `LightEngine` orchestrator — `process_updates()` returns `LightResult` |
+| Face occlusion | `oxidized-game/src/lighting/occlusion.rs` | `shape_occludes()` and `get_light_block_into()` for non-full blocks |
+| World lighting | `oxidized-game/src/lighting/world_lighting.rs` | Persistent `WorldLighting` state across ticks with boundary queuing |
+| Light queue | `oxidized-game/src/lighting/queue.rs` | `LightUpdateQueue` and `LightUpdate` types |
 | Light packet | `oxidized-protocol/src/packets/play/clientbound_light_update.rs` | `ClientboundLightUpdatePacket` (ID 0x30) |
+| Sky light sources | `oxidized-world/src/chunk/sky_light_sources.rs` | `ChunkSkyLightSources` per-column heightmap for sky light seeding |
 | Chunk accessors | `oxidized-world/src/chunk/level_chunk.rs` | `get/set_sky_light_at()`, `get/set_block_light_at()` |
 
 ### Integration hooks
 
 | Hook | Location | Description |
 |------|----------|-------------|
-| Worldgen | `oxidized-game/src/worldgen/flat/generator.rs` | `initialize_block_light()` called after sky light cloning |
-| Block changes | `oxidized-server/src/network/play/block_interaction.rs` | `set_block()` queues `LightUpdate` when emission/opacity changes |
-| Tick processing | `oxidized-server/src/tick.rs` | `process_light_updates()` at tick end — drains queue, runs BFS, broadcasts |
-| Packet delivery | `oxidized-server/src/tick.rs` | `ClientboundLightUpdatePacket` broadcast after processing |
-| Pending queue | `oxidized-server/src/network/mod.rs` | `WorldContext.pending_light_updates` field |
+| Worldgen | `oxidized-game/src/worldgen/flat/generator.rs` | `initialize_sky_light()` then `initialize_block_light()` after template cloning |
+| Block changes | `oxidized-server/src/network/play/block_interaction.rs` | `set_block()` queues `LightUpdate` via `has_different_light_properties()` (emission, opacity, shape occlusion) |
+| Tick processing | `oxidized-server/src/tick.rs` | `process_light_updates()` at tick end — drains queue, runs BFS, propagates cross-chunk, broadcasts |
+| Packet delivery | `oxidized-server/src/tick.rs` | `ClientboundLightUpdatePacket` broadcast for primary + neighbor chunks |
+| World lighting | `oxidized-server/src/network/mod.rs` | `WorldContext.lighting: Mutex<WorldLighting>` — persistent engine + pending updates + boundary entries |
 
 ### Algorithm (ADR-017)
 
-1. Block changes push `LightUpdate` to `WorldContext.pending_light_updates`
+1. Block changes push `LightUpdate` to `WorldContext.lighting` (via `WorldLighting.queue_update()`)
 2. At tick end, `process_light_updates()` drains the queue and groups updates by chunk
 3. Per chunk: creates a `LightEngine`, pushes updates, calls `process_updates(&mut chunk)`
 4. Inside `process_updates`: emission changes seed decrease/increase queues, opacity changes seed sky/block queues
@@ -42,9 +46,11 @@
 
 ### Test coverage
 
-- 36 unit tests across all lighting modules (propagation, sky, block_light, cross_chunk, parallel, engine, queue)
+- 69 unit tests across all lighting modules (propagation, sky, block_light, cross_chunk, parallel, engine, queue, occlusion, world_lighting)
 - 2 roundtrip tests for `ClientboundLightUpdatePacket` (inline in packet module)
-- 5 roundtrip tests for `LightUpdateData` wire format (in `light_compliance.rs`)
+- 13 tests for `LightUpdateData` wire format and roundtrips (in `light_compliance.rs`)
+- 29 unit tests for `DataLayer` lazy allocation (in `data_layer.rs`)
+- 14 unit tests for `ChunkSkyLightSources` (in `sky_light_sources.rs`)
 - All tests pass with the full workspace suite
 
 ---
@@ -87,7 +93,7 @@ The following types and modules were used:
 | `LightUpdateQueue` | `oxidized-game/src/lighting/queue.rs` | ✅ Complete (pending update batch) |
 | `LightUpdate` | `oxidized-game/src/lighting/queue.rs` | ✅ Complete (emission/opacity delta) |
 | `LightEngine` | `oxidized-game/src/lighting/engine.rs` | ✅ Complete (BFS orchestrator) |
-| `build_light_data()` | `oxidized-game/src/net/light_serializer.rs` | ✅ Complete (packet encoding) |
+| `build_light_data()` | `oxidized-game/src/net/light_serializer.rs` | ✅ Complete (packet encoding; also `build_light_data_filtered()` for incremental) |
 | `ClientboundLightUpdatePacket` | `oxidized-protocol/src/packets/play/` | ✅ New (incremental light updates) |
 
 ---
@@ -124,12 +130,15 @@ use std::collections::VecDeque;
 use oxidized_world::chunk::LevelChunk;
 use oxidized_world::registry::BlockStateId;
 
-/// Six cardinal directions as (dx, dy, dz) offsets.
-pub(crate) const DIRECTIONS: [(i32, i32, i32); 6] = [
-    (1, 0, 0), (-1, 0, 0),
-    (0, 1, 0), (0, -1, 0),
-    (0, 0, 1), (0, 0, -1),
+/// Six cardinal directions as (dx, dy, dz, Direction) offsets.
+pub(crate) const DIRECTIONS: [(i32, i32, i32, Direction); 6] = [
+    (1, 0, 0, Direction::East), (-1, 0, 0, Direction::West),
+    (0, 1, 0, Direction::Up), (0, -1, 0, Direction::Down),
+    (0, 0, 1, Direction::South), (0, 0, -1, Direction::North),
 ];
+
+/// All 6 direction bits set.
+pub(crate) const ALL_DIRECTIONS: u8 = 0x3F;
 
 /// Entry in the BFS increase queue.
 pub(crate) struct LightEntry {
@@ -141,6 +150,8 @@ pub(crate) struct LightEntry {
     pub z: i32,
     /// Light level to propagate from this position.
     pub level: u8,
+    /// Bitmask of directions to propagate. 0x3F = all 6.
+    pub directions: u8,
 }
 
 /// Entry in the BFS decrease queue.
@@ -153,6 +164,8 @@ pub(crate) struct DecreaseEntry {
     pub z: i32,
     /// The light level that was at this position before removal.
     pub old_level: u8,
+    /// Bitmask of directions to propagate.
+    pub directions: u8,
 }
 
 /// A cross-boundary entry produced when BFS reaches the edge of a chunk.
@@ -161,13 +174,15 @@ pub struct BoundaryEntry {
     pub world_y: i32,
     pub world_z: i32,
     pub level: u8,
+    pub directions: u8,
 }
 
 /// BFS increase pass for block light within a single chunk.
 ///
-/// For each entry, checks all 6 neighbors. If the neighbor's current light
-/// level is less than `(entry level - max(1, neighbor opacity))`, sets the
-/// neighbor to that value and enqueues it.
+/// For each entry, checks all directions in the entry's bitmask. If the
+/// neighbor's current light level is less than `(entry level - effective_opacity)`,
+/// where effective_opacity uses `get_light_block_into()` for face occlusion,
+/// sets the neighbor to that value and enqueues it.
 ///
 /// Returns boundary entries for positions that fall outside the chunk column.
 pub(crate) fn propagate_block_light_increase(
@@ -180,7 +195,8 @@ pub(crate) fn propagate_block_light_increase(
 /// BFS decrease pass for block light.
 ///
 /// Clears light from removed sources and re-seeds the increase queue
-/// for neighbors that have independent sources.
+/// for neighbors that have independent sources. Re-checks emitter
+/// emission at each BFS position.
 pub(crate) fn propagate_block_light_decrease(
     chunk: &mut LevelChunk,
     decrease_queue: &mut VecDeque<DecreaseEntry>,
@@ -216,10 +232,15 @@ use oxidized_world::chunk::heightmap::HeightmapType;
 ///
 /// Phase 1: Vertical pass — for each (x, z) column, set sky light to 15
 /// above the heightmap, then attenuate downward by each block's opacity.
+/// Empty sections above all columns are bulk-filled with sky light 15
+/// using lazy `DataLayer::filled(15)`.
 ///
 /// Phase 2: Horizontal BFS — propagate sky light sideways through
 /// transparent blocks below the heightmap (caves, overhangs).
-pub fn initialize_sky_light(chunk: &mut LevelChunk) {
+///
+/// Stores `ChunkSkyLightSources` in the chunk for future incremental
+/// updates. Returns boundary entries for cross-chunk propagation.
+pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
     let min_y = chunk.min_y();
     let max_y = chunk.max_y();
 
@@ -274,8 +295,11 @@ use oxidized_world::registry::BlockStateId;
 /// Initializes block light for a newly generated chunk.
 ///
 /// Scans all sections for blocks with `light_emission > 0`, seeds the BFS
-/// queue, and propagates outward. Uses the core BFS from `propagation.rs`.
-pub fn initialize_block_light(chunk: &mut LevelChunk) {
+/// queue, and propagates outward. Uses the core BFS from `propagation.rs`
+/// with face occlusion from `occlusion.rs`.
+///
+/// Returns boundary entries for cross-chunk propagation.
+pub fn initialize_block_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
     let min_y = chunk.min_y();
     let section_count = chunk.section_count();
     let mut queue = VecDeque::new();
@@ -386,7 +410,7 @@ impl LightEngine {
     pub fn process_updates(
         &mut self,
         chunk: &mut LevelChunk,
-    ) -> Result<Vec<SectionPos>, LightingError> {
+    ) -> Result<LightResult, LightingError> {
         let updates = self.queue.drain();
         if updates.is_empty() {
             return Ok(Vec::new());
@@ -407,26 +431,36 @@ impl LightEngine {
             changed_sections.insert(section_pos, ());
         }
 
-        // Decrease passes first (per ADR-017).
-        propagate_block_light_decrease(chunk, &mut block_decrease, &mut block_increase, ...);
-        propagate_sky_light_decrease(chunk, &mut sky_decrease, &mut sky_increase, ...);
+        // Decrease passes first (per ADR-017), re-checking emitters at each position.
+        let block_dec_boundary = propagate_block_light_decrease(chunk, &mut block_decrease, &mut block_increase, ...);
+        let sky_dec_boundary = propagate_sky_light_decrease(chunk, &mut sky_decrease, &mut sky_increase, ...);
 
-        // Handle opacity decreases by checking neighbor light sources.
+        // Handle opacity decreases by re-seeding from neighbor light sources
+        // and sky column re-seeding (reseed_sky_column).
         // Then increase passes.
-        propagate_block_light_increase(chunk, &mut block_increase, ...);
-        propagate_sky_light_increase(chunk, &mut sky_increase, ...);
+        let block_inc_boundary = propagate_block_light_increase(chunk, &mut block_increase, ...);
+        let sky_inc_boundary = propagate_sky_light_increase(chunk, &mut sky_increase, ...);
 
-        Ok(changed_sections.into_keys().collect())
+        Ok(LightResult {
+            changed_sections: changed_sections.into_keys().collect(),
+            block_boundary: /* combined block boundaries */,
+            sky_boundary: /* combined sky boundaries */,
+        })
     }
 
     /// Computes full sky + block light for a newly generated chunk.
+    /// Returns boundary entries for cross-chunk propagation.
     pub fn light_chunk(
         &mut self,
         chunk: &mut LevelChunk,
-    ) -> Result<(), LightingError> {
-        initialize_sky_light(chunk);
-        initialize_block_light(chunk);
-        Ok(())
+    ) -> Result<LightResult, LightingError> {
+        let sky_boundary = initialize_sky_light(chunk);
+        let block_boundary = initialize_block_light(chunk);
+        Ok(LightResult {
+            changed_sections: Vec::new(),
+            block_boundary,
+            sky_boundary,
+        })
     }
 }
 ```
@@ -550,9 +584,14 @@ incremental update path.
 ```rust
 // In tick.rs — process_light_updates() handles broadcasting inline:
 fn process_light_updates(ctx: &ServerContext) {
-    let updates = std::mem::take(&mut *ctx.world.pending_light_updates.lock());
+    let updates = {
+        let mut lighting = ctx.world.lighting.lock();
+        if !lighting.has_pending_work() { return; }
+        lighting.drain_updates()
+    };
+
     // Group by chunk position.
-    let mut by_chunk: HashMap<ChunkPos, Vec<LightUpdate>> = HashMap::new();
+    let mut by_chunk: AHashMap<ChunkPos, Vec<LightUpdate>> = AHashMap::new();
     for (chunk_pos, update) in updates {
         by_chunk.entry(chunk_pos).or_default().push(update);
     }
@@ -560,26 +599,29 @@ fn process_light_updates(ctx: &ServerContext) {
     for (chunk_pos, chunk_updates) in &by_chunk {
         let chunk_ref = ctx.world.chunks.get(chunk_pos);
         let mut chunk = chunk_ref.write();
-        let mut engine = LightEngine::new();
-        for update in chunk_updates {
-            engine.queue_mut().push(update.clone());
+        let result = {
+            let mut lighting = ctx.world.lighting.lock();
+            let engine = lighting.engine_mut();
+            for update in chunk_updates {
+                engine.queue_mut().push(update.clone());
+            }
+            engine.process_updates(&mut chunk)?
+        };
+
+        if !result.changed_sections.is_empty() {
+            let light_data = build_light_data_filtered(
+                chunk.sky_light_layers(),
+                chunk.block_light_layers(),
+                &result.changed_sections,
+                chunk.min_y(),
+            );
+            drop(chunk);
+            broadcast_light_update(ctx, chunk_pos.x, chunk_pos.z, light_data);
         }
 
-        match engine.process_updates(&mut chunk) {
-            Ok(changed_sections) if !changed_sections.is_empty() => {
-                let light_data = build_light_data(
-                    chunk.sky_light_layers(),
-                    chunk.block_light_layers(),
-                );
-                drop(chunk);
-                let pkt = ClientboundLightUpdatePacket {
-                    chunk_x: chunk_pos.x,
-                    chunk_z: chunk_pos.z,
-                    light_data,
-                };
-                ctx.broadcast(/* pkt */);
-            }
-            _ => {}
+        // Cross-chunk propagation.
+        if !result.block_boundary.is_empty() || !result.sky_boundary.is_empty() {
+            propagate_cross_chunk_light(ctx, chunk_pos, &result);
         }
     }
 }
@@ -609,28 +651,31 @@ Full report in session state. Summary of findings and their status:
 | **C3** | Boundary entries pre-attenuated by 1 | Pass un-attenuated source level; cross-chunk reads target opacity |
 | **C5** | No sky column re-seeding on block break | `reseed_sky_column` restores sky light downward through transparent blocks |
 
-### Remaining (tasks 23a.10–23a.15 below)
+### Remaining (tasks 23a.10–23a.15 below) — All Fixed
 
 | ID | Finding | Effort | Task |
 |----|---------|--------|------|
-| **C1b** | Cross-chunk boundary entries still discarded in production | Medium | 23a.10 |
-| **M3** | Fresh `LightEngine` created per tick per chunk | Medium | 23a.11 |
-| **C2** | Missing VoxelShape face occlusion | Large | 23a.12 |
-| **C4** | Sky light missing `ChunkSkyLightSources` algorithm | Large | 23a.13 |
-| **M5** | No directional propagation tracking (perf) | Small | 23a.14 |
+| **C1b** | ~~Cross-chunk boundary entries discarded in production~~ | Medium | 23a.10 ✅ |
+| **M3** | ~~Fresh `LightEngine` created per tick per chunk~~ | Medium | 23a.11 ✅ |
+| **C2** | ~~Missing VoxelShape face occlusion~~ | Large | 23a.12 ✅ |
+| **C4** | ~~Sky light missing `ChunkSkyLightSources` algorithm~~ | Large | 23a.13 ✅ |
+| **M5** | ~~No directional propagation tracking (perf)~~ | Small | 23a.14 ✅ |
 | **M4** | ~~Light trigger missing shape property check~~ | Small | 23a.15 ✅ |
 | **m1** | ~~`DataLayer` always allocates (no lazy)~~ | Small | 23a.16 ✅ |
 | **m3** | ~~Missing empty-section sky light optimization~~ | Small | 23a.16 ✅ |
 
 ---
 
-### 23a.10 — Cross-chunk production integration ⏳
+### 23a.10 — Cross-chunk production integration ✅
 
-Wire boundary entries into the production code path. Currently the cross-chunk
-API is fixed (resolve_neighbor, attenuation, center_chunk params) but all
-callers in `engine.rs`, `sky.rs`, and `block_light.rs` discard boundary entries
-with `let _boundary = ...`. The tick loop processes each chunk independently
-without providing neighbor chunks.
+Boundary entries from BFS are now wired into the production code path. The
+`LightEngine.process_updates()` method returns `LightResult` with `block_boundary`
+and `sky_boundary` vectors. The tick loop's `process_light_updates()` calls
+`propagate_cross_chunk_light()` which looks up neighbor chunks from the chunk map,
+constructs `ChunkNeighbors`, and calls `propagate_block_light_cross_chunk` /
+`propagate_sky_light_cross_chunk`. Light updates are broadcast for modified
+neighbor chunks as well. `WorldLighting` stores pending boundary entries for
+multi-tick propagation via `queue_boundaries()` / `drain_boundaries()`.
 
 **Approach:**
 1. In `process_light_updates()` (tick.rs), after BFS on a chunk, collect
@@ -653,7 +698,7 @@ without providing neighbor chunks.
   directly
 
 ```rust
-// New return type for process_updates:
+// Return type for process_updates:
 pub struct LightResult {
     pub changed_sections: Vec<SectionPos>,
     pub block_boundary: Vec<BoundaryEntry>,
@@ -663,16 +708,19 @@ pub struct LightResult {
 // In tick.rs — process_light_updates():
 let result = engine.process_updates(&mut chunk)?;
 if !result.block_boundary.is_empty() || !result.sky_boundary.is_empty() {
-    // Look up neighbor chunks and propagate
-    let mut neighbors = ChunkNeighbors {
-        north: chunks.get_mut(&ChunkPos::new(cx, cz - 1)),
-        south: chunks.get_mut(&ChunkPos::new(cx, cz + 1)),
-        east:  chunks.get_mut(&ChunkPos::new(cx + 1, cz)),
-        west:  chunks.get_mut(&ChunkPos::new(cx - 1, cz)),
-    };
-    propagate_block_light_cross_chunk(&mut neighbors, &result.block_boundary, cx, cz);
-    propagate_sky_light_cross_chunk(&mut neighbors, &result.sky_boundary, cx, cz);
+    propagate_cross_chunk_light(ctx, chunk_pos, &result);
 }
+
+// propagate_cross_chunk_light() acquires locks on 4 neighbors:
+let mut neighbors = ChunkNeighbors {
+    north: chunks.get_mut(&ChunkPos::new(cx, cz - 1)),
+    south: chunks.get_mut(&ChunkPos::new(cx, cz + 1)),
+    east:  chunks.get_mut(&ChunkPos::new(cx + 1, cz)),
+    west:  chunks.get_mut(&ChunkPos::new(cx - 1, cz)),
+};
+propagate_block_light_cross_chunk(&mut neighbors, &result.block_boundary, cx, cz);
+propagate_sky_light_cross_chunk(&mut neighbors, &result.sky_boundary, cx, cz);
+// Broadcasts light updates for each modified neighbor.
 ```
 
 **Tests:**
@@ -686,100 +734,105 @@ if !result.block_boundary.is_empty() || !result.sky_boundary.is_empty() {
 
 ---
 
-### 23a.11 — Persistent `LightEngine` per world ⏳
+### 23a.11 — Persistent `LightEngine` per world ✅
 
-Currently a fresh `LightEngine` is created every tick for every chunk with
-pending updates. Vanilla's `LevelLightEngine` is persistent across server
-lifetime and maintains queued section data and change tracking.
-
-**Approach:**
-1. Move `LightEngine` into `WorldContext` (or a dedicated `WorldLighting`
-   struct) as a persistent field
-2. Queue light updates directly into the persistent engine instead of
-   `pending_light_updates` vec
-3. `process_light_updates()` calls `engine.process_updates()` which drains its
-   internal queue
-4. Multi-tick propagation state is preserved (important once cross-chunk is
-   live — boundary entries from tick N can be processed in tick N+1)
-
-**Vanilla reference:**
-- `LevelLightEngine` wraps `BlockLightEngine` + `SkyLightEngine`, persistent
-- `ThreadedLevelLightEngine` runs on the lighting thread with
-  `runLightUpdates()` processing accumulated work
-- Section states (`SectionState`) track which sections need recomputation
+`WorldLighting` struct wraps a persistent `LightEngine` + pending update queue +
+pending boundary entries. Stored in `WorldContext.lighting: Mutex<WorldLighting>`.
+Block changes queue directly into the persistent engine via `queue_update()`.
+The tick loop calls `drain_updates()` and `engine_mut().process_updates()`.
+Multi-tick propagation state is preserved — boundary entries from tick N are
+queued via `queue_boundaries()` and processed in tick N+1 via `drain_boundaries()`.
 
 ```rust
-// In WorldContext or similar:
+// In WorldContext (network/mod.rs):
+pub lighting: Mutex<WorldLighting>,
+
+// WorldLighting (lighting/world_lighting.rs):
 pub struct WorldLighting {
     engine: LightEngine,
-    // Optionally: per-chunk pending boundary entries for next-tick processing
-    pending_boundaries: AHashMap<ChunkPos, Vec<BoundaryEntry>>,
+    pending_updates: Vec<(ChunkPos, LightUpdate)>,
+    pending_boundaries: AHashMap<ChunkPos, PendingBoundaries>,
 }
 ```
 
 **Tests:**
 - Unit: Engine retains state across two consecutive `process_updates()` calls
 - Unit: Boundary entries queued in tick N are available in tick N+1
-- Integration: Two-tick light propagation — torch placed near chunk edge, tick
-  1 propagates within chunk, tick 2 propagates into neighbor
+- Unit: `drain_updates()` returns all queued and clears
+- Unit: `queue_boundaries()` merges entries for the same chunk
+- Integration: Torch at chunk edge triggers cross-chunk propagation across ticks
 
 ---
 
-### 23a.12 — VoxelShape face occlusion (C2) ⏳
+### 23a.12 — VoxelShape face occlusion (C2) ✅
 
-Implement directional occlusion testing for non-full blocks (stairs, slabs,
-fences, walls). Currently Oxidized uses a single `light_opacity()` scalar per
-block state, which is correct for full blocks but wrong for partial blocks
-where only certain faces should block light.
+Directional occlusion testing for non-full blocks (stairs, slabs, fences, walls).
+Per-face occlusion bitmasks are computed at compile time in `build.rs` and stored
+in the static `BLOCK_STATE_DATA` array. The BFS uses `get_light_block_into()`
+(in `occlusion.rs`) instead of scalar opacity, which checks `shape_occludes()`
+for blocks with `use_shape_for_light_occlusion() == true`.
 
-**Vanilla reference:**
-- `LightEngine.java:50-60` (`getLightBlockInto`) — computes occlusion between
-  two adjacent block states for a specific direction
-- `LightEngine.java:81-85` (`shapeOccludes`) — checks whether the exit face
-  of the source block and the entry face of the target block combine to form
-  full occlusion
-- `Shapes.java` — `faceShapeOccludes()`, `mergedFaceOcclusion()`
-- `BlockBehaviour.java` — `useShapeForLightOcclusion()`, `getOcclusionShape()`
-
-**Approach:**
-1. **Extract occlusion shapes from vanilla data.** Extend `extract_block_properties.py`
-   (or write a new extractor) to dump per-block-state, per-face occlusion
-   bitmasks from vanilla. Each face of each block state can be represented as a
-   1-bit (full face / not) or as a 16×16 grid bitmask for sub-block precision.
-2. **Compile-time codegen.** Add the face occlusion data to `build.rs` and
-   generate a static lookup: `fn face_occludes(state: BlockStateId, face: Direction) -> bool`
-3. **Integrate into BFS.** In `propagation.rs`, before propagating light to a
-   neighbor, check `shapeOccludes(from_state, to_state, direction)`. If
-   occluded, skip that neighbor.
-4. **Simplified first pass:** Start with a boolean per-face (full face or not).
-   Sub-block precision (16×16 grid) can be added later.
+**Implementation:**
+1. **Compile-time codegen** (`build.rs`): `compute_occlusion_faces()` generates a
+   `u8` bitmask (6 bits for 6 faces) per block state. Handles slabs, stairs, snow
+   layers, pistons, dirt_path, farmland, enchanting_table, lectern, stonecutter,
+   and other single-box blocks. 146 block types have shape occlusion enabled.
+2. **Runtime methods** (`block.rs`): `BlockStateId::occlusion_face(face_index)`,
+   `use_shape_for_light_occlusion()`, `is_empty_shape()`,
+   `has_different_light_properties()`
+3. **Occlusion module** (`occlusion.rs`): `shape_occludes(from, to, dir)` checks
+   whether exit face of source OR entry face of target fully occludes.
+   `get_light_block_into(from, to, dir)` returns 16 (fully blocked) if occluded,
+   else scalar opacity. Fast path when both blocks have empty shapes.
+4. **BFS integration** (`propagation.rs`): `get_effective_opacity()` calls
+   `get_light_block_into()` for every neighbor check in the BFS loop.
 
 ```rust
 /// Returns true if light is blocked from passing from `from_state` to
 /// `to_state` in the given `direction`.
 ///
-/// Checks whether the exit face of the source block and the entry face
-/// of the target block combine to fully occlude the face.
+/// Checks whether the exit face of the source block OR the entry face
+/// of the target block fully occludes the face.
 pub fn shape_occludes(
-    from_state: BlockStateId,
-    to_state: BlockStateId,
-    direction: Direction,
+    from: BlockStateId,
+    to: BlockStateId,
+    dir: Direction,
 ) -> bool {
-    let exit_face = from_state.occlusion_face(direction);
-    let entry_face = to_state.occlusion_face(direction.opposite());
-    exit_face.is_full() && entry_face.is_full()
+    let from_face = !from.is_empty_shape() && from.occlusion_face(dir.to_3d_data_value());
+    let to_face = !to.is_empty_shape() && to.occlusion_face(dir.opposite().to_3d_data_value());
+    from_face || to_face
+}
+
+/// Returns the effective light opacity when propagating from `from` to `to`
+/// in the given direction. Returns 16 (fully blocked) if shape-occluded.
+pub fn get_light_block_into(
+    from: BlockStateId,
+    to: BlockStateId,
+    dir: Direction,
+) -> u8 {
+    let simple_opacity = to.light_opacity();
+    if from.is_empty_shape() && to.is_empty_shape() {
+        return simple_opacity; // Fast path
+    }
+    if shape_occludes(from, to, dir) { 16 } else { simple_opacity }
 }
 ```
 
-**Tests:**
-- Unit: Full block → full block — light blocked in all 6 directions
+**Tests (16):**
+- Unit: Full block → full block — uses scalar opacity
 - Unit: Air → air — light passes in all 6 directions
-- Unit: Bottom slab → air from above — light blocked (slab top face is full)
-- Unit: Bottom slab → air from side — light passes (slab side face is partial)
-- Unit: Stair step face — correct occlusion per direction
-- Property: For all block states, `shape_occludes(air, state, dir) == false`
-  when opacity is 0
-- Compliance: Light through slabs/stairs matches vanilla snapshot
+- Unit: Bottom slab → air from above — light blocked (DOWN face full)
+- Unit: Bottom slab → air from below — light passes (UP face empty)
+- Unit: Bottom slab → air from side — light passes
+- Unit: Top slab → air from above — light passes (DOWN face empty)
+- Unit: Top slab → air from below — light blocked (UP face full)
+- Unit: Double slab — uses scalar opacity (shape flag cleared)
+- Unit: Bottom stairs block down and back face
+- Unit: Bottom stairs pass front face
+- Unit: Top stairs block up
+- Unit: Slab-on-slab vertical occlusion
+- Unit: Air never shape-occludes with any block
+- Deferred: Sub-block precision (16×16 grid) can be added later if needed
 
 ---
 
@@ -799,43 +852,46 @@ vanilla for overhangs, caves near chunk edges, and non-full blocks.
   `updateSourcesInColumn(x, z, lowestSourceY)` on block changes
 
 **Approach:**
-1. **New struct `ChunkSkyLightSources`** in `oxidized-game/src/lighting/`
+1. **`ChunkSkyLightSources` struct** in `oxidized-world/src/chunk/sky_light_sources.rs`
    - Per-column (16×16) heightmap storing the lowest Y where sky light enters
-   - `update(x, z, min_y, max_y)` — recalculates a single column
+   - `update(chunk, x, y, z)` — recalculates a single column when a block changes
    - `get_lowest_source_y(x, z) -> i32`
+   - `from_chunk(chunk)` / `fill_from(chunk)` for initial population
 2. **Column update on block change** — when a block changes, call
-   `update_sources_in_column(x, z)` which runs `remove_sources_below` +
-   `add_sources_above` logic
+   `update(chunk, x, y, z)` which returns whether the source height changed
 3. **Selective BFS seeding** — only seed increase BFS at positions where a
    column's source height differs from its vertical neighbors (reduces wasteful
    BFS work from m2)
-4. **Store in `LevelChunk`** — add `sky_light_sources: ChunkSkyLightSources`
-   field (built during initial sky light pass)
+4. **Store in `LevelChunk`** — `sky_light_sources: Option<ChunkSkyLightSources>`
+   field (built during initial sky light pass via take/set pattern)
 
 ```rust
 /// Per-column sky light source tracking.
 ///
 /// For each (x, z) column in a chunk, tracks the lowest Y where sky light
 /// at level 15 enters the column. This is similar to a heightmap but uses
-/// face occlusion testing (when C2 is available) rather than simple opacity.
+/// face occlusion testing (via C2) rather than simple opacity.
 pub struct ChunkSkyLightSources {
-    /// Lowest source Y per column, indexed as [x * 16 + z].
+    /// Lowest source Y per column, indexed as [x + z * 16].
     lowest_y: [i32; 256],
     min_y: i32,
 }
 
 impl ChunkSkyLightSources {
-    /// Recalculates sky light sources for a single column.
-    pub fn update_column(&mut self, chunk: &LevelChunk, x: usize, z: usize) { /* ... */ }
+    /// Builds sky light sources by scanning all columns in a chunk.
+    pub fn from_chunk(chunk: &LevelChunk) -> Self { /* ... */ }
 
-    /// Called when a block changes — handles removeSourcesBelow + addSourcesAbove.
-    pub fn update_sources_in_column(
+    /// Recalculates sky light sources for all columns.
+    pub fn fill_from(&mut self, chunk: &LevelChunk) { /* ... */ }
+
+    /// Called when a block changes — returns true if source height changed.
+    pub fn update(
         &mut self,
         chunk: &LevelChunk,
         x: usize,
+        y: i32,
         z: usize,
-        changed_y: i32,
-    ) { /* ... */ }
+    ) -> bool { /* ... */ }
 
     /// Returns the lowest Y in this column that has sky light 15.
     pub fn get_lowest_source_y(&self, x: usize, z: usize) -> i32 {
@@ -852,9 +908,9 @@ impl ChunkSkyLightSources {
 - Property: For all columns, lowest_source_y ≥ min_y
 - Compliance: Sky light values in complex terrain match vanilla snapshot
 
-**Note:** Full accuracy depends on C2 (VoxelShape occlusion). Without it, this
-system uses simple opacity which is still an improvement over the current
-MOTION_BLOCKING heightmap approach.
+**Note:** Full accuracy depends on C2 (VoxelShape occlusion), which is now
+implemented. The `is_edge_occluded()` helper in `sky_light_sources.rs` uses
+`occlusion_face()` for face-level checks rather than simple opacity alone.
 
 ---
 
@@ -899,27 +955,19 @@ performance optimization.
 
 ### 23a.15 — Shape property light trigger (M4) ✅
 
-Add `useShapeForLightOcclusion()` change detection to the block change handler.
-Currently only emission and opacity changes trigger light updates.
-
-**Blocked on:** 23a.12 (VoxelShape face occlusion)
-
-**Vanilla reference:**
-- `LightEngine.java:41-47` (`hasDifferentLightProperties`) — also checks
-  `useShapeForLightOcclusion()` change between old and new state
+Add `use_shape_for_light_occlusion()` change detection to the block change handler.
+Implemented via `has_different_light_properties()` on `BlockStateId`, which checks
+emission, opacity, and shape occlusion flag. Called in `block_interaction.rs` to
+decide whether to queue a `LightUpdate`.
 
 **Approach:**
-1. After C2 is implemented, add `uses_shape_for_occlusion() -> bool` to
-   `BlockStateId`
-2. In `block_interaction.rs`, extend the light trigger condition:
-   ```rust
-   if old_emission != new_emission
-       || old_opacity != new_opacity
-       || old_state.uses_shape_for_occlusion() != new_state.uses_shape_for_occlusion()
-   {
-       // Queue light update
-   }
-   ```
+`BlockStateId::has_different_light_properties(other)` checks:
+```rust
+self.light_emission() != other.light_emission()
+    || self.light_opacity() != other.light_opacity()
+    || self.use_shape_for_light_occlusion()
+    || other.use_shape_for_light_occlusion()
+```
 
 **Tests:**
 - Unit: Replacing slab with full block triggers light update
@@ -970,7 +1018,7 @@ allocation). The per-block vertical pass starts just below the bulk-filled range
 
 - **Requires:** Phase 09 (chunk structures), Phase 13 (chunk sending), Phase 22 (block interaction), Phase 23 (flat worldgen)
 - **Required by:** Phase 25 (hostile mobs — mob spawning depends on light levels), Phase 26 (noise worldgen — light status in pipeline)
-- **Internal:** 23a.15 blocked on 23a.12 (VoxelShape occlusion). 23a.13 improved by 23a.12 but not blocked.
+- **Internal:** All internal dependencies satisfied. 23a.12 (VoxelShape occlusion) complete; 23a.13 uses face occlusion for accuracy.
 - **Crate deps:** `rayon` (already in workspace for ADR-016)
 
 ---
@@ -985,14 +1033,14 @@ allocation). The per-block vertical pass starts just below the bulk-filled range
 4. ✅ Light propagates across chunk boundaries
 5. ✅ Clients receive light update packets for incremental changes
 6. ⏳ Performance meets ADR-017 targets — sequential implementation complete; parallel optimization deferred
-7. ✅ All tests pass: unit, integration, property-based, compliance (36 unit + 2 roundtrip + 5 compliance)
+7. ✅ All tests pass: unit, integration, compliance (69 unit + 2 roundtrip + 13 compliance)
 8. ✅ No `todo!()` stubs remain in `lighting/engine.rs`
 
 ### Vanilla Compliance (23a.10–23a.16)
 
-9. ⏳ Cross-chunk light propagation works in production (not just tests) — 23a.10
-10. ⏳ `LightEngine` persists across ticks — 23a.11
-11. ⏳ Non-full blocks (slabs, stairs) correctly occlude light per-face — 23a.12
+9. ✅ Cross-chunk light propagation works in production — 23a.10
+10. ✅ `LightEngine` persists across ticks via `WorldLighting` — 23a.11
+11. ✅ Non-full blocks (slabs, stairs) correctly occlude light per-face — 23a.12
 12. ✅ Sky light uses per-column source tracking for complex terrain — 23a.13
 13. ✅ Direction bitmask reduces BFS work by ~17% — 23a.14
 14. ✅ Shape property changes trigger light updates — 23a.15
