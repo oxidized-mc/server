@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # setup-ref.sh — Download, extract, and decompile the Minecraft server JAR.
 #
+# Decompilation uses VineFlower as the primary decompiler (best quality output).
+# Files that VineFlower fails to decompile are retried with CFR as a fallback.
+#
 # All output lives under mc-server-ref/<version>/:
 #   server.jar             — downloaded bundled launcher JAR
 #   extracted/server.jar   — unbundled server JAR (class files)
@@ -18,8 +21,10 @@ set -euo pipefail
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 MC_VERSION="26.1"
-VINEFLOWER_VERSION="1.11.1"
+VINEFLOWER_VERSION="1.11.2"
 VINEFLOWER_URL="https://github.com/Vineflower/vineflower/releases/download/${VINEFLOWER_VERSION}/vineflower-${VINEFLOWER_VERSION}.jar"
+CFR_VERSION="0.152"
+CFR_URL="https://github.com/leibnitz27/cfr/releases/download/${CFR_VERSION}/cfr-${CFR_VERSION}.jar"
 VERSION_MANIFEST_URL="https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -120,6 +125,17 @@ else
     ok "Downloaded VineFlower ($(du -h "${VINEFLOWER_JAR}" | cut -f1))"
 fi
 
+# ── Step 3b: Download CFR decompiler (fallback) ───────────────────────────────
+CFR_JAR="${REF_DIR}/cfr-${CFR_VERSION}.jar"
+
+if [ -f "${CFR_JAR}" ]; then
+    ok "CFR ${CFR_VERSION} already exists, skipping download"
+else
+    info "Downloading CFR ${CFR_VERSION} (fallback decompiler)..."
+    curl -#L -o "${CFR_JAR}" "${CFR_URL}"
+    ok "Downloaded CFR ($(du -h "${CFR_JAR}" | cut -f1))"
+fi
+
 # ── Step 4: Decompile ─────────────────────────────────────────────────────────
 if [ -d "${DECOMPILED_DIR}" ] && [ "$(find "${DECOMPILED_DIR}" -name '*.java' | head -1)" ]; then
     JAVA_COUNT=$(find "${DECOMPILED_DIR}" -name '*.java' | wc -l)
@@ -133,6 +149,43 @@ else
 
     JAVA_COUNT=$(find "${DECOMPILED_DIR}" -name '*.java' | wc -l)
     ok "Decompiled ${JAVA_COUNT} Java files"
+fi
+
+# ── Step 4b: CFR fallback for VineFlower failures ─────────────────────────────
+FAILED_FILES=()
+while IFS= read -r -d '' file; do
+    FAILED_FILES+=("$file")
+done < <(grep -rlZ "Couldn't be decompiled" "${DECOMPILED_DIR}" 2>/dev/null || true)
+
+if [ ${#FAILED_FILES[@]} -gt 0 ]; then
+    info "Found ${#FAILED_FILES[@]} files that VineFlower failed to decompile, retrying with CFR..."
+    CFR_TMP=$(mktemp -d)
+    FIXED=0
+
+    for failed_file in "${FAILED_FILES[@]}"; do
+        REL_PATH="${failed_file#"${DECOMPILED_DIR}/"}"
+        CLASS_NAME="${REL_PATH%.java}"
+        CLASS_NAME="${CLASS_NAME//\//.}"
+
+        if java -jar "${CFR_JAR}" --outputdir "${CFR_TMP}" "${INNER_JAR}" \
+            --jarfilter "${CLASS_NAME}" 2>/dev/null; then
+            CFR_OUTPUT="${CFR_TMP}/${REL_PATH}"
+            if [ -f "${CFR_OUTPUT}" ] && ! grep -q "Couldn't be decompiled" "${CFR_OUTPUT}" 2>/dev/null; then
+                cp "${CFR_OUTPUT}" "${failed_file}"
+                FIXED=$((FIXED + 1))
+            fi
+        fi
+    done
+
+    rm -rf "${CFR_TMP}"
+
+    REMAINING=$((${#FAILED_FILES[@]} - FIXED))
+    ok "CFR recovered ${FIXED}/${#FAILED_FILES[@]} files"
+    if [ "${REMAINING}" -gt 0 ]; then
+        warn "${REMAINING} files could not be decompiled by either tool"
+    fi
+else
+    ok "No VineFlower failures to recover"
 fi
 
 # ── Step 5: Run vanilla data generator ─────────────────────────────────────────
@@ -187,6 +240,7 @@ info "Setup complete! Directory layout:"
 echo ""
 echo "  mc-server-ref/"
 [ -f "${VINEFLOWER_JAR}" ] && echo "  ├── vineflower-${VINEFLOWER_VERSION}.jar"
+[ -f "${CFR_JAR}" ] && echo "  ├── cfr-${CFR_VERSION}.jar"
 echo "  ├── decompiled -> ${MC_VERSION}/decompiled"
 echo "  ├── generated -> ${MC_VERSION}/generated"
 echo "  ├── mc-extracted -> ${MC_VERSION}/mc-extracted"
