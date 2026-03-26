@@ -107,6 +107,37 @@ impl BlockStateId {
         self.data().flags.contains(BlockStateFlags::IS_INTERACTABLE)
     }
 
+    /// Returns `true` if this block uses its shape for directional light occlusion.
+    ///
+    /// When `true`, the lighting engine checks per-face occlusion data rather
+    /// than scalar `light_opacity()` to determine if light passes through a face.
+    #[inline]
+    pub fn use_shape_for_light_occlusion(self) -> bool {
+        self.data()
+            .flags
+            .contains(BlockStateFlags::USE_SHAPE_FOR_LIGHT_OCCLUSION)
+    }
+
+    /// Returns `true` if this block state's shape is "empty" for light occlusion.
+    ///
+    /// Matches vanilla's `isEmptyShape()`: a shape is empty if the block cannot
+    /// occlude OR does not use shape-based light occlusion. When empty, only
+    /// scalar `light_opacity()` is used.
+    #[inline]
+    pub fn is_empty_shape(self) -> bool {
+        !self.is_opaque() || !self.use_shape_for_light_occlusion()
+    }
+
+    /// Returns `true` if the given face fully occludes light.
+    ///
+    /// `face_index` maps to [`Direction`] ordinals: 0=Down, 1=Up, 2=North,
+    /// 3=South, 4=West, 5=East.
+    #[inline]
+    pub fn occlusion_face(self, face_index: u8) -> bool {
+        debug_assert!(face_index < 6, "face_index must be 0..6");
+        self.data().occlusion_faces & (1 << face_index) != 0
+    }
+
     /// Returns the light level this block emits (0–15).
     #[inline]
     pub fn light_emission(self) -> u8 {
@@ -225,10 +256,9 @@ impl BlockStateId {
 
 // ─── Static data types (populated by build.rs) ─────────────────────────────
 
-/// Per-state block data: all 18 bytes of immutable properties.
+/// Per-state block data: all immutable properties.
 /// Generated at compile time and stored in a dense static array.
 ///
-/// Size: 18 bytes per entry × 29,873 states ≈ 537 KB (acceptable overhead).
 /// Property values are **not** stored inline — they are computed on demand
 /// from the state's offset within its block using stride arithmetic.
 #[derive(Debug, Clone, Copy)]
@@ -236,12 +266,19 @@ impl BlockStateId {
 pub struct BlockStateEntry {
     /// Index into `BLOCK_DEFS`.
     pub block_type: u16,
-    /// Bitflags for commonly queried properties (11 flags, u16).
+    /// Bitflags for commonly queried properties (13 flags, u16).
     pub flags: BlockStateFlags,
     /// Light level emission (0–15). From vanilla `luminance`.
     pub light_emission: u8,
     /// Light opacity (0–15). How much light this block absorbs.
     pub light_opacity: u8,
+    /// Per-face occlusion bitmask.
+    ///
+    /// Bit N is set if face N (matching [`Direction`] ordinal: 0=Down, 1=Up,
+    /// 2=North, 3=South, 4=West, 5=East) is fully occluding for light.
+    /// Only meaningful when both `IS_OPAQUE` and `USE_SHAPE_FOR_LIGHT_OCCLUSION`
+    /// flags are set.
+    pub occlusion_faces: u8,
     /// Hardness in fixed-point ×100. 0xFFFF = unbreakable (bedrock).
     pub hardness: u16,
     /// Explosion resistance in fixed-point ×100.
@@ -290,6 +327,12 @@ bitflags! {
         const IS_FLAMMABLE     = 1 << 10;
         /// Block opens a UI or changes state on right-click (without item).
         const IS_INTERACTABLE  = 1 << 11;
+        /// Block uses its VoxelShape for directional light occlusion.
+        ///
+        /// When set together with `IS_OPAQUE`, per-face occlusion data in
+        /// [`BlockStateEntry::occlusion_faces`] is used by the lighting engine
+        /// instead of scalar `light_opacity`.
+        const USE_SHAPE_FOR_LIGHT_OCCLUSION = 1 << 12;
     }
 }
 

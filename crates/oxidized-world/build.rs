@@ -88,6 +88,7 @@ fn main() {
     let mut state_jump_factor = vec![0u16; state_count];
     let mut state_map_color = vec![0u8; state_count];
     let mut state_push_reaction = vec![0u8; state_count];
+    let mut state_occlusion_faces = vec![0u8; state_count];
 
     for block in &blocks {
         let base_flags = compute_flags(&block.name, &block.definition_type, &block_props);
@@ -106,6 +107,7 @@ fn main() {
                 has_block_entity: false,
                 is_interactable: false,
                 is_solid: false,
+                use_shape_for_light_occlusion: false,
                 light_emission: 0,
                 light_opacity: 0,
                 hardness: 0,
@@ -119,8 +121,27 @@ fn main() {
 
         for state in &block.states {
             let idx = state.id as usize;
+            let mut flags = base_flags | if state.is_default { 0x0002 } else { 0 };
+
+            // Compute per-state occlusion faces and potentially adjust the
+            // USE_SHAPE_FOR_LIGHT_OCCLUSION flag (some blocks are state-dependent,
+            // e.g. double slabs don't use shape occlusion).
+            let occlusion = if props.use_shape_for_light_occlusion {
+                compute_occlusion_faces(&block.name, state, &block.properties)
+            } else {
+                0u8
+            };
+            // If the per-state computation cleared shape occlusion (e.g. double
+            // slab), remove the flag for this specific state.
+            if props.use_shape_for_light_occlusion && occlusion == 0x3F {
+                // Full block occlusion — not actually using shape occlusion.
+                // This matches vanilla where double slabs return false from
+                // useShapeForLightOcclusion.
+                flags &= !0x1000;
+            }
+
             state_block_type[idx] = block.type_index;
-            state_flags[idx] = base_flags | if state.is_default { 0x0002 } else { 0 };
+            state_flags[idx] = flags;
             state_light_emission[idx] = props.light_emission;
             state_light_opacity[idx] = props.light_opacity;
             state_hardness[idx] = props.hardness;
@@ -130,6 +151,7 @@ fn main() {
             state_jump_factor[idx] = props.jump_factor;
             state_map_color[idx] = props.map_color;
             state_push_reaction[idx] = props.push_reaction;
+            state_occlusion_faces[idx] = occlusion;
         }
     }
 
@@ -195,6 +217,7 @@ fn main() {
         &state_flags,
         &state_light_emission,
         &state_light_opacity,
+        &state_occlusion_faces,
         &state_hardness,
         &state_explosion_resistance,
         &state_friction,
@@ -335,6 +358,208 @@ fn parse_block(name: &str, value: &serde_json::Value) -> BlockData {
     }
 }
 
+/// Direction ordinals matching the runtime `Direction` enum.
+const DIR_DOWN: u8 = 0;
+const DIR_UP: u8 = 1;
+const DIR_NORTH: u8 = 2;
+const DIR_SOUTH: u8 = 3;
+const DIR_WEST: u8 = 4;
+const DIR_EAST: u8 = 5;
+
+/// Helper: get a state property value by name.
+fn get_state_prop<'a>(
+    state: &StateData,
+    block_props: &'a [PropData],
+    prop_name: &str,
+) -> Option<&'a str> {
+    for (i, p) in block_props.iter().enumerate() {
+        if p.name == prop_name {
+            let idx = *state.value_indices.get(i)? as usize;
+            return p.values.get(idx).map(|s| s.as_str());
+        }
+    }
+    None
+}
+
+/// Compute per-face occlusion bitmask for a block state that uses shape-based
+/// light occlusion.
+///
+/// Returns a u8 where bit N is set if face N (Direction ordinal) is fully
+/// occluding. Returns 0x3F (all faces) if the block should be treated as a
+/// full cube for this state (e.g., double slab).
+fn compute_occlusion_faces(
+    block_name: &str,
+    state: &StateData,
+    block_props: &[PropData],
+) -> u8 {
+    let short = block_name.strip_prefix("minecraft:").unwrap_or(block_name);
+
+    // ── Slabs ───────────────────────────────────────────────────────────
+    // SlabType: bottom → DOWN full, top → UP full, double → full cube
+    if short.ends_with("_slab") {
+        return match get_state_prop(state, block_props, "type") {
+            Some("bottom") => 1 << DIR_DOWN,
+            Some("top") => 1 << DIR_UP,
+            Some("double") => 0x3F,
+            _ => 0,
+        };
+    }
+
+    // ── Stairs ──────────────────────────────────────────────────────────
+    // A stair always has a full half-slab base (DOWN or UP face) and
+    // potentially a full back face depending on shape.
+    if short.ends_with("_stairs") {
+        return compute_stair_occlusion_faces(state, block_props);
+    }
+
+    // ── Snow layers ─────────────────────────────────────────────────────
+    // Layers 1-7: only DOWN face (if any height). Layer 8: full block.
+    if short == "snow" {
+        return match get_state_prop(state, block_props, "layers") {
+            Some("8") => 0x3F,
+            Some(l) if l.parse::<u8>().unwrap_or(0) >= 1 => 1 << DIR_DOWN,
+            _ => 0,
+        };
+    }
+
+    // ── Pistons ─────────────────────────────────────────────────────────
+    // PistonBase: when extended, missing the head on one face.
+    if short == "piston" || short == "sticky_piston" {
+        let extended = get_state_prop(state, block_props, "extended") == Some("true");
+        if !extended {
+            return 0x3F; // Not extended = full block (not shape-occluding)
+        }
+        // Extended: missing the face in the `facing` direction
+        let facing = get_state_prop(state, block_props, "facing").unwrap_or("up");
+        let missing = direction_ordinal(facing);
+        return 0x3F & !(1 << missing);
+    }
+
+    // PistonHead: thin shape, only the face in the `facing` direction is full.
+    if short == "piston_head" {
+        let facing = get_state_prop(state, block_props, "facing").unwrap_or("up");
+        return 1 << direction_ordinal(facing);
+    }
+
+    // ── Single-box non-full blocks (15/16 or shorter height) ────────────
+    // These have a full DOWN face but don't reach y=1.
+    // dirt_path, farmland: height 15/16
+    // daylight_detector, sculk_sensor, sculk_shrieker: height 6/16 or 8/16
+    // enchanting_table: height 12/16
+    // end_portal_frame: height 13/16
+    // stonecutter: height 9/16
+    // lectern: custom shape
+    // shelves (chiseled_bookshelf variants): full-ish but not full
+    if matches!(
+        short,
+        "dirt_path"
+            | "farmland"
+            | "daylight_detector"
+            | "sculk_sensor"
+            | "calibrated_sculk_sensor"
+            | "sculk_shrieker"
+            | "enchanting_table"
+            | "end_portal_frame"
+            | "stonecutter"
+            | "lectern"
+    ) {
+        return 1 << DIR_DOWN;
+    }
+
+    // Shelves (chiseled bookshelf) — full cube shape but registered as
+    // shape-occluding; treat as full occlusion.
+    if short.ends_with("_shelf") {
+        return 0x3F;
+    }
+
+    // Fallback: no faces fully occlude.
+    0
+}
+
+/// Compute face occlusion for a stair block state.
+///
+/// Stairs have a half-slab base (bottom or top) and a step that extends
+/// in the facing direction. The base face (DOWN or UP) is always full.
+/// The back face (opposite of facing direction) is full for STRAIGHT and INNER shapes.
+fn compute_stair_occlusion_faces(state: &StateData, block_props: &[PropData]) -> u8 {
+    let half = get_state_prop(state, block_props, "half").unwrap_or("bottom");
+    let facing = get_state_prop(state, block_props, "facing").unwrap_or("north");
+    let shape = get_state_prop(state, block_props, "shape").unwrap_or("straight");
+
+    // The base half-slab always fully covers one Y face.
+    let base_face = if half == "bottom" {
+        DIR_DOWN
+    } else {
+        DIR_UP
+    };
+    let mut mask = 1u8 << base_face;
+
+    // The back face is OPPOSITE the facing direction (facing = step direction,
+    // back wall is behind the step).
+    let facing_dir = direction_ordinal(facing);
+    let back_dir = match facing_dir {
+        DIR_NORTH => DIR_SOUTH,
+        DIR_SOUTH => DIR_NORTH,
+        DIR_EAST => DIR_WEST,
+        DIR_WEST => DIR_EAST,
+        other => other,
+    };
+    match shape {
+        "straight" => {
+            mask |= 1 << back_dir;
+        }
+        "inner_left" | "inner_right" => {
+            // Inner corners: back face is full, plus one side face.
+            mask |= 1 << back_dir;
+            let side = if shape == "inner_left" {
+                counter_clockwise(back_dir)
+            } else {
+                clockwise(back_dir)
+            };
+            mask |= 1 << side;
+        }
+        // outer_left, outer_right: only the base face is full.
+        _ => {}
+    }
+
+    mask
+}
+
+/// Map a facing name to a Direction ordinal.
+fn direction_ordinal(facing: &str) -> u8 {
+    match facing {
+        "down" => DIR_DOWN,
+        "up" => DIR_UP,
+        "north" => DIR_NORTH,
+        "south" => DIR_SOUTH,
+        "west" => DIR_WEST,
+        "east" => DIR_EAST,
+        _ => DIR_NORTH,
+    }
+}
+
+/// Rotate a horizontal direction 90° clockwise (around Y axis).
+fn clockwise(dir: u8) -> u8 {
+    match dir {
+        DIR_NORTH => DIR_EAST,
+        DIR_EAST => DIR_SOUTH,
+        DIR_SOUTH => DIR_WEST,
+        DIR_WEST => DIR_NORTH,
+        other => other,
+    }
+}
+
+/// Rotate a horizontal direction 90° counter-clockwise (around Y axis).
+fn counter_clockwise(dir: u8) -> u8 {
+    match dir {
+        DIR_NORTH => DIR_WEST,
+        DIR_WEST => DIR_SOUTH,
+        DIR_SOUTH => DIR_EAST,
+        DIR_EAST => DIR_NORTH,
+        other => other,
+    }
+}
+
 fn compute_flags(
     block_name: &str,
     definition_type: &str,
@@ -384,6 +609,9 @@ fn compute_flags(
         if props.is_interactable {
             f |= 0x0800; // IS_INTERACTABLE
         }
+        if props.use_shape_for_light_occlusion {
+            f |= 0x1000; // USE_SHAPE_FOR_LIGHT_OCCLUSION
+        }
     }
     f
 }
@@ -401,6 +629,7 @@ struct BlockProperties {
     has_block_entity: bool,
     is_interactable: bool,
     is_solid: bool,
+    use_shape_for_light_occlusion: bool,
     light_emission: u8,
     light_opacity: u8,
     hardness: u16,
@@ -448,6 +677,9 @@ fn load_block_properties(path: &Path) -> HashMap<String, BlockProperties> {
             has_block_entity: value["has_block_entity"].as_bool().unwrap_or(false),
             is_interactable: value["is_interactable"].as_bool().unwrap_or(false),
             is_solid: value["is_solid"].as_bool().unwrap_or(false),
+            use_shape_for_light_occlusion: value["use_shape_for_light_occlusion"]
+                .as_bool()
+                .unwrap_or(false),
             light_emission: (value["light_emission"].as_u64().unwrap_or(0) & 0xF) as u8,
             light_opacity: (value["light_opacity"].as_u64().unwrap_or(0) & 0xF) as u8,
             hardness,
@@ -516,6 +748,7 @@ fn write_generated(
     state_flags: &[u16],
     state_light_emission: &[u8],
     state_light_opacity: &[u8],
+    state_occlusion_faces: &[u8],
     state_hardness: &[u16],
     state_explosion_resistance: &[u16],
     state_friction: &[u16],
@@ -546,12 +779,13 @@ fn write_generated(
         let _ = writeln!(
             out,
             "    BlockStateEntry {{ block_type: {}, flags: BlockStateFlags::from_bits_truncate({}), \
-             light_emission: {}, light_opacity: {}, hardness: {}, explosion_resistance: {}, \
+             light_emission: {}, light_opacity: {}, occlusion_faces: {}, hardness: {}, explosion_resistance: {}, \
              friction: {}, speed_factor: {}, jump_factor: {}, map_color: {}, push_reaction: {} }},",
             state_block_type[i],
             state_flags[i],
             state_light_emission[i],
             state_light_opacity[i],
+            state_occlusion_faces[i],
             state_hardness[i],
             state_explosion_resistance[i],
             state_friction[i],

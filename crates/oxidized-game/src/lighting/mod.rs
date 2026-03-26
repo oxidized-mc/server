@@ -15,6 +15,7 @@
 pub mod block_light;
 pub mod cross_chunk;
 pub mod engine;
+pub mod occlusion;
 pub mod parallel;
 pub mod propagation;
 pub mod queue;

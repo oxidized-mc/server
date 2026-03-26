@@ -12,17 +12,20 @@
 
 use std::collections::VecDeque;
 
+use oxidized_protocol::types::Direction;
 use oxidized_world::chunk::LevelChunk;
 use oxidized_world::registry::BlockStateId;
 
-/// Six cardinal directions as (dx, dy, dz) offsets.
-pub(crate) const DIRECTIONS: [(i32, i32, i32); 6] = [
-    (1, 0, 0),
-    (-1, 0, 0),
-    (0, 1, 0),
-    (0, -1, 0),
-    (0, 0, 1),
-    (0, 0, -1),
+use super::occlusion::get_light_block_into;
+
+/// Six cardinal directions as (dx, dy, dz, Direction) tuples.
+pub(crate) const DIRECTIONS: [(i32, i32, i32, Direction); 6] = [
+    (1, 0, 0, Direction::East),
+    (-1, 0, 0, Direction::West),
+    (0, 1, 0, Direction::Up),
+    (0, -1, 0, Direction::Down),
+    (0, 0, 1, Direction::South),
+    (0, 0, -1, Direction::North),
 ];
 
 /// Entry in the BFS increase queue.
@@ -64,12 +67,30 @@ pub struct BoundaryEntry {
     pub level: u8,
 }
 
-/// Returns the block state opacity at the given chunk-local position.
-fn get_opacity(chunk: &LevelChunk, x: i32, y: i32, z: i32) -> u8 {
+/// Returns the effective light attenuation between a source block and its neighbor.
+///
+/// Uses face-occlusion-aware logic: if either the source's exit face or the
+/// target's entry face fully covers the boundary, returns 16 (fully blocked).
+/// Otherwise returns the target's scalar light opacity.
+fn get_effective_opacity(
+    chunk: &LevelChunk,
+    from: BlockStateId,
+    nx: i32,
+    ny: i32,
+    nz: i32,
+    dir: Direction,
+) -> u8 {
+    let state_id = chunk.get_block_state(nx & 15, ny, nz & 15).unwrap_or(0);
+    #[allow(clippy::cast_possible_truncation)]
+    let to = BlockStateId(state_id as u16);
+    get_light_block_into(from, to, dir)
+}
+
+/// Returns the block state at the given chunk-local position.
+fn get_block_state_id(chunk: &LevelChunk, x: i32, y: i32, z: i32) -> BlockStateId {
     let state_id = chunk.get_block_state(x & 15, y, z & 15).unwrap_or(0);
     #[allow(clippy::cast_possible_truncation)]
-    let sid = BlockStateId(state_id as u16);
-    sid.light_opacity()
+    BlockStateId(state_id as u16)
 }
 
 /// Checks whether a position is within the chunk column's Y bounds.
@@ -97,7 +118,9 @@ pub(crate) fn propagate_block_light_increase(
             continue;
         }
 
-        for &(dx, dy, dz) in &DIRECTIONS {
+        let from_state = get_block_state_id(chunk, entry.x, entry.y, entry.z);
+
+        for &(dx, dy, dz, dir) in &DIRECTIONS {
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;
@@ -118,7 +141,10 @@ pub(crate) fn propagate_block_light_increase(
                 continue;
             }
 
-            let opacity = get_opacity(chunk, nx, ny, nz);
+            let opacity = get_effective_opacity(chunk, from_state, nx, ny, nz, dir);
+            if opacity >= 16 {
+                continue;
+            }
             let new_level = entry.level.saturating_sub(opacity.max(1));
             if new_level == 0 {
                 continue;
@@ -158,7 +184,7 @@ pub(crate) fn propagate_block_light_decrease(
     let mut boundary = Vec::new();
 
     while let Some(entry) = decrease_queue.pop_front() {
-        for &(dx, dy, dz) in &DIRECTIONS {
+        for &(dx, dy, dz, _dir) in &DIRECTIONS {
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;
@@ -187,9 +213,8 @@ pub(crate) fn propagate_block_light_decrease(
 
             if neighbor_level < entry.old_level {
                 // This neighbor's light was dependent on the removed source.
-                let state_id = chunk.get_block_state(nx & 15, ny, nz & 15).unwrap_or(0);
-                #[allow(clippy::cast_possible_truncation)]
-                let emission = BlockStateId(state_id as u16).light_emission();
+                let neighbor_state = get_block_state_id(chunk, nx, ny, nz);
+                let emission = neighbor_state.light_emission();
 
                 chunk.set_block_light_at(nx, ny, nz, 0);
 
@@ -246,7 +271,9 @@ pub(crate) fn propagate_sky_light_increase(
             continue;
         }
 
-        for &(dx, dy, dz) in &DIRECTIONS {
+        let from_state = get_block_state_id(chunk, entry.x, entry.y, entry.z);
+
+        for &(dx, dy, dz, dir) in &DIRECTIONS {
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;
@@ -265,7 +292,10 @@ pub(crate) fn propagate_sky_light_increase(
                 continue;
             }
 
-            let opacity = get_opacity(chunk, nx, ny, nz);
+            let opacity = get_effective_opacity(chunk, from_state, nx, ny, nz, dir);
+            if opacity >= 16 {
+                continue;
+            }
             let new_level = entry.level.saturating_sub(opacity.max(1));
             if new_level == 0 {
                 continue;
@@ -298,7 +328,7 @@ pub(crate) fn propagate_sky_light_decrease(
     let mut boundary = Vec::new();
 
     while let Some(entry) = decrease_queue.pop_front() {
-        for &(dx, dy, dz) in &DIRECTIONS {
+        for &(dx, dy, dz, _dir) in &DIRECTIONS {
             let nx = entry.x + dx;
             let ny = entry.y + dy;
             let nz = entry.z + dz;

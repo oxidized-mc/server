@@ -644,6 +644,110 @@ def map_block_entity_fields_to_names(
     return names
 
 
+def extract_shape_occlusion_classes() -> tuple[set[str], dict[str, str]]:
+    """Find block classes that override useShapeForLightOcclusion().
+
+    Returns (direct_overrides, parents) where direct_overrides is the set of
+    class names that directly override the method, and parents maps child→parent.
+    """
+    if not BLOCK_DIR.is_dir():
+        print(f"  WARNING: Block source directory not found: {BLOCK_DIR}", file=sys.stderr)
+        return set(), {}
+
+    parents: dict[str, str] = {}
+    direct: set[str] = set()
+    for java_file in BLOCK_DIR.glob("**/*.java"):
+        source = java_file.read_text(encoding="utf-8")
+        m = re.search(r'class\s+(\w+)\s+extends\s+(\w+)', source)
+        if m:
+            parents[m.group(1)] = m.group(2)
+        if re.search(r'(?:public|protected)\s+boolean\s+useShapeForLightOcclusion\s*\(', source):
+            cls_m = re.search(r'class\s+(\w+)', source)
+            if cls_m:
+                direct.add(cls_m.group(1))
+
+    # Remove BlockBehaviour itself — its default returns false
+    direct.discard("BlockBehaviour")
+
+    return direct, parents
+
+
+def is_shape_occlusion_class(cls: str, direct: set[str], parents: dict[str, str],
+                              cache: dict[str, bool] | None = None) -> bool:
+    """Check if a class uses shape-based light occlusion (directly or inherited)."""
+    if cache is None:
+        cache = {}
+    if cls in cache:
+        return cache[cls]
+    if cls in direct:
+        cache[cls] = True
+        return True
+    parent = parents.get(cls)
+    if parent:
+        result = is_shape_occlusion_class(parent, direct, parents, cache)
+        cache[cls] = result
+        return result
+    cache[cls] = False
+    return False
+
+
+def map_shape_occlusion_classes_to_blocks(
+    blocks_source: str, field_to_name: dict[str, str],
+    direct: set[str], parents: dict[str, str],
+) -> set[str]:
+    """Map shape-occlusion Java class names to minecraft: block names.
+
+    Uses two strategies:
+    1. Factory class detection (for blocks registered with explicit class refs)
+    2. Helper method detection (registerLegacyStair → StairBlock, etc.)
+    """
+    result: set[str] = set()
+    cache: dict[str, bool] = {}
+
+    # Helper methods in Blocks.java that create shape-occluding block types
+    helper_class_map = {
+        "registerLegacyStair": "StairBlock",
+        "registerStair": "StairBlock",
+    }
+
+    field_pattern = re.compile(
+        r'public\s+static\s+final\s+(?:Block|WeatheringCopperBlocks)\s+(\w+)\s*='
+    )
+
+    pos = 0
+    while pos < len(blocks_source):
+        m = field_pattern.search(blocks_source, pos)
+        if not m:
+            break
+        field_name = m.group(1)
+        start = m.end()
+        stmt = extract_statement(blocks_source, start)
+        pos = start + len(stmt)
+
+        mc_name = field_to_name.get(field_name)
+        if not mc_name:
+            continue
+
+        # Strategy 1: direct factory class
+        factory_cls = extract_factory_class(stmt)
+        if factory_cls and is_shape_occlusion_class(factory_cls, direct, parents, cache):
+            if "WeatheringCopperBlocks.create(" in stmt:
+                base = mc_name.removeprefix("minecraft:")
+                for prefix in WEATHERING_PREFIXES:
+                    result.add(f"minecraft:{prefix}{base}")
+            else:
+                result.add(mc_name)
+            continue
+
+        # Strategy 2: known helper methods
+        for helper, cls in helper_class_map.items():
+            if helper + "(" in stmt and is_shape_occlusion_class(cls, direct, parents, cache):
+                result.add(mc_name)
+                break
+
+    return result
+
+
 def compute_is_solid(props: dict) -> bool:
     """Compute IS_SOLID flag from available properties.
 
@@ -701,10 +805,19 @@ def main() -> None:
     )
     print(f"  Found {len(interactable_blocks)} interactable blocks")
 
+    # Extract shape-based light occlusion blocks
+    print("Scanning for shape-based light occlusion (useShapeForLightOcclusion overrides)...")
+    so_direct, so_parents = extract_shape_occlusion_classes()
+    shape_occlusion_blocks = map_shape_occlusion_classes_to_blocks(
+        blocks_source, full_field_map, so_direct, so_parents,
+    )
+    print(f"  Found {len(shape_occlusion_blocks)} blocks with shape-based light occlusion")
+
     # Enrich blocks with block entity and interactable flags, compute is_solid
     for name, props in blocks.items():
         props["has_block_entity"] = name in be_block_names
         props["is_interactable"] = name in interactable_blocks
+        props["use_shape_for_light_occlusion"] = name in shape_occlusion_blocks
         props["is_solid"] = compute_is_solid(props)
         # Derive light_opacity heuristic:
         #   Full opaque solid blocks → 15 (blocks all light)
