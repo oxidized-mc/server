@@ -28,6 +28,7 @@ pub struct ChunkNeighbors<'a> {
 ///
 /// For each boundary entry, determines which neighbor chunk owns that
 /// position, reads the target block's opacity, and runs BFS increase.
+/// Returns any further boundary entries produced by BFS in neighbor chunks.
 ///
 /// `center_chunk_x`/`center_chunk_z` are the chunk coordinates of the
 /// chunk that produced the boundary entries.
@@ -36,22 +37,37 @@ pub fn propagate_block_light_cross_chunk(
     boundary_entries: &[BoundaryEntry],
     center_chunk_x: i32,
     center_chunk_z: i32,
-) {
+) -> Vec<BoundaryEntry> {
+    let mut further = Vec::new();
     for entry in boundary_entries {
-        propagate_boundary_block_light(neighbors, entry, center_chunk_x, center_chunk_z);
+        further.extend(propagate_boundary_block_light(
+            neighbors,
+            entry,
+            center_chunk_x,
+            center_chunk_z,
+        ));
     }
+    further
 }
 
 /// Propagates sky light boundary entries into neighboring chunks.
+/// Returns any further boundary entries produced by BFS in neighbor chunks.
 pub fn propagate_sky_light_cross_chunk(
     neighbors: &mut ChunkNeighbors<'_>,
     boundary_entries: &[BoundaryEntry],
     center_chunk_x: i32,
     center_chunk_z: i32,
-) {
+) -> Vec<BoundaryEntry> {
+    let mut further = Vec::new();
     for entry in boundary_entries {
-        propagate_boundary_sky_light(neighbors, entry, center_chunk_x, center_chunk_z);
+        further.extend(propagate_boundary_sky_light(
+            neighbors,
+            entry,
+            center_chunk_x,
+            center_chunk_z,
+        ));
     }
+    further
 }
 
 fn propagate_boundary_block_light(
@@ -59,11 +75,11 @@ fn propagate_boundary_block_light(
     entry: &BoundaryEntry,
     center_chunk_x: i32,
     center_chunk_z: i32,
-) {
+) -> Vec<BoundaryEntry> {
     let (chunk, local_x, local_z, base_x, base_z) =
         match resolve_neighbor(neighbors, entry.world_x, entry.world_z, center_chunk_x, center_chunk_z) {
             Some(v) => v,
-            None => return,
+            None => return Vec::new(),
         };
 
     // Attenuate by target block's opacity (not pre-attenuated).
@@ -72,7 +88,7 @@ fn propagate_boundary_block_light(
     let opacity = BlockStateId(state_id as u16).light_opacity();
     let attenuated = entry.level.saturating_sub(opacity.max(1));
     if attenuated == 0 {
-        return;
+        return Vec::new();
     }
 
     let current = chunk.get_block_light_at(local_x, entry.world_y, local_z);
@@ -86,9 +102,9 @@ fn propagate_boundary_block_light(
             level: attenuated,
             directions: entry.directions,
         });
-        let _further = propagate_block_light_increase(chunk, &mut queue, base_x, base_z);
-        // Further cross-chunk propagation is not pursued recursively;
-        // it will be handled in the next tick or full-lighting pass.
+        propagate_block_light_increase(chunk, &mut queue, base_x, base_z)
+    } else {
+        Vec::new()
     }
 }
 
@@ -97,11 +113,11 @@ fn propagate_boundary_sky_light(
     entry: &BoundaryEntry,
     center_chunk_x: i32,
     center_chunk_z: i32,
-) {
+) -> Vec<BoundaryEntry> {
     let (chunk, local_x, local_z, base_x, base_z) =
         match resolve_neighbor(neighbors, entry.world_x, entry.world_z, center_chunk_x, center_chunk_z) {
             Some(v) => v,
-            None => return,
+            None => return Vec::new(),
         };
 
     // Attenuate by target block's opacity.
@@ -110,7 +126,7 @@ fn propagate_boundary_sky_light(
     let opacity = BlockStateId(state_id as u16).light_opacity();
     let attenuated = entry.level.saturating_sub(opacity.max(1));
     if attenuated == 0 {
-        return;
+        return Vec::new();
     }
 
     let current = chunk.get_sky_light_at(local_x, entry.world_y, local_z);
@@ -124,7 +140,9 @@ fn propagate_boundary_sky_light(
             level: attenuated,
             directions: entry.directions,
         });
-        let _further = propagate_sky_light_increase(chunk, &mut queue, base_x, base_z);
+        propagate_sky_light_increase(chunk, &mut queue, base_x, base_z)
+    } else {
+        Vec::new()
     }
 }
 

@@ -181,6 +181,13 @@ pub(crate) fn propagate_block_light_increase(
                 continue;
             }
 
+            // Fast rejection: even with minimum opacity (1), this neighbor
+            // can't improve. Avoids expensive block state + occlusion lookups.
+            let current = chunk.get_block_light_at(nx, ny, nz);
+            if entry.level.saturating_sub(1) <= current {
+                continue;
+            }
+
             let opacity = get_effective_opacity(chunk, from_state, nx, ny, nz, dir);
             if opacity >= 16 {
                 continue;
@@ -190,7 +197,6 @@ pub(crate) fn propagate_block_light_increase(
                 continue;
             }
 
-            let current = chunk.get_block_light_at(nx, ny, nz);
             if new_level > current {
                 chunk.set_block_light_at(nx, ny, nz, new_level);
                 queue.push_back(LightEntry {
@@ -346,6 +352,13 @@ pub(crate) fn propagate_sky_light_increase(
                 continue;
             }
 
+            // Fast rejection: even with minimum opacity (1), this neighbor
+            // can't improve. Avoids expensive block state + occlusion lookups.
+            let current = chunk.get_sky_light_at(nx, ny, nz);
+            if entry.level.saturating_sub(1) <= current {
+                continue;
+            }
+
             let opacity = get_effective_opacity(chunk, from_state, nx, ny, nz, dir);
             if opacity >= 16 {
                 continue;
@@ -355,7 +368,6 @@ pub(crate) fn propagate_sky_light_increase(
                 continue;
             }
 
-            let current = chunk.get_sky_light_at(nx, ny, nz);
             if new_level > current {
                 chunk.set_sky_light_at(nx, ny, nz, new_level);
                 queue.push_back(LightEntry {

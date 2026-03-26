@@ -147,6 +147,49 @@ impl LightEngine {
                 changed_sections.insert(section_pos, ());
             }
 
+            // Shape-only change: emission and opacity unchanged but the
+            // update was triggered because shape occlusion differs (e.g.,
+            // replacing bottom slab with top slab). Clear stale light and
+            // re-evaluate from neighbors, matching vanilla's PULL_LIGHT_IN.
+            if update.old_emission == update.new_emission
+                && update.old_opacity == update.new_opacity
+            {
+                let block_level = chunk.get_block_light_at(local_x, y, local_z);
+                let sky_level = chunk.get_sky_light_at(local_x, y, local_z);
+
+                if block_level > 0 && update.new_emission == 0 {
+                    chunk.set_block_light_at(local_x, y, local_z, 0);
+                    block_decrease.push_back(DecreaseEntry {
+                        x: local_x,
+                        y,
+                        z: local_z,
+                        old_level: block_level,
+                        directions: ALL_DIRECTIONS,
+                    });
+                }
+                if sky_level > 0 {
+                    chunk.set_sky_light_at(local_x, y, local_z, 0);
+                    sky_decrease.push_back(DecreaseEntry {
+                        x: local_x,
+                        y,
+                        z: local_z,
+                        old_level: sky_level,
+                        directions: ALL_DIRECTIONS,
+                    });
+                }
+                if update.new_emission > 0 {
+                    chunk.set_block_light_at(local_x, y, local_z, update.new_emission);
+                    block_increase.push_back(LightEntry {
+                        x: local_x,
+                        y,
+                        z: local_z,
+                        level: update.new_emission,
+                        directions: ALL_DIRECTIONS,
+                    });
+                }
+                changed_sections.insert(section_pos, ());
+            }
+
             // Sky/Block light: handle opacity increases (block placed).
             if update.new_opacity > update.old_opacity {
                 let sky_level = chunk.get_sky_light_at(local_x, y, local_z);

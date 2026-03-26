@@ -312,6 +312,9 @@ fn propagate_cross_chunk_light(
     let mut east_guard = neighbor_arcs[2].as_ref().map(|a| a.write());
     let mut west_guard = neighbor_arcs[3].as_ref().map(|a| a.write());
 
+    let mut further_block = Vec::new();
+    let mut further_sky = Vec::new();
+
     let mut neighbors = ChunkNeighbors {
         north: north_guard.as_deref_mut(),
         south: south_guard.as_deref_mut(),
@@ -320,10 +323,20 @@ fn propagate_cross_chunk_light(
     };
 
     if !block_boundary.is_empty() {
-        propagate_block_light_cross_chunk(&mut neighbors, block_boundary, cx, cz);
+        further_block = propagate_block_light_cross_chunk(
+            &mut neighbors,
+            block_boundary,
+            cx,
+            cz,
+        );
     }
     if !sky_boundary.is_empty() {
-        propagate_sky_light_cross_chunk(&mut neighbors, sky_boundary, cx, cz);
+        further_sky = propagate_sky_light_cross_chunk(
+            &mut neighbors,
+            sky_boundary,
+            cx,
+            cz,
+        );
     }
 
     // Broadcast light updates for each neighbor that was modified.
@@ -357,6 +370,32 @@ fn propagate_cross_chunk_light(
                 min_y,
             );
             broadcast_light_update(ctx, pos.x, pos.z, light_data);
+        }
+    }
+
+    // Queue further boundary entries for processing in the next tick.
+    // These are entries that reached the edge of a neighbor chunk and
+    // need to cascade into the neighbor's neighbors.
+    if !further_block.is_empty() || !further_sky.is_empty() {
+        let mut grouped: HashMap<ChunkPos, (Vec<oxidized_game::lighting::propagation::BoundaryEntry>, Vec<oxidized_game::lighting::propagation::BoundaryEntry>)> =
+            HashMap::new();
+        for entry in further_block {
+            let target = ChunkPos::new(
+                entry.world_x.div_euclid(16),
+                entry.world_z.div_euclid(16),
+            );
+            grouped.entry(target).or_default().0.push(entry);
+        }
+        for entry in further_sky {
+            let target = ChunkPos::new(
+                entry.world_x.div_euclid(16),
+                entry.world_z.div_euclid(16),
+            );
+            grouped.entry(target).or_default().1.push(entry);
+        }
+        let mut lighting = ctx.world.lighting.lock();
+        for (target, (block, sky)) in grouped {
+            lighting.queue_boundaries(target, block, sky);
         }
     }
 }

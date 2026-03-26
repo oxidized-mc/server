@@ -1003,6 +1003,104 @@ allocation). The per-block vertical pass starts just below the bulk-filled range
 
 ---
 
+### 23a.17 — Neighbor-aware sky seeding in incremental updates ⏳
+
+**Status:** Deferred to Phase 26 (noise worldgen)
+
+**Vanilla behavior:** `SkyLightEngine.checkNode()` calls `updateSourcesInColumn()` →
+`removeSourcesBelow()` + `addSourcesAbove()` for column-aware source management. It also
+calls `propagateLightSources()` with `QueueEntry.increaseSkySourceInDirections()` using
+selective per-direction flags based on neighbor source heights.
+
+**Gap:** Oxidized's incremental sky light update seeds the changed column but does not
+consider neighbor column heights when computing directional flags. This can cause
+under-illumination near chunk column edges when blocks are placed/broken in valleys.
+
+**Impact:** Correctness issue visible only with complex terrain (valleys, overhangs).
+Flat worlds unaffected. Low priority until noise worldgen.
+
+**Ref:** `SkyLightEngine.checkNode()` → `updateSourcesInColumn()`,
+`propagateLightSources()` in `mc-server-ref/26.1/decompiled/net/minecraft/world/level/lighting/SkyLightEngine.java`
+
+---
+
+### 23a.18 — `propagateLightSources` for chunk load ⏳
+
+**Status:** Deferred to Phase 26 (noise worldgen)
+
+**Vanilla behavior:** When a chunk is first loaded, `LevelLightEngine` calls
+`propagateLightSources()` on each section to seed the increase queue with all light
+sources (both block emitters and sky sources). This ensures light from neighboring
+already-loaded chunks flows into the new chunk.
+
+**Gap:** Oxidized initializes sky and block light per-chunk during worldgen but does
+not re-seed from neighbor chunks on chunk load. This means a chunk loaded after its
+neighbors may have incorrect light at its edges if light from neighbors should flow in.
+
+**Impact:** Only visible when chunks load out of order or when a chunk is unloaded and
+reloaded. Flat worlds (all chunks generated together) are unaffected. Becomes important
+with noise worldgen and dynamic chunk loading.
+
+**Ref:** `LevelLightEngine.propagateLightSources()`,
+`ServerChunkCache.onChunkReadyToSend()` in `mc-server-ref/26.1/`
+
+---
+
+### 23a.19 — `propagateFromEmptySections` BFS optimization ⏳
+
+**Status:** Deferred to Phase 26 (noise worldgen)
+
+**Vanilla behavior:** During BFS, `SkyLightEngine.propagateFromEmptySections()`
+bulk-fills empty sections at chunk column edges. When BFS reaches an empty section
+boundary, instead of propagating block-by-block, vanilla fills the entire column
+of empty sections with sky light 15 in one operation. This dramatically reduces
+BFS queue size for tall worlds with many air sections.
+
+**Gap:** Oxidized's BFS iterates every block even in empty sections. This is
+functionally correct but O(n) in the number of air blocks rather than O(1) per
+section.
+
+**Impact:** Performance only — no correctness impact. Becomes significant with
+noise worldgen where chunks have many empty sections above terrain. Estimated
+2-5× improvement for tall overworld chunks.
+
+**Ref:** `SkyLightEngine.propagateFromEmptySections()` in
+`mc-server-ref/26.1/decompiled/net/minecraft/world/level/lighting/SkyLightEngine.java`
+
+---
+
+### 23a.20 — Parallel lighting sub-phase ⏳
+
+**Status:** Deferred — requires profiling data from Phase 26 to set priorities
+
+Parallel lighting was deferred from the original phase to focus on correctness first.
+This task covers the remaining parallelism work.
+
+**Sub-tasks:**
+
+1. **Parallel full-chunk lighting:** Use `rayon` to process independent chunk sections
+   in parallel during worldgen. The sequential wrapper in `parallel.rs` already exists;
+   replace it with actual parallel iteration. Target: < 200 µs per chunk (from ADR-017).
+
+2. **Parallel cross-chunk propagation:** When multiple chunks have pending boundary
+   entries, process non-adjacent chunks in parallel (chunks sharing no neighbors can
+   be processed concurrently). Requires a chunk dependency graph or coloring scheme.
+
+3. **Batch incremental updates:** When many blocks change in a single tick (e.g., TNT),
+   batch all updates per chunk and run BFS once per chunk rather than per-block.
+   The engine already batches by chunk; the parallel aspect is running multiple
+   chunk BFS passes concurrently.
+
+4. **Profile-guided tuning:** Use criterion benchmarks (`game_benchmarks.rs`) to
+   measure actual parallelism gains and tune thread pool size / batch thresholds.
+
+**Prerequisites:**
+- Phase 26 (noise worldgen) for realistic chunk data to profile against
+- ADR-017 performance targets validated with sequential implementation first
+- Profiling to confirm lighting is actually the bottleneck (vs. network, worldgen)
+
+---
+
 ## Performance Targets (from ADR-017)
 
 | Scenario | Target | Status |
@@ -1045,3 +1143,10 @@ allocation). The per-block vertical pass starts just below the bulk-filled range
 13. ✅ Direction bitmask reduces BFS work by ~17% — 23a.14
 14. ✅ Shape property changes trigger light updates — 23a.15
 15. ✅ `DataLayer` lazy allocation + empty-section sky fill — 23a.16
+
+### Deferred (23a.17–23a.20)
+
+16. ⏳ Neighbor-aware sky seeding in incremental updates — 23a.17 (Phase 26)
+17. ⏳ `propagateLightSources` for chunk load — 23a.18 (Phase 26)
+18. ⏳ `propagateFromEmptySections` BFS optimization — 23a.19 (Phase 26)
+19. ⏳ Parallel lighting sub-phase — 23a.20 (post-Phase 26 profiling)
