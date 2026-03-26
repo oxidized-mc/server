@@ -237,25 +237,30 @@ impl LightEngine {
         let mut sky_boundary = Vec::new();
 
         // Run decrease passes first (per ADR-017).
+        // Note: decrease boundary entries are intentionally discarded.
+        // They carry the old (removed) light level, but our cross-chunk
+        // propagation treats all entries as increases. Feeding decrease
+        // entries to neighbors would inject phantom light into dark areas.
+        // The increase pass generates correct boundary entries for any
+        // light remaining after the decrease+increase cycle.
+        // TODO: implement proper cross-chunk decrease propagation (Phase 26).
         if !block_decrease.is_empty() {
-            let boundary = propagate_block_light_decrease(
+            let _decrease_boundary = propagate_block_light_decrease(
                 chunk,
                 &mut block_decrease,
                 &mut block_increase,
                 chunk_base_x,
                 chunk_base_z,
             );
-            block_boundary.extend(boundary);
         }
         if !sky_decrease.is_empty() {
-            let boundary = propagate_sky_light_decrease(
+            let _decrease_boundary = propagate_sky_light_decrease(
                 chunk,
                 &mut sky_decrease,
                 &mut sky_increase,
                 chunk_base_x,
                 chunk_base_z,
             );
-            sky_boundary.extend(boundary);
         }
 
         // After decrease completes, handle opacity decreases (block broken)
@@ -782,12 +787,21 @@ mod tests {
         });
 
         let result = engine.process_updates(&mut chunk).unwrap();
-        // Sky light decrease near chunk edge should produce sky boundary entries.
-        // The decrease BFS propagates outward and hits x=-1 or z=-1.
+        // After decrease is resolved, the increase pass re-diffuses remaining light
+        // near the chunk edge, producing correct boundary entries.
         assert!(
             !result.sky_boundary.is_empty(),
-            "expected sky boundary entries when opaque block placed at chunk edge"
+            "expected sky boundary entries from increase pass when opaque block placed at chunk edge"
         );
+        // Boundary entries must come from the increase pass (correct current levels),
+        // NOT from the decrease pass (stale old_level values).
+        for entry in &result.sky_boundary {
+            assert!(
+                entry.level < 15,
+                "boundary entry level should be < 15 (diffused), got {}",
+                entry.level
+            );
+        }
     }
 
     #[test]
@@ -881,5 +895,61 @@ mod tests {
             center_sky, 0,
             "enclosed air block should have sky light 0, got {center_sky}"
         );
+    }
+
+    /// Regression test: placing an opaque block at a chunk edge must NOT
+    /// produce boundary entries that inject phantom sky light underground
+    /// in the neighboring chunk. Before the fix, decrease boundary entries
+    /// carried `old_level` (the removed light value) and were incorrectly
+    /// processed as increases, lighting up dark underground areas.
+    #[test]
+    fn test_decrease_boundary_entries_not_injected_as_increases() {
+        let mut engine = LightEngine::new();
+        let mut chunk = flat_chunk();
+        engine.light_chunk(&mut chunk).unwrap();
+
+        // Surface is at OVERWORLD_MIN_Y + 3 (grass). Air above has sky 15.
+        let above_surface = OVERWORLD_MIN_Y + 4;
+
+        // Place opaque block at chunk edge x=0, above surface.
+        // This triggers sky decrease for the column at x=0.
+        let st = stone_id();
+        let opacity = BlockStateId(st as u16).light_opacity();
+        chunk.set_block_state(0, above_surface, 8, st).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(0, above_surface, 8),
+            old_emission: 0,
+            new_emission: 0,
+            old_opacity: 0,
+            new_opacity: opacity,
+        });
+
+        let result = engine.process_updates(&mut chunk).unwrap();
+
+        // All boundary entries must have levels that represent ACTUAL current
+        // light, not stale old_level from decrease passes. An underground
+        // neighbor receiving these entries should not gain phantom sky light.
+        for entry in &result.sky_boundary {
+            // Entries with level 15 from the decrease pass would be the bug:
+            // they represent removed light, not current light.
+            assert!(
+                entry.level < 15,
+                "boundary entry at y={} has level 15 (stale decrease), would inject phantom light",
+                entry.world_y
+            );
+        }
+
+        // Furthermore, entries should only exist for y-levels where light
+        // actually reaches the chunk edge (above or at surface level).
+        // No entries should exist for underground y-levels.
+        let surface_y = OVERWORLD_MIN_Y + 3;
+        for entry in &result.sky_boundary {
+            assert!(
+                entry.world_y >= surface_y,
+                "boundary entry at y={} is underground (surface={}), would inject phantom light",
+                entry.world_y,
+                surface_y
+            );
+        }
     }
 }

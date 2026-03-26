@@ -1181,10 +1181,24 @@ mod cross_chunk_light {
 
         let result2 = engine.process_updates(&mut center).unwrap();
 
-        // Should produce block boundary entries for the decrease pass.
+        // Decrease boundary entries are intentionally discarded to prevent
+        // phantom light injection (they carried old_level and were incorrectly
+        // processed as increases in neighbors). The block boundary should only
+        // contain entries from the increase pass; with no remaining light
+        // source, no increase boundaries are produced.
+        // TODO: proper cross-chunk decrease propagation (Phase 26) will
+        // allow the neighbor to clear its stale light.
         assert!(
-            !result2.block_boundary.is_empty(),
-            "expected boundary entries from removing glowstone at edge"
+            result2.block_boundary.is_empty(),
+            "decrease boundary entries should be discarded (no increase sources remain)"
+        );
+
+        // The neighbor retains stale block light — this is a known limitation
+        // until cross-chunk decrease propagation is implemented.
+        let light_after = east.get_block_light_at(0, -56, 8);
+        assert!(
+            light_after > 0,
+            "neighbor retains stale light until cross-chunk decrease is implemented"
         );
     }
 
