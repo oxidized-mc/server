@@ -82,7 +82,7 @@ The following types and modules were used:
 
 | Type | Location | Status |
 |------|----------|--------|
-| `DataLayer` | `oxidized-world/src/chunk/data_layer.rs` | ✅ Complete (nibble storage) |
+| `DataLayer` | `oxidized-world/src/chunk/data_layer.rs` | ✅ Complete (lazy nibble storage) |
 | `LevelChunk` | `oxidized-world/src/chunk/level_chunk.rs` | ✅ Complete (sky/block light vecs + per-block accessors) |
 | `LightUpdateQueue` | `oxidized-game/src/lighting/queue.rs` | ✅ Complete (pending update batch) |
 | `LightUpdate` | `oxidized-game/src/lighting/queue.rs` | ✅ Complete (emission/opacity delta) |
@@ -619,8 +619,8 @@ Full report in session state. Summary of findings and their status:
 | **C4** | Sky light missing `ChunkSkyLightSources` algorithm | Large | 23a.13 |
 | **M5** | No directional propagation tracking (perf) | Small | 23a.14 |
 | **M4** | ~~Light trigger missing shape property check~~ | Small | 23a.15 ✅ |
-| **m1** | `DataLayer` always allocates (no lazy) | Small | 23a.16 |
-| **m3** | Missing empty-section sky light optimization | Small | 23a.16 |
+| **m1** | ~~`DataLayer` always allocates (no lazy)~~ | Small | 23a.16 ✅ |
+| **m3** | ~~Missing empty-section sky light optimization~~ | Small | 23a.16 ✅ |
 
 ---
 
@@ -927,26 +927,31 @@ Currently only emission and opacity changes trigger light updates.
 
 ---
 
-### 23a.16 — Minor optimizations ⏳
+### 23a.16 — Minor optimizations ✅
 
 Small optimizations identified in the vanilla compliance audit.
 
 **m1. `DataLayer` lazy allocation:**
-Vanilla uses lazy allocation (null data until first write). Oxidized allocates
-2048 bytes immediately. Add `Option<Box<[u8; 2048]>>` with lazy init on first
-`set()`. Makes `is_empty()` O(1) and reduces memory for empty sections.
+Vanilla uses lazy allocation (null data until first write). ~~Oxidized allocates
+2048 bytes immediately.~~ Implemented `Option<Box<[u8; 2048]>>` + `default_value`
+with lazy init on first `set()`. `is_empty()` is now O(1). `new()` and `filled()`
+allocate zero heap memory. Added `fill()` for de-allocation, plus
+`is_definitely_homogeneous()` and `is_definitely_filled_with()` introspection.
+Pre-computed static arrays for all 16 fill patterns support zero-copy `as_bytes()`.
 
 **m3. Empty-section sky light fill:**
-Vanilla's `SkyLightEngine.propagateFromEmptySections()` fills entire empty
+~~Vanilla's `SkyLightEngine.propagateFromEmptySections()` fills entire empty
 sections with sky light 15 at once instead of attenuating per-block at
-boundaries. Implement bulk fill for sections that are entirely air and above all
-opaque blocks.
+boundaries.~~ Implemented `bulk_fill_empty_sections()` in sky light init: sections
+whose min Y ≥ highest source Y across all columns get `DataLayer::filled(15)` (no
+allocation). The per-block vertical pass starts just below the bulk-filled range.
 
 **Tests:**
-- Unit: `DataLayer` — `is_empty()` returns true before any `set()` call
-- Unit: `DataLayer` — `get()` returns 0 before any `set()` call
-- Unit: Empty air section above surface gets uniform sky light 15
-- Benchmark: Memory usage before/after lazy `DataLayer`
+- ✅ Unit: `DataLayer` — `is_empty()` returns true before any `set()` call
+- ✅ Unit: `DataLayer` — `get()` returns 0 before any `set()` call
+- ✅ Unit: Empty air section above surface gets uniform sky light 15
+- ✅ Unit: Bulk-filled sections use lazy `DataLayer::filled(15)`
+- ✅ Proptest: `fill(v)` then `get()` returns v without materializing
 
 ---
 
@@ -991,4 +996,4 @@ opaque blocks.
 12. ✅ Sky light uses per-column source tracking for complex terrain — 23a.13
 13. ✅ Direction bitmask reduces BFS work by ~17% — 23a.14
 14. ✅ Shape property changes trigger light updates — 23a.15
-15. ⏳ `DataLayer` lazy allocation + empty-section sky fill — 23a.16
+15. ✅ `DataLayer` lazy allocation + empty-section sky fill — 23a.16

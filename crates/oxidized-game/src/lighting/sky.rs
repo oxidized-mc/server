@@ -10,6 +10,7 @@
 use std::collections::VecDeque;
 
 use oxidized_world::chunk::LevelChunk;
+use oxidized_world::chunk::DataLayer;
 use oxidized_world::chunk::sky_light_sources::ChunkSkyLightSources;
 use oxidized_world::registry::BlockStateId;
 
@@ -28,7 +29,15 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
     let min_y = chunk.min_y();
     let max_y = chunk.max_y();
 
+    // Bulk-fill optimization: sections entirely above ALL source heights
+    // are guaranteed to have sky light 15 everywhere. Fill them in O(1)
+    // per section instead of iterating 4096 blocks.
+    let highest_source_y = sources.get_highest_lowest_source_y();
+    let bulk_fill_above = bulk_fill_empty_sections(chunk, highest_source_y, min_y, max_y);
+
     // Phase 1: Vertical pass — top-down per (x, z) column.
+    // Only iterate down to `bulk_fill_above` — everything above is already
+    // filled with sky light 15.
     let mut bfs_seeds = VecDeque::new();
 
     for x in 0..16i32 {
@@ -36,8 +45,8 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
             let source_y = sources.get_lowest_source_y(x as usize, z as usize);
             let mut level: u8 = 15;
 
-            // Iterate from top of world downward.
-            for y in (min_y..max_y).rev() {
+            // Iterate from the first block that isn't bulk-filled downward.
+            for y in (min_y..bulk_fill_above).rev() {
                 if y >= source_y {
                     // At or above the source height: full sky brightness.
                     chunk.set_sky_light_at(x, y, z, 15);
@@ -84,6 +93,51 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
     let chunk_base_x = chunk.pos.x * 16;
     let chunk_base_z = chunk.pos.z * 16;
     propagate_sky_light_increase(chunk, &mut bfs_seeds, chunk_base_x, chunk_base_z)
+}
+
+/// Bulk-fills sky light sections that are entirely above all source heights.
+///
+/// For sections whose minimum Y is at or above `highest_source_y`, the entire
+/// section is guaranteed sky light 15. Uses [`DataLayer::filled`] which avoids
+/// heap allocation (lazy DataLayer stores only the fill value).
+///
+/// Returns the world Y coordinate above which all blocks have been filled.
+/// The per-block vertical pass should start just below this Y.
+fn bulk_fill_empty_sections(
+    chunk: &mut LevelChunk,
+    highest_source_y: i32,
+    min_y: i32,
+    max_y: i32,
+) -> i32 {
+    // If no columns have sky sources (e.g., all-air chunk), fill everything.
+    let threshold = if highest_source_y == i32::MIN {
+        min_y
+    } else {
+        highest_source_y
+    };
+
+    // Find the first section index whose min Y >= threshold.
+    let section_count = chunk.section_count();
+    let mut first_bulk_section = section_count;
+    for si in 0..section_count {
+        let section_min_y = min_y + (si as i32 * 16);
+        if section_min_y >= threshold {
+            first_bulk_section = si;
+            break;
+        }
+    }
+
+    // Bulk-fill all sections from first_bulk_section to the top.
+    for si in first_bulk_section..section_count {
+        let light_idx = si + 1; // +1 for below-world border section
+        chunk.set_sky_light(light_idx, DataLayer::filled(15));
+    }
+
+    if first_bulk_section < section_count {
+        min_y + (first_bulk_section as i32 * 16)
+    } else {
+        max_y
+    }
 }
 
 #[cfg(test)]
@@ -176,5 +230,46 @@ mod tests {
 
         let sources = chunk.sky_light_sources().expect("sources should be set");
         assert_eq!(sources.get_lowest_source_y(8, 8), OVERWORLD_MIN_Y + 4);
+    }
+
+    #[test]
+    fn test_empty_air_section_above_surface_gets_bulk_filled() {
+        let mut chunk = flat_chunk();
+        initialize_sky_light(&mut chunk);
+
+        // Section 1 (y = -48 to -33) is entirely air above the surface
+        // (surface is at y = -60). It should have uniform sky light 15.
+        for x in 0..16 {
+            for z in 0..16 {
+                for y in (OVERWORLD_MIN_Y + 16)..(OVERWORLD_MIN_Y + 32) {
+                    assert_eq!(
+                        chunk.get_sky_light_at(x, y, z),
+                        15,
+                        "sky light at ({x}, {y}, {z}) should be 15"
+                    );
+                }
+            }
+        }
+
+        // High section (y = 304–319, section index 23) should also be 15.
+        assert_eq!(chunk.get_sky_light_at(8, 310, 8), 15);
+    }
+
+    #[test]
+    fn test_bulk_filled_sections_use_lazy_datalayer() {
+        use oxidized_world::chunk::data_layer::DataLayer;
+
+        let mut chunk = flat_chunk();
+        initialize_sky_light(&mut chunk);
+
+        // Flat world: surface at y = -60, section 0 = y[-64, -48).
+        // Section 1 (y[-48, -32)) is entirely above the surface.
+        // Its sky light DataLayer should be lazy (not materialized).
+        let light_idx = 2; // section 1 → light index 2 (1 + 1 for border)
+        let layer = chunk.sky_light(light_idx).expect("sky light should exist");
+        assert!(
+            layer.is_definitely_filled_with(15),
+            "bulk-filled sections should use lazy DataLayer::filled(15)"
+        );
     }
 }
