@@ -134,7 +134,7 @@ pub(super) fn get_block(ctx: &Arc<ServerContext>, pos: BlockPos) -> Option<u32> 
 /// Returns `true` if the block was successfully set, `false` if the chunk
 /// is not loaded or the position is out of bounds.
 /// Marks the chunk as dirty for autosave and queues a light update if the
-/// block's emission or opacity changed.
+/// block's light properties changed (emission, opacity, or shape occlusion).
 pub(super) fn set_block(ctx: &Arc<ServerContext>, pos: BlockPos, state_id: u32) -> bool {
     let chunk_pos = ChunkPos::from_block_coords(pos.x, pos.z);
     if let Some(chunk_ref) = ctx.world.chunks.get(&chunk_pos) {
@@ -143,22 +143,18 @@ pub(super) fn set_block(ctx: &Arc<ServerContext>, pos: BlockPos, state_id: u32) 
         if chunk.set_block_state(pos.x, pos.y, pos.z, state_id).is_ok() {
             ctx.world.dirty_chunks.insert(chunk_pos);
 
-            // Queue a light update if emission or opacity changed.
+            // Queue a light update if any light property changed.
             let old_sid = BlockStateId(old_state as u16);
             let new_sid = BlockStateId(state_id as u16);
-            let old_emission = old_sid.light_emission();
-            let new_emission = new_sid.light_emission();
-            let old_opacity = old_sid.light_opacity();
-            let new_opacity = new_sid.light_opacity();
-            if old_emission != new_emission || old_opacity != new_opacity {
+            if old_sid.has_different_light_properties(new_sid) {
                 ctx.world.lighting.lock().queue_update(
                     chunk_pos,
                     LightUpdate {
                         pos,
-                        old_emission,
-                        new_emission,
-                        old_opacity,
-                        new_opacity,
+                        old_emission: old_sid.light_emission(),
+                        new_emission: new_sid.light_emission(),
+                        old_opacity: old_sid.light_opacity(),
+                        new_opacity: new_sid.light_opacity(),
                     },
                 );
             }
@@ -333,6 +329,85 @@ mod tests {
         let ctx = test_server_ctx();
         let pos = BlockPos::new(1000, 64, 1000);
         assert!(!set_block(&ctx, pos, 1));
+    }
+
+    // -- Light trigger tests --
+
+    /// Helper: returns the number of pending light updates in the world.
+    fn pending_light_updates(ctx: &Arc<ServerContext>) -> usize {
+        let updates = ctx.world.lighting.lock().drain_updates();
+        updates.len()
+    }
+
+    #[test]
+    fn test_slab_to_full_block_triggers_light_update() {
+        let ctx = test_server_ctx();
+        let chunk_pos = ChunkPos::from_block_coords(0, 0);
+        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        ctx.world
+            .chunks
+            .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
+
+        let pos = BlockPos::new(0, 64, 0);
+        let reg = BlockRegistry;
+        let slab = reg.default_state("minecraft:stone_slab").unwrap();
+        let stone = reg.default_state("minecraft:stone").unwrap();
+
+        // Place a slab, drain the initial update.
+        set_block(&ctx, pos, u32::from(slab.0));
+        let _ = ctx.world.lighting.lock().drain_updates();
+
+        // Replace slab with full block — shape occlusion changed.
+        set_block(&ctx, pos, u32::from(stone.0));
+        assert!(
+            pending_light_updates(&ctx) > 0,
+            "replacing a slab with a full block should trigger a light update"
+        );
+    }
+
+    #[test]
+    fn test_air_to_air_no_light_update() {
+        let ctx = test_server_ctx();
+        let chunk_pos = ChunkPos::from_block_coords(0, 0);
+        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        ctx.world
+            .chunks
+            .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
+
+        let pos = BlockPos::new(0, 64, 0);
+        // Set air on air — no light property change.
+        set_block(&ctx, pos, 0);
+        assert_eq!(
+            pending_light_updates(&ctx),
+            0,
+            "replacing air with air should not trigger a light update"
+        );
+    }
+
+    #[test]
+    fn test_stone_to_granite_no_light_update() {
+        let ctx = test_server_ctx();
+        let chunk_pos = ChunkPos::from_block_coords(0, 0);
+        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        ctx.world
+            .chunks
+            .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
+
+        let pos = BlockPos::new(0, 64, 0);
+        let reg = BlockRegistry;
+        let stone = reg.default_state("minecraft:stone").unwrap();
+        let granite = reg.default_state("minecraft:granite").unwrap();
+
+        set_block(&ctx, pos, u32::from(stone.0));
+        let _ = ctx.world.lighting.lock().drain_updates();
+
+        // Stone to granite: same emission, opacity, neither uses shape.
+        set_block(&ctx, pos, u32::from(granite.0));
+        assert_eq!(
+            pending_light_updates(&ctx),
+            0,
+            "replacing stone with granite should not trigger a light update"
+        );
     }
 
     // -- Build height validation tests --

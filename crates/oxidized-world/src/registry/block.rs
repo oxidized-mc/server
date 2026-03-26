@@ -150,6 +150,25 @@ impl BlockStateId {
         self.data().light_opacity
     }
 
+    /// Returns `true` if replacing `self` with `other` could change light propagation.
+    ///
+    /// Matches vanilla `LightEngine.hasDifferentLightProperties()`: returns `true`
+    /// when emission or opacity differs, or when **either** state uses shape-based
+    /// light occlusion (since the per-face blocking may differ even if scalar
+    /// properties are identical, e.g. bottom slab → top slab).
+    ///
+    /// Returns `false` when both states are identical.
+    #[inline]
+    pub fn has_different_light_properties(self, other: Self) -> bool {
+        if self.0 == other.0 {
+            return false;
+        }
+        self.light_emission() != other.light_emission()
+            || self.light_opacity() != other.light_opacity()
+            || self.use_shape_for_light_occlusion()
+            || other.use_shape_for_light_occlusion()
+    }
+
     /// Returns the hardness of this block in seconds.
     /// Returns -1.0 for unbreakable blocks (bedrock).
     #[inline]
@@ -370,4 +389,105 @@ pub struct PropertyDef {
     pub values_offset: u16,
     /// Stride for this property in state index computation.
     pub stride: u16,
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::registry::BlockRegistry;
+
+    /// Looks up the default state for a block by name.
+    fn default_state(name: &str) -> BlockStateId {
+        let full_name = format!("minecraft:{name}");
+        BlockRegistry.default_state(&full_name).unwrap_or_else(|| {
+            panic!("block '{full_name}' not found in registry");
+        })
+    }
+
+    #[test]
+    fn same_state_never_triggers() {
+        let stone = default_state("stone");
+        assert!(!stone.has_different_light_properties(stone));
+
+        let air = BlockStateId(0);
+        assert!(!air.has_different_light_properties(air));
+
+        let slab = default_state("stone_slab");
+        assert!(!slab.has_different_light_properties(slab));
+    }
+
+    #[test]
+    fn air_to_air_does_not_trigger() {
+        // Both air variants (if any) have no emission, no opacity, no shape.
+        let air = BlockStateId(0);
+        let void_air = default_state("void_air");
+        // Even different air types: both have identical light properties.
+        assert!(!air.has_different_light_properties(void_air));
+    }
+
+    #[test]
+    fn emission_change_triggers() {
+        let stone = default_state("stone");
+        let glowstone = default_state("glowstone");
+        assert_ne!(stone.light_emission(), glowstone.light_emission());
+        assert!(stone.has_different_light_properties(glowstone));
+    }
+
+    #[test]
+    fn opacity_change_triggers() {
+        let air = BlockStateId(0);
+        let stone = default_state("stone");
+        assert_ne!(air.light_opacity(), stone.light_opacity());
+        assert!(air.has_different_light_properties(stone));
+    }
+
+    #[test]
+    fn slab_to_full_block_triggers() {
+        let slab = default_state("stone_slab");
+        let stone = default_state("stone");
+        // The slab uses shape-based occlusion, so any change involving it
+        // must trigger a light update.
+        assert!(slab.use_shape_for_light_occlusion());
+        assert!(slab.has_different_light_properties(stone));
+    }
+
+    #[test]
+    fn full_block_to_slab_triggers() {
+        let stone = default_state("stone");
+        let slab = default_state("stone_slab");
+        assert!(stone.has_different_light_properties(slab));
+    }
+
+    #[test]
+    fn slab_to_different_slab_triggers() {
+        let stone_slab = default_state("stone_slab");
+        let oak_slab = default_state("oak_slab");
+        // Both use shape occlusion — the OR condition catches this.
+        assert!(stone_slab.use_shape_for_light_occlusion());
+        assert!(oak_slab.use_shape_for_light_occlusion());
+        assert!(stone_slab.has_different_light_properties(oak_slab));
+    }
+
+    #[test]
+    fn stair_to_stair_triggers() {
+        let oak_stairs = default_state("oak_stairs");
+        let stone_stairs = default_state("stone_stairs");
+        assert!(oak_stairs.use_shape_for_light_occlusion());
+        assert!(stone_stairs.use_shape_for_light_occlusion());
+        assert!(oak_stairs.has_different_light_properties(stone_stairs));
+    }
+
+    #[test]
+    fn stone_to_different_full_block_no_trigger() {
+        // Two full opaque blocks with same emission and opacity, neither
+        // using shape occlusion — no light recalculation needed.
+        let stone = default_state("stone");
+        let granite = default_state("granite");
+        assert!(!stone.use_shape_for_light_occlusion());
+        assert!(!granite.use_shape_for_light_occlusion());
+        assert_eq!(stone.light_emission(), granite.light_emission());
+        assert_eq!(stone.light_opacity(), granite.light_opacity());
+        assert!(!stone.has_different_light_properties(granite));
+    }
 }

@@ -618,7 +618,7 @@ Full report in session state. Summary of findings and their status:
 | **C2** | Missing VoxelShape face occlusion | Large | 23a.12 |
 | **C4** | Sky light missing `ChunkSkyLightSources` algorithm | Large | 23a.13 |
 | **M5** | No directional propagation tracking (perf) | Small | 23a.14 |
-| **M4** | Light trigger missing shape property check | Small | 23a.15 |
+| **M4** | ~~Light trigger missing shape property check~~ | Small | 23a.15 ✅ |
 | **m1** | `DataLayer` always allocates (no lazy) | Small | 23a.16 |
 | **m3** | Missing empty-section sky light optimization | Small | 23a.16 |
 
@@ -897,7 +897,7 @@ performance optimization.
 
 ---
 
-### 23a.15 — Shape property light trigger (M4) ⏳
+### 23a.15 — Shape property light trigger (M4) ✅
 
 Add `useShapeForLightOcclusion()` change detection to the block change handler.
 Currently only emission and opacity changes trigger light updates.
@@ -990,5 +990,5 @@ opaque blocks.
 11. ⏳ Non-full blocks (slabs, stairs) correctly occlude light per-face — 23a.12
 12. ✅ Sky light uses per-column source tracking for complex terrain — 23a.13
 13. ✅ Direction bitmask reduces BFS work by ~17% — 23a.14
-14. ⏳ Shape property changes trigger light updates — 23a.15
+14. ✅ Shape property changes trigger light updates — 23a.15
 15. ⏳ `DataLayer` lazy allocation + empty-section sky fill — 23a.16
