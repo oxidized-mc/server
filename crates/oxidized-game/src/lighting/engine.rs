@@ -215,6 +215,20 @@ impl LightEngine {
                         directions: ALL_DIRECTIONS,
                     });
                 }
+
+                // Darken the sky column below: blocks that were directly
+                // sky-lit lose their source when an opaque block is placed
+                // above them. Matches vanilla's column processing in
+                // SkyLightEngine.checkNode() → updateSourcesInColumn().
+                darken_sky_column(
+                    chunk,
+                    local_x,
+                    y,
+                    local_z,
+                    &mut sky_decrease,
+                    &mut changed_sections,
+                );
+
                 changed_sections.insert(section_pos, ());
             }
         }
@@ -442,6 +456,70 @@ fn reseed_sky_column(
                 chunk.pos.z,
             );
             changed_sections.insert(section_pos, ());
+        }
+    }
+}
+
+/// Darkens sky light in a column after an opaque block is placed.
+///
+/// Matches vanilla's column processing in `SkyLightEngine.checkNode()`:
+/// when a block becomes opaque, updates [`ChunkSkyLightSources`] and
+/// clears sky light for all blocks between the old and new source heights,
+/// queuing decrease entries for the BFS to re-evaluate from neighbors.
+fn darken_sky_column(
+    chunk: &mut LevelChunk,
+    x: i32,
+    y: i32,
+    z: i32,
+    sky_decrease: &mut VecDeque<DecreaseEntry>,
+    changed_sections: &mut AHashMap<SectionPos, ()>,
+) {
+    let mut sources = chunk
+        .take_sky_light_sources()
+        .unwrap_or_else(|| ChunkSkyLightSources::new(chunk.min_y()));
+    let old_source_y = sources.get_lowest_source_y(x as usize, z as usize);
+    sources.update(chunk, x as usize, y, z as usize);
+    let new_source_y = sources.get_lowest_source_y(x as usize, z as usize);
+    chunk.set_sky_light_sources(sources);
+
+    // If the source didn't move up, no blocks below lost their sky source.
+    if new_source_y <= old_source_y {
+        return;
+    }
+
+    // Iterate from below the placed block down through the old sky column.
+    // Clear sky light for blocks that lost their direct sky source.
+    let min_y = chunk.min_y();
+    let start = y - 1;
+    let stop = if old_source_y == i32::MIN {
+        min_y
+    } else {
+        old_source_y
+    };
+
+    for cur_y in (stop..=start).rev() {
+        let sky = chunk.get_sky_light_at(x, cur_y, z);
+        if sky == 0 {
+            break;
+        }
+
+        chunk.set_sky_light_at(x, cur_y, z, 0);
+        sky_decrease.push_back(DecreaseEntry {
+            x,
+            y: cur_y,
+            z,
+            old_level: sky,
+            directions: ALL_DIRECTIONS,
+        });
+        let section_pos = SectionPos::new(chunk.pos.x, cur_y >> 4, chunk.pos.z);
+        changed_sections.insert(section_pos, ());
+
+        // Stop at fully opaque blocks — light below came from another source.
+        #[allow(clippy::cast_possible_truncation)]
+        let state_id = chunk.get_block_state(x, cur_y, z).unwrap_or(0);
+        let opacity = BlockStateId(state_id as u16).light_opacity();
+        if opacity >= 15 {
+            break;
         }
     }
 }
@@ -709,6 +787,99 @@ mod tests {
         assert!(
             !result.sky_boundary.is_empty(),
             "expected sky boundary entries when opaque block placed at chunk edge"
+        );
+    }
+
+    #[test]
+    fn test_place_opaque_darkens_sky_column_below() {
+        let mut engine = LightEngine::new();
+        let mut chunk = flat_chunk();
+        engine.light_chunk(&mut chunk).unwrap();
+
+        // Surface at OVERWORLD_MIN_Y + 3 (grass). Air above has sky 15.
+        let above_surface = OVERWORLD_MIN_Y + 4;
+        assert_eq!(chunk.get_sky_light_at(8, above_surface, 8), 15);
+        assert_eq!(chunk.get_sky_light_at(8, above_surface + 3, 8), 15);
+
+        // Place an opaque block 4 above surface, creating a sky gap.
+        let place_y = above_surface + 4;
+        let st = stone_id();
+        let opacity = BlockStateId(st as u16).light_opacity();
+        chunk.set_block_state(8, place_y, 8, st).unwrap();
+        engine.queue_mut().push(LightUpdate {
+            pos: BlockPos::new(8, place_y, 8),
+            old_emission: 0,
+            new_emission: 0,
+            old_opacity: 0,
+            new_opacity: opacity,
+        });
+
+        engine.process_updates(&mut chunk).unwrap();
+
+        // The placed block itself should have sky light 0.
+        assert_eq!(
+            chunk.get_sky_light_at(8, place_y, 8),
+            0,
+            "placed opaque block should have sky light 0"
+        );
+
+        // Blocks below the placed block should no longer have sky light 15
+        // because the column's sky source moved above the placed block.
+        // They should get light from horizontal neighbors instead (< 15).
+        let below = chunk.get_sky_light_at(8, place_y - 1, 8);
+        assert!(
+            below < 15,
+            "block below placed opaque should not have sky 15, got {below}"
+        );
+
+        // The block at the surface (grass level + 1) should also lose
+        // direct sky source.
+        let at_surface = chunk.get_sky_light_at(8, above_surface, 8);
+        assert!(
+            at_surface < 15,
+            "block at surface should not have sky 15 after ceiling placed, got {at_surface}"
+        );
+    }
+
+    #[test]
+    fn test_enclose_in_cube_darkens_interior() {
+        let mut engine = LightEngine::new();
+        let mut chunk = flat_chunk();
+        engine.light_chunk(&mut chunk).unwrap();
+
+        let st = stone_id();
+        let opacity = BlockStateId(st as u16).light_opacity();
+        let above_surface = OVERWORLD_MIN_Y + 4;
+
+        // Build a 3×3×3 solid cube from (7, above_surface, 7) to
+        // (9, above_surface+2, 9), leaving the center hollow at
+        // (8, above_surface+1, 8).
+        for x in 7..=9i32 {
+            for z in 7..=9i32 {
+                for y in above_surface..=above_surface + 2 {
+                    if x == 8 && y == above_surface + 1 && z == 8 {
+                        continue; // Leave center hollow.
+                    }
+                    chunk.set_block_state(x, y, z, st).unwrap();
+                    engine.queue_mut().push(LightUpdate {
+                        pos: BlockPos::new(x, y, z),
+                        old_emission: 0,
+                        new_emission: 0,
+                        old_opacity: 0,
+                        new_opacity: opacity,
+                    });
+                }
+            }
+        }
+
+        engine.process_updates(&mut chunk).unwrap();
+
+        // The hollow center, surrounded by opaque blocks on all 6 faces,
+        // should have sky light 0.
+        let center_sky = chunk.get_sky_light_at(8, above_surface + 1, 8);
+        assert_eq!(
+            center_sky, 0,
+            "enclosed air block should have sky light 0, got {center_sky}"
         );
     }
 }
