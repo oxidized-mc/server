@@ -783,7 +783,7 @@ pub fn shape_occludes(
 
 ---
 
-### 23a.13 — `ChunkSkyLightSources` heightmap system (C4) ⏳
+### 23a.13 — `ChunkSkyLightSources` heightmap system (C4) ✅
 
 Implement vanilla's per-column sky light source tracking for accurate sky light
 in complex terrain. Currently Oxidized uses the `MOTION_BLOCKING` heightmap
@@ -988,7 +988,7 @@ opaque blocks.
 9. ⏳ Cross-chunk light propagation works in production (not just tests) — 23a.10
 10. ⏳ `LightEngine` persists across ticks — 23a.11
 11. ⏳ Non-full blocks (slabs, stairs) correctly occlude light per-face — 23a.12
-12. ⏳ Sky light uses per-column source tracking for complex terrain — 23a.13
+12. ✅ Sky light uses per-column source tracking for complex terrain — 23a.13
 13. ⏳ Direction bitmask reduces BFS work by ~17% — 23a.14
 14. ⏳ Shape property changes trigger light updates — 23a.15
 15. ⏳ `DataLayer` lazy allocation + empty-section sky fill — 23a.16

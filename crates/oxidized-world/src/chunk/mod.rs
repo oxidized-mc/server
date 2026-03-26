@@ -23,6 +23,7 @@ pub mod palette;
 mod palette_codec;
 pub mod paletted_container;
 pub mod section;
+pub mod sky_light_sources;
 
 pub use bit_storage::BitStorage;
 pub use data_layer::DataLayer;
@@ -31,3 +32,4 @@ pub use level_chunk::LevelChunk;
 pub use oxidized_types::ChunkPos;
 pub use paletted_container::PalettedContainer;
 pub use section::LevelChunkSection;
+pub use sky_light_sources::ChunkSkyLightSources;

@@ -11,6 +11,7 @@ use super::data_layer::DataLayer;
 use super::heightmap::{Heightmap, HeightmapType};
 use super::paletted_container::PalettedContainerError;
 use super::section::LevelChunkSection;
+use super::sky_light_sources::ChunkSkyLightSources;
 
 /// Number of chunk sections in the overworld (y=-64 to y=319, 384 blocks / 16).
 pub const OVERWORLD_SECTION_COUNT: usize = 24;
@@ -69,6 +70,8 @@ pub struct LevelChunk {
     sky_light: Vec<Option<DataLayer>>,
     /// Per-section block light data. Index matches sections.
     block_light: Vec<Option<DataLayer>>,
+    /// Per-column sky light source tracking (vanilla `ChunkSkyLightSources`).
+    sky_light_sources: Option<ChunkSkyLightSources>,
     /// Minimum Y coordinate for this chunk's dimension.
     min_y: i32,
     /// Number of sections in this chunk.
@@ -97,6 +100,7 @@ impl LevelChunk {
             heightmaps: HashMap::new(),
             sky_light,
             block_light,
+            sky_light_sources: None,
             min_y,
             section_count,
         }
@@ -212,6 +216,25 @@ impl LevelChunk {
     #[must_use]
     pub fn heightmaps(&self) -> &HashMap<HeightmapType, Heightmap> {
         &self.heightmaps
+    }
+
+    /// Returns a reference to the sky light sources, if initialized.
+    #[must_use]
+    pub fn sky_light_sources(&self) -> Option<&ChunkSkyLightSources> {
+        self.sky_light_sources.as_ref()
+    }
+
+    /// Sets the sky light sources for this chunk.
+    pub fn set_sky_light_sources(&mut self, sources: ChunkSkyLightSources) {
+        self.sky_light_sources = Some(sources);
+    }
+
+    /// Takes the sky light sources out of this chunk, leaving `None`.
+    ///
+    /// Used to avoid borrow conflicts when updating sources that also need
+    /// to read block states from the same chunk.
+    pub fn take_sky_light_sources(&mut self) -> Option<ChunkSkyLightSources> {
+        self.sky_light_sources.take()
     }
 
     /// Sets sky light data for a section (index includes +1 offset for below-chunk light).

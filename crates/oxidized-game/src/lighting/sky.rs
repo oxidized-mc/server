@@ -1,28 +1,30 @@
 //! Sky light initialization for newly generated chunks.
 //!
 //! Computes sky light in two phases:
-//! 1. **Vertical pass** — for each (x, z) column, sets sky light to 15 above
-//!    the heightmap, then attenuates downward by each block's opacity.
+//! 1. **Vertical pass** — for each (x, z) column, sets sky light to 15 at and
+//!    above the sky light source height (from [`ChunkSkyLightSources`]), then
+//!    attenuates downward by each block's opacity.
 //! 2. **Horizontal BFS** — propagates sky light sideways through transparent
-//!    blocks below the heightmap (caves, overhangs).
+//!    blocks below the source height (caves, overhangs).
 
 use std::collections::VecDeque;
 
 use oxidized_world::chunk::LevelChunk;
-use oxidized_world::chunk::heightmap::HeightmapType;
+use oxidized_world::chunk::sky_light_sources::ChunkSkyLightSources;
 use oxidized_world::registry::BlockStateId;
 
 use super::propagation::{BoundaryEntry, LightEntry, propagate_sky_light_increase};
 
 /// Initializes sky light for a newly generated chunk.
 ///
-/// Clears any existing sky light, runs the vertical pass, then the
-/// horizontal BFS. After this call, the chunk's sky light layers are
-/// fully populated.
+/// Builds [`ChunkSkyLightSources`] for per-column source tracking, then runs
+/// the vertical pass and horizontal BFS. After this call, the chunk's sky
+/// light layers are fully populated and the sources are stored in the chunk.
 ///
 /// Returns boundary entries for positions where sky light reached a chunk
 /// edge and needs to propagate into a neighbor chunk.
 pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
+    let sources = ChunkSkyLightSources::from_chunk(chunk);
     let min_y = chunk.min_y();
     let max_y = chunk.max_y();
 
@@ -31,16 +33,16 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
 
     for x in 0..16i32 {
         for z in 0..16i32 {
-            let surface_y = get_surface_y(chunk, x as usize, z as usize, min_y);
+            let source_y = sources.get_lowest_source_y(x as usize, z as usize);
             let mut level: u8 = 15;
 
             // Iterate from top of world downward.
             for y in (min_y..max_y).rev() {
-                if y >= surface_y {
-                    // Above or at the heightmap surface: full sky brightness.
+                if y >= source_y {
+                    // At or above the source height: full sky brightness.
                     chunk.set_sky_light_at(x, y, z, 15);
                 } else {
-                    // Below the surface: attenuate by opacity.
+                    // Below the source: attenuate by opacity.
                     let state_id = chunk.get_block_state(x & 15, y, z & 15).unwrap_or(0);
                     #[allow(clippy::cast_possible_truncation)]
                     let opacity = BlockStateId(state_id as u16).light_opacity();
@@ -52,11 +54,11 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
                 }
             }
 
-            // Seed horizontal BFS from blocks just below the surface where
+            // Seed horizontal BFS from blocks just below the source where
             // sky light is still > 1 (light can spread sideways into caves).
-            if surface_y > min_y {
-                let start_y = surface_y - 1;
-                for y in (min_y..=start_y).rev() {
+            let seed_start = source_y.min(max_y).saturating_sub(1);
+            if seed_start >= min_y {
+                for y in (min_y..=seed_start).rev() {
                     let sky = chunk.get_sky_light_at(x, y, z);
                     if sky > 1 {
                         bfs_seeds.push_back(LightEntry {
@@ -74,31 +76,13 @@ pub fn initialize_sky_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
         }
     }
 
+    // Store the sources in the chunk for incremental updates.
+    chunk.set_sky_light_sources(sources);
+
     // Phase 2: Horizontal BFS for sky light bleeding into caves.
     let chunk_base_x = chunk.pos.x * 16;
     let chunk_base_z = chunk.pos.z * 16;
     propagate_sky_light_increase(chunk, &mut bfs_seeds, chunk_base_x, chunk_base_z)
-}
-
-/// Returns the highest Y coordinate at which blocks exist in this column,
-/// using the MOTION_BLOCKING heightmap if available, otherwise scanning.
-fn get_surface_y(chunk: &LevelChunk, x: usize, z: usize, min_y: i32) -> i32 {
-    if let Some(hm) = chunk.heightmap(HeightmapType::MotionBlocking) {
-        if let Ok(h) = hm.get(x, z) {
-            // Heightmap value is the number of blocks above min_y,
-            // so the surface is at min_y + h (first air block).
-            return min_y + h as i32;
-        }
-    }
-    // Fallback: scan from the top.
-    let max_y = chunk.max_y();
-    for y in (min_y..max_y).rev() {
-        let state = chunk.get_block_state(x as i32, y, z as i32).unwrap_or(0);
-        if state != 0 {
-            return y + 1;
-        }
-    }
-    min_y
 }
 
 #[cfg(test)]
@@ -133,16 +117,6 @@ mod tests {
             }
         }
 
-        // Set heightmap.
-        use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-        use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
-        let mut hm = Heightmap::new(HeightmapType::MotionBlocking, OVERWORLD_HEIGHT).unwrap();
-        for x in 0..16 {
-            for z in 0..16 {
-                hm.set(x, z, 4).unwrap(); // 4 blocks above min_y
-            }
-        }
-        chunk.set_heightmap(hm);
         chunk
     }
 
@@ -184,16 +158,22 @@ mod tests {
         for y in OVERWORLD_MIN_Y..OVERWORLD_MIN_Y + 4 {
             chunk.set_block_state(8, y, 8, 0).unwrap(); // air
         }
-        // Update heightmap for the shaft column.
-        if let Some(hm) = chunk.heightmap_mut(HeightmapType::MotionBlocking) {
-            hm.set(8, 8, 0).unwrap(); // no solid blocks in this column
-        }
         initialize_sky_light(&mut chunk);
 
-        // Sky light should propagate down the shaft.
+        // Sky light should propagate down the shaft — sources detect the
+        // all-air column and set source Y to world bottom.
         assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y + 3, 8), 15);
         assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y + 2, 8), 15);
         assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y + 1, 8), 15);
         assert_eq!(chunk.get_sky_light_at(8, OVERWORLD_MIN_Y, 8), 15);
+    }
+
+    #[test]
+    fn test_sources_stored_in_chunk_after_init() {
+        let mut chunk = flat_chunk();
+        initialize_sky_light(&mut chunk);
+
+        let sources = chunk.sky_light_sources().expect("sources should be set");
+        assert_eq!(sources.get_lowest_source_y(8, 8), OVERWORLD_MIN_Y + 4);
     }
 }

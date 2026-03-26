@@ -29,8 +29,7 @@ pub fn light_chunk_parallel(chunk: &mut LevelChunk) {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-    use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
+    use oxidized_world::chunk::level_chunk::OVERWORLD_MIN_Y;
     use oxidized_world::chunk::{ChunkPos, LevelChunk};
     use oxidized_world::registry::{BEDROCK, DIRT, GRASS_BLOCK};
 
@@ -57,13 +56,6 @@ mod tests {
             }
         }
 
-        let mut hm = Heightmap::new(HeightmapType::MotionBlocking, OVERWORLD_HEIGHT).unwrap();
-        for x in 0..16 {
-            for z in 0..16 {
-                hm.set(x, z, 4).unwrap();
-            }
-        }
-        chunk.set_heightmap(hm);
         chunk
     }
 

@@ -9,6 +9,7 @@ use std::collections::VecDeque;
 use ahash::AHashMap;
 use oxidized_protocol::types::SectionPos;
 use oxidized_world::chunk::LevelChunk;
+use oxidized_world::chunk::sky_light_sources::ChunkSkyLightSources;
 use oxidized_world::registry::BlockStateId;
 
 use super::block_light::initialize_block_light;
@@ -261,7 +262,7 @@ impl LightEngine {
     /// Computes full sky + block light for a newly generated chunk.
     ///
     /// Called by the worldgen pipeline at the Light status (ADR-016).
-    /// Initializes sky light top-down from the heightmap, seeds block light
+    /// Initializes sky light using per-column source tracking, seeds block light
     /// from emitters, and runs BFS propagation for both light types.
     ///
     /// Returns a [`LightResult`] containing boundary entries for cross-chunk
@@ -335,16 +336,13 @@ fn check_neighbor_light_sources(
     }
 }
 
-/// Simplified sky light column re-seeding after a block is broken.
+/// Sky light column re-seeding after a block is broken, using
+/// [`ChunkSkyLightSources`] for accurate source tracking.
 ///
-/// When a block is removed and the block above it has sky light 15,
-/// the broken position and all positions below it (until an opaque block
-/// or the bottom of the world) should also have sky light 15. This mimics
-/// vanilla's `updateSourcesInColumn` / `addSourcesAbove` behavior for the
-/// common case of breaking surface blocks.
-///
-/// Each restored position is also seeded into the BFS increase queue
-/// so sky light can propagate horizontally into adjacent caves.
+/// When a block is removed, updates the chunk's sky light sources and
+/// restores sky light 15 downward through transparent blocks if the
+/// column is a sky source. Each restored position is seeded into the
+/// BFS increase queue for horizontal propagation into caves.
 fn reseed_sky_column(
     chunk: &mut LevelChunk,
     x: i32,
@@ -353,25 +351,30 @@ fn reseed_sky_column(
     sky_increase: &mut VecDeque<LightEntry>,
     changed_sections: &mut AHashMap<SectionPos, ()>,
 ) {
-    let above_y = y + 1;
-    if above_y >= chunk.max_y() {
-        // Above world — this position should be sky-lit 15.
-    } else {
-        let above_sky = chunk.get_sky_light_at(x, above_y, z);
-        if above_sky != 15 {
-            return; // Not a sky source column — nothing to re-seed.
-        }
+    // Update the sky light sources for this column.
+    let mut sources = chunk
+        .take_sky_light_sources()
+        .unwrap_or_else(|| ChunkSkyLightSources::new(chunk.min_y()));
+    sources.update(chunk, x as usize, y, z as usize);
+
+    let source_y = sources.get_lowest_source_y(x as usize, z as usize);
+    chunk.set_sky_light_sources(sources);
+
+    // If this position is at or above the source height, it should be sky-lit 15.
+    if y < source_y {
+        return;
     }
 
     // Walk downward from the broken block's position, restoring sky light 15
-    // through transparent blocks.
+    // through transparent blocks until we hit the source boundary or an opaque block.
     let min_y = chunk.min_y();
-    for cur_y in (min_y..=y).rev() {
+    let stop_y = source_y.max(min_y);
+    for cur_y in (stop_y..=y).rev() {
         let state_id = chunk.get_block_state(x & 15, cur_y, z & 15).unwrap_or(0);
         #[allow(clippy::cast_possible_truncation)]
         let opacity = BlockStateId(state_id as u16).light_opacity();
         if opacity >= 15 {
-            break; // Hit an opaque block — stop.
+            break;
         }
 
         let current = chunk.get_sky_light_at(x, cur_y, z);
@@ -405,8 +408,7 @@ mod tests {
     use super::*;
     use crate::lighting::queue::LightUpdate;
     use oxidized_protocol::types::BlockPos;
-    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-    use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
+    use oxidized_world::chunk::level_chunk::OVERWORLD_MIN_Y;
     use oxidized_world::chunk::{ChunkPos, LevelChunk};
     use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
 
@@ -451,13 +453,6 @@ mod tests {
             }
         }
 
-        let mut hm = Heightmap::new(HeightmapType::MotionBlocking, OVERWORLD_HEIGHT).unwrap();
-        for x in 0..16 {
-            for z in 0..16 {
-                hm.set(x, z, 4).unwrap();
-            }
-        }
-        chunk.set_heightmap(hm);
         chunk
     }
 
