@@ -24,7 +24,7 @@ use oxidized_game::event::EventBus;
 use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::level::tick_rate::ServerTickRateManager;
 use oxidized_game::level::weather::WeatherType;
-use oxidized_game::lighting::queue::LightUpdate;
+use oxidized_game::lighting::world_lighting::WorldLighting;
 use oxidized_game::worldgen::ChunkGenerator;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
@@ -90,8 +90,10 @@ pub struct WorldContext {
     pub chunk_serializer: Arc<ChunkSerializer>,
     /// Game rules — thread-safe for tick loop + command access.
     pub game_rules: RwLock<GameRules>,
-    /// Pending light updates queued by block changes, processed at tick end.
-    pub pending_light_updates: Mutex<Vec<(ChunkPos, LightUpdate)>>,
+    /// Persistent world lighting state — engine + pending updates + boundary
+    /// entries. Protected by a `Mutex` for cross-thread access from network
+    /// handlers (queue updates) and the tick loop (process updates).
+    pub lighting: Mutex<WorldLighting>,
 }
 
 /// Network-level state: player list, broadcast, shutdown, kick channels.
@@ -1041,7 +1043,9 @@ mod tests {
                         block_registry,
                     )),
                     game_rules: RwLock::new(oxidized_game::level::GameRules::default()),
-                    pending_light_updates: parking_lot::Mutex::new(Vec::new()),
+                    lighting: parking_lot::Mutex::new(
+                        oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                    ),
                 },
                 network: NetworkContext {
                     broadcast_tx: broadcast::channel(256).0,

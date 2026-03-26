@@ -151,7 +151,7 @@ pub(super) fn set_block(ctx: &Arc<ServerContext>, pos: BlockPos, state_id: u32) 
             let old_opacity = old_sid.light_opacity();
             let new_opacity = new_sid.light_opacity();
             if old_emission != new_emission || old_opacity != new_opacity {
-                ctx.world.pending_light_updates.lock().push((
+                ctx.world.lighting.lock().queue_update(
                     chunk_pos,
                     LightUpdate {
                         pos,
@@ -160,7 +160,7 @@ pub(super) fn set_block(ctx: &Arc<ServerContext>, pos: BlockPos, state_id: u32) 
                         old_opacity,
                         new_opacity,
                     },
-                ));
+                );
             }
             true
         } else {
@@ -533,7 +533,9 @@ mod tests {
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
-                pending_light_updates: parking_lot::Mutex::new(Vec::new()),
+                lighting: parking_lot::Mutex::new(
+                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                ),
             },
             network: crate::network::NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,
@@ -601,7 +603,9 @@ mod tests {
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
-                pending_light_updates: parking_lot::Mutex::new(Vec::new()),
+                lighting: parking_lot::Mutex::new(
+                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                ),
             },
             network: crate::network::NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,

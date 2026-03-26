@@ -19,3 +19,4 @@ pub mod parallel;
 pub mod propagation;
 pub mod queue;
 pub mod sky;
+pub mod world_lighting;

@@ -243,7 +243,9 @@ fn main() -> anyhow::Result<()> {
                 chunk_loader,
                 chunk_serializer,
                 game_rules: parking_lot::RwLock::new(oxidized_game::level::GameRules::default()),
-                pending_light_updates: parking_lot::Mutex::new(Vec::new()),
+                lighting: parking_lot::Mutex::new(
+                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                ),
             },
             network: NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,

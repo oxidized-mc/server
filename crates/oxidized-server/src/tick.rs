@@ -16,7 +16,6 @@ use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_game::lighting::cross_chunk::{
     ChunkNeighbors, propagate_block_light_cross_chunk, propagate_sky_light_cross_chunk,
 };
-use oxidized_game::lighting::engine::LightEngine;
 use oxidized_game::net::light_serializer::build_light_data_filtered;
 use oxidized_protocol::codec::Packet;
 use oxidized_protocol::constants::TICKS_PER_SECOND;
@@ -210,15 +209,16 @@ fn do_tick(ctx: &ServerContext, tick_count: u64, rng: &mut impl Rng, weather: &m
     process_light_updates(ctx);
 }
 
-/// Drains pending light updates, processes them per-chunk, and broadcasts
-/// light update packets to all connected clients.
+/// Drains pending light updates from the persistent [`WorldLighting`], processes
+/// them per-chunk, broadcasts light update packets, and stores any new boundary
+/// entries back for the next tick.
 fn process_light_updates(ctx: &ServerContext) {
     let updates = {
-        let mut queue = ctx.world.pending_light_updates.lock();
-        if queue.is_empty() {
+        let mut lighting = ctx.world.lighting.lock();
+        if !lighting.has_pending_work() {
             return;
         }
-        std::mem::take(&mut *queue)
+        lighting.drain_updates()
     };
 
     // Group updates by chunk position.
@@ -228,24 +228,29 @@ fn process_light_updates(ctx: &ServerContext) {
         by_chunk.entry(chunk_pos).or_default().push(update);
     }
 
-    // Process each chunk's updates and broadcast light packets.
+    // Process each chunk's updates using the persistent engine.
     for (chunk_pos, chunk_updates) in &by_chunk {
         let Some(chunk_ref) = ctx.world.chunks.get(chunk_pos) else {
             continue;
         };
 
         let mut chunk = chunk_ref.write();
-        let mut engine = LightEngine::new();
-        for update in chunk_updates {
-            engine.queue_mut().push(update.clone());
-        }
 
-        let result = match engine.process_updates(&mut chunk) {
-            Ok(result) => result,
-            Err(e) => {
-                warn!(chunk = ?chunk_pos, error = %e, "Light update failed");
-                continue;
-            },
+        // Use the persistent engine from WorldLighting. We lock briefly to
+        // push updates and process, then release.
+        let result = {
+            let mut lighting = ctx.world.lighting.lock();
+            let engine = lighting.engine_mut();
+            for update in chunk_updates {
+                engine.queue_mut().push(update.clone());
+            }
+            match engine.process_updates(&mut chunk) {
+                Ok(result) => result,
+                Err(e) => {
+                    warn!(chunk = ?chunk_pos, error = %e, "Light update failed");
+                    continue;
+                },
+            }
         };
 
         // Broadcast light update for the center chunk.
@@ -818,7 +823,9 @@ mod tests {
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
-                pending_light_updates: parking_lot::Mutex::new(Vec::new()),
+                lighting: parking_lot::Mutex::new(
+                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                ),
             },
             network: crate::network::NetworkContext {
                 broadcast_tx: broadcast::channel(256).0,

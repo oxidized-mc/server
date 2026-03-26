@@ -1255,3 +1255,210 @@ mod cross_chunk_light {
         // end-to-end without panicking.
     }
 }
+
+// ============== Persistent WorldLighting tests (23a.11) ==============
+
+mod world_lighting_integration {
+    use oxidized_game::lighting::engine::LightEngine;
+    use oxidized_game::lighting::queue::LightUpdate;
+    use oxidized_game::lighting::world_lighting::WorldLighting;
+    use oxidized_protocol::types::BlockPos;
+    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
+    use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
+    use oxidized_world::chunk::{ChunkPos, LevelChunk};
+    use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
+
+    fn flat_chunk(pos: ChunkPos) -> LevelChunk {
+        let mut chunk = LevelChunk::new(pos);
+        let bedrock = u32::from(BEDROCK.0);
+        let dirt = u32::from(DIRT.0);
+        let grass = u32::from(GRASS_BLOCK.0);
+
+        for x in 0..16i32 {
+            for z in 0..16i32 {
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y, z, bedrock)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 1, z, dirt)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 2, z, dirt)
+                    .unwrap();
+                chunk
+                    .set_block_state(x, OVERWORLD_MIN_Y + 3, z, grass)
+                    .unwrap();
+            }
+        }
+
+        let mut hm = Heightmap::new(HeightmapType::MotionBlocking, OVERWORLD_HEIGHT).unwrap();
+        for x in 0..16 {
+            for z in 0..16 {
+                hm.set(x, z, 4).unwrap();
+            }
+        }
+        chunk.set_heightmap(hm);
+        chunk
+    }
+
+    fn glowstone_id() -> u32 {
+        u32::from(
+            BlockRegistry
+                .default_state("minecraft:glowstone")
+                .expect("glowstone missing")
+                .0,
+        )
+    }
+
+    /// Verifies that the persistent engine retains state across two
+    /// consecutive `process_updates()` calls. Tick 1 places a light source;
+    /// tick 2 removes it. The engine should correctly undo the light.
+    #[test]
+    fn test_engine_retains_state_across_two_process_updates_calls() {
+        let mut wl = WorldLighting::new();
+        let mut chunk = flat_chunk(ChunkPos::new(0, 0));
+
+        // Initialize sky light.
+        wl.engine_mut().light_chunk(&mut chunk).unwrap();
+
+        // Tick 1: place glowstone at (8, -56, 8).
+        let gs = glowstone_id();
+        let emission = BlockStateId(gs as u16).light_emission();
+        let opacity = BlockStateId(gs as u16).light_opacity();
+        chunk.set_block_state(8, -56, 8, gs).unwrap();
+        wl.engine_mut().queue_mut().push(LightUpdate {
+            pos: BlockPos::new(8, -56, 8),
+            old_emission: 0,
+            new_emission: emission,
+            old_opacity: 0,
+            new_opacity: opacity,
+        });
+        let result1 = wl.engine_mut().process_updates(&mut chunk).unwrap();
+        assert!(!result1.changed_sections.is_empty());
+        assert_eq!(chunk.get_block_light_at(8, -56, 8), emission);
+        assert_eq!(chunk.get_block_light_at(9, -56, 8), emission - 1);
+
+        // Tick 2: remove glowstone (set to air).
+        chunk.set_block_state(8, -56, 8, 0).unwrap();
+        wl.engine_mut().queue_mut().push(LightUpdate {
+            pos: BlockPos::new(8, -56, 8),
+            old_emission: emission,
+            new_emission: 0,
+            old_opacity: opacity,
+            new_opacity: 0,
+        });
+        let result2 = wl.engine_mut().process_updates(&mut chunk).unwrap();
+        assert!(!result2.changed_sections.is_empty());
+        assert_eq!(chunk.get_block_light_at(8, -56, 8), 0);
+        assert_eq!(chunk.get_block_light_at(9, -56, 8), 0);
+    }
+
+    /// Verifies that boundary entries queued in tick N are available for
+    /// retrieval in tick N+1 via `drain_boundaries()`.
+    #[test]
+    fn test_boundary_entries_queued_in_tick_n_available_in_tick_n_plus_1() {
+        let mut wl = WorldLighting::new();
+        let mut chunk = flat_chunk(ChunkPos::new(0, 0));
+
+        // Initialize and place glowstone at chunk edge (0, -56, 8).
+        wl.engine_mut().light_chunk(&mut chunk).unwrap();
+        let gs = glowstone_id();
+        let emission = BlockStateId(gs as u16).light_emission();
+        let opacity = BlockStateId(gs as u16).light_opacity();
+        chunk.set_block_state(0, -56, 8, gs).unwrap();
+        wl.engine_mut().queue_mut().push(LightUpdate {
+            pos: BlockPos::new(0, -56, 8),
+            old_emission: 0,
+            new_emission: emission,
+            old_opacity: 0,
+            new_opacity: opacity,
+        });
+
+        // Tick 1: process updates, collect boundary entries.
+        let result = wl.engine_mut().process_updates(&mut chunk).unwrap();
+        assert!(
+            !result.block_boundary.is_empty(),
+            "expected block boundary entries at chunk edge"
+        );
+
+        // Store boundary entries into WorldLighting (simulating tick loop).
+        let target = ChunkPos::new(-1, 0); // neighbor to the west
+        wl.queue_boundaries(target, result.block_boundary, result.sky_boundary);
+        assert!(wl.has_pending_work());
+
+        // Tick 2: drain boundaries — they should be available.
+        let boundaries = wl.drain_boundaries();
+        assert!(
+            boundaries.contains_key(&target),
+            "boundary entries for target chunk should be present"
+        );
+        let pending = &boundaries[&target];
+        assert!(
+            !pending.block.is_empty(),
+            "block boundary entries should carry over to next tick"
+        );
+    }
+
+    /// Two-tick light propagation: torch placed near chunk edge in tick 1
+    /// produces boundary entries; tick 2 propagates them into the neighbor.
+    #[test]
+    fn test_two_tick_cross_chunk_propagation_via_world_lighting() {
+        use oxidized_game::lighting::cross_chunk::{
+            ChunkNeighbors, propagate_block_light_cross_chunk,
+        };
+
+        let mut wl = WorldLighting::new();
+        let mut center = flat_chunk(ChunkPos::new(0, 0));
+        let mut east = flat_chunk(ChunkPos::new(1, 0));
+
+        // Initialize both chunks.
+        {
+            let mut engine = LightEngine::new();
+            engine.light_chunk(&mut center).unwrap();
+            engine.light_chunk(&mut east).unwrap();
+        }
+
+        // Tick 1: place glowstone at east edge of center chunk (15, -56, 8).
+        let gs = glowstone_id();
+        let emission = BlockStateId(gs as u16).light_emission();
+        let opacity = BlockStateId(gs as u16).light_opacity();
+        center.set_block_state(15, -56, 8, gs).unwrap();
+        wl.engine_mut().queue_mut().push(LightUpdate {
+            pos: BlockPos::new(15, -56, 8),
+            old_emission: 0,
+            new_emission: emission,
+            old_opacity: 0,
+            new_opacity: opacity,
+        });
+
+        let result = wl.engine_mut().process_updates(&mut center).unwrap();
+        assert_eq!(center.get_block_light_at(15, -56, 8), emission);
+        assert!(
+            !result.block_boundary.is_empty(),
+            "placing light at chunk edge should produce boundary entries"
+        );
+
+        // Store boundary entries (simulating end of tick 1).
+        let east_pos = ChunkPos::new(1, 0);
+        wl.queue_boundaries(east_pos, result.block_boundary, result.sky_boundary);
+
+        // Tick 2: drain boundaries and propagate into neighbor.
+        let boundaries = wl.drain_boundaries();
+        let pending = &boundaries[&east_pos];
+
+        let mut neighbors = ChunkNeighbors {
+            north: None,
+            south: None,
+            east: Some(&mut east),
+            west: None,
+        };
+        propagate_block_light_cross_chunk(&mut neighbors, &pending.block, 0, 0);
+
+        // The east chunk's x=0 (world x=16) should have light from the torch.
+        let east_light = east.get_block_light_at(0, -56, 8);
+        assert!(
+            east_light > 0,
+            "east chunk should have light from cross-chunk propagation, got {east_light}"
+        );
+    }
+}
