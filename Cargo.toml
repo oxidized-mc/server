@@ -32,7 +32,7 @@ bytes          = "1"
 
 # Crypto
 aes            = "0.8"
-md-5           = "0.10"
+md-5           = "0.11"
 rsa            = { version = "0.9", features = ["sha2", "getrandom"] }
 rand           = "0.10"
 sha1           = "0.10"
