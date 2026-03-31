@@ -82,7 +82,7 @@ glam           = "0.32"
 
 # CLI
 clap           = { version = "4", features = ["derive"] }
-rustyline      = "17"
+rustyline      = "18"
 
 # Testing
 proptest       = "1"
