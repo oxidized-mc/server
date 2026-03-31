@@ -36,7 +36,7 @@ md-5           = "0.11"
 rsa            = { version = "0.9", features = ["sha2", "getrandom"] }
 rand           = "0.10"
 sha1           = "0.10"
-sha2           = "0.10"
+sha2           = "0.11"
 
 # Compression
 flate2         = "1"
@@ -82,7 +82,7 @@ glam           = "0.32"
 
 # CLI
 clap           = { version = "4", features = ["derive"] }
-rustyline      = "17"
+rustyline      = "18"
 
 # Testing
 proptest       = "1"
