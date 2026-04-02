@@ -4,7 +4,7 @@
 > Targets **Minecraft 26.1** (protocol `775`).
 
 [![CI](https://github.com/dodoflix/Oxidized/actions/workflows/ci.yml/badge.svg)](https://github.com/dodoflix/Oxidized/actions/workflows/ci.yml)
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 
 ---
@@ -96,12 +96,7 @@ docs, phases, performance.
 
 ## License
 
-Licensed under either of
-
-- **MIT License** ([LICENSE-MIT](./LICENSE-MIT))
-- **Apache License, Version 2.0** ([LICENSE-APACHE](./LICENSE-APACHE))
-
-at your option.
+Licensed under the [MIT License](./LICENSE).
 
 > **Note:** This project is not affiliated with or endorsed by Mojang or Microsoft.
 > Minecraft is a trademark of Mojang AB. This server reimplementation is developed
