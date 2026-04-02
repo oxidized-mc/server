@@ -14,7 +14,7 @@
 //! - If `data_length > 0`: the packet data is zlib-compressed and
 //!   `data_length` is the size of the original uncompressed data.
 //!
-//! See [ADR-009](../../docs/adr/adr-009-encryption-compression.md) for
+//! See ADR-009 (Encryption & Compression) for
 //! design rationale.
 
 use flate2::Compression;

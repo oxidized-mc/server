@@ -1,6 +1,6 @@
 //! Declarative macros to eliminate boilerplate across vector and coordinate types.
 //!
-//! See [ADR-037](../../../../docs/adr/adr-037-vector-type-macros.md) for design rationale.
+//! See ADR-037 (Vector Type Macros) for design rationale.
 
 /// Generate `Add`, `Sub`, and optionally `Neg` operator trait impls for a vector type.
 ///

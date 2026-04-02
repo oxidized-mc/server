@@ -4,7 +4,7 @@
 //! RSA-1024 key pair generation (for the server's identity during login),
 //! and RSA decryption (to unwrap the client's shared secret).
 //!
-//! See [ADR-009](../../docs/adr/adr-009-encryption-compression.md) for design rationale.
+//! See ADR-009 (Encryption & Compression) for design rationale.
 
 use aes::Aes128;
 use aes::cipher::{BlockEncrypt, KeyInit};

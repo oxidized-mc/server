@@ -4,7 +4,7 @@
 //! on the outbound channel without direct access to the TCP stream. The
 //! writer task drains the channel and flushes packets to the network.
 //!
-//! See [ADR-006](../../../docs/adr/adr-006-network-io.md) for the
+//! See ADR-006 (Network I/O) for the
 //! reader/writer task pair architecture.
 
 use std::net::SocketAddr;

@@ -5,7 +5,7 @@
 //! Every packet type in the protocol is tested here through the unified
 //! [`Packet`] trait, validating that the trait implementations are correct.
 //!
-//! See [ADR-038](../../../docs/adr/adr-038-packet-trait.md) for the trait design.
+//! See ADR-038 (Packet Trait) for the trait design.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

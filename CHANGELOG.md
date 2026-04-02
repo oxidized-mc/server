@@ -16,12 +16,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   CODE_OF_CONDUCT, SECURITY, CI workflow
 - Rust tooling: `rustfmt.toml`, `deny.toml`, `rust-toolchain.toml`
 - Decompiled Minecraft 26.1-pre-3 reference (`mc-server-ref/decompiled/`, 4 789 files)
-- 38 detailed implementation phase documents (`docs/phases/`)
-- 34 Architecture Decision Records (`docs/adr/`)
+- 38 detailed implementation phase documents
+- 34 Architecture Decision Records
 - Architecture documentation: system overview, crate layout, protocol, world format,
-  entity system (`docs/architecture/`) — aligned with all ADRs
+  entity system — aligned with all ADRs
 - Reference documentation: Java class map (110+ mappings), binary format specs,
-  protocol packet listing (`docs/reference/`)
+  protocol packet listing
 - Server binary bootstrap: mimalloc global allocator, Tokio runtime, structured logging
   (Phase 1)
 - TOML-based server configuration with full type safety and serde derives (Phase 1)

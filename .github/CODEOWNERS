@@ -7,19 +7,11 @@
 # Default: project owner reviews everything
 *                                   @dodoflix
 
-# Architecture & design decisions require owner review
-docs/adr/                           @dodoflix
-docs/lifecycle/                     @dodoflix
-docs/architecture/                  @dodoflix
-
 # CI/CD and tooling
 .github/                            @dodoflix
 deny.toml                           @dodoflix
 rust-toolchain.toml                 @dodoflix
 Cargo.toml                          @dodoflix
-
-# Persistent memories (institutional knowledge)
-.github/memories.md                 @dodoflix
 
 # Copilot instructions (affects all AI-assisted development)
 .github/copilot-instructions.md     @dodoflix

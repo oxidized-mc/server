@@ -8,7 +8,7 @@
 //!
 //! Currently, all 59+ packets in `oxidized-protocol` are manually implemented using
 //! inherent `decode()`/`encode()` methods and the `Packet` trait from
-//! [ADR-038](../../../docs/adr/adr-038-packet-trait-unified-codec.md). The derive
+//! ADR-038 (Packet Trait Unified Codec). The derive
 //! macros below will be implemented in a future phase to replace that boilerplate.
 //!
 //! # Planned Functionality
@@ -24,9 +24,9 @@
 //!
 //! # Design References
 //!
-//! - [ADR-007](../../../docs/adr/adr-007-packet-codec.md) — original derive-macro
+//! - ADR-007 (Packet Codec) — original derive-macro
 //!   design specifying `#[packet(...)]` attributes and supported wire types.
-//! - [ADR-038](../../../docs/adr/adr-038-packet-trait-unified-codec.md) — the
+//! - ADR-038 (Packet Trait Unified Codec) — the
 //!   `Packet` trait and unified `PacketDecodeError` that these macros will target.
 //!
 //! # Intended Usage (Future)
@@ -88,10 +88,7 @@ use proc_macro::TokenStream;
 /// // }
 /// ```
 ///
-/// See [ADR-007] and [ADR-038] for design details.
-///
-/// [ADR-007]: ../../../docs/adr/adr-007-packet-codec.md
-/// [ADR-038]: ../../../docs/adr/adr-038-packet-trait-unified-codec.md
+/// See ADR-007 (Packet Codec) and ADR-038 (Packet Trait Unified Codec) for design details.
 #[proc_macro_derive(McPacket, attributes(packet))]
 pub fn derive_mc_packet(_input: TokenStream) -> TokenStream {
     // STUB: returns empty TokenStream — no code is generated.
@@ -143,9 +140,7 @@ pub fn derive_mc_packet(_input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// See [ADR-007] for the full wire-type mapping.
-///
-/// [ADR-007]: ../../../docs/adr/adr-007-packet-codec.md
+/// See ADR-007 (Packet Codec) for the full wire-type mapping.
 #[proc_macro_derive(McRead, attributes(mc))]
 pub fn derive_mc_read(_input: TokenStream) -> TokenStream {
     // STUB: returns empty TokenStream — no code is generated.
@@ -186,9 +181,7 @@ pub fn derive_mc_read(_input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-/// See [ADR-007] for the full wire-type mapping.
-///
-/// [ADR-007]: ../../../docs/adr/adr-007-packet-codec.md
+/// See ADR-007 (Packet Codec) for the full wire-type mapping.
 #[proc_macro_derive(McWrite, attributes(mc))]
 pub fn derive_mc_write(_input: TokenStream) -> TokenStream {
     // STUB: returns empty TokenStream — no code is generated.

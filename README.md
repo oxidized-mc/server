@@ -25,8 +25,8 @@
 
 🚧 **Pre-alpha — infrastructure and planning complete, implementation starting.**
 
-See the [38-phase roadmap](./docs/phases/README.md) and
-[32 Architecture Decision Records](./docs/adr/README.md) for the full design.
+See the 38-phase roadmap and
+32 Architecture Decision Records for the full design.
 
 ---
 
@@ -41,11 +41,6 @@ Oxidized/
 │   ├── oxidized-world/      # World, chunks (Anvil), blocks, items, lighting
 │   ├── oxidized-game/       # ECS (bevy_ecs): entities, AI, combat, commands
 │   └── oxidized-server/     # Binary — startup, tick loop, network layer
-├── docs/
-│   ├── adr/                 # 32 Architecture Decision Records
-│   ├── architecture/        # System design documents
-│   ├── phases/              # 38 implementation phase details
-│   └── reference/           # Java class map, binary format specs
 ├── mc-server-ref/           # Decompiled vanilla server (gitignored)
 ├── deny.toml                # cargo-deny licence + advisory config
 ├── rustfmt.toml             # Formatting rules
@@ -83,15 +78,7 @@ cargo clippy --workspace --all-targets -- -D warnings  # lints
 
 | Document | Description |
 |---|---|
-| [Architecture Overview](./docs/architecture/overview.md) | System design, threading model, data flow |
-| [Crate Layout](./docs/architecture/crate-layout.md) | 6-crate workspace, dependency rules |
-| [Development Lifecycle](./docs/lifecycle/README.md) | 9-stage lifecycle, quality gates, continuous improvement |
-| [Protocol](./docs/architecture/protocol.md) | Wire protocol, packet states, encryption |
-| [Phases](./docs/phases/README.md) | 38-phase implementation roadmap |
-| [ADRs](./docs/adr/README.md) | 32 Architecture Decision Records |
-| [Memories](.github/memories.md) | Persistent learnings, patterns, gotchas |
-| [Java Class Map](./docs/reference/java-class-map.md) | 110+ vanilla Java → Rust mappings |
-| [Data Formats](./docs/reference/data-formats.md) | Binary format specs (VarInt, NBT, chunks) |
+| [Contributing](CONTRIBUTING.md) | How to contribute to the project |
 
 ---
 

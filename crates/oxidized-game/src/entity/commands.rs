@@ -4,7 +4,7 @@
 //! they enqueue [`EntityCommand`] values which the tick thread drains
 //! at the start of each tick during the [`PreTick`](super::phases::TickPhase::PreTick) phase.
 //!
-//! See [ADR-020](../../../docs/adr/adr-020-player-session.md) for the
+//! See ADR-020 (Player Session) for the
 //! split architecture rationale.
 
 use glam::DVec3;

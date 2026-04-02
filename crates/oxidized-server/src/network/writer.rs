@@ -1,10 +1,8 @@
 //! Writer task — batches outbound packets and flushes to the network.
 //!
-//! The writer task is the core of the [ADR-006] performance model.
+//! The writer task is the core of the ADR-006 (Network I/O) performance model.
 //! Instead of flushing after every packet (one syscall per packet), it
 //! drains all queued outbound packets and flushes once per drain cycle.
-//!
-//! [ADR-006]: ../../../docs/adr/adr-006-network-io.md
 
 // Writer task is implemented in R4.3 but not integrated until R4.5+.
 #![allow(dead_code)]

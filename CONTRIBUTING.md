@@ -30,23 +30,23 @@ Be respectful and constructive.
 ## Development Lifecycle
 
 Every change in Oxidized follows a structured
-[Development Lifecycle](./docs/lifecycle/README.md) with 9 stages:
+Development Lifecycle with 9 stages:
 
 ```
 Identify → Research → Decide (ADR) → Plan → Test First → Implement → Review → Integrate → Retrospect
 ```
 
-Each stage has explicit [Quality Gates](./docs/lifecycle/quality-gates.md) that must
+Each stage has explicit Quality Gates that must
 be satisfied before advancing. The lifecycle ensures that we:
 
 - Understand the problem before writing code
 - Record significant decisions as ADRs
 - Write tests before implementation (TDD)
 - Actively identify improvements during review
-- Capture learnings in [persistent memories](.github/memories.md)
+- Capture learnings and track tech-debt
 
 For trivial changes (typo fixes, dependency bumps), an abbreviated lifecycle applies —
-see [Lifecycle Variants](./docs/lifecycle/README.md#lifecycle-variants).
+see Lifecycle Variants.
 
 ---
 
@@ -57,9 +57,9 @@ see [Lifecycle Variants](./docs/lifecycle/README.md#lifecycle-variants).
 | 🐛 Bug report | Open a [bug report issue](.github/ISSUE_TEMPLATE/bug_report.yml) |
 | 💡 Feature request | Open a [feature request issue](.github/ISSUE_TEMPLATE/feature_request.yml) |
 | 📖 Docs | Edit any `.md` file and open a PR |
-| 🧩 Implementation | Pick a phase from the [roadmap](./docs/phases/README.md) and open a PR |
+| 🧩 Implementation | Pick a phase from the roadmap and open a PR |
 | 🔍 Review | Review open PRs and leave constructive feedback |
-| 💡 Improvement | Found a better approach? Propose a new ADR or update [memories](.github/memories.md) |
+| 💡 Improvement | Found a better approach? Propose a new ADR |
 
 ---
 
@@ -111,14 +111,12 @@ The workspace has six crates — keep concerns separated:
 (gitignored). When implementing something, always check the Java reference first.
 **Rewrite idiomatically in Rust — do not transliterate Java line-by-line.**
 
-For detailed architecture docs, see [`docs/architecture/`](./docs/architecture/).
-
 ---
 
 ## Design Decisions (ADRs)
 
 All significant design decisions are documented as
-[Architecture Decision Records](./docs/adr/README.md). Before implementing any
+Architecture Decision Records. Before implementing any
 phase, read the ADRs linked in that phase's doc file.
 
 Key principle: **the wire protocol is sacred** (we can't change what the client
@@ -132,7 +130,7 @@ ADRs are living knowledge. When you discover a better approach:
 2. Mark the old ADR as "Superseded by ADR-NNN"
 3. Plan the migration of existing code
 
-See [Continuous Improvement](./docs/lifecycle/continuous-improvement.md#adr-evolution)
+See Continuous Improvement
 for the full process.
 
 ---
@@ -180,8 +178,8 @@ chore(deps): bump tokio from 1.43 to 1.44
 ## Pull Request Process
 
 1. Create a branch: `git checkout -b feat/varint-codec`
-2. Make your changes, following the [Development Lifecycle](./docs/lifecycle/README.md)
-3. Ensure all [Quality Gates](./docs/lifecycle/quality-gates.md) pass
+2. Make your changes, following the Development Lifecycle
+3. Ensure all Quality Gates pass
 4. Commit with conventional commits
 5. Open a PR targeting `main`; fill in the PR template completely
 6. At least one approving review is required before merge
@@ -193,7 +191,7 @@ Reviews are not just about catching bugs — they actively seek improvements:
 - Does the code follow relevant ADRs?
 - Are any ADRs outdated given this change?
 - Could any existing pattern be improved?
-- Are there learnings to record in [memories.md](.github/memories.md)?
+- Are there learnings to record?
 
 ---
 
@@ -270,7 +268,7 @@ regression test in the corresponding crate's `tests/` directory.
 ## Release Process
 
 Oxidized uses automated versioning and release management based on conventional commits.
-See [ADR-039](./docs/adr/adr-039-release-strategy.md) for the full design rationale.
+See ADR-039 (Release Strategy) for the full design rationale.
 
 ### How It Works
 
@@ -311,11 +309,11 @@ latest build.
 ## Continuous Improvement
 
 We believe the codebase should always be getting better. See the full
-[Continuous Improvement](./docs/lifecycle/continuous-improvement.md) process for details.
+Continuous Improvement process for details.
 
 **After every phase:**
 - Conduct a retrospective
-- Update [persistent memories](.github/memories.md) with learnings
+- Record learnings and identify improvements
 - Review ADRs for accuracy
 - Record any technical debt incurred
 

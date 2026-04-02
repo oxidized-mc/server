@@ -5,7 +5,7 @@
 //! error type. This replaces per-packet error enums and enables generic
 //! `send_packet`/`decode_packet` operations.
 //!
-//! See [ADR-038](../../../../docs/adr/adr-038-packet-trait.md) for design rationale.
+//! See ADR-038 (Packet Trait) for design rationale.
 
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;

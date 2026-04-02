@@ -1,14 +1,12 @@
 //! Tick phase enum and schedule labels for entity system scheduling.
 //!
 //! Defines the strict phase order within each server tick as specified
-//! by [ADR-018 §System Scheduling]. Within each phase, `bevy_ecs`
+//! by ADR-018 §System Scheduling (Entity System). Within each phase, `bevy_ecs`
 //! automatically parallelizes non-conflicting systems.
 //!
 //! Each [`TickPhase`] maps to a [`PhaseSchedule`] label via
 //! [`TickPhase::label()`], allowing registration of systems into
 //! the appropriate per-tick schedule.
-//!
-//! [ADR-018 §System Scheduling]: ../../../docs/adr/adr-018-entity-system.md
 
 use bevy_ecs::prelude::SystemSet;
 use bevy_ecs::schedule::ScheduleLabel;

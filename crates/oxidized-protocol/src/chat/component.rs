@@ -7,7 +7,7 @@
 //! - [`super::component_json`] — JSON (status/config packets)
 //! - [`super::component_nbt`] — NBT (play-state packets)
 //!
-//! See [ADR-028](../../../docs/adr/adr-028-chat-components.md) for design rationale.
+//! See ADR-028 (Chat Components) for design rationale.
 
 use std::fmt;
 

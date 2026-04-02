@@ -3,7 +3,7 @@
 //! Defines the packet wrappers that flow through bounded `mpsc` channels
 //! between the reader task, writer task, and game logic. Also defines
 //! the capacity and rate-limiting constants specified by
-//! [ADR-006](../../../docs/adr/adr-006-network-io.md).
+//! ADR-006 (Network I/O).
 
 use bytes::Bytes;
 

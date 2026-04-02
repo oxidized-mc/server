@@ -1,7 +1,7 @@
 //! Server configuration loaded from `oxidized.toml`.
 //!
 //! Uses TOML format with serde derives for type-safe deserialization.
-//! See [ADR-033](../../../docs/adr/adr-033-configuration-format.md) for rationale.
+//! See ADR-033 (Configuration Format) for rationale.
 
 mod admin;
 mod advanced;

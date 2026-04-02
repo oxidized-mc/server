@@ -1,11 +1,9 @@
 //! Reader task — reads packets from the network and dispatches to game logic.
 //!
-//! The reader task is one half of the [ADR-006] per-connection task pair.
+//! The reader task is one half of the ADR-006 (Network I/O) per-connection task pair.
 //! It reads raw packets from the TCP stream (handling decryption and
 //! decompression), applies rate limiting, and dispatches decoded packets
 //! through the bounded inbound channel to game logic.
-//!
-//! [ADR-006]: ../../../docs/adr/adr-006-network-io.md
 
 // Reader task is implemented in R4.4 but not integrated until R4.5+.
 #![allow(dead_code)]

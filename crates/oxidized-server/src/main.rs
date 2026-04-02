@@ -36,7 +36,7 @@ use oxidized_server::{app, ecs, network, tick};
 
 /// Use mimalloc as the global allocator for improved throughput and
 /// reduced fragmentation under the server's allocation patterns.
-/// See [ADR-029](../../docs/adr/adr-029-memory-management.md).
+/// See ADR-029 (Memory Management).
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
