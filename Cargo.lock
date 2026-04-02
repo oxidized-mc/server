@@ -1918,13 +1918,11 @@ dependencies = [
 [[package]]
 name = "oxidized-nbt"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/nbt.git#fc4a249a3b36ebe370630fc3ebcbd68e17069879"
 dependencies = [
  "bytes",
- "criterion",
  "flate2",
  "indexmap",
- "insta",
- "proptest",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1995,9 +1993,7 @@ dependencies = [
 [[package]]
 name = "oxidized-types"
 version = "0.1.0"
-dependencies = [
- "proptest",
-]
+source = "git+https://github.com/oxidized-mc/types.git#bc330d15759b86baaea59655b9f5a4f3890f706d"
 
 [[package]]
 name = "oxidized-world"
