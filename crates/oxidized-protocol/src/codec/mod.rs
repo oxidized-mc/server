@@ -38,8 +38,8 @@ macro_rules! impl_empty_packet {
     };
 }
 
-pub use oxidized_codec::{frame, lp_vec3, packet, slot, types, varint};
 pub use oxidized_codec::{Packet, PacketDecodeError, ResourceLocationError};
+pub use oxidized_codec::{frame, lp_vec3, packet, slot, types, varint};
 
 /// Asserts that encoding then decoding a packet produces the original value.
 ///

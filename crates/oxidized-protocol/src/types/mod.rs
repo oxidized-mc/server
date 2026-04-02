@@ -10,5 +10,5 @@ pub use oxidized_mc_types::{
     ResourceLocation, SectionPos, Vec2, Vec3, Vec3i,
 };
 
-pub use oxidized_mc_types::direction::{Axis, AxisDirection, Direction};
 pub use oxidized_mc_types::chunk_pos::ChunkPosExt;
+pub use oxidized_mc_types::direction::{Axis, AxisDirection, Direction};
