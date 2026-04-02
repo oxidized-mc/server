@@ -51,4 +51,4 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - URL-encode all query parameters in Mojang session authentication (Phase 4)
 - Replaced deprecated `rustsec/audit-check@v2` CI action with direct `cargo-audit`
 
-[Unreleased]: https://github.com/dodoflix/Oxidized/commits/main
+[Unreleased]: https://github.com/oxidized-mc/server/commits/main

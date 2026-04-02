@@ -13,8 +13,8 @@ version      = "0.1.0" # x-release-please-version
 edition      = "2024"
 authors      = ["Dogukan Metan <dogukanmetan@gmail.com>"]
 license      = "MIT"
-repository   = "https://github.com/dodoflix/Oxidized"
-homepage     = "https://github.com/dodoflix/Oxidized"
+repository   = "https://github.com/oxidized-mc/server"
+homepage     = "https://github.com/oxidized-mc/server"
 rust-version = "1.85"
 
 [workspace.dependencies]

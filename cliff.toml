@@ -14,7 +14,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 """
 body = """
 {%- macro remote_url() -%}
-  https://github.com/dodoflix/Oxidized
+  https://github.com/oxidized-mc/server
 {%- endmacro -%}
 
 {% if version -%}
@@ -43,7 +43,7 @@ body = """
 """
 footer = """
 {%- macro remote_url() -%}
-  https://github.com/dodoflix/Oxidized
+  https://github.com/oxidized-mc/server
 {%- endmacro -%}
 
 {% for release in releases -%}

@@ -62,7 +62,7 @@ For trivial changes (typo fixes, dependency bumps), an abbreviated lifecycle app
 
 ```bash
 # 1. Fork and clone
-git clone https://github.com/dodoflix/Oxidized.git
+git clone https://github.com/oxidized-mc/server.git
 cd Oxidized
 
 # 2. Rust stable (toolchain pinned via rust-toolchain.toml)

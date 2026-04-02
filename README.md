@@ -3,7 +3,7 @@
 > A high-performance Minecraft Java Edition server rewritten in Rust.
 > Targets **Minecraft 26.1** (protocol `775`).
 
-[![CI](https://github.com/dodoflix/Oxidized/actions/workflows/ci.yml/badge.svg)](https://github.com/dodoflix/Oxidized/actions/workflows/ci.yml)
+[![CI](https://github.com/oxidized-mc/server/actions/workflows/ci.yml/badge.svg)](https://github.com/oxidized-mc/server/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org/)
 
