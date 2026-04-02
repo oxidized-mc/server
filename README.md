@@ -25,9 +25,6 @@
 
 🚧 **Pre-alpha — infrastructure and planning complete, implementation starting.**
 
-See the 38-phase roadmap and
-32 Architecture Decision Records for the full design.
-
 ---
 
 ## Project Layout

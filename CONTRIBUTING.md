@@ -11,7 +11,7 @@ Thank you for your interest in contributing! This document explains the process.
 - [How to Contribute](#how-to-contribute)
 - [Development Setup](#development-setup)
 - [Architecture](#architecture)
-- [Design Decisions (ADRs)](#design-decisions-adrs)
+- [Design Principles](#design-principles)
 - [Commit Style](#commit-style)
 - [Pull Request Process](#pull-request-process)
 - [Testing](#testing)
@@ -29,24 +29,19 @@ Be respectful and constructive.
 
 ## Development Lifecycle
 
-Every change in Oxidized follows a structured
-Development Lifecycle with 9 stages:
+Every change in Oxidized follows a structured lifecycle:
 
 ```
-Identify → Research → Decide (ADR) → Plan → Test First → Implement → Review → Integrate → Retrospect
+Identify → Research → Decide → Plan → Test First → Implement → Review → Integrate → Retrospect
 ```
 
-Each stage has explicit Quality Gates that must
-be satisfied before advancing. The lifecycle ensures that we:
+The lifecycle ensures that we:
 
 - Understand the problem before writing code
-- Record significant decisions as ADRs
 - Write tests before implementation (TDD)
 - Actively identify improvements during review
-- Capture learnings and track tech-debt
 
-For trivial changes (typo fixes, dependency bumps), an abbreviated lifecycle applies —
-see Lifecycle Variants.
+For trivial changes (typo fixes, dependency bumps), an abbreviated lifecycle applies.
 
 ---
 
@@ -57,9 +52,9 @@ see Lifecycle Variants.
 | 🐛 Bug report | Open a [bug report issue](.github/ISSUE_TEMPLATE/bug_report.yml) |
 | 💡 Feature request | Open a [feature request issue](.github/ISSUE_TEMPLATE/feature_request.yml) |
 | 📖 Docs | Edit any `.md` file and open a PR |
-| 🧩 Implementation | Pick a phase from the roadmap and open a PR |
+| 🧩 Implementation | Pick an open issue and open a PR |
 | 🔍 Review | Review open PRs and leave constructive feedback |
-| 💡 Improvement | Found a better approach? Propose a new ADR |
+| 💡 Improvement | Found a better approach? Open an issue or PR |
 
 ---
 
@@ -113,25 +108,11 @@ The workspace has six crates — keep concerns separated:
 
 ---
 
-## Design Decisions (ADRs)
-
-All significant design decisions are documented as
-Architecture Decision Records. Before implementing any
-phase, read the ADRs linked in that phase's doc file.
+## Design Principles
 
 Key principle: **the wire protocol is sacred** (we can't change what the client
 sends or expects), but everything server-side uses modern, data-oriented Rust
 design rather than cloning vanilla Java patterns.
-
-### ADR Evolution
-
-ADRs are living knowledge. When you discover a better approach:
-1. Create a new ADR that supersedes the old one
-2. Mark the old ADR as "Superseded by ADR-NNN"
-3. Plan the migration of existing code
-
-See Continuous Improvement
-for the full process.
 
 ---
 
@@ -178,18 +159,16 @@ chore(deps): bump tokio from 1.43 to 1.44
 ## Pull Request Process
 
 1. Create a branch: `git checkout -b feat/varint-codec`
-2. Make your changes, following the Development Lifecycle
-3. Ensure all Quality Gates pass
-4. Commit with conventional commits
-5. Open a PR targeting `main`; fill in the PR template completely
-6. At least one approving review is required before merge
-7. Squash-merge preferred for feature branches; merge commit for phase completions
+2. Make your changes following the lifecycle
+3. Commit with conventional commits
+4. Open a PR targeting `main`; fill in the PR template completely
+5. At least one approving review is required before merge
+6. Squash-merge preferred for feature branches
 
 ### PR Review Standards
 
 Reviews are not just about catching bugs — they actively seek improvements:
-- Does the code follow relevant ADRs?
-- Are any ADRs outdated given this change?
+- Does the code follow the project's design principles?
 - Could any existing pattern be improved?
 - Are there learnings to record?
 
@@ -268,7 +247,7 @@ regression test in the corresponding crate's `tests/` directory.
 ## Release Process
 
 Oxidized uses automated versioning and release management based on conventional commits.
-See ADR-039 (Release Strategy) for the full design rationale.
+See the release strategy in the commit history for the full design rationale.
 
 ### How It Works
 
@@ -308,22 +287,19 @@ latest build.
 
 ## Continuous Improvement
 
-We believe the codebase should always be getting better. See the full
-Continuous Improvement process for details.
+We believe the codebase should always be getting better.
 
-**After every phase:**
+**After every milestone:**
 - Conduct a retrospective
 - Record learnings and identify improvements
-- Review ADRs for accuracy
 - Record any technical debt incurred
 
 **During every PR review:**
-- Check for ADR compliance and identify outdated decisions
+- Identify outdated patterns or decisions
 - Look for patterns that should be extracted or formalized
 - Suggest improvements (not just catch bugs)
 
 **When you find something better:**
 - Don't just note it — act on it
-- Create a new ADR if needed
+- Open an issue or PR
 - Plan and execute the refactoring
-- Time is never a reason to skip improvement

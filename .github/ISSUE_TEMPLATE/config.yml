@@ -2,7 +2,7 @@ blank_issues_enabled: false
 contact_links:
   - name: 📖 Roadmap
     url: https://github.com/oxidized-mc/server
-    about: Full 38-phase implementation roadmap
+    about: Project overview and status
   - name: 💬 Discussions
     url: https://github.com/dodoflix/Oxidized/discussions
     about: General questions and community chat
