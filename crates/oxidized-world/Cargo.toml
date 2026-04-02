@@ -13,6 +13,7 @@ categories  = ["game-development", "data-structures"]
 [dependencies]
 oxidized-nbt = { workspace = true }
 oxidized-types = { workspace = true }
+oxidized-registry = { workspace = true }
 
 serde        = { workspace = true }
 serde_json   = { workspace = true }
@@ -28,10 +29,6 @@ parking_lot  = { workspace = true }
 bitflags     = { workspace = true }
 glam         = { workspace = true }
 dashmap      = { workspace = true }
-
-[build-dependencies]
-serde_json = { workspace = true }
-flate2     = { workspace = true }
 
 [dev-dependencies]
 tokio    = { workspace = true }

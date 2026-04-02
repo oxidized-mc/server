@@ -102,6 +102,7 @@ oxidized-auth        = { git = "https://github.com/oxidized-mc/auth.git" }
 oxidized-codec       = { git = "https://github.com/oxidized-mc/codec.git" }
 oxidized-mc-types    = { git = "https://github.com/oxidized-mc/mc-types.git" }
 oxidized-chat        = { git = "https://github.com/oxidized-mc/chat.git" }
+oxidized-registry    = { path = "../registry" }
 
 [profile.release]
 opt-level     = 3

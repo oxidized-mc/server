@@ -1950,6 +1950,7 @@ dependencies = [
  "lru",
  "oxidized-nbt",
  "oxidized-protocol",
+ "oxidized-registry",
  "oxidized-world",
  "parking_lot",
  "proptest",
@@ -2034,6 +2035,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxidized-registry"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "flate2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "oxidized-server"
 version = "0.1.0"
 dependencies = [
@@ -2085,6 +2097,7 @@ dependencies = [
  "insta",
  "lz4_flex",
  "oxidized-nbt",
+ "oxidized-registry",
  "oxidized-types",
  "parking_lot",
  "proptest",
