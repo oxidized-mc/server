@@ -14,6 +14,12 @@ categories  = ["game-development", "network-programming"]
 oxidized-nbt = { workspace = true }
 oxidized-macros = { workspace = true }
 oxidized-types = { workspace = true }
+oxidized-compression = { workspace = true }
+oxidized-crypto = { workspace = true }
+oxidized-auth = { workspace = true }
+oxidized-codec = { workspace = true }
+oxidized-mc-types = { workspace = true }
+oxidized-chat = { workspace = true }
 
 tokio        = { workspace = true }
 tokio-util   = { workspace = true }

@@ -1876,6 +1876,60 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
+name = "oxidized-auth"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
+name = "oxidized-chat"
+version = "0.1.0"
+dependencies = [
+ "oxidized-mc-types",
+ "oxidized-nbt",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "oxidized-codec"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "oxidized-nbt",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "oxidized-compression"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "oxidized-crypto"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "md-5 0.11.0",
+ "rand 0.10.0",
+ "rsa",
+ "sha1",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "oxidized-game"
 version = "0.1.0"
 dependencies = [
@@ -1916,9 +1970,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxidized-mc-types"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "oxidized-codec",
+ "oxidized-types",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "oxidized-nbt"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/nbt.git#fc4a249a3b36ebe370630fc3ebcbd68e17069879"
 dependencies = [
  "bytes",
  "flate2",
@@ -1939,7 +2002,13 @@ dependencies = [
  "indexmap",
  "insta",
  "md-5 0.11.0",
+ "oxidized-auth",
+ "oxidized-chat",
+ "oxidized-codec",
+ "oxidized-compression",
+ "oxidized-crypto",
  "oxidized-macros",
+ "oxidized-mc-types",
  "oxidized-nbt",
  "oxidized-types",
  "proptest",
@@ -1993,7 +2062,6 @@ dependencies = [
 [[package]]
 name = "oxidized-types"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/types.git#bc330d15759b86baaea59655b9f5a4f3890f706d"
 
 [[package]]
 name = "oxidized-world"

@@ -96,6 +96,41 @@ oxidized-world    = { path = "crates/oxidized-world" }
 oxidized-game     = { path = "crates/oxidized-game" }
 oxidized-macros   = { path = "crates/oxidized-macros" }
 oxidized-types    = { git = "https://github.com/oxidized-mc/types.git" }
+oxidized-compression = { git = "https://github.com/oxidized-mc/compression.git" }
+oxidized-crypto      = { git = "https://github.com/oxidized-mc/crypto.git" }
+oxidized-auth        = { git = "https://github.com/oxidized-mc/auth.git" }
+oxidized-codec       = { git = "https://github.com/oxidized-mc/codec.git" }
+oxidized-mc-types    = { git = "https://github.com/oxidized-mc/mc-types.git" }
+oxidized-chat        = { git = "https://github.com/oxidized-mc/chat.git" }
+
+# ── Local overrides ──────────────────────────────────────────────────
+# Redirect git deps to sibling submodules for local development.
+# Cargo's [patch] ensures every crate in the dep graph resolves to
+# the same local copy, avoiding duplicate-type errors.
+
+[patch."https://github.com/oxidized-mc/nbt.git"]
+oxidized-nbt = { path = "../nbt" }
+
+[patch."https://github.com/oxidized-mc/types.git"]
+oxidized-types = { path = "../types" }
+
+[patch."https://github.com/oxidized-mc/compression.git"]
+oxidized-compression = { path = "../compression" }
+
+[patch."https://github.com/oxidized-mc/crypto.git"]
+oxidized-crypto = { path = "../crypto" }
+
+[patch."https://github.com/oxidized-mc/auth.git"]
+oxidized-auth = { path = "../auth" }
+
+[patch."https://github.com/oxidized-mc/codec.git"]
+oxidized-codec = { path = "../codec" }
+
+[patch."https://github.com/oxidized-mc/mc-types.git"]
+oxidized-mc-types = { path = "../mc-types" }
+
+[patch."https://github.com/oxidized-mc/chat.git"]
+oxidized-chat = { path = "../chat" }
 
 [profile.release]
 opt-level     = 3

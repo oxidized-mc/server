@@ -1,5 +1,0 @@
----
-source: crates/oxidized-protocol/src/codec/types.rs
-expression: "format!(\"{}\", TypeError::StringTooLong { len: 300, max: 255 })"
----
-string too long: 300 chars (max 255)

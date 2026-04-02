@@ -1,21 +1,11 @@
-//! Chat and text component system.
-//!
-//! Implements Minecraft's text component tree: styled, interactive,
-//! translatable text used by chat messages, item names, signs, etc.
-//! See ADR-028 for design rationale.
+//! Chat and text component system — re-exported from [`oxidized_chat`].
 
-pub mod click_event;
-pub mod component;
-pub mod component_json;
-pub mod component_nbt;
-pub mod formatting;
-pub mod hover_event;
-pub mod style;
-pub mod text_color;
+pub use oxidized_chat::{
+    click_event, component, component_json, component_nbt, formatting, hover_event, style,
+    text_color,
+};
 
-pub use click_event::ClickEvent;
-pub use component::{Component, ComponentContent, NbtSource};
-pub use formatting::ChatFormatting;
-pub use hover_event::{HoverEntity, HoverEvent, HoverItem};
-pub use style::{Style, StyleBuilder};
-pub use text_color::TextColor;
+pub use oxidized_chat::{
+    ChatFormatting, ClickEvent, Component, ComponentContent, HoverEntity, HoverEvent, HoverItem,
+    NbtSource, Style, StyleBuilder, TextColor,
+};

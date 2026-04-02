@@ -1,6 +1,6 @@
 //! Codec primitives for the Minecraft wire protocol.
 //!
-//! Provides VarInt/VarLong encoding, packet framing, and related utilities.
+//! This module re-exports from the standalone [`oxidized_codec`] crate.
 
 /// Defines an empty packet (no fields) with a trivial [`Packet`] impl.
 ///
@@ -38,14 +38,8 @@ macro_rules! impl_empty_packet {
     };
 }
 
-pub mod frame;
-pub mod lp_vec3;
-pub mod packet;
-pub mod slot;
-pub mod types;
-pub mod varint;
-
-pub use packet::{Packet, PacketDecodeError};
+pub use oxidized_codec::{frame, lp_vec3, packet, slot, types, varint};
+pub use oxidized_codec::{Packet, PacketDecodeError, ResourceLocationError};
 
 /// Asserts that encoding then decoding a packet produces the original value.
 ///

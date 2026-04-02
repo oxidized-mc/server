@@ -1,5 +1,0 @@
----
-source: crates/oxidized-protocol/src/codec/types.rs
-expression: "format!(\"{}\", TypeError::UnexpectedEof { need: 16, have: 4, })"
----
-unexpected end of buffer (need 16, have 4)
