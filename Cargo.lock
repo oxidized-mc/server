@@ -1958,6 +1958,7 @@ dependencies = [
  "insta",
  "lru",
  "oxidized-commands",
+ "oxidized-inventory",
  "oxidized-nbt",
  "oxidized-protocol",
  "oxidized-registry",
@@ -1974,6 +1975,15 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "oxidized-inventory"
+version = "0.1.0"
+dependencies = [
+ "oxidized-nbt",
+ "oxidized-registry",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

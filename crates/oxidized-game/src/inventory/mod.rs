@@ -1,16 +1,25 @@
-//! Inventory system: item stacks, player inventory, and container menus.
+//! Re-exports from [`oxidized_inventory`].
 //!
-//! This module implements the full Minecraft inventory model including:
-//! - [`ItemStack`] with `DataComponentPatch` (1.20.5+ format)
-//! - [`PlayerInventory`](crate::player::inventory::PlayerInventory) with 41 slots and protocol slot mapping
-//! - `ContainerMenu` trait for container interactions (future phases)
-//! - [`MenuType`] enum for all container types
-//! - [`item_ids`] item ID mapping backed by the vanilla item registry
+//! The core inventory types have been extracted to the standalone
+//! `oxidized-inventory` crate. This module provides backward-compatible
+//! re-exports so existing `crate::inventory::*` paths continue to work.
 
-pub mod container;
-pub mod item_ids;
-pub mod item_stack;
+/// Re-exports from [`oxidized_inventory::item_stack`].
+pub mod item_stack {
+    pub use oxidized_inventory::item_stack::*;
+}
 
-pub use container::{ContainerStateId, MenuType};
-pub use item_ids::{item_id_to_name, item_name_to_id, max_stack_size_by_name};
-pub use item_stack::{DataComponentPatch, ItemError, ItemId, ItemStack};
+/// Re-exports from [`oxidized_inventory::item_ids`].
+pub mod item_ids {
+    pub use oxidized_inventory::item_ids::*;
+}
+
+/// Re-exports from [`oxidized_inventory::container`].
+pub mod container {
+    pub use oxidized_inventory::container::*;
+}
+
+pub use oxidized_inventory::{
+    ContainerStateId, DataComponentPatch, ItemError, ItemId, ItemStack, MenuType,
+    item_id_to_name, item_name_to_id, max_stack_size_by_name,
+};

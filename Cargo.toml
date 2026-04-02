@@ -104,6 +104,7 @@ oxidized-mc-types    = { git = "https://github.com/oxidized-mc/mc-types.git" }
 oxidized-chat        = { git = "https://github.com/oxidized-mc/chat.git" }
 oxidized-registry    = { path = "../registry" }
 oxidized-commands    = { path = "../commands" }
+oxidized-inventory   = { path = "../inventory" }
 
 [profile.release]
 opt-level     = 3
