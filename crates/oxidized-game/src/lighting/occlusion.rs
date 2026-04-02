@@ -17,8 +17,8 @@
 //! partial blocks. Sub-block precision (e.g., fence post outlines) is not needed
 //! because those shapes never fully cover a face.
 
-use oxidized_protocol::types::Direction;
-use oxidized_world::registry::BlockStateId;
+use oxidized_mc_types::Direction;
+use oxidized_registry::BlockStateId;
 
 /// Checks whether two adjacent block states form a full face occlusion at their
 /// shared boundary in the given direction.
@@ -69,8 +69,8 @@ pub fn get_light_block_into(from: BlockStateId, to: BlockStateId, dir: Direction
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
-    use oxidized_protocol::types::{Direction, direction};
-    use oxidized_world::registry::BlockRegistry;
+    use oxidized_mc_types::{Direction, direction};
+    use oxidized_registry::BlockRegistry;
 
     fn state(name: &str) -> BlockStateId {
         BlockRegistry

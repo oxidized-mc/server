@@ -6,10 +6,9 @@
 
 use std::time::Instant;
 
+use oxidized_codec::Packet;
 use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_game::player::movement::validate_movement;
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::ConnectionError;
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
     ClientboundForgetLevelChunkPacket, ClientboundLevelChunkWithLightPacket,
@@ -19,7 +18,8 @@ use oxidized_protocol::packets::play::{
     ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
-use oxidized_world::chunk::ChunkPos;
+use oxidized_protocol::transport::connection::ConnectionError;
+use oxidized_types::ChunkPos;
 use tracing::{debug, trace, warn};
 
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
@@ -247,8 +247,8 @@ pub async fn handle_movement(
 fn broadcast_movement(
     ctx: &PlayContext<'_>,
     entity_id: i32,
-    old_pos: oxidized_protocol::types::Vec3,
-    new_pos: oxidized_protocol::types::Vec3,
+    old_pos: oxidized_mc_types::Vec3,
+    new_pos: oxidized_mc_types::Vec3,
     _old_yaw: f32,
     _old_pitch: f32,
     new_yaw: f32,

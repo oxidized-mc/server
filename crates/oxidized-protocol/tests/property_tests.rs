@@ -5,11 +5,11 @@
 use bytes::{Bytes, BytesMut};
 use proptest::prelude::*;
 
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::codec::types;
-use oxidized_protocol::types::block_pos::BlockPos;
-use oxidized_protocol::types::chunk_pos::ChunkPos;
-use oxidized_protocol::types::section_pos::SectionPos;
+use oxidized_codec::Packet;
+use oxidized_codec::types;
+use oxidized_mc_types::block_pos::BlockPos;
+use oxidized_mc_types::section_pos::SectionPos;
+use oxidized_types::ChunkPos;
 
 // ---------------------------------------------------------------------------
 // BlockPos
@@ -578,7 +578,7 @@ proptest! {
 // LpVec3 property tests
 // ---------------------------------------------------------------------------
 
-use oxidized_protocol::codec::lp_vec3;
+use oxidized_codec::lp_vec3;
 
 proptest! {
     /// LpVec3 zero vector always encodes to a single byte.

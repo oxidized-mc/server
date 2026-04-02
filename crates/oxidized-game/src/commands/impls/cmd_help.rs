@@ -4,16 +4,16 @@
 //! Each command entry is clickable (suggests the command) and hoverable
 //! (shows the description). Pages are navigated via clickable prev/next.
 
-use crate::commands::argument_access::get_integer;
-use crate::commands::arguments::ArgumentType;
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
 use crate::commands::pagination::PaginatedMessage;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::ChatFormatting;
-use oxidized_protocol::chat::Component;
-use oxidized_protocol::chat::{ClickEvent, HoverEvent, TextColor};
+use oxidized_chat::ChatFormatting;
+use oxidized_chat::Component;
+use oxidized_chat::{ClickEvent, HoverEvent, TextColor};
+use oxidized_commands::argument_access::get_integer;
+use oxidized_commands::arguments::ArgumentType;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 
 /// Registers the `/help` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -42,7 +42,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 fn show_help(
     ctx: &CommandContext<CommandSourceStack>,
     page: usize,
-) -> Result<i32, crate::commands::CommandError> {
+) -> Result<i32, oxidized_commands::CommandError> {
     let descs = ctx.source.server.command_descriptions();
     if descs.is_empty() {
         ctx.source

@@ -5,10 +5,10 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
-use crate::types::resource_location::ResourceLocation;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
+use oxidized_mc_types::resource_location::ResourceLocation;
 
 /// Clientbound packet `0x05` in the CONFIGURATION state — update enabled features.
 ///

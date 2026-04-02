@@ -9,11 +9,11 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::codec::types;
-use crate::types::resource_location::ResourceLocation;
+use oxidized_codec::types;
+use oxidized_mc_types::resource_location::ResourceLocation;
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// Sets the world spawn position (compass target).
 ///
@@ -60,7 +60,7 @@ impl Packet for ClientboundSetDefaultSpawnPositionPacket {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::types::block_pos::BlockPos;
+    use oxidized_mc_types::block_pos::BlockPos;
 
     #[test]
     fn test_roundtrip() {

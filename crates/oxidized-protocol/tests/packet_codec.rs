@@ -5,8 +5,8 @@
 use bytes::Bytes;
 use uuid::Uuid;
 
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::codec::types;
+use oxidized_codec::Packet;
+use oxidized_codec::types;
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
 use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
 use oxidized_protocol::packets::login::{

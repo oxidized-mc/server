@@ -4,7 +4,7 @@
 //! produces a result indicating whether the movement is accepted or
 //! needs server correction.
 
-use oxidized_protocol::types::Vec3;
+use oxidized_mc_types::Vec3;
 
 /// Normalizes an angle to the range `[-180, 180)`.
 ///
@@ -73,7 +73,7 @@ pub struct MovementResult {
 ///
 /// ```
 /// use oxidized_game::player::movement::validate_movement;
-/// use oxidized_protocol::types::Vec3;
+/// use oxidized_mc_types::Vec3;
 ///
 /// // Small step — accepted
 /// let result = validate_movement(

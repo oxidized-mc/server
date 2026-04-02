@@ -4,7 +4,7 @@
 //! (closest first) and delta functions for computing which chunks to load
 //! or unload when a player moves between chunk columns.
 
-use oxidized_world::chunk::ChunkPos;
+use oxidized_types::ChunkPos;
 
 /// Iterates chunk positions in a square spiral from `center`, out to `radius`.
 ///
@@ -15,8 +15,8 @@ use oxidized_world::chunk::ChunkPos;
 /// # Examples
 ///
 /// ```
-/// use oxidized_world::chunk::ChunkPos;
 /// use oxidized_game::chunk::view_distance::spiral_chunks;
+/// use oxidized_types::ChunkPos;
 ///
 /// let chunks: Vec<ChunkPos> = spiral_chunks(ChunkPos::new(0, 0), 1).collect();
 /// assert_eq!(chunks.len(), 9); // 3×3
@@ -42,8 +42,8 @@ pub fn spiral_chunks(center: ChunkPos, radius: i32) -> impl Iterator<Item = Chun
 /// # Examples
 ///
 /// ```
-/// use oxidized_world::chunk::ChunkPos;
 /// use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload};
+/// use oxidized_types::ChunkPos;
 ///
 /// let old = ChunkPos::new(0, 0);
 /// let new = ChunkPos::new(2, 0);

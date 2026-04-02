@@ -9,16 +9,16 @@
 use std::collections::VecDeque;
 use std::time::Instant;
 
+use oxidized_auth::GameProfile;
+use oxidized_mc_types::{BlockPos, ResourceLocation, Vec3};
 use oxidized_nbt::{NbtCompound, NbtList, NbtTag, TAG_COMPOUND, TAG_DOUBLE, TAG_FLOAT};
-use oxidized_protocol::auth::GameProfile;
 use oxidized_protocol::constants::{DEFAULT_SIMULATION_DISTANCE, DEFAULT_VIEW_DISTANCE};
-use oxidized_protocol::types::{BlockPos, ResourceLocation, Vec3};
 use uuid::Uuid;
 
 use super::abilities::PlayerAbilities;
 use super::game_mode::GameMode;
 use super::inventory::PlayerInventory;
-use crate::inventory::ItemStack;
+use oxidized_inventory::ItemStack;
 
 // ---------------------------------------------------------------------------
 // Sub-structs — logical groupings extracted from ServerPlayer (R5.11).
@@ -173,8 +173,8 @@ pub struct RawPlayerNbt {
 /// ```
 /// use oxidized_game::player::ServerPlayer;
 /// use oxidized_game::player::GameMode;
-/// use oxidized_protocol::auth::GameProfile;
-/// use oxidized_protocol::types::ResourceLocation;
+/// use oxidized_auth::GameProfile;
+/// use oxidized_mc_types::ResourceLocation;
 /// use uuid::Uuid;
 ///
 /// let uuid = Uuid::nil();

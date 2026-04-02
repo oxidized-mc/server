@@ -44,6 +44,9 @@ tokio = { workspace = true }
 proptest = { workspace = true }
 insta = { workspace = true }
 criterion = { workspace = true }
+oxidized-codec = { workspace = true }
+oxidized-mc-types = { workspace = true }
+oxidized-chat = { workspace = true }
 
 [[bench]]
 name    = "codec_benchmarks"

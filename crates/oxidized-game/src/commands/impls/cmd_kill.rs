@@ -3,13 +3,13 @@
 //! TODO: Actually killing entities requires health/damage system and death
 //! event handling. Needs `ServerHandle::kill_entity()` or similar.
 
-use crate::commands::CommandError;
-use crate::commands::arguments::ArgumentType;
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
+use oxidized_commands::CommandError;
+use oxidized_commands::arguments::ArgumentType;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 
 /// Registers the `/kill` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {

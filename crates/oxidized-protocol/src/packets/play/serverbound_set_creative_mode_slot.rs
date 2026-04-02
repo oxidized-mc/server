@@ -7,9 +7,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::slot::{self, SlotData};
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::slot::{self, SlotData};
 
 /// 0x38 — Creative mode sets item in a slot.
 #[derive(Debug, Clone, PartialEq)]
@@ -41,7 +41,7 @@ impl Packet for ServerboundSetCreativeModeSlotPacket {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::codec::slot::ComponentPatchData;
+    use oxidized_codec::slot::ComponentPatchData;
 
     #[test]
     fn test_roundtrip_with_item() {

@@ -2,9 +2,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::chat::Component;
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_chat::Component;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// 0x79 — System chat message (no signature, no player sender).
 #[derive(Debug, Clone, PartialEq)]
@@ -117,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_styled_component_roundtrip() {
-        use crate::chat::{ChatFormatting, TextColor};
+        use oxidized_chat::{ChatFormatting, TextColor};
 
         let pkt = ClientboundSystemChatPacket {
             content: Component::text("Warning!")

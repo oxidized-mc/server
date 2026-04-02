@@ -1878,7 +1878,6 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 [[package]]
 name = "oxidized-auth"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/auth.git#0b44e91da89e3fd1919825fafbb140d383d07909"
 dependencies = [
  "reqwest",
  "serde",
@@ -1891,7 +1890,6 @@ dependencies = [
 [[package]]
 name = "oxidized-chat"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/chat.git#90ad3187fd5821a9aaeb935176174441404583da"
 dependencies = [
  "oxidized-mc-types",
  "oxidized-nbt",
@@ -1902,7 +1900,6 @@ dependencies = [
 [[package]]
 name = "oxidized-codec"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/codec.git#20880ae4d930a0b29d6217c165fe9cd2dc76053c"
 dependencies = [
  "bytes",
  "oxidized-nbt",
@@ -1923,7 +1920,6 @@ dependencies = [
 [[package]]
 name = "oxidized-compression"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/compression.git#e3f77dbe6cfb19e9d54ac8fa9836b8d843c2aebe"
 dependencies = [
  "flate2",
  "thiserror 2.0.18",
@@ -1932,7 +1928,6 @@ dependencies = [
 [[package]]
 name = "oxidized-crypto"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/crypto.git#afe42b7a8fc7d1cac59f0002b5a84fe80a29babf"
 dependencies = [
  "aes",
  "md-5 0.11.0",
@@ -1957,11 +1952,16 @@ dependencies = [
  "indexmap",
  "insta",
  "lru",
+ "oxidized-auth",
+ "oxidized-chat",
+ "oxidized-codec",
  "oxidized-commands",
  "oxidized-inventory",
+ "oxidized-mc-types",
  "oxidized-nbt",
  "oxidized-protocol",
  "oxidized-registry",
+ "oxidized-types",
  "oxidized-world",
  "parking_lot",
  "proptest",
@@ -1998,7 +1998,6 @@ dependencies = [
 [[package]]
 name = "oxidized-mc-types"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/mc-types.git#520e4a2990432744d9985bcf9b5b5cf1cea2521e"
 dependencies = [
  "bytes",
  "oxidized-codec",
@@ -2009,7 +2008,6 @@ dependencies = [
 [[package]]
 name = "oxidized-nbt"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/nbt.git#fc4a249a3b36ebe370630fc3ebcbd68e17069879"
 dependencies = [
  "bytes",
  "flate2",
@@ -2077,9 +2075,19 @@ dependencies = [
  "glam 0.32.1",
  "insta",
  "mimalloc",
+ "oxidized-auth",
+ "oxidized-chat",
+ "oxidized-codec",
+ "oxidized-commands",
+ "oxidized-crypto",
  "oxidized-game",
+ "oxidized-inventory",
+ "oxidized-mc-types",
  "oxidized-nbt",
  "oxidized-protocol",
+ "oxidized-registry",
+ "oxidized-transport",
+ "oxidized-types",
  "oxidized-world",
  "parking_lot",
  "proptest",
@@ -2099,9 +2107,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxidized-transport"
+version = "0.1.0"
+
+[[package]]
 name = "oxidized-types"
 version = "0.1.0"
-source = "git+https://github.com/oxidized-mc/types.git#bc330d15759b86baaea59655b9f5a4f3890f706d"
 
 [[package]]
 name = "oxidized-world"

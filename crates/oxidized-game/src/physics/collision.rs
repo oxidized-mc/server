@@ -5,8 +5,8 @@
 //! order is movement-dependent: Y is always first, then X and Z are ordered
 //! by which has the larger absolute movement (matching `Direction.axisStepOrder`).
 
-use oxidized_protocol::types::BlockPos;
-use oxidized_protocol::types::aabb::Aabb;
+use oxidized_mc_types::BlockPos;
+use oxidized_mc_types::aabb::Aabb;
 
 use super::voxel_shape::BlockShapeProvider;
 use crate::level::traits::BlockGetter;

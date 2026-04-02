@@ -3,11 +3,11 @@
 //! Handles player commands (sprint, elytra) and input (sneak, sprint),
 //! broadcasting entity metadata changes to other players.
 
+use oxidized_codec::Packet;
 use oxidized_game::entity::data_slots::{
     DATA_POSE, DATA_SHARED_FLAGS, FLAG_CROUCHING, FLAG_FALL_FLYING, FLAG_SPRINTING,
 };
 use oxidized_game::player::ServerPlayer;
-use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::clientbound_set_entity_data::EntityDataEntry;
 use oxidized_protocol::packets::play::{
     ClientboundSetEntityDataPacket, PlayerCommandAction, ServerboundPlayerCommandPacket,
@@ -143,7 +143,7 @@ pub(super) fn handle_player_input(ctx: &PlayContext<'_>, data: bytes::Bytes) {
             // Pose: 5 = sneaking, 0 = standing.
             let pose: i32 = if new_sneaking { 5 } else { 0 };
             let mut pose_bytes = bytes::BytesMut::new();
-            oxidized_protocol::codec::varint::write_varint_buf(pose, &mut pose_bytes);
+            oxidized_codec::varint::write_varint_buf(pose, &mut pose_bytes);
 
             let pkt = ClientboundSetEntityDataPacket {
                 entity_id,

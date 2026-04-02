@@ -18,6 +18,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::{DashMap, DashSet};
+use oxidized_chat::Component;
+use oxidized_crypto::ServerKeyPair;
 use oxidized_game::commands::Commands;
 use oxidized_game::commands::source::ServerHandle;
 use oxidized_game::event::EventBus;
@@ -26,14 +28,13 @@ use oxidized_game::level::tick_rate::ServerTickRateManager;
 use oxidized_game::level::weather::WeatherType;
 use oxidized_game::lighting::world_lighting::WorldLighting;
 use oxidized_game::worldgen::ChunkGenerator;
-use oxidized_protocol::chat::Component;
-use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
-use oxidized_protocol::crypto::ServerKeyPair;
+use oxidized_mc_types::resource_location::ResourceLocation;
 use oxidized_protocol::status::ServerStatus;
-use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_protocol::transport::connection::{Connection, ConnectionError, ConnectionState};
+use oxidized_registry::BlockRegistry;
+use oxidized_types::ChunkPos;
 use oxidized_world::anvil::{AsyncChunkLoader, ChunkSerializer};
-use oxidized_world::chunk::{ChunkPos, LevelChunk};
-use oxidized_world::registry::BlockRegistry;
+use oxidized_world::chunk::LevelChunk;
 use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
 use parking_lot::{Mutex, RwLock};
 use tokio::net::TcpListener;
@@ -189,7 +190,7 @@ impl ServerContext {
     /// Vanilla calls this `sendPlayerPermissionLevel` — event IDs 24–28
     /// correspond to permission levels 0–4.
     fn send_permission_level_update(&self, uuid: uuid::Uuid) {
-        use oxidized_protocol::codec::Packet;
+        use oxidized_codec::Packet;
         use oxidized_protocol::packets::play::ClientboundEntityEventPacket;
 
         let entity_id = {
@@ -217,7 +218,7 @@ impl ServerContext {
     /// Resends the command tree to a player so visible commands update
     /// after a permission level change.
     fn send_command_tree_update(&self, uuid: uuid::Uuid) {
-        use oxidized_protocol::codec::Packet;
+        use oxidized_codec::Packet;
 
         let (entity_id, player_name) = {
             let player_list = self.network.player_list.read();
@@ -240,8 +241,8 @@ impl ServerContext {
             warn!("cannot send command tree update: ServerContext dropped or not initialised");
             return;
         };
-        let source = oxidized_game::commands::CommandSourceStack {
-            source: oxidized_game::commands::CommandSourceKind::Player {
+        let source = oxidized_game::commands::source::CommandSourceStack {
+            source: oxidized_game::commands::source::CommandSourceKind::Player {
                 name: player_name.clone(),
                 uuid,
             },
@@ -360,7 +361,7 @@ impl ServerHandle for ServerContext {
     }
 
     fn broadcast_chat(&self, message: &Component) {
-        use oxidized_protocol::codec::Packet;
+        use oxidized_codec::Packet;
         use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
 
         let pkt = ClientboundSystemChatPacket {
@@ -387,7 +388,7 @@ impl ServerHandle for ServerContext {
     }
 
     fn set_weather(&self, weather: WeatherType, duration: Option<i32>) {
-        use oxidized_protocol::codec::Packet;
+        use oxidized_codec::Packet;
         use oxidized_protocol::packets::play::{ClientboundGameEventPacket, GameEventType};
 
         let was_raining;
@@ -486,7 +487,7 @@ impl ServerHandle for ServerContext {
     }
 
     fn broadcast_tick_state(&self) {
-        use oxidized_protocol::codec::Packet;
+        use oxidized_codec::Packet;
         use oxidized_protocol::packets::play::ClientboundTickingStatePacket;
 
         let mgr = self.tick_rate_manager.read();
@@ -509,8 +510,8 @@ impl ServerHandle for ServerContext {
         uuid: uuid::Uuid,
         mode: oxidized_game::player::game_mode::GameMode,
     ) -> bool {
+        use oxidized_codec::Packet;
         use oxidized_game::player::abilities::PlayerAbilities;
-        use oxidized_protocol::codec::Packet;
         use oxidized_protocol::packets::play::{
             ClientboundGameEventPacket, ClientboundPlayerAbilitiesPacket,
             ClientboundPlayerInfoUpdatePacket, GameEventType, PlayerInfoActions, PlayerInfoEntry,
@@ -594,7 +595,7 @@ impl ServerHandle for ServerContext {
     }
 
     fn send_system_message_to_player(&self, uuid: uuid::Uuid, message: &Component) {
-        use oxidized_protocol::codec::Packet;
+        use oxidized_codec::Packet;
         use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
 
         let entity_id = {
@@ -619,9 +620,9 @@ impl ServerHandle for ServerContext {
     }
 
     fn set_block(&self, x: i32, y: i32, z: i32, block_name: &str) -> bool {
-        use oxidized_protocol::codec::Packet;
+        use oxidized_codec::Packet;
+        use oxidized_mc_types::BlockPos;
         use oxidized_protocol::packets::play::ClientboundBlockUpdatePacket;
-        use oxidized_protocol::types::BlockPos;
 
         let state_id = match self.world.block_registry.default_state(block_name) {
             Some(id) => u32::from(id.0),
@@ -977,10 +978,11 @@ async fn handle_connection(
 mod tests {
     use super::*;
     use bytes::BytesMut;
-    use oxidized_protocol::codec::Packet;
-    use oxidized_protocol::codec::{frame, varint};
+    use oxidized_chat::Component;
+    use oxidized_codec::Packet;
+    use oxidized_codec::{frame, varint};
+    use oxidized_crypto::ServerKeyPair;
     use oxidized_protocol::constants;
-    use oxidized_protocol::crypto::ServerKeyPair;
     use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
     use oxidized_protocol::packets::status::{
         ClientboundPongResponsePacket, ClientboundStatusResponsePacket,
@@ -988,7 +990,7 @@ mod tests {
     use oxidized_protocol::packets::status::{
         ServerboundPingRequestPacket, ServerboundStatusRequestPacket,
     };
-    use oxidized_protocol::status::{Component, StatusPlayers, StatusVersion};
+    use oxidized_protocol::status::{StatusPlayers, StatusVersion};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
 
@@ -1091,10 +1093,9 @@ mod tests {
 
     /// Reads one framed packet and returns (packet_id, body).
     async fn read_packet(stream: &mut TcpStream) -> (i32, bytes::Bytes) {
-        let frame_data =
-            frame::read_frame(stream, oxidized_protocol::codec::frame::MAX_PACKET_SIZE)
-                .await
-                .unwrap();
+        let frame_data = frame::read_frame(stream, oxidized_codec::frame::MAX_PACKET_SIZE)
+            .await
+            .unwrap();
         let mut buf = frame_data;
         let id = varint::read_varint_buf(&mut buf).unwrap();
         (id, buf)
@@ -1144,7 +1145,7 @@ mod tests {
         assert_eq!(resp_id, ClientboundStatusResponsePacket::PACKET_ID);
 
         // Parse the response JSON string
-        use oxidized_protocol::codec::types;
+        use oxidized_codec::types;
         let mut resp_data = resp_body;
         let json_str = types::read_string(&mut resp_data, 32767).unwrap();
         let json: serde_json::Value = serde_json::from_str(&json_str).unwrap();
@@ -1155,7 +1156,7 @@ mod tests {
         // 4. Send ping request
         let ping_time: i64 = 1_719_000_000_000;
         let mut ping_body = BytesMut::new();
-        oxidized_protocol::codec::types::write_i64(&mut ping_body, ping_time);
+        oxidized_codec::types::write_i64(&mut ping_body, ping_time);
         send_packet(
             &mut client,
             ServerboundPingRequestPacket::PACKET_ID,
@@ -1223,7 +1224,7 @@ mod tests {
         let (resp_id, resp_body) = read_packet(&mut client).await;
         assert_eq!(resp_id, ClientboundStatusResponsePacket::PACKET_ID);
 
-        use oxidized_protocol::codec::types;
+        use oxidized_codec::types;
         let mut resp_data = resp_body;
         let json_str = types::read_string(&mut resp_data, 32767).unwrap();
         let json: serde_json::Value = serde_json::from_str(&json_str).unwrap();

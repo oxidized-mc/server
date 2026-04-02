@@ -9,7 +9,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use oxidized_protocol::codec::Packet;
+use oxidized_codec::Packet;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Generic roundtrip helper
@@ -176,13 +176,13 @@ fn roundtrip_login_acknowledged() {
 // Configuration state
 // ═══════════════════════════════════════════════════════════════════════════
 
+use oxidized_mc_types::resource_location::ResourceLocation;
 use oxidized_protocol::packets::configuration::{
     ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
     ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket,
     ClientboundUpdateTagsPacket, KnownPack, RegistryEntry, ServerboundClientInformationPacket,
     ServerboundFinishConfigurationPacket, ServerboundSelectKnownPacksPacket, TagEntry, TagRegistry,
 };
-use oxidized_protocol::types::resource_location::ResourceLocation;
 
 #[test]
 fn roundtrip_finish_configuration_clientbound() {
@@ -467,7 +467,7 @@ fn roundtrip_delete_chat_by_index() {
 // Play state — chat packets
 // ═══════════════════════════════════════════════════════════════════════════
 
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
 use oxidized_protocol::packets::play::{
     ClientboundCommandSuggestionsPacket, ClientboundSystemChatPacket, SuggestionEntry,
 };

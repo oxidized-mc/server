@@ -7,13 +7,14 @@
 //!
 //! [`generate_chunk`]: FlatChunkGenerator::generate_chunk
 
+use oxidized_registry::{PLAINS_BIOME_ID, biome_name_to_id};
+use oxidized_types::ChunkPos;
+use oxidized_world::chunk::LevelChunk;
 use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
 use oxidized_world::chunk::level_chunk::{
     OVERWORLD_HEIGHT, OVERWORLD_MIN_Y, OVERWORLD_SECTION_COUNT,
 };
 use oxidized_world::chunk::section::LevelChunkSection;
-use oxidized_world::chunk::{ChunkPos, LevelChunk};
-use oxidized_world::registry::{PLAINS_BIOME_ID, biome_name_to_id};
 
 use super::config::FlatWorldConfig;
 use crate::lighting::block_light::initialize_block_light;
@@ -140,8 +141,8 @@ fn fill_section_biome(section: &mut LevelChunkSection, biome_id: u32) {
 ///
 /// ```
 /// use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
+/// use oxidized_types::ChunkPos;
 /// use oxidized_game::worldgen::ChunkGenerator;
-/// use oxidized_world::chunk::ChunkPos;
 ///
 /// let generator = FlatChunkGenerator::new(FlatWorldConfig::default());
 /// let chunk = generator.generate_chunk(ChunkPos::new(0, 0));
@@ -221,8 +222,8 @@ impl ChunkGenerator for FlatChunkGenerator {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use oxidized_registry::{BEDROCK, DIRT, GRASS_BLOCK, SAND, STONE};
     use oxidized_world::chunk::heightmap::HeightmapType;
-    use oxidized_world::registry::{BEDROCK, DIRT, GRASS_BLOCK, SAND, STONE};
 
     use super::*;
 

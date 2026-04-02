@@ -17,8 +17,8 @@ use super::components::{
 use super::data_slots::*;
 use super::markers::{CowMarker, CreeperMarker, SkeletonMarker, ZombieMarker};
 use super::synched_data::{DataSerializerType, SynchedEntityData};
-use oxidized_protocol::types::aabb::Aabb;
-use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_mc_types::aabb::Aabb;
+use oxidized_mc_types::resource_location::ResourceLocation;
 
 /// Creates a base `SynchedEntityData` with the 8 standard entity data
 /// slots (matching `Entity.java` constructor).
@@ -284,8 +284,8 @@ impl PlayerBundle {
         use crate::player::GameMode;
         use crate::player::abilities::PlayerAbilities;
         use crate::player::inventory::PlayerInventory;
-        use oxidized_protocol::auth::GameProfile;
-        use oxidized_protocol::types::BlockPos;
+        use oxidized_auth::GameProfile;
+        use oxidized_mc_types::BlockPos;
 
         Self {
             living: LivingEntityBundle::new(
@@ -343,7 +343,7 @@ impl PlayerBundle {
     pub fn from_spawn_data(
         network_id: i32,
         uuid: Uuid,
-        profile: oxidized_protocol::auth::GameProfile,
+        profile: oxidized_auth::GameProfile,
         position: DVec3,
         rotation: (f32, f32),
         game_mode: crate::player::GameMode,
@@ -391,7 +391,7 @@ mod tests {
 
     use super::*;
     use crate::entity::markers::CowMarker;
-    use oxidized_protocol::types::resource_location::ResourceLocation;
+    use oxidized_mc_types::resource_location::ResourceLocation;
 
     #[test]
     fn test_base_bundle_creates_all_components() {
@@ -581,8 +581,8 @@ mod tests {
     fn test_player_from_spawn_data() {
         use crate::player::GameMode;
         use crate::player::inventory::PlayerInventory;
-        use oxidized_protocol::auth::GameProfile;
-        use oxidized_protocol::types::BlockPos;
+        use oxidized_auth::GameProfile;
+        use oxidized_mc_types::BlockPos;
 
         let mut world = World::new();
         let uuid = uuid::Uuid::new_v4();

@@ -6,8 +6,8 @@
 use std::io::Write;
 use std::sync::Arc;
 
+use oxidized_chat::Component;
 use oxidized_game::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
-use oxidized_protocol::chat::Component;
 use rustyline::completion::{Completer, Pair};
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;

@@ -27,9 +27,9 @@ use uuid::Uuid;
 use self::data_slots::*;
 use self::id::next_entity_id;
 use self::synched_data::{DataSerializerType, SynchedEntityData};
-use oxidized_protocol::types::Vec3;
-use oxidized_protocol::types::aabb::Aabb;
-use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_mc_types::Vec3;
+use oxidized_mc_types::aabb::Aabb;
+use oxidized_mc_types::resource_location::ResourceLocation;
 
 /// Entity rotation in degrees (yaw, pitch, and head yaw).
 ///
@@ -76,7 +76,7 @@ pub struct EntityDimensions {
 ///
 /// ```
 /// use oxidized_game::entity::Entity;
-/// use oxidized_protocol::types::resource_location::ResourceLocation;
+/// use oxidized_mc_types::resource_location::ResourceLocation;
 ///
 /// let mut entity = Entity::new(
 ///     ResourceLocation::minecraft("cow"),

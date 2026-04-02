@@ -6,9 +6,9 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
 /// 0x2C — Keepalive ping from server to client.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientboundKeepAlivePacket {

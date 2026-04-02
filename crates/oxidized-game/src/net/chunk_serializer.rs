@@ -66,8 +66,8 @@ fn build_heightmap_entries(chunk: &LevelChunk) -> Vec<HeightmapEntry> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use oxidized_protocol::codec::Packet;
-    use oxidized_world::chunk::ChunkPos;
+    use oxidized_codec::Packet;
+    use oxidized_types::ChunkPos;
     use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
     use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
 

@@ -5,10 +5,10 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
-use crate::codec::varint;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
+use oxidized_codec::varint;
 
 /// The client's declared intent after the handshake.
 ///
@@ -51,7 +51,7 @@ impl ClientIntent {
 ///
 /// ```rust,ignore
 /// use oxidized_protocol::packets::handshake::{ClientIntentionPacket, ClientIntent};
-/// use oxidized_protocol::codec::Packet;
+/// use oxidized_codec::Packet;
 ///
 /// let packet = ClientIntentionPacket {
 ///     protocol_version: 775,

@@ -6,12 +6,12 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::auth::ProfileProperty;
-use crate::codec::types;
-use crate::codec::varint;
+use oxidized_auth::ProfileProperty;
+use oxidized_codec::types;
+use oxidized_codec::varint;
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// Action flags indicating which fields are present in each entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

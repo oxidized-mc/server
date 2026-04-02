@@ -234,7 +234,7 @@ mod tests {
         tx.try_send(EntityCommand::SpawnPlayer {
             network_id: 42,
             uuid,
-            profile: oxidized_protocol::auth::GameProfile::new(uuid, "test".into()),
+            profile: oxidized_auth::GameProfile::new(uuid, "test".into()),
             position: glam::DVec3::new(0.0, 64.0, 0.0),
             rotation: (90.0, 0.0),
             game_mode: oxidized_game::player::GameMode::Survival,
@@ -247,10 +247,10 @@ mod tests {
                 total: 0,
             },
             spawn_data: oxidized_game::entity::components::SpawnData {
-                dimension: oxidized_protocol::types::resource_location::ResourceLocation::minecraft(
+                dimension: oxidized_mc_types::resource_location::ResourceLocation::minecraft(
                     "overworld",
                 ),
-                spawn_pos: oxidized_protocol::types::BlockPos::new(0, 64, 0),
+                spawn_pos: oxidized_mc_types::BlockPos::new(0, 64, 0),
                 spawn_angle: 0.0,
             },
         })
@@ -317,7 +317,7 @@ mod tests {
         tx.try_send(EntityCommand::SpawnPlayer {
             network_id: 1,
             uuid,
-            profile: oxidized_protocol::auth::GameProfile::new(uuid, "test".into()),
+            profile: oxidized_auth::GameProfile::new(uuid, "test".into()),
             position: glam::DVec3::ZERO,
             rotation: (0.0, 0.0),
             game_mode: oxidized_game::player::GameMode::Survival,
@@ -330,10 +330,10 @@ mod tests {
                 total: 0,
             },
             spawn_data: oxidized_game::entity::components::SpawnData {
-                dimension: oxidized_protocol::types::resource_location::ResourceLocation::minecraft(
+                dimension: oxidized_mc_types::resource_location::ResourceLocation::minecraft(
                     "overworld",
                 ),
-                spawn_pos: oxidized_protocol::types::BlockPos::new(0, 64, 0),
+                spawn_pos: oxidized_mc_types::BlockPos::new(0, 64, 0),
                 spawn_angle: 0.0,
             },
         })
@@ -375,7 +375,7 @@ mod tests {
         tx.try_send(EntityCommand::SpawnPlayer {
             network_id: 1,
             uuid,
-            profile: oxidized_protocol::auth::GameProfile::new(uuid, "test".into()),
+            profile: oxidized_auth::GameProfile::new(uuid, "test".into()),
             position: glam::DVec3::ZERO,
             rotation: (0.0, 0.0),
             game_mode: oxidized_game::player::GameMode::Survival,
@@ -388,10 +388,10 @@ mod tests {
                 total: 0,
             },
             spawn_data: oxidized_game::entity::components::SpawnData {
-                dimension: oxidized_protocol::types::resource_location::ResourceLocation::minecraft(
+                dimension: oxidized_mc_types::resource_location::ResourceLocation::minecraft(
                     "overworld",
                 ),
-                spawn_pos: oxidized_protocol::types::BlockPos::new(0, 64, 0),
+                spawn_pos: oxidized_mc_types::BlockPos::new(0, 64, 0),
                 spawn_angle: 0.0,
             },
         })

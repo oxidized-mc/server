@@ -1,10 +1,10 @@
 //! `/stop` command — shuts down the server.
 
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::literal;
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::literal;
 
 /// Registers the `/stop` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {

@@ -2,11 +2,11 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::chat::Component;
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
+use oxidized_chat::Component;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::varint;
 
 /// 0x21 — Disguised chat (chat type + sender name, no UUID/signature).
 #[derive(Debug, Clone, PartialEq)]

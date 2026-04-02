@@ -8,6 +8,8 @@
 
 use std::collections::HashSet;
 
+use oxidized_auth::GameProfile;
+use oxidized_codec::Packet;
 use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload, spiral_chunks};
 use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
@@ -16,17 +18,15 @@ use oxidized_game::player::game_mode::GameMode;
 use oxidized_game::player::login::build_login_sequence;
 use oxidized_game::player::player_list::PlayerList;
 use oxidized_game::player::server_player::ServerPlayer;
+use oxidized_mc_types::ResourceLocation;
 use oxidized_nbt::NbtCompound;
-use oxidized_protocol::auth::GameProfile;
-use oxidized_protocol::codec::Packet;
 use oxidized_protocol::packets::play::{
     ClientboundChangeDifficultyPacket, ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket,
     ClientboundPlayerInfoUpdatePacket, ClientboundPlayerPositionPacket,
     ClientboundSetChunkCacheCenterPacket, ClientboundSetHeldSlotPacket,
     ClientboundSetSimulationDistancePacket,
 };
-use oxidized_protocol::types::ResourceLocation;
-use oxidized_world::chunk::ChunkPos;
+use oxidized_types::ChunkPos;
 use oxidized_world::chunk::{DataLayer, LevelChunk};
 use oxidized_world::storage::PrimaryLevelData;
 use uuid::Uuid;
@@ -423,7 +423,7 @@ fn test_chunk_tracker_large_jump() {
 #[test]
 fn test_movement_validation_normal_walk() {
     use oxidized_game::player::movement::validate_movement;
-    use oxidized_protocol::types::Vec3;
+    use oxidized_mc_types::Vec3;
 
     // Simulate a normal walking step: 0.1 blocks forward
     let current = Vec3::new(100.0, 64.0, -50.0);
@@ -447,7 +447,7 @@ fn test_movement_validation_normal_walk() {
 #[test]
 fn test_movement_validation_too_fast_triggers_correction() {
     use oxidized_game::player::movement::validate_movement;
-    use oxidized_protocol::types::Vec3;
+    use oxidized_mc_types::Vec3;
 
     // Attempt to teleport 200 blocks — must be rejected
     let result = validate_movement(
@@ -468,7 +468,7 @@ fn test_movement_validation_too_fast_triggers_correction() {
 #[test]
 fn test_movement_validation_preserves_unchanged_fields() {
     use oxidized_game::player::movement::validate_movement;
-    use oxidized_protocol::types::Vec3;
+    use oxidized_mc_types::Vec3;
 
     // Rotation-only update: position should not change
     let current = Vec3::new(42.0, 100.0, -7.5);
@@ -572,16 +572,16 @@ fn test_teleport_accept_correct_id() {
 
     let uuid = uuid::Uuid::new_v4();
     let profile = GameProfile::new(uuid, "TeleportTest".into());
-    let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
+    let dim = oxidized_mc_types::resource_location::ResourceLocation::minecraft("overworld");
     let mut player = ServerPlayer::new(1, profile, dim, GameMode::Survival);
     player
         .teleport
         .pending
-        .push_back((42, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
+        .push_back((42, oxidized_mc_types::Vec3::ZERO, Instant::now()));
     player
         .teleport
         .pending
-        .push_back((43, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
+        .push_back((43, oxidized_mc_types::Vec3::ZERO, Instant::now()));
 
     assert!(
         handle_accept_teleportation(&mut player, 42),
@@ -598,12 +598,12 @@ fn test_teleport_accept_wrong_id_fails() {
 
     let uuid = uuid::Uuid::new_v4();
     let profile = GameProfile::new(uuid, "TeleportTest2".into());
-    let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
+    let dim = oxidized_mc_types::resource_location::ResourceLocation::minecraft("overworld");
     let mut player = ServerPlayer::new(2, profile, dim, GameMode::Survival);
     player
         .teleport
         .pending
-        .push_back((10, oxidized_protocol::types::Vec3::ZERO, Instant::now()));
+        .push_back((10, oxidized_mc_types::Vec3::ZERO, Instant::now()));
 
     assert!(
         !handle_accept_teleportation(&mut player, 99),
@@ -622,7 +622,7 @@ fn test_teleport_accept_empty_queue_fails() {
 
     let uuid = uuid::Uuid::new_v4();
     let profile = GameProfile::new(uuid, "TeleportTest3".into());
-    let dim = oxidized_protocol::types::resource_location::ResourceLocation::minecraft("overworld");
+    let dim = oxidized_mc_types::resource_location::ResourceLocation::minecraft("overworld");
     let mut player = ServerPlayer::new(3, profile, dim, GameMode::Survival);
 
     assert!(
@@ -648,7 +648,7 @@ use oxidized_game::entity::tracker::{
 #[test]
 fn test_entity_create_full_lifecycle() {
     let mut entity = Entity::new(
-        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("pig"),
+        oxidized_mc_types::resource_location::ResourceLocation::minecraft("pig"),
         0.9,
         0.9,
     );
@@ -711,17 +711,17 @@ fn test_synched_data_dirty_lifecycle() {
 #[test]
 fn test_multiple_entities_independent() {
     let e1 = Entity::new(
-        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("cow"),
+        oxidized_mc_types::resource_location::ResourceLocation::minecraft("cow"),
         0.9,
         1.4,
     );
     let e2 = Entity::new(
-        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("zombie"),
+        oxidized_mc_types::resource_location::ResourceLocation::minecraft("zombie"),
         0.6,
         1.95,
     );
     let e3 = Entity::new(
-        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("creeper"),
+        oxidized_mc_types::resource_location::ResourceLocation::minecraft("creeper"),
         0.6,
         1.7,
     );
@@ -782,12 +782,12 @@ fn test_tracker_full_workflow() {
 #[test]
 fn test_aabb_entity_collision() {
     let mut e1 = Entity::new(
-        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("cow"),
+        oxidized_mc_types::resource_location::ResourceLocation::minecraft("cow"),
         0.9,
         1.4,
     );
     let mut e2 = Entity::new(
-        oxidized_protocol::types::resource_location::ResourceLocation::minecraft("pig"),
+        oxidized_mc_types::resource_location::ResourceLocation::minecraft("pig"),
         0.9,
         0.9,
     );
@@ -855,8 +855,8 @@ fn test_tracking_range_boundary_conditions() {
 
 use oxidized_game::worldgen::ChunkGenerator;
 use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
+use oxidized_registry::{BEDROCK, DIRT, GRASS_BLOCK};
 use oxidized_world::chunk::heightmap::HeightmapType;
-use oxidized_world::registry::{BEDROCK, DIRT, GRASS_BLOCK};
 
 /// A full generate→serialize round-trip: the generated chunk must produce a
 /// valid chunk packet that the client can decode (non-empty, starts with
@@ -942,7 +942,7 @@ fn flat_spawn_y_is_above_surface() {
 /// Custom layer config produces correct blocks.
 #[test]
 fn flat_custom_layers_generate_correctly() {
-    use oxidized_world::registry::SAND;
+    use oxidized_registry::SAND;
 
     let config = FlatWorldConfig::from_layers(&[(BEDROCK, 1), (SAND, 5)]);
     let generator = FlatChunkGenerator::new(config);
@@ -989,21 +989,21 @@ fn biome_ids_match_protocol_registry_order() {
             .expect("biome registry should load");
 
     let protocol_count = protocol_entries.len();
-    let world_count = oxidized_world::registry::biome_count();
+    let world_count = oxidized_registry::biome_count();
     assert_eq!(
         protocol_count, world_count,
         "protocol biome count ({protocol_count}) != world biome count ({world_count})"
     );
 
     for (idx, (protocol_name, _)) in protocol_entries.iter().enumerate() {
-        let world_id = oxidized_world::registry::biome_name_to_id(protocol_name);
+        let world_id = oxidized_registry::biome_name_to_id(protocol_name);
         assert_eq!(
             world_id,
             Some(idx as u32),
             "biome {protocol_name}: protocol index={idx} but world ID={world_id:?}"
         );
 
-        let world_name = oxidized_world::registry::biome_id_to_name(idx as u32);
+        let world_name = oxidized_registry::biome_id_to_name(idx as u32);
         assert_eq!(
             world_name,
             Some(protocol_name.as_str()),
@@ -1020,11 +1020,12 @@ mod cross_chunk_light {
     };
     use oxidized_game::lighting::engine::LightEngine;
     use oxidized_game::lighting::queue::LightUpdate;
-    use oxidized_protocol::types::BlockPos;
+    use oxidized_mc_types::BlockPos;
+    use oxidized_registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
+    use oxidized_types::ChunkPos;
+    use oxidized_world::chunk::LevelChunk;
     use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
     use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
-    use oxidized_world::chunk::{ChunkPos, LevelChunk};
-    use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
 
     fn flat_chunk(pos: ChunkPos) -> LevelChunk {
         let mut chunk = LevelChunk::new(pos);
@@ -1271,11 +1272,12 @@ mod world_lighting_integration {
     use oxidized_game::lighting::engine::LightEngine;
     use oxidized_game::lighting::queue::LightUpdate;
     use oxidized_game::lighting::world_lighting::WorldLighting;
-    use oxidized_protocol::types::BlockPos;
+    use oxidized_mc_types::BlockPos;
+    use oxidized_registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
+    use oxidized_types::ChunkPos;
+    use oxidized_world::chunk::LevelChunk;
     use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
     use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
-    use oxidized_world::chunk::{ChunkPos, LevelChunk};
-    use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
 
     fn flat_chunk(pos: ChunkPos) -> LevelChunk {
         let mut chunk = LevelChunk::new(pos);

@@ -5,7 +5,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use oxidized_protocol::codec::varint::{decode_varint, decode_varlong};
+use oxidized_codec::varint::{decode_varint, decode_varlong};
 
 fuzz_target!(|data: &[u8]| {
     let _ = decode_varint(data);

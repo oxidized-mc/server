@@ -5,10 +5,10 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
-use crate::types::BlockPos;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
+use oxidized_mc_types::BlockPos;
 
 /// Maximum characters per sign line (protocol limit).
 const MAX_LINE_LENGTH: usize = 384;

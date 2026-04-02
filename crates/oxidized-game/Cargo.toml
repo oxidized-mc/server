@@ -17,6 +17,11 @@ oxidized-protocol = { workspace = true }
 oxidized-registry = { workspace = true }
 oxidized-commands = { workspace = true }
 oxidized-inventory = { workspace = true }
+oxidized-auth     = { workspace = true }
+oxidized-mc-types = { workspace = true }
+oxidized-codec    = { workspace = true }
+oxidized-chat     = { workspace = true }
+oxidized-types    = { workspace = true }
 
 bevy_ecs     = { workspace = true }
 bytes        = { workspace = true }

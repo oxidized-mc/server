@@ -9,9 +9,9 @@
 //! O(1) access to block metadata and property transitions.
 //!
 //! [`ServerLevel`]: super::ServerLevel
-//! [`BlockStateId`]: oxidized_world::registry::BlockStateId
+//! [`BlockStateId`]: oxidized_registry::BlockStateId
 
-use oxidized_protocol::types::BlockPos;
+use oxidized_mc_types::BlockPos;
 
 use super::error::LevelError;
 use super::flags::BlockFlags;

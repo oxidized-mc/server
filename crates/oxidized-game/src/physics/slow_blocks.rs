@@ -4,12 +4,12 @@
 //! This module provides lookup functions that read physics properties
 //! directly from the block registry via [`BlockStateId`].
 //!
-//! [`BlockStateId`]: oxidized_world::registry::BlockStateId
+//! [`BlockStateId`]: oxidized_registry::BlockStateId
 
 use crate::level::traits::BlockGetter;
 
-use oxidized_protocol::types::BlockPos;
-use oxidized_world::registry::BlockStateId;
+use oxidized_mc_types::BlockPos;
+use oxidized_registry::BlockStateId;
 
 /// Returns the speed multiplier for the block at the entity's feet.
 ///
@@ -55,7 +55,7 @@ mod tests {
 
     use super::*;
     use crate::level::error::LevelError;
-    use oxidized_world::registry::BlockRegistry;
+    use oxidized_registry::BlockRegistry;
 
     struct EmptyLevel;
 

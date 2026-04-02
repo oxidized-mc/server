@@ -363,7 +363,7 @@ impl DirtyDataValue<'_> {
             DataSerializerType::Int | DataSerializerType::Pose => {
                 if let Some(&v) = self.value.downcast_ref::<i32>() {
                     let mut buf = BytesMut::with_capacity(5);
-                    oxidized_protocol::codec::varint::write_varint_buf(v, &mut buf);
+                    oxidized_codec::varint::write_varint_buf(v, &mut buf);
                     buf.to_vec()
                 } else {
                     Vec::new()

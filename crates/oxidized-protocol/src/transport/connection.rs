@@ -17,12 +17,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 
-use super::compression::{CompressionError, CompressionState, Compressor, Decompressor};
-use super::crypto::{CipherState, DecryptCipher, EncryptCipher};
 use super::handle::HandleError;
-use crate::codec::frame::{self, FrameError, MAX_PACKET_SIZE};
-use crate::codec::packet::{Packet, PacketDecodeError};
-use crate::codec::varint::{self, VarIntError};
+use oxidized_codec::frame::{self, FrameError, MAX_PACKET_SIZE};
+use oxidized_codec::packet::{Packet, PacketDecodeError};
+use oxidized_codec::varint::{self, VarIntError};
+use oxidized_compression::{CompressionError, CompressionState, Compressor, Decompressor};
+use oxidized_crypto::{CipherState, DecryptCipher, EncryptCipher};
 
 // ---------------------------------------------------------------------------
 // ConnectionState
@@ -1077,13 +1077,13 @@ mod tests {
         const PACKET_ID: i32 = 0x42;
 
         fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-            use crate::codec::types::read_i32;
+            use oxidized_codec::types::read_i32;
             let value = read_i32(&mut data)?;
             Ok(Self { value })
         }
 
         fn encode(&self) -> BytesMut {
-            use crate::codec::types::write_i32;
+            use oxidized_codec::types::write_i32;
             let mut buf = BytesMut::with_capacity(4);
             write_i32(&mut buf, self.value);
             buf

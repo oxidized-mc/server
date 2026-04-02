@@ -24,8 +24,8 @@ mod cmd_tp;
 mod cmd_weather;
 mod stubs;
 
-use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::source::CommandSourceStack;
+use oxidized_commands::dispatcher::CommandDispatcher;
 
 /// Registers all implemented and stub commands with the dispatcher.
 pub(crate) fn register_all(d: &mut CommandDispatcher<CommandSourceStack>) {

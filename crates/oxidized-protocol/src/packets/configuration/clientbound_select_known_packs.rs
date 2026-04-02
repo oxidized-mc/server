@@ -5,9 +5,9 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
 
 /// A known data pack identifier used during configuration negotiation.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -6,10 +6,10 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
-use crate::types::BlockPos;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::varint;
+use oxidized_mc_types::BlockPos;
 
 /// Notifies the client that a single block has changed.
 ///

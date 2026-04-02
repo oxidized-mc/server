@@ -7,7 +7,7 @@
 
 use bytes::Bytes;
 use libfuzzer_sys::fuzz_target;
-use oxidized_protocol::codec::varint::read_varint_buf;
+use oxidized_codec::varint::read_varint_buf;
 
 fuzz_target!(|data: &[u8]| {
     let mut buf = Bytes::copy_from_slice(data);

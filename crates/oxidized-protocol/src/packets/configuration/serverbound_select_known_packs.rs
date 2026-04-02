@@ -5,10 +5,10 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
 use crate::packets::configuration::clientbound_select_known_packs::KnownPack;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::varint;
 
 /// Maximum number of known packs the client may send.
 const MAX_KNOWN_PACKS: i32 = 64;
@@ -48,7 +48,7 @@ impl Packet for ServerboundSelectKnownPacksPacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        crate::codec::types::write_list(&mut buf, &self.packs, |b, p| p.write(b));
+        oxidized_codec::types::write_list(&mut buf, &self.packs, |b, p| p.write(b));
         buf
     }
 }
@@ -79,9 +79,9 @@ mod tests {
         let mut buf = BytesMut::new();
         varint::write_varint_buf(65, &mut buf);
         for _ in 0..65 {
-            crate::codec::types::write_string(&mut buf, "minecraft");
-            crate::codec::types::write_string(&mut buf, "core");
-            crate::codec::types::write_string(&mut buf, "1.0");
+            oxidized_codec::types::write_string(&mut buf, "minecraft");
+            oxidized_codec::types::write_string(&mut buf, "core");
+            oxidized_codec::types::write_string(&mut buf, "1.0");
         }
         let err = <ServerboundSelectKnownPacksPacket as Packet>::decode(buf.freeze()).unwrap_err();
         assert!(

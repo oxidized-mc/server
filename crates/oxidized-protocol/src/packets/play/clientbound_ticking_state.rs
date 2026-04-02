@@ -7,9 +7,9 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
 
 /// 0x7F — Server tick rate and freeze state.
 #[derive(Debug, Clone, PartialEq)]

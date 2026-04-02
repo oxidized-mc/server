@@ -9,9 +9,9 @@
 use bytes::{Bytes, BytesMut};
 
 use super::clientbound_level_chunk_with_light::LightUpdateData;
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::varint;
 
 /// Sends updated sky and/or block light data for a single chunk column.
 ///

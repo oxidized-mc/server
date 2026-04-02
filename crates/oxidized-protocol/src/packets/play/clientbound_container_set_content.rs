@@ -8,10 +8,10 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::slot::{self, SlotData};
-use crate::codec::varint;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::slot::{self, SlotData};
+use oxidized_codec::varint;
 
 /// 0x12 — Full container content synchronization.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,9 +30,9 @@ impl Packet for ClientboundContainerSetContentPacket {
     const PACKET_ID: i32 = 0x12;
 
     fn decode(mut data: Bytes) -> Result<Self, PacketDecodeError> {
-        let container_id = crate::codec::types::read_u8(&mut data)?;
+        let container_id = oxidized_codec::types::read_u8(&mut data)?;
         let state_id = varint::read_varint_buf(&mut data)?;
-        let items = crate::codec::types::read_list(&mut data, slot::read_slot)?;
+        let items = oxidized_codec::types::read_list(&mut data, slot::read_slot)?;
         let carried_item = slot::read_slot(&mut data)?;
         Ok(Self {
             container_id,
@@ -44,9 +44,9 @@ impl Packet for ClientboundContainerSetContentPacket {
 
     fn encode(&self) -> BytesMut {
         let mut buf = BytesMut::new();
-        crate::codec::types::write_u8(&mut buf, self.container_id);
+        oxidized_codec::types::write_u8(&mut buf, self.container_id);
         varint::write_varint_buf(self.state_id, &mut buf);
-        crate::codec::types::write_list(&mut buf, &self.items, |b, item| {
+        oxidized_codec::types::write_list(&mut buf, &self.items, |b, item| {
             slot::write_slot(b, item.as_ref());
         });
         slot::write_slot(&mut buf, self.carried_item.as_ref());
@@ -58,7 +58,7 @@ impl Packet for ClientboundContainerSetContentPacket {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::codec::slot::ComponentPatchData;
+    use oxidized_codec::slot::ComponentPatchData;
 
     #[test]
     fn test_roundtrip_empty_inventory() {

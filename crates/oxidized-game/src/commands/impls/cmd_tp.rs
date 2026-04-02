@@ -12,13 +12,13 @@
 //!
 //! TODO: Actual teleportation requires sending `ClientboundPlayerPositionPacket`.
 
-use crate::commands::CommandError;
-use crate::commands::arguments::ArgumentType;
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
+use oxidized_commands::CommandError;
+use oxidized_commands::arguments::ArgumentType;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 
 /// Registers the `/tp` and `/teleport` commands with all vanilla branches.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -27,7 +27,9 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 }
 
 /// Builds the command tree for either `/tp` or `/teleport`.
-fn build_tp_tree(name: &'static str) -> crate::commands::nodes::LiteralBuilder<CommandSourceStack> {
+fn build_tp_tree(
+    name: &'static str,
+) -> oxidized_commands::nodes::LiteralBuilder<CommandSourceStack> {
     literal(name)
         .description("Teleports entities")
         .requires_op()

@@ -34,13 +34,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use oxidized_game::chat::ChatRateLimiter;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::player::{ServerPlayer, handle_accept_teleportation};
-use oxidized_protocol::auth;
-use oxidized_protocol::chat::Component;
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::codec::slot::SlotData;
-use oxidized_protocol::connection::{Connection, ConnectionError};
+
+use oxidized_chat::Component;
+use oxidized_codec::Packet;
+use oxidized_codec::slot::SlotData;
 use oxidized_protocol::constants::MILLIS_PER_TICK;
-use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
     ClientboundAnimatePacket, ClientboundKeepAlivePacket, ClientboundPlayerInfoRemovePacket,
@@ -58,7 +56,9 @@ use oxidized_protocol::packets::play::{
     ServerboundSignUpdatePacket, ServerboundSwingPacket, ServerboundUseItemOnPacket,
     ServerboundUseItemPacket, equipment_slot,
 };
-use oxidized_world::chunk::ChunkPos;
+use oxidized_protocol::transport::connection::{Connection, ConnectionError};
+use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_types::ChunkPos;
 use parking_lot::RwLock;
 use tokio::sync::{broadcast, mpsc};
 use tracing::{debug, info, warn};
@@ -127,7 +127,7 @@ fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacke
     use inventory::item_stack_to_slot_data;
 
     let inv = &player.inventory;
-    let to_slot = |stack: &oxidized_game::inventory::ItemStack| -> Option<SlotData> {
+    let to_slot = |stack: &oxidized_inventory::ItemStack| -> Option<SlotData> {
         if stack.is_empty() {
             None
         } else {
@@ -160,7 +160,7 @@ fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacke
 /// Returns a [`ConnectionError`] if any I/O or protocol step fails.
 pub async fn handle_play_split(
     conn: Connection,
-    profile: auth::GameProfile,
+    profile: oxidized_auth::GameProfile,
     client_info: ClientInformation,
     ctx: &LoginContext,
 ) -> Result<(), ConnectionError> {
@@ -194,7 +194,7 @@ pub async fn handle_play_split(
     {
         use oxidized_game::entity::commands::EntityCommand;
         use oxidized_game::entity::components::{ExperienceData, SpawnData};
-        use oxidized_protocol::types::BlockPos;
+        use oxidized_mc_types::BlockPos;
 
         let p = player_arc.read();
         let _ = ctx.entity_cmd_tx.try_send(EntityCommand::SpawnPlayer {

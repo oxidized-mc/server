@@ -12,13 +12,13 @@
 use bytes::Bytes;
 use tracing::debug;
 
-use oxidized_game::inventory::item_ids::item_name_to_id;
-use oxidized_game::inventory::item_stack::ItemStack;
 use oxidized_game::player::{GameMode, PlayerInventory};
+use oxidized_inventory::item_ids::item_name_to_id;
+use oxidized_inventory::item_stack::ItemStack;
 use oxidized_protocol::packets::play::{
     ClientboundSetHeldSlotPacket, ServerboundPickItemFromBlockPacket,
 };
-use oxidized_world::registry::AIR;
+use oxidized_registry::AIR;
 
 use super::PlayContext;
 use super::block_interaction::{get_block, sync_inventory_slot};

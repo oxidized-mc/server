@@ -4,12 +4,12 @@
 //! active effects, tick-based duration, amplifier, particle visibility).
 //! Also needs `ClientboundUpdateMobEffectPacket` / `ClientboundRemoveMobEffectPacket`.
 
-use crate::commands::arguments::ArgumentType;
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
+use oxidized_commands::arguments::ArgumentType;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 
 /// Registers the `/effect` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -53,7 +53,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                 literal("clear")
                     .executes(|_ctx: &CommandContext<CommandSourceStack>| {
                         // TODO: Clear all effects from command sender
-                        Err(crate::commands::CommandError::NotImplemented(
+                        Err(oxidized_commands::CommandError::NotImplemented(
                             "effect clear".into(),
                         ))
                     })
@@ -68,7 +68,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         .executes(
                             |_ctx: &CommandContext<CommandSourceStack>| {
                                 // TODO: Clear all effects from targets
-                                Err(crate::commands::CommandError::NotImplemented(
+                                Err(oxidized_commands::CommandError::NotImplemented(
                                     "effect clear".into(),
                                 ))
                             },
@@ -80,11 +80,11 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 
 fn effect_give(
     _ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, crate::commands::CommandError> {
+) -> Result<i32, oxidized_commands::CommandError> {
     // TODO: Apply status effect to targets — requires a status-effect
     // system on entities (ECS components for active effects, tick-based
     // duration, amplifier) and ClientboundUpdateMobEffectPacket.
-    Err(crate::commands::CommandError::NotImplemented(
+    Err(oxidized_commands::CommandError::NotImplemented(
         "effect give".into(),
     ))
 }

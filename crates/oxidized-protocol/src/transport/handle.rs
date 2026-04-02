@@ -14,7 +14,7 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 
 use super::channel::OutboundPacket;
-use crate::codec::packet::Packet;
+use oxidized_codec::packet::Packet;
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -117,9 +117,9 @@ impl ConnectionHandle {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::codec::packet::{Packet, PacketDecodeError};
-    use crate::codec::types::{read_i32, write_i32};
     use bytes::{Bytes, BytesMut};
+    use oxidized_codec::packet::{Packet, PacketDecodeError};
+    use oxidized_codec::types::{read_i32, write_i32};
 
     /// Minimal test packet for handle tests.
     #[derive(Debug, Clone, PartialEq)]

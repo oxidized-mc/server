@@ -7,8 +7,8 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// 0x35 — Player selects a hotbar slot.
 #[derive(Debug, Clone, PartialEq, Eq)]

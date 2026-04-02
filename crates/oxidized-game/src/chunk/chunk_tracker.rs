@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use oxidized_world::chunk::ChunkPos;
+use oxidized_types::ChunkPos;
 
 use super::view_distance::{chunks_to_load, chunks_to_unload, spiral_chunks};
 
@@ -33,7 +33,7 @@ impl PlayerChunkTracker {
     ///
     /// ```
     /// use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
-    /// use oxidized_world::chunk::ChunkPos;
+    /// use oxidized_types::ChunkPos;
     ///
     /// let tracker = PlayerChunkTracker::new(ChunkPos::new(0, 0), 2);
     /// // (2*2+1)² = 25 chunks loaded initially
@@ -60,7 +60,7 @@ impl PlayerChunkTracker {
     ///
     /// ```
     /// use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
-    /// use oxidized_world::chunk::ChunkPos;
+    /// use oxidized_types::ChunkPos;
     ///
     /// let mut tracker = PlayerChunkTracker::new(ChunkPos::new(0, 0), 2);
     /// let (to_load, to_unload) = tracker.update_center(ChunkPos::new(1, 0));
@@ -104,7 +104,7 @@ impl PlayerChunkTracker {
     ///
     /// ```
     /// use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
-    /// use oxidized_world::chunk::ChunkPos;
+    /// use oxidized_types::ChunkPos;
     ///
     /// let mut tracker = PlayerChunkTracker::new(ChunkPos::new(0, 0), 2);
     /// assert_eq!(tracker.loaded_count(), 25);

@@ -4,7 +4,7 @@
 
 use bytes::{Bytes, BytesMut};
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use oxidized_protocol::codec::varint::{
+use oxidized_codec::varint::{
     VARINT_MAX_BYTES, VARLONG_MAX_BYTES, decode_varint, decode_varlong, encode_varint,
     encode_varlong, read_varint_buf, varint_size, write_varint_buf,
 };

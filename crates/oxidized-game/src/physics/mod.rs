@@ -17,7 +17,7 @@
 //! Block physics properties (friction, speed factor, jump factor) are read
 //! directly from the compile-time block registry via [`BlockStateId`].
 //!
-//! [`BlockStateId`]: oxidized_world::registry::BlockStateId
+//! [`BlockStateId`]: oxidized_registry::BlockStateId
 
 pub mod collision;
 pub mod constants;

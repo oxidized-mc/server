@@ -13,7 +13,7 @@ use oxidized_nbt::{NbtCompound, NbtList, NbtTag};
 use crate::packets::configuration::clientbound_update_tags::{
     ClientboundUpdateTagsPacket, TagEntry, TagRegistry,
 };
-use crate::types::resource_location::ResourceLocation;
+use oxidized_mc_types::resource_location::ResourceLocation;
 
 /// Raw registry JSON bundled at compile time.
 const REGISTRIES_JSON: &str = include_str!("data/registries.json");
@@ -291,7 +291,7 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
-    use crate::codec::Packet;
+    use oxidized_codec::Packet;
 
     #[test]
     fn test_all_registries_loadable() {

@@ -6,11 +6,11 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::{types, varint};
-use crate::types::resource_location::ResourceLocation;
+use oxidized_codec::{types, varint};
+use oxidized_mc_types::resource_location::ResourceLocation;
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// Common spawn information shared between login and respawn packets.
 ///
@@ -266,7 +266,7 @@ mod tests {
     #[test]
     fn test_login_packet_with_death_location() {
         let mut pkt = sample_login_packet();
-        let death_pos = crate::types::block_pos::BlockPos::new(100, 64, -200);
+        let death_pos = oxidized_mc_types::block_pos::BlockPos::new(100, 64, -200);
         pkt.common_spawn_info.last_death_location = Some((
             ResourceLocation::minecraft("overworld"),
             death_pos.as_long(),
@@ -277,7 +277,7 @@ mod tests {
 
         let (dim, pos_packed) = decoded.common_spawn_info.last_death_location.unwrap();
         assert_eq!(dim, ResourceLocation::minecraft("overworld"));
-        let death = crate::types::block_pos::BlockPos::from_long(pos_packed);
+        let death = oxidized_mc_types::block_pos::BlockPos::from_long(pos_packed);
         assert_eq!(death.x, 100);
         assert_eq!(death.y, 64);
         assert_eq!(death.z, -200);

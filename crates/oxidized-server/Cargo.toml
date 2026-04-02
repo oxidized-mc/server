@@ -22,6 +22,16 @@ oxidized-protocol = { workspace = true }
 oxidized-nbt      = { workspace = true }
 oxidized-world    = { workspace = true }
 oxidized-game     = { workspace = true }
+oxidized-auth     = { workspace = true }
+oxidized-crypto   = { workspace = true }
+oxidized-chat     = { workspace = true }
+oxidized-mc-types = { workspace = true }
+oxidized-codec    = { workspace = true }
+oxidized-transport = { workspace = true }
+oxidized-types    = { workspace = true }
+oxidized-registry = { workspace = true }
+oxidized-inventory = { workspace = true }
+oxidized-commands  = { workspace = true }
 
 bevy_ecs          = { workspace = true }
 glam              = { workspace = true }

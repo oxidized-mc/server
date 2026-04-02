@@ -15,7 +15,7 @@ mod tests {
     use bytes::Bytes;
 
     use super::*;
-    use crate::codec::Packet;
+    use oxidized_codec::Packet;
 
     #[test]
     fn test_decode_empty_body() {

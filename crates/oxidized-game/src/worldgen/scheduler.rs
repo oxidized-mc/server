@@ -10,7 +10,7 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use oxidized_world::chunk::ChunkPos;
+use oxidized_types::ChunkPos;
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
 

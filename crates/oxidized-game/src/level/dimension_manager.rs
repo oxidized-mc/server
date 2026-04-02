@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-use oxidized_protocol::types::ResourceLocation;
+use oxidized_mc_types::ResourceLocation;
 
 use super::server_level::ServerLevel;
 
@@ -83,8 +83,8 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    use oxidized_registry::BlockRegistry;
     use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader};
-    use oxidized_world::registry::BlockRegistry;
     use oxidized_world::storage::PrimaryLevelData;
 
     use crate::level::dimension::DimensionType;

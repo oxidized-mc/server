@@ -4,8 +4,8 @@
 //! using Java BitSet encoding for section masks and 2048-byte nibble
 //! arrays for per-section light data.
 
+use oxidized_mc_types::SectionPos;
 use oxidized_protocol::packets::play::LightUpdateData;
-use oxidized_protocol::types::SectionPos;
 use oxidized_world::chunk::DataLayer;
 
 /// Builds [`LightUpdateData`] including only sections in `changed_sections`.

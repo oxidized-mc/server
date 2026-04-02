@@ -1,14 +1,15 @@
 //! `/setblock` command — set a block at a position.
 
-use crate::commands::argument_access::{get_block_pos, get_string};
-use crate::commands::arguments::ArgumentType;
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
+use crate::commands::argument_access::get_block_pos;
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
-use oxidized_world::registry::BlockStateId;
+use oxidized_chat::Component;
+use oxidized_commands::argument_access::get_string;
+use oxidized_commands::arguments::ArgumentType;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
+use oxidized_registry::BlockStateId;
 
 /// Block name for air, used to avoid magic strings.
 const AIR_BLOCK_NAME: &str = "minecraft:air";
@@ -34,7 +35,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 /// Resolves block name from command context, prefixing `minecraft:` if needed.
 fn resolve_block_name(
     ctx: &CommandContext<CommandSourceStack>,
-) -> Result<String, crate::commands::CommandError> {
+) -> Result<String, oxidized_commands::CommandError> {
     let block = get_string(ctx, "block")?;
     Ok(if block.contains(':') {
         block.to_string()
@@ -65,7 +66,7 @@ fn send_setblock_failure(ctx: &CommandContext<CommandSourceStack>) {
 /// `/setblock <pos> <block>` and `/setblock <pos> <block> replace`
 fn setblock_replace(
     ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, crate::commands::CommandError> {
+) -> Result<i32, oxidized_commands::CommandError> {
     let (x, y, z) = get_block_pos(ctx, "pos")?;
     let block_name = resolve_block_name(ctx)?;
 
@@ -81,7 +82,7 @@ fn setblock_replace(
 /// `/setblock <pos> <block> keep` — only sets if the target is air.
 fn setblock_keep(
     ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, crate::commands::CommandError> {
+) -> Result<i32, oxidized_commands::CommandError> {
     let (x, y, z) = get_block_pos(ctx, "pos")?;
     let block_name = resolve_block_name(ctx)?;
 
@@ -104,7 +105,7 @@ fn setblock_keep(
 /// `/setblock <pos> <block> destroy` — destroys old block first (air), then places.
 fn setblock_destroy(
     ctx: &CommandContext<CommandSourceStack>,
-) -> Result<i32, crate::commands::CommandError> {
+) -> Result<i32, oxidized_commands::CommandError> {
     let (x, y, z) = get_block_pos(ctx, "pos")?;
     let block_name = resolve_block_name(ctx)?;
 

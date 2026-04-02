@@ -4,10 +4,12 @@
 //! connection to either [`ConnectionState::Status`] or
 //! [`ConnectionState::Login`].
 
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
+use oxidized_codec::Packet;
 use oxidized_protocol::constants::VERSION_NAME;
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
+use oxidized_protocol::transport::connection::{
+    Connection, ConnectionError, ConnectionState, RawPacket,
+};
 use tracing::{debug, warn};
 
 use super::helpers::{decode_packet, disconnect_err};

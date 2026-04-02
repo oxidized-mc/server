@@ -4,7 +4,7 @@
 //! before a chunk can advance to that status. This encodes the vanilla
 //! dependency table from ADR-016, extended for the full 12-status pipeline.
 
-use oxidized_world::chunk::ChunkPos;
+use oxidized_types::ChunkPos;
 
 use super::ChunkStatus;
 
@@ -116,7 +116,7 @@ pub const fn requirements(status: ChunkStatus) -> StatusRequirement {
 ///
 /// ```
 /// use oxidized_game::worldgen::{ChunkStatus, status_requirements};
-/// use oxidized_world::chunk::ChunkPos;
+/// use oxidized_types::ChunkPos;
 ///
 /// // Features requires radius-1 neighbors at Carvers.
 /// let all_at_carvers = |_: ChunkPos| Some(ChunkStatus::Carvers);

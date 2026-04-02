@@ -1,6 +1,7 @@
-//! Codec primitives for the Minecraft wire protocol.
+//! Protocol-specific codec macros.
 //!
-//! This module re-exports from the standalone [`oxidized_codec`] crate.
+//! Provides convenience macros for defining packets.
+//! Core codec types live in the [`oxidized_codec`] crate.
 
 /// Defines an empty packet (no fields) with a trivial [`Packet`] impl.
 ///
@@ -22,12 +23,12 @@ macro_rules! impl_empty_packet {
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct $name;
 
-        impl $crate::codec::Packet for $name {
+        impl ::oxidized_codec::Packet for $name {
             const PACKET_ID: i32 = $id;
 
             fn decode(
                 _data: ::bytes::Bytes,
-            ) -> Result<Self, $crate::codec::packet::PacketDecodeError> {
+            ) -> Result<Self, ::oxidized_codec::packet::PacketDecodeError> {
                 Ok(Self)
             }
 
@@ -37,9 +38,6 @@ macro_rules! impl_empty_packet {
         }
     };
 }
-
-pub use oxidized_codec::{Packet, PacketDecodeError, ResourceLocationError};
-pub use oxidized_codec::{frame, lp_vec3, packet, slot, types, varint};
 
 /// Asserts that encoding then decoding a packet produces the original value.
 ///
@@ -58,9 +56,9 @@ pub use oxidized_codec::{frame, lp_vec3, packet, slot, types, varint};
 macro_rules! assert_packet_roundtrip {
     ($pkt:expr) => {{
         let pkt = $pkt;
-        let encoded = $crate::codec::Packet::encode(&pkt);
+        let encoded = ::oxidized_codec::Packet::encode(&pkt);
         let decoded =
-            <_ as $crate::codec::Packet>::decode(encoded.freeze()).expect("decode failed");
+            <_ as ::oxidized_codec::Packet>::decode(encoded.freeze()).expect("decode failed");
         assert_eq!(pkt, decoded);
     }};
 }
@@ -78,6 +76,9 @@ macro_rules! assert_packet_roundtrip {
 #[cfg(test)]
 macro_rules! assert_packet_id {
     ($pkt_type:ty, $expected:expr) => {
-        assert_eq!(<$pkt_type as $crate::codec::Packet>::PACKET_ID, $expected);
+        assert_eq!(
+            <$pkt_type as ::oxidized_codec::Packet>::PACKET_ID,
+            $expected
+        );
     };
 }

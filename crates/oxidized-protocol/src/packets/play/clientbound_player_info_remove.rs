@@ -3,10 +3,10 @@
 use bytes::{Bytes, BytesMut};
 use uuid::Uuid;
 
-use crate::codec::{types, varint};
+use oxidized_codec::{types, varint};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// 0x45 — Removes one or more players from the tab list.
 #[derive(Debug, Clone, PartialEq)]

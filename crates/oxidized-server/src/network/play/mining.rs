@@ -9,13 +9,13 @@ use std::time::{Duration, Instant};
 use bytes::Bytes;
 use tracing::debug;
 
+use oxidized_codec::Packet;
 use oxidized_game::player::GameMode;
-use oxidized_protocol::codec::Packet;
+use oxidized_mc_types::BlockPos;
+use oxidized_mc_types::direction::Direction;
 use oxidized_protocol::constants::MILLIS_PER_TICK;
 use oxidized_protocol::packets::play::ServerboundPlayerActionPacket;
 use oxidized_protocol::packets::play::serverbound_player_action::PlayerAction;
-use oxidized_protocol::types::BlockPos;
-use oxidized_protocol::types::direction::Direction;
 
 use super::PlayContext;
 use super::block_interaction::{
@@ -24,8 +24,8 @@ use super::block_interaction::{
 };
 use crate::network::helpers::decode_packet;
 use crate::network::{BroadcastMessage, ConnectionError, ServerContext};
-use oxidized_protocol::chat::Component;
-use oxidized_world::registry::{AIR, BlockStateId};
+use oxidized_chat::Component;
+use oxidized_registry::{AIR, BlockStateId};
 use std::sync::Arc;
 
 /// Minimum survival mining duration.

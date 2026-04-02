@@ -3,7 +3,7 @@
 use crate::event::EventBus;
 use crate::level::weather::WeatherType;
 use crate::player::game_mode::GameMode;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
 use std::sync::Arc;
 
 /// A handle to the server, used by commands that need to affect global state.

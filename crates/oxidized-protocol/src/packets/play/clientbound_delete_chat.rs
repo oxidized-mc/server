@@ -2,9 +2,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::{types, varint};
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::{types, varint};
 
 /// 0x1F — Server requests client to delete a chat message.
 ///

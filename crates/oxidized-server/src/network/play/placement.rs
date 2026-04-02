@@ -6,16 +6,16 @@
 use bytes::Bytes;
 use tracing::debug;
 
+use oxidized_chat::Component;
 use oxidized_game::player::GameMode;
-use oxidized_protocol::chat::Component;
+use oxidized_mc_types::BlockPos;
+use oxidized_mc_types::direction::{Axis, Direction};
 use oxidized_protocol::packets::play::{
     ClientboundOpenSignEditorPacket, ClientboundSetPlayerInventoryPacket,
     ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
-use oxidized_protocol::types::BlockPos;
-use oxidized_protocol::types::direction::{Axis, Direction};
+use oxidized_registry::{BlockRegistry, BlockStateId, BlockTags};
 use oxidized_world::chunk::level_chunk::OVERWORLD_MAX_Y;
-use oxidized_world::registry::{BlockRegistry, BlockStateId, BlockTags};
 
 use super::PlayContext;
 use super::block_interaction::{
@@ -318,10 +318,9 @@ async fn decrement_held_item(play_ctx: &mut PlayContext<'_>) -> Result<(), Conne
         let stack = player.inventory.get_mut(slot);
         stack.count -= 1;
         if stack.count <= 0 {
-            player.inventory.set(
-                slot,
-                oxidized_game::inventory::item_stack::ItemStack::empty(),
-            );
+            player
+                .inventory
+                .set(slot, oxidized_inventory::item_stack::ItemStack::empty());
         }
         (slot, player.inventory.get(slot).clone())
     };
@@ -714,7 +713,7 @@ fn block_intersects_player(play_ctx: &PlayContext<'_>, pos: BlockPos) -> bool {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use oxidized_world::registry::BlockRegistry;
+    use oxidized_registry::BlockRegistry;
 
     // ── is_replaceable_block ────────────────────────────────────────────
 

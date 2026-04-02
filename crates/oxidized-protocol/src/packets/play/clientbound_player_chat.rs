@@ -2,11 +2,11 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::chat::Component;
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::{types, varint};
 use crate::packets::play::clientbound_system_chat::{read_component_nbt, write_component_nbt};
+use oxidized_chat::Component;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::{types, varint};
 
 /// Filter mask type for chat messages.
 #[derive(Debug, Clone, PartialEq)]

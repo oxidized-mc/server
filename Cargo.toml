@@ -91,20 +91,21 @@ criterion      = { version = "0.5", features = ["html_reports"] }
 
 # Internal workspace crates
 oxidized-protocol = { path = "crates/oxidized-protocol" }
-oxidized-nbt      = { git = "https://github.com/oxidized-mc/nbt.git" }
+oxidized-nbt      = { version = "0.1" }
 oxidized-world    = { path = "crates/oxidized-world" }
 oxidized-game     = { path = "crates/oxidized-game" }
 oxidized-macros   = { path = "crates/oxidized-macros" }
-oxidized-types    = { git = "https://github.com/oxidized-mc/types.git" }
-oxidized-compression = { git = "https://github.com/oxidized-mc/compression.git" }
-oxidized-crypto      = { git = "https://github.com/oxidized-mc/crypto.git" }
-oxidized-auth        = { git = "https://github.com/oxidized-mc/auth.git" }
-oxidized-codec       = { git = "https://github.com/oxidized-mc/codec.git" }
-oxidized-mc-types    = { git = "https://github.com/oxidized-mc/mc-types.git" }
-oxidized-chat        = { git = "https://github.com/oxidized-mc/chat.git" }
-oxidized-registry    = { path = "../registry" }
-oxidized-commands    = { path = "../commands" }
-oxidized-inventory   = { path = "../inventory" }
+oxidized-types    = { version = "0.1" }
+oxidized-compression = { version = "0.1" }
+oxidized-crypto      = { version = "0.1" }
+oxidized-auth        = { version = "0.1" }
+oxidized-codec       = { version = "0.1" }
+oxidized-mc-types    = { version = "0.1" }
+oxidized-chat        = { version = "0.1" }
+oxidized-transport   = { version = "0.1" }
+oxidized-registry    = { version = "0.1" }
+oxidized-commands    = { version = "0.1" }
+oxidized-inventory   = { version = "0.1" }
 
 [profile.release]
 opt-level     = 3
@@ -147,3 +148,17 @@ must_use_candidate      = "allow"
 cast_possible_truncation = "allow"
 cast_sign_loss           = "allow"
 cast_possible_wrap       = "allow"
+
+[patch.crates-io]
+oxidized-nbt         = { path = "../nbt" }
+oxidized-types       = { path = "../types" }
+oxidized-compression = { path = "../compression" }
+oxidized-crypto      = { path = "../crypto" }
+oxidized-auth        = { path = "../auth" }
+oxidized-codec       = { path = "../codec" }
+oxidized-mc-types    = { path = "../mc-types" }
+oxidized-chat        = { path = "../chat" }
+oxidized-transport   = { path = "../transport" }
+oxidized-registry    = { path = "../registry" }
+oxidized-commands    = { path = "../commands" }
+oxidized-inventory   = { path = "../inventory" }

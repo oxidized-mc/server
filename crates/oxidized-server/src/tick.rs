@@ -12,19 +12,19 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use oxidized_codec::Packet;
 use oxidized_game::level::game_rules::GameRuleKey;
 use oxidized_game::lighting::cross_chunk::{
     ChunkNeighbors, propagate_block_light_cross_chunk, propagate_sky_light_cross_chunk,
 };
 use oxidized_game::net::light_serializer::build_light_data_filtered;
-use oxidized_protocol::codec::Packet;
 use oxidized_protocol::constants::TICKS_PER_SECOND;
 use oxidized_protocol::packets::play::{
     ClientboundGameEventPacket, ClientboundLightUpdatePacket, ClientboundSetTimePacket,
     ClientboundTickingStepPacket, ClockNetworkState, ClockUpdate, GameEventType,
 };
+use oxidized_types::ChunkPos;
 use oxidized_world::anvil::{RegionFile, compress_zlib};
-use oxidized_world::chunk::ChunkPos;
 use rand::Rng;
 use rand::RngExt;
 use rand::SeedableRng;
@@ -341,10 +341,8 @@ fn propagate_cross_chunk_light(
             // exactly which neighbor sections changed, so send all non-empty).
             let min_y = chunk.min_y();
             let section_count = chunk.section_count();
-            let all_sections: Vec<oxidized_protocol::types::SectionPos> = (0..section_count)
-                .map(|i| {
-                    oxidized_protocol::types::SectionPos::new(pos.x, (min_y >> 4) + i as i32, pos.z)
-                })
+            let all_sections: Vec<oxidized_mc_types::SectionPos> = (0..section_count)
+                .map(|i| oxidized_mc_types::SectionPos::new(pos.x, (min_y >> 4) + i as i32, pos.z))
                 .collect();
             let light_data = build_light_data_filtered(
                 chunk.sky_light_layers(),
@@ -813,7 +811,7 @@ mod tests {
     use super::*;
     use oxidized_game::level::{GameRules, ServerTickRateManager};
     use oxidized_game::player::PlayerList;
-    use oxidized_protocol::types::resource_location::ResourceLocation;
+    use oxidized_mc_types::resource_location::ResourceLocation;
     use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
     use parking_lot::RwLock;
     use rand::SeedableRng;
@@ -822,8 +820,8 @@ mod tests {
     const TICKS_PER_DAY: i64 = 24_000;
 
     fn test_ctx() -> Arc<ServerContext> {
+        use oxidized_registry::BlockRegistry;
         use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
-        use oxidized_world::registry::BlockRegistry;
         use tokio::sync::broadcast;
 
         let block_registry = Arc::new(BlockRegistry::load().unwrap());

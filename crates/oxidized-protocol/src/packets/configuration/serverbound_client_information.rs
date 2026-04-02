@@ -6,11 +6,11 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
-use crate::codec::varint;
-use crate::types::{ChatVisibility, HumanoidArm, ParticleStatus};
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
+use oxidized_codec::varint;
+use oxidized_mc_types::{ChatVisibility, HumanoidArm, ParticleStatus};
 
 /// Maximum length of the language string (in characters).
 const MAX_LANGUAGE_LENGTH: usize = 16;

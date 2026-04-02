@@ -8,12 +8,12 @@
 use bytes::{BufMut, Bytes, BytesMut};
 use uuid::Uuid;
 
-use crate::codec::lp_vec3;
-use crate::codec::types;
-use crate::codec::varint;
+use oxidized_codec::lp_vec3;
+use oxidized_codec::types;
+use oxidized_codec::varint;
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// Spawn entity packet (0x01).
 ///

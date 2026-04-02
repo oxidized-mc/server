@@ -9,7 +9,7 @@ use proptest::prelude::*;
 use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload, spiral_chunks};
 use oxidized_game::net::light_serializer::build_light_data;
-use oxidized_world::chunk::ChunkPos;
+use oxidized_types::ChunkPos;
 use oxidized_world::chunk::DataLayer;
 
 proptest! {
@@ -172,7 +172,7 @@ use oxidized_game::net::entity_movement::{
     DELTA_SCALE, EntityMoveKind, classify_move, encode_delta, pack_degrees, unpack_degrees,
 };
 use oxidized_game::player::movement::{MAX_COORDINATE, MAX_MOVEMENT_PER_TICK, validate_movement};
-use oxidized_protocol::types::Vec3;
+use oxidized_mc_types::Vec3;
 
 proptest! {
     /// encode_delta roundtrip: for small deltas, decoding the i16 recovers the
@@ -311,7 +311,7 @@ proptest! {
 
 use oxidized_game::entity::synched_data::{DataSerializerType, SynchedEntityData};
 use oxidized_game::entity::tracker::is_in_tracking_range;
-use oxidized_protocol::types::aabb::Aabb;
+use oxidized_mc_types::aabb::Aabb;
 
 proptest! {
     /// AABB from_center volume is always width² × height.

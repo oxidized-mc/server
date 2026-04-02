@@ -19,7 +19,7 @@ use crate::chunk::level_chunk::{
 };
 use crate::chunk::paletted_container::{PalettedContainer, Strategy};
 use crate::chunk::section::LevelChunkSection;
-use crate::registry::BlockRegistry;
+use oxidized_registry::BlockRegistry;
 use oxidized_types::ChunkPos;
 
 /// Minimum section Y index for the overworld.
@@ -244,8 +244,8 @@ impl AnvilChunkLoader {
                 oxidized_nbt::NbtTag::String(s) => s.as_str(),
                 _ => "minecraft:plains",
             };
-            let biome_id = crate::registry::biome_name_to_id(biome_name)
-                .unwrap_or(crate::registry::PLAINS_BIOME_ID);
+            let biome_id = oxidized_registry::biome_name_to_id(biome_name)
+                .unwrap_or(oxidized_registry::PLAINS_BIOME_ID);
             palette_ids.push(biome_id);
         }
 
@@ -357,8 +357,8 @@ impl AsyncChunkLoader {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::registry::BlockRegistry;
     use oxidized_nbt::NbtList;
+    use oxidized_registry::BlockRegistry;
 
     fn test_registry() -> Arc<BlockRegistry> {
         Arc::new(BlockRegistry::load().unwrap())

@@ -4,12 +4,12 @@
 
 use tracing::{debug, warn};
 
-use oxidized_game::inventory::ItemStack;
-use oxidized_game::inventory::item_ids::{item_id_to_name, item_name_to_id};
+use oxidized_codec::Packet;
+use oxidized_codec::slot::{ComponentPatchData, SlotData};
 use oxidized_game::player::inventory::PROTOCOL_SLOT_COUNT;
 use oxidized_game::player::{GameMode, PlayerInventory};
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
+use oxidized_inventory::ItemStack;
+use oxidized_inventory::item_ids::{item_id_to_name, item_name_to_id};
 use oxidized_protocol::packets::play::{
     ClientboundContainerSetContentPacket, ClientboundSetEquipmentPacket,
     ClientboundSetHeldSlotPacket, ServerboundSetCarriedItemPacket,
@@ -135,7 +135,7 @@ pub async fn handle_set_creative_mode_slot(
             let s = slot_data_to_item_stack(slot_data);
             // Vanilla: reject items with count > max stack size.
             if !s.is_empty() {
-                let max = oxidized_game::inventory::item_stack::max_stack_size(&s.item);
+                let max = oxidized_inventory::item_stack::max_stack_size(&s.item);
                 if s.count > max {
                     warn!(
                         peer = %play_ctx.addr,

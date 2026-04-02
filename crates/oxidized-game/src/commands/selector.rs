@@ -6,10 +6,10 @@
 //! Remaining filters (`tag`, `nbt`, `scores`, `advancements`, `team`, `level`,
 //! rotations, coordinates/volumes) are parsed and stored for future ECS use.
 
-use crate::commands::CommandError;
-use crate::commands::argument_parser::parse_range;
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
 use crate::player::game_mode::GameMode;
+use oxidized_commands::CommandError;
+use oxidized_commands::argument_parser::parse_range;
 use rand::RngExt;
 use std::str::FromStr;
 
@@ -804,7 +804,7 @@ mod tests {
 
     use crate::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
     use crate::player::game_mode::GameMode as GM;
-    use oxidized_protocol::chat::Component;
+    use oxidized_chat::Component;
     use std::sync::Arc;
 
     /// Mock player data for resolution tests.

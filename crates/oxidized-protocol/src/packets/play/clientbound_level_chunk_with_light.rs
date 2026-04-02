@@ -7,9 +7,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::packet::{Packet, PacketDecodeError};
-use crate::codec::types::{ensure_remaining, read_i32, read_i64};
-use crate::codec::varint;
+use oxidized_codec::packet::{Packet, PacketDecodeError};
+use oxidized_codec::types::{ensure_remaining, read_i32, read_i64};
+use oxidized_codec::varint;
 
 /// A full chunk + light packet.
 ///
@@ -274,7 +274,7 @@ fn read_byte_arrays(buf: &mut Bytes) -> Result<Vec<Vec<u8>>, PacketDecodeError> 
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::codec::packet::Packet;
+    use oxidized_codec::packet::Packet;
 
     #[test]
     fn test_empty_chunk_roundtrip() {

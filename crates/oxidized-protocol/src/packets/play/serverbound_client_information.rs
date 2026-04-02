@@ -9,9 +9,9 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
 use crate::packets::configuration::ClientInformation;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// Serverbound client information packet in PLAY state.
 ///

@@ -13,7 +13,8 @@ pub mod priority;
 pub mod scheduler;
 pub mod status_requirements;
 
-use oxidized_world::chunk::{ChunkPos, LevelChunk};
+use oxidized_types::ChunkPos;
+use oxidized_world::chunk::LevelChunk;
 
 pub use priority::ChunkGenPriority;
 pub use scheduler::{ChunkGenTask, WorldgenScheduler};

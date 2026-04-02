@@ -13,9 +13,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{ensure_remaining, read_f32, read_f64, write_f32, write_f64};
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types::{ensure_remaining, read_f32, read_f64, write_f32, write_f64};
 
 const FLAG_ON_GROUND: u8 = 0x01;
 const FLAG_HORIZONTAL_COLLISION: u8 = 0x02;

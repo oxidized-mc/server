@@ -5,7 +5,7 @@
 //! `LevelLightEngine` architecture.
 
 use ahash::AHashMap;
-use oxidized_world::chunk::ChunkPos;
+use oxidized_types::ChunkPos;
 
 use super::engine::LightEngine;
 use super::propagation::BoundaryEntry;
@@ -33,9 +33,9 @@ pub struct PendingBoundaries {
 ///
 /// ```
 /// use oxidized_game::lighting::world_lighting::WorldLighting;
+/// use oxidized_types::ChunkPos;
 /// use oxidized_game::lighting::queue::LightUpdate;
-/// use oxidized_protocol::types::BlockPos;
-/// use oxidized_world::chunk::ChunkPos;
+/// use oxidized_mc_types::BlockPos;
 ///
 /// let mut wl = WorldLighting::new();
 /// assert!(!wl.has_pending_work());
@@ -133,7 +133,7 @@ mod tests {
     use super::*;
     use crate::lighting::propagation::ALL_DIRECTIONS;
     use crate::lighting::queue::LightUpdate;
-    use oxidized_protocol::types::BlockPos;
+    use oxidized_mc_types::BlockPos;
 
     fn sample_update() -> LightUpdate {
         LightUpdate {

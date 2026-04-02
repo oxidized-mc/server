@@ -7,7 +7,7 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashSet};
 use std::hash::Hash;
 
-use oxidized_protocol::types::BlockPos;
+use oxidized_mc_types::BlockPos;
 
 /// Priority level for a scheduled tick. Lower numeric value = higher priority.
 ///

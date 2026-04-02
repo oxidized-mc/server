@@ -4,16 +4,16 @@
 //! decode-match-log boilerplate, and the [`disconnect`] / [`disconnect_err`]
 //! utilities for cleanly terminating a connection.
 
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::{Connection, ConnectionError};
-use oxidized_protocol::handle::ConnectionHandle;
+use oxidized_codec::Packet;
 use oxidized_protocol::packets::login::ClientboundDisconnectPacket;
+use oxidized_protocol::transport::connection::{Connection, ConnectionError};
+use oxidized_protocol::transport::handle::ConnectionHandle;
 use tracing::debug;
 
 /// Decodes a typed packet from raw body bytes using the [`Packet`] trait,
 /// logging failures with connection context.
 ///
-/// Converts [`PacketDecodeError`](oxidized_protocol::codec::PacketDecodeError)
+/// Converts [`PacketDecodeError`](oxidized_codec::PacketDecodeError)
 /// into a [`ConnectionError::Protocol`].
 ///
 /// # Usage

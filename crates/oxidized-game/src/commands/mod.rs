@@ -1,21 +1,16 @@
-//! Brigadier-compatible command framework — re-exported from `oxidized-commands`
-//! plus game-specific extensions (source, selector, pagination, implementations).
+//! Minecraft-specific command extensions.
 //!
-//! The core command engine lives in the standalone `oxidized-commands` crate.
-//! This module re-exports it and adds Minecraft-specific types (CommandSourceStack,
-//! entity selectors, command implementations).
+//! Core command types live in the [`oxidized_commands`] crate. This module
+//! provides game-specific extensions: [`CommandSourceStack`](source::CommandSourceStack),
+//! entity selectors, command implementations, and permission-based builder traits.
 
-// Re-export the core command library modules so existing `crate::commands::*`
-// paths continue to work.
 pub mod argument_access {
-    //! Typed argument getters — re-exports from `oxidized_commands` plus
-    //! game-specific accessors.
+    //! Game-specific argument getters.
 
-    pub use oxidized_commands::argument_access::*;
-
-    use crate::commands::CommandError;
-    use crate::commands::source::CommandSourceStack;
+    use oxidized_commands::CommandError;
     use oxidized_commands::context::{ArgumentResult, CommandContext};
+
+    use crate::commands::source::CommandSourceStack;
 
     /// Gets a gamemode argument by name, resolved to the game's [`GameType`].
     ///
@@ -26,9 +21,9 @@ pub mod argument_access {
     pub fn get_gamemode(
         ctx: &CommandContext<CommandSourceStack>,
         name: &str,
-    ) -> Result<oxidized_protocol::types::game_type::GameType, CommandError> {
+    ) -> Result<oxidized_mc_types::game_type::GameType, CommandError> {
         let s = oxidized_commands::get_gamemode_str(ctx, name)?;
-        oxidized_protocol::types::game_type::GameType::by_name(s)
+        oxidized_mc_types::game_type::GameType::by_name(s)
             .ok_or_else(|| CommandError::Parse(format!("Unknown game mode: '{s}'")))
     }
 
@@ -137,31 +132,10 @@ pub mod argument_access {
     }
 }
 
-pub mod argument_parser {
-    //! Argument parsing — re-exports from `oxidized_commands`.
-    pub use oxidized_commands::argument_parser::*;
-}
-pub mod arguments {
-    //! Argument types — re-exports from `oxidized_commands`.
-    pub use oxidized_commands::arguments::*;
-}
-pub mod context {
-    //! Command context types — re-exports from `oxidized_commands`.
-    pub use oxidized_commands::context::*;
-}
-pub mod coordinates {
-    //! Coordinate parsing — re-exports from `oxidized_commands`.
-    pub use oxidized_commands::coordinates::*;
-}
-pub mod dispatcher {
-    //! Command dispatcher — re-exports from `oxidized_commands`.
-    pub use oxidized_commands::dispatcher::*;
-}
 pub mod nodes {
-    //! Command node types — re-exports from `oxidized_commands` plus
-    //! `CommandSourceStack` convenience methods via extension traits.
+    //! Permission-based builder extension traits for command nodes.
 
-    pub use oxidized_commands::nodes::*;
+    use oxidized_commands::nodes::{ArgumentBuilder, LiteralBuilder};
 
     use crate::commands::source::CommandSourceStack;
 
@@ -215,39 +189,19 @@ pub mod nodes {
         }
     }
 }
-pub mod serializer {
-    //! Command tree serializer — re-exports from `oxidized_commands`.
-    pub use oxidized_commands::serializer::*;
-}
-pub mod string_reader {
-    //! String reader — re-exports from `oxidized_commands`.
-    pub use oxidized_commands::string_reader::*;
-}
 
-// Game-specific modules (not in oxidized-commands)
+// Game-specific modules
 mod impls;
 pub mod pagination;
 pub mod selector;
 pub mod source;
 
-pub use argument_access::{
-    for_each_target, get_block_pos, get_bool, get_double, get_entities, get_entity, get_float,
-    get_game_profile, get_gamemode, get_integer, get_long, get_string, get_time, get_vec3,
-};
-pub use argument_parser::parse_argument;
-pub use arguments::{ArgumentType, StringKind};
-pub use context::{CommandContext, ParsedArgument, StringRange};
-pub use coordinates::{CoordinateKind, Coordinates, EntityAnchorKind, WorldCoordinate};
-pub use dispatcher::CommandDispatcher;
-pub use nodes::{ArgumentCommandNode, CommandNode, LiteralCommandNode, RootCommandNode};
-pub use pagination::PaginatedMessage;
-pub use selector::{EntitySelector, SelectorFilters, SelectorKind, SelectorTarget};
-pub use serializer::{CommandNodeData, CommandTreeData};
-pub use source::{CommandSourceKind, CommandSourceStack};
-pub use string_reader::StringReader;
+use oxidized_commands::CommandError;
+use oxidized_commands::context::Suggestion;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::serializer::CommandTreeData;
 
-/// Re-export the core `CommandError` type from the library.
-pub use oxidized_commands::CommandError;
+use source::CommandSourceStack;
 
 /// The command system hub: registers all commands, provides dispatch and
 /// tab-completion, and serializes the command tree for the client.
@@ -275,11 +229,7 @@ impl Commands {
     }
 
     /// Collect tab-completions for the given partial input.
-    pub fn completions(
-        &self,
-        input: &str,
-        source: &CommandSourceStack,
-    ) -> Vec<context::Suggestion> {
+    pub fn completions(&self, input: &str, source: &CommandSourceStack) -> Vec<Suggestion> {
         let player_names = source.server.online_player_names();
         self.dispatcher
             .get_completions(input, source, &player_names)

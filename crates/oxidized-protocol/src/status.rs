@@ -7,8 +7,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-// Re-export Component from the chat module for backward compatibility.
-pub use crate::chat::Component;
+use oxidized_chat::Component;
 
 // ---------------------------------------------------------------------------
 // ServerStatus

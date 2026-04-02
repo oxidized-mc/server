@@ -2,11 +2,11 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::chat::Component;
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types::{read_string, write_string};
-use crate::codec::varint::{read_varint_buf, write_varint_buf};
+use oxidized_chat::Component;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types::{read_string, write_string};
+use oxidized_codec::varint::{read_varint_buf, write_varint_buf};
 
 /// 0x0F — Server returns tab-completion suggestions.
 #[derive(Debug, Clone, PartialEq)]

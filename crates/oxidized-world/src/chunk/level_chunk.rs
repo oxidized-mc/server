@@ -50,7 +50,8 @@ pub enum ChunkError {
 /// # Examples
 ///
 /// ```
-/// use oxidized_world::chunk::{ChunkPos, LevelChunk};
+/// use oxidized_world::chunk::LevelChunk;
+/// use oxidized_types::ChunkPos;
 ///
 /// let mut chunk = LevelChunk::new(ChunkPos::new(0, 0));
 /// // y=0 maps to section index 4 (overworld min_y = -64)

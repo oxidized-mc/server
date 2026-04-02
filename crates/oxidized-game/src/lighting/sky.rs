@@ -9,10 +9,10 @@
 
 use std::collections::VecDeque;
 
+use oxidized_registry::BlockStateId;
 use oxidized_world::chunk::DataLayer;
 use oxidized_world::chunk::LevelChunk;
 use oxidized_world::chunk::sky_light_sources::ChunkSkyLightSources;
-use oxidized_world::registry::BlockStateId;
 
 use super::propagation::{ALL_DIRECTIONS, BoundaryEntry, LightEntry, propagate_sky_light_increase};
 
@@ -144,9 +144,10 @@ fn bulk_fill_empty_sections(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use oxidized_registry::{BEDROCK, DIRT, GRASS_BLOCK};
+    use oxidized_types::ChunkPos;
+    use oxidized_world::chunk::LevelChunk;
     use oxidized_world::chunk::level_chunk::OVERWORLD_MIN_Y;
-    use oxidized_world::chunk::{ChunkPos, LevelChunk};
-    use oxidized_world::registry::{BEDROCK, DIRT, GRASS_BLOCK};
 
     /// Creates a standard flat world chunk: bedrock, 2 dirt, grass, air above.
     fn flat_chunk() -> LevelChunk {

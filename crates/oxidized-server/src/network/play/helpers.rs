@@ -4,16 +4,17 @@
 
 use std::sync::Arc;
 
+use oxidized_codec::Packet;
 use oxidized_game::chunk::view_distance::spiral_chunks;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::ConnectionError;
-use oxidized_protocol::handle::ConnectionHandle;
 use oxidized_protocol::packets::play::{
     ClientboundChunkBatchFinishedPacket, ClientboundChunkBatchStartPacket,
     ClientboundLevelChunkWithLightPacket,
 };
-use oxidized_world::chunk::{ChunkPos, LevelChunk};
+use oxidized_protocol::transport::connection::ConnectionError;
+use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_types::ChunkPos;
+use oxidized_world::chunk::LevelChunk;
 use parking_lot::RwLock;
 use tracing::warn;
 

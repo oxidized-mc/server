@@ -3,11 +3,9 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use oxidized_protocol::auth;
-use oxidized_protocol::chat::Component;
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::ConnectionError;
-use oxidized_protocol::handle::ConnectionHandle;
+use oxidized_chat::Component;
+use oxidized_codec::Packet;
+use oxidized_mc_types::resource_location::ResourceLocation;
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
     ClientboundAddEntityPacket, ClientboundEntityEventPacket, ClientboundGameEventPacket,
@@ -16,8 +14,9 @@ use oxidized_protocol::packets::play::{
     ClientboundSetTimePacket, ClientboundSystemChatPacket, ClockNetworkState, ClockUpdate,
     GameEventType, PlayerInfoActions, PlayerInfoEntry,
 };
-use oxidized_protocol::types::resource_location::ResourceLocation;
-use oxidized_world::chunk::ChunkPos;
+use oxidized_protocol::transport::connection::ConnectionError;
+use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_types::ChunkPos;
 use parking_lot::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
@@ -62,7 +61,7 @@ pub(super) struct JoinState {
 /// Returns a [`ConnectionError`] if any I/O or protocol step fails.
 pub(super) async fn send_join_sequence(
     conn_handle: &ConnectionHandle,
-    profile: auth::GameProfile,
+    profile: oxidized_auth::GameProfile,
     client_info: ClientInformation,
     server_ctx: &Arc<ServerContext>,
 ) -> Result<JoinState, ConnectionError> {
@@ -120,11 +119,8 @@ pub(super) async fn send_join_sequence(
     } else {
         // New player — spawn at world spawn, centered on the block (vanilla: +0.5 on X/Z).
         let (sx, sy, sz) = server_ctx.world.level_data.read().spawn_pos();
-        player.movement.pos = oxidized_protocol::types::Vec3::new(
-            f64::from(sx) + 0.5,
-            f64::from(sy),
-            f64::from(sz) + 0.5,
-        );
+        player.movement.pos =
+            oxidized_mc_types::Vec3::new(f64::from(sx) + 0.5, f64::from(sy), f64::from(sz) + 0.5);
         debug!(peer = %addr, uuid = %uuid, "New player — spawning at world spawn");
     }
 

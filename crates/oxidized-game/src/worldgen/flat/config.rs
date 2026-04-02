@@ -8,8 +8,8 @@
 //! by Y offset from `OVERWORLD_MIN_Y`, giving O(1) block lookups. This
 //! mirrors Java's `FlatLevelGeneratorSettings.updateLayers()`.
 
+use oxidized_registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
 use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
-use oxidized_world::registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
 
 /// Errors that can occur when parsing a flat world layer string.
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +42,7 @@ pub enum FlatConfigError {
 ///
 /// ```
 /// use oxidized_game::worldgen::flat::FlatLayerInfo;
-/// use oxidized_world::registry::BEDROCK;
+/// use oxidized_registry::BEDROCK;
 ///
 /// let layer = FlatLayerInfo { block: BEDROCK, height: 1 };
 /// assert_eq!(layer.height, 1);
@@ -200,7 +200,7 @@ impl FlatWorldConfig {
     ///
     /// ```
     /// use oxidized_game::worldgen::flat::FlatWorldConfig;
-    /// use oxidized_world::registry::BlockRegistry;
+    /// use oxidized_registry::BlockRegistry;
     ///
     /// let registry = BlockRegistry::load().unwrap();
     /// let config = FlatWorldConfig::from_layers_string(
@@ -258,7 +258,7 @@ impl FlatWorldConfig {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use oxidized_world::registry::STONE;
+    use oxidized_registry::STONE;
 
     use super::*;
 
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn from_layers_string_parses_correctly() {
-        let registry = oxidized_world::registry::BlockRegistry::load().unwrap();
+        let registry = oxidized_registry::BlockRegistry::load().unwrap();
         let config = FlatWorldConfig::from_layers_string(
             "minecraft:bedrock,minecraft:dirt*2,minecraft:grass_block",
             &registry,
@@ -339,13 +339,13 @@ mod tests {
 
     #[test]
     fn from_layers_string_rejects_empty() {
-        let registry = oxidized_world::registry::BlockRegistry::load().unwrap();
+        let registry = oxidized_registry::BlockRegistry::load().unwrap();
         assert!(FlatWorldConfig::from_layers_string("", &registry).is_err());
     }
 
     #[test]
     fn from_layers_string_rejects_unknown_block() {
-        let registry = oxidized_world::registry::BlockRegistry::load().unwrap();
+        let registry = oxidized_registry::BlockRegistry::load().unwrap();
         assert!(
             FlatWorldConfig::from_layers_string("minecraft:nonexistent_block", &registry).is_err()
         );
@@ -390,7 +390,7 @@ mod tests {
 
     #[test]
     fn from_layers_string_skips_zero_height() {
-        let registry = oxidized_world::registry::BlockRegistry::load().unwrap();
+        let registry = oxidized_registry::BlockRegistry::load().unwrap();
         let config = FlatWorldConfig::from_layers_string(
             "minecraft:bedrock,minecraft:dirt*0,minecraft:grass_block",
             &registry,

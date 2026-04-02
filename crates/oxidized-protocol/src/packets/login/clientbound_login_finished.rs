@@ -5,10 +5,10 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
-use crate::codec::varint;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
+use oxidized_codec::varint;
 
 /// Maximum length for property strings.
 const MAX_PROPERTY_STRING: usize = 32767;

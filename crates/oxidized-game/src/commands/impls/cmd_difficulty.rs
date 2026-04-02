@@ -6,13 +6,13 @@
 //! TODO: Modifying difficulty requires wrapping `PrimaryLevelData` in a
 //! `RwLock` and sending `ClientboundChangeDifficultyPacket` to all clients.
 
-use crate::commands::CommandError;
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::literal;
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
+use oxidized_commands::CommandError;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::literal;
 
 /// Map difficulty ID to vanilla translation key.
 fn difficulty_key(id: i32) -> &'static str {

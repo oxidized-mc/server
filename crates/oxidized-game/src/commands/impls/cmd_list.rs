@@ -1,10 +1,10 @@
 //! `/list` command — list online players.
 
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::literal;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::literal;
 
 /// Registers the `/list` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -20,7 +20,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 fn execute_list_impl(
     ctx: &CommandContext<CommandSourceStack>,
     include_uuids: bool,
-) -> Result<i32, crate::commands::CommandError> {
+) -> Result<i32, oxidized_commands::CommandError> {
     let names = ctx.source.server.online_player_names();
     let count = names.len();
     let max = ctx.source.server.max_players();

@@ -8,9 +8,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::varint;
 
 /// End-of-data marker byte.
 pub const DATA_EOF_MARKER: u8 = 0xFF;

@@ -4,14 +4,14 @@
 //! and `ChatType.EMOTE_COMMAND` (`chat.type.emote`) for `/me`. We broadcast
 //! via the server's chat channel.
 
-use crate::commands::argument_access::get_string;
-use crate::commands::arguments::{ArgumentType, StringKind};
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
+use oxidized_commands::argument_access::get_string;
+use oxidized_commands::arguments::{ArgumentType, StringKind};
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 
 /// Registers the `/say` and `/me` commands.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {

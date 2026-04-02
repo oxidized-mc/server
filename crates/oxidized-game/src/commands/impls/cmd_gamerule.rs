@@ -3,14 +3,14 @@
 //! Uses `ServerHandle::get_game_rule` / `set_game_rule` to access the
 //! game rules storage.
 
-use crate::commands::argument_access::get_string;
-use crate::commands::arguments::{ArgumentType, StringKind};
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
+use oxidized_commands::argument_access::get_string;
+use oxidized_commands::arguments::{ArgumentType, StringKind};
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 
 /// Registers the `/gamerule` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {

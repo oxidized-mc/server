@@ -4,7 +4,7 @@
 //! that control world height, lighting, weather, and other mechanics.
 //! Mirrors Java's `DimensionType` record from 26.1.
 
-use oxidized_protocol::types::ResourceLocation;
+use oxidized_mc_types::ResourceLocation;
 
 /// Maximum valid Y coordinate (exclusive upper bound on `min_y + height`).
 ///

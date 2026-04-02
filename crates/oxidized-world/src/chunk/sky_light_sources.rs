@@ -7,7 +7,7 @@
 //! results for overhangs, non-full blocks (slabs, stairs), and caves near
 //! chunk edges.
 
-use crate::registry::BlockStateId;
+use oxidized_registry::BlockStateId;
 
 use super::LevelChunk;
 
@@ -278,10 +278,11 @@ const fn index(x: usize, z: usize) -> usize {
 #[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod tests {
     use super::*;
+    use crate::chunk::LevelChunk;
     use crate::chunk::heightmap::{Heightmap, HeightmapType};
     use crate::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
-    use crate::chunk::{ChunkPos, LevelChunk};
-    use crate::registry::{BEDROCK, BlockRegistry, DIRT, GRASS_BLOCK};
+    use oxidized_registry::{BEDROCK, BlockRegistry, DIRT, GRASS_BLOCK};
+    use oxidized_types::ChunkPos;
 
     /// Creates a standard flat world chunk: bedrock, 2 dirt, grass, air above.
     fn flat_chunk() -> LevelChunk {

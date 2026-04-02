@@ -4,12 +4,12 @@
 //! and required permission level. Running a stub command reports
 //! `"/<name> is not yet implemented"` to the player.
 
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::literal;
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::literal;
 
 /// (name, description, permission_level, aliases)
 const STUBS: &[(&str, &str, u32, &[&str])] = &[

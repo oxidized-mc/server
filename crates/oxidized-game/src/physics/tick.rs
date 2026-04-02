@@ -22,9 +22,9 @@ use super::collision::{collect_obstacles, collide_with_shapes};
 use super::constants::*;
 use super::voxel_shape::BlockShapeProvider;
 
-use oxidized_protocol::types::BlockPos;
-use oxidized_protocol::types::aabb::Aabb;
-use oxidized_world::registry::BlockStateId;
+use oxidized_mc_types::BlockPos;
+use oxidized_mc_types::aabb::Aabb;
+use oxidized_registry::BlockStateId;
 
 /// Applies one tick of physics to an entity.
 ///
@@ -221,7 +221,7 @@ mod tests {
     use crate::level::error::LevelError;
     use crate::physics::voxel_shape::FullCubeShapeProvider;
     use glam::DVec3;
-    use oxidized_world::registry::BlockRegistry;
+    use oxidized_registry::BlockRegistry;
 
     /// A level with no blocks (everything is air / unloaded).
     struct EmptyLevel;

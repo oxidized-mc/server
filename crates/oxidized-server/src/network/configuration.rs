@@ -5,8 +5,8 @@
 
 use std::time::Duration;
 
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState};
+use oxidized_codec::Packet;
+use oxidized_mc_types::resource_location::ResourceLocation;
 use oxidized_protocol::packets::configuration::{
     ClientInformation, ClientboundFinishConfigurationPacket, ClientboundRegistryDataPacket,
     ClientboundSelectKnownPacksPacket, ClientboundUpdateEnabledFeaturesPacket, KnownPack,
@@ -14,7 +14,7 @@ use oxidized_protocol::packets::configuration::{
     ServerboundSelectKnownPacksPacket,
 };
 use oxidized_protocol::registry;
-use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_protocol::transport::connection::{Connection, ConnectionError, ConnectionState};
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
@@ -52,10 +52,10 @@ pub async fn handle_configuration(
         use bytes::BufMut;
         let mut brand_buf = bytes::BytesMut::new();
         let channel = "minecraft:brand";
-        oxidized_protocol::codec::varint::write_varint_buf(channel.len() as i32, &mut brand_buf);
+        oxidized_codec::varint::write_varint_buf(channel.len() as i32, &mut brand_buf);
         brand_buf.put_slice(channel.as_bytes());
         let brand = "Oxidized";
-        oxidized_protocol::codec::varint::write_varint_buf(brand.len() as i32, &mut brand_buf);
+        oxidized_codec::varint::write_varint_buf(brand.len() as i32, &mut brand_buf);
         brand_buf.put_slice(brand.as_bytes());
         conn.send_raw(0x01, &brand_buf).await?;
         debug!(peer = %addr, "Sent server brand");

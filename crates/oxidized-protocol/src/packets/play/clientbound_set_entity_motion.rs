@@ -2,17 +2,17 @@
 //!
 //! Sent when the server changes an entity's velocity (e.g. knockback,
 //! explosions, water currents). The velocity is encoded using the
-//! compact [`LpVec3`](crate::codec::lp_vec3) format.
+//! compact [`LpVec3`](oxidized_codec::lp_vec3) format.
 //!
 //! Corresponds to `net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket`.
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::lp_vec3;
-use crate::codec::varint;
+use oxidized_codec::lp_vec3;
+use oxidized_codec::varint;
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// Set entity motion packet (0x65).
 ///

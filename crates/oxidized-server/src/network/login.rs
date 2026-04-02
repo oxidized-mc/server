@@ -7,14 +7,15 @@
 
 use std::time::Duration;
 
-use oxidized_protocol::auth;
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::connection::{Connection, ConnectionError, ConnectionState, RawPacket};
-use oxidized_protocol::crypto::{generate_challenge, minecraft_digest, offline_uuid};
+use oxidized_codec::Packet;
+use oxidized_crypto::{generate_challenge, minecraft_digest, offline_uuid};
 use oxidized_protocol::packets::login::clientbound_login_finished::ProfileProperty;
 use oxidized_protocol::packets::login::{
     ClientboundHelloPacket, ClientboundLoginCompressionPacket, ClientboundLoginFinishedPacket,
     ServerboundHelloPacket, ServerboundKeyPacket, ServerboundLoginAcknowledgedPacket,
+};
+use oxidized_protocol::transport::connection::{
+    Connection, ConnectionError, ConnectionState, RawPacket,
 };
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
@@ -30,7 +31,7 @@ use super::helpers::{decode_packet, disconnect, disconnect_err};
 /// [`ClientboundLoginFinishedPacket`], and transitions to
 /// [`ConnectionState::Configuration`].
 ///
-/// Returns the authenticated [`GameProfile`](oxidized_protocol::auth::GameProfile) for use in subsequent
+/// Returns the authenticated [`GameProfile`](oxidized_auth::GameProfile) for use in subsequent
 /// protocol states.
 ///
 /// # Errors
@@ -42,7 +43,7 @@ pub async fn handle_login(
     conn: &mut Connection,
     hello_pkt: RawPacket,
     ctx: &LoginContext,
-) -> Result<auth::GameProfile, ConnectionError> {
+) -> Result<oxidized_auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
     let login_timeout = Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
 
@@ -79,7 +80,7 @@ pub async fn handle_login(
     } else {
         let uuid = offline_uuid(&hello.name);
         debug!(peer = %addr, uuid = %uuid, name = %hello.name, "Offline-mode UUID generated");
-        auth::GameProfile::new(uuid, hello.name.clone())
+        oxidized_auth::GameProfile::new(uuid, hello.name.clone())
     };
 
     let uuid = profile.uuid().ok_or_else(|| {
@@ -147,7 +148,7 @@ pub async fn handle_login(
 /// Performs online-mode authentication: encryption handshake, shared secret
 /// exchange, and Mojang session server verification.
 ///
-/// Returns the authenticated [`GameProfile`](oxidized_protocol::auth::GameProfile) from Mojang's session server.
+/// Returns the authenticated [`GameProfile`](oxidized_auth::GameProfile) from Mojang's session server.
 ///
 /// # Errors
 ///
@@ -157,7 +158,7 @@ async fn authenticate_online(
     conn: &mut Connection,
     hello: &ServerboundHelloPacket,
     ctx: &LoginContext,
-) -> Result<auth::GameProfile, ConnectionError> {
+) -> Result<oxidized_auth::GameProfile, ConnectionError> {
     let addr = conn.remote_addr();
     let login_timeout = Duration::from_secs(ctx.server_ctx.settings.timeouts.login_timeout_secs);
 
@@ -229,7 +230,7 @@ async fn authenticate_online(
         None
     };
 
-    let profile = auth::has_joined(
+    let profile = oxidized_auth::has_joined(
         &ctx.http_client,
         &hello.name,
         &server_hash,

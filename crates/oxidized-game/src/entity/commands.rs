@@ -11,7 +11,7 @@ use glam::DVec3;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-use oxidized_protocol::auth::GameProfile;
+use oxidized_auth::GameProfile;
 
 use super::components::{ExperienceData, SpawnData};
 use crate::player::GameMode;
@@ -106,8 +106,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
     use super::*;
-    use oxidized_protocol::auth::GameProfile;
-    use oxidized_protocol::types::BlockPos;
+    use oxidized_auth::GameProfile;
+    use oxidized_mc_types::BlockPos;
 
     #[test]
     fn test_spawn_player_send_receive() {
@@ -132,10 +132,9 @@ mod tests {
                     total: 0,
                 },
                 spawn_data: SpawnData {
-                    dimension:
-                        oxidized_protocol::types::resource_location::ResourceLocation::minecraft(
-                            "overworld",
-                        ),
+                    dimension: oxidized_mc_types::resource_location::ResourceLocation::minecraft(
+                        "overworld",
+                    ),
                     spawn_pos: BlockPos::new(0, 64, 0),
                     spawn_angle: 0.0,
                 },

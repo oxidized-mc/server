@@ -5,14 +5,14 @@
 
 use std::sync::Arc;
 
+use oxidized_chat::Component;
 use oxidized_game::commands::source::{CommandSourceKind, CommandSourceStack};
 use oxidized_game::player::ServerPlayer;
-use oxidized_protocol::chat::Component;
-use oxidized_protocol::connection::ConnectionError;
 use oxidized_protocol::packets::play::{
     ClientboundCommandSuggestionsPacket, ClientboundCommandsPacket,
     ServerboundCommandSuggestionPacket,
 };
+use oxidized_protocol::transport::connection::ConnectionError;
 use tracing::debug;
 
 use super::PlayContext;
@@ -86,7 +86,7 @@ pub async fn handle_command_suggestion(
             .map(|s| {
                 oxidized_protocol::packets::play::clientbound_command_suggestions::SuggestionEntry {
                     text: s.text,
-                    tooltip: s.tooltip.map(oxidized_protocol::chat::Component::text),
+                    tooltip: s.tooltip.map(oxidized_chat::Component::text),
                 }
             })
             .collect(),
@@ -156,10 +156,10 @@ pub fn make_command_source_for_player(
     }
 }
 
-/// Converts the game crate's [`CommandTreeData`](oxidized_game::commands::CommandTreeData) into a protocol-level
+/// Converts the game crate's [`CommandTreeData`](oxidized_commands::serializer::CommandTreeData) into a protocol-level
 /// [`ClientboundCommandsPacket`].
 pub fn commands_packet_from_tree(
-    tree: &oxidized_game::commands::CommandTreeData,
+    tree: &oxidized_commands::serializer::CommandTreeData,
 ) -> ClientboundCommandsPacket {
     let nodes = tree
         .nodes

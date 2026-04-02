@@ -5,8 +5,8 @@
 
 use std::collections::VecDeque;
 
+use oxidized_registry::BlockStateId;
 use oxidized_world::chunk::LevelChunk;
-use oxidized_world::registry::BlockStateId;
 
 use super::propagation::{
     ALL_DIRECTIONS, BoundaryEntry, LightEntry, propagate_block_light_increase,
@@ -74,8 +74,9 @@ pub fn initialize_block_light(chunk: &mut LevelChunk) -> Vec<BoundaryEntry> {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use oxidized_world::chunk::{ChunkPos, LevelChunk};
-    use oxidized_world::registry::BlockRegistry;
+    use oxidized_registry::BlockRegistry;
+    use oxidized_types::ChunkPos;
+    use oxidized_world::chunk::LevelChunk;
 
     fn air_chunk() -> LevelChunk {
         LevelChunk::new(ChunkPos::new(0, 0))
@@ -136,7 +137,7 @@ mod tests {
         chunk.set_block_state(8, 64, 8, torch_id()).unwrap();
         initialize_block_light(&mut chunk);
 
-        let emission = oxidized_world::registry::BlockStateId(torch_id() as u16).light_emission();
+        let emission = oxidized_registry::BlockStateId(torch_id() as u16).light_emission();
         assert_eq!(chunk.get_block_light_at(8, 64, 8), emission);
         if emission > 1 {
             assert_eq!(chunk.get_block_light_at(9, 64, 8), emission - 1);

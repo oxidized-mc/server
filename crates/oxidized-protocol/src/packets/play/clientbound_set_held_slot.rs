@@ -6,9 +6,9 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::varint;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::varint;
 
 /// 0x69 — Server sets the client's active hotbar slot.
 #[derive(Debug, Clone, PartialEq, Eq)]

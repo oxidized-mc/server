@@ -4,15 +4,15 @@
 //! actually modify the world time via `ServerHandle::set_day_time` /
 //! `add_day_time`.
 
-use crate::commands::CommandError;
-use crate::commands::argument_access::get_time;
-use crate::commands::arguments::ArgumentType;
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
+use oxidized_commands::CommandError;
+use oxidized_commands::argument_access::get_time;
+use oxidized_commands::arguments::ArgumentType;
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 use oxidized_protocol::constants::{
     DAY_START_TICKS, MIDNIGHT_TICKS, NIGHT_START_TICKS, NOON_TICKS, TICKS_PER_GAME_DAY,
 };

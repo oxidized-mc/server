@@ -2,9 +2,9 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
 
 /// 0x07 — Client dispatches an unsigned command (leading `/` already stripped).
 #[derive(Debug, Clone, PartialEq, Eq)]

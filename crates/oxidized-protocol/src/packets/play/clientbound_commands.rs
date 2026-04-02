@@ -5,9 +5,9 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::codec::packet::{Packet, PacketDecodeError};
-use crate::codec::types::{ensure_remaining, read_string, write_string};
-use crate::codec::varint::{read_varint_buf, write_varint_buf};
+use oxidized_codec::packet::{Packet, PacketDecodeError};
+use oxidized_codec::types::{ensure_remaining, read_string, write_string};
+use oxidized_codec::varint::{read_varint_buf, write_varint_buf};
 
 /// Maximum string length in the Minecraft protocol (characters).
 const MAX_STRING_LENGTH: usize = 32767;
@@ -271,7 +271,7 @@ fn skip_number_parser(buf: &mut Bytes, value_size: usize) -> Result<(), PacketDe
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::codec::packet::Packet;
+    use oxidized_codec::packet::Packet;
 
     /// Helper to build a root node (type 0).
     fn root_node(children: Vec<i32>) -> CommandNodeData {

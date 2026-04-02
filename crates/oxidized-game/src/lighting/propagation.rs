@@ -12,9 +12,9 @@
 
 use std::collections::VecDeque;
 
-use oxidized_protocol::types::Direction;
+use oxidized_mc_types::Direction;
+use oxidized_registry::BlockStateId;
 use oxidized_world::chunk::LevelChunk;
-use oxidized_world::registry::BlockStateId;
 
 use super::occlusion::get_light_block_into;
 
@@ -454,8 +454,9 @@ pub(crate) fn propagate_sky_light_decrease(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use oxidized_world::chunk::{ChunkPos, LevelChunk};
-    use oxidized_world::registry::BlockRegistry;
+    use oxidized_registry::BlockRegistry;
+    use oxidized_types::ChunkPos;
+    use oxidized_world::chunk::LevelChunk;
 
     fn air_chunk() -> LevelChunk {
         LevelChunk::new(ChunkPos::new(0, 0))

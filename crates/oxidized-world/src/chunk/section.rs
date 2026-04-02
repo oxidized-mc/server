@@ -4,7 +4,7 @@
 //! palette-compressed and serialized for the network packet.
 
 use super::paletted_container::{PalettedContainer, PalettedContainerError, Strategy};
-use crate::registry::BlockStateId;
+use oxidized_registry::BlockStateId;
 
 /// A 16×16×16 section of a chunk column.
 ///
@@ -401,7 +401,7 @@ mod tests {
 
     /// Helper: look up the default state ID for a block by name.
     fn default_state(name: &str) -> u32 {
-        use crate::registry::BlockRegistry;
+        use oxidized_registry::BlockRegistry;
         u32::from(
             BlockRegistry
                 .default_state(name)

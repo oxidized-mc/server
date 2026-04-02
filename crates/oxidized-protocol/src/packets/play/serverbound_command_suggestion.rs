@@ -2,8 +2,8 @@
 
 use bytes::{Bytes, BytesMut};
 
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::{Packet, types, varint};
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::{Packet, types, varint};
 
 /// 0x0F — Client requests tab-completion suggestions.
 #[derive(Debug, Clone, PartialEq, Eq)]

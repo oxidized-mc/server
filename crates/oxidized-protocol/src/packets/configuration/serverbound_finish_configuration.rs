@@ -13,7 +13,7 @@ impl_empty_packet!(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::codec::Packet;
+    use oxidized_codec::Packet;
 
     #[test]
     fn test_roundtrip() {

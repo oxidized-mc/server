@@ -3,7 +3,7 @@
 //! Accumulates block changes that affect lighting during a tick, then feeds
 //! them to [`super::engine::LightEngine::process_updates`] in a single batch.
 
-use oxidized_protocol::types::BlockPos;
+use oxidized_mc_types::BlockPos;
 
 /// A queue of pending light updates for the current tick.
 ///
@@ -14,7 +14,7 @@ use oxidized_protocol::types::BlockPos;
 ///
 /// ```
 /// use oxidized_game::lighting::queue::{LightUpdateQueue, LightUpdate};
-/// use oxidized_protocol::types::BlockPos;
+/// use oxidized_mc_types::BlockPos;
 ///
 /// let mut queue = LightUpdateQueue::new();
 /// assert!(queue.is_empty());

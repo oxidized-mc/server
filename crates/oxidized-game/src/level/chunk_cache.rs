@@ -8,7 +8,8 @@ use std::sync::Arc;
 
 use parking_lot::RwLock;
 
-use oxidized_world::chunk::{ChunkPos, LevelChunk};
+use oxidized_types::ChunkPos;
+use oxidized_world::chunk::LevelChunk;
 
 /// An LRU cache of loaded chunks.
 ///

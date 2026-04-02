@@ -13,7 +13,7 @@ use crate::chunk::LevelChunk;
 use crate::chunk::data_layer::DATA_LAYER_SIZE;
 use crate::chunk::heightmap::HeightmapType;
 use crate::chunk::level_chunk::OVERWORLD_MIN_Y;
-use crate::registry::{BlockRegistry, BlockStateId};
+use oxidized_registry::{BlockRegistry, BlockStateId};
 
 /// Data version for Minecraft 26.1.
 const DATA_VERSION: i32 = 4786;
@@ -193,7 +193,7 @@ impl ChunkSerializer {
     /// Uses the biome registry for all 65 vanilla biomes.
     /// IDs outside the valid range fall back to `"minecraft:plains"`.
     fn biome_name(&self, biome_id: u32) -> String {
-        crate::registry::biome_id_to_name(biome_id)
+        oxidized_registry::biome_id_to_name(biome_id)
             .unwrap_or("minecraft:plains")
             .to_owned()
     }

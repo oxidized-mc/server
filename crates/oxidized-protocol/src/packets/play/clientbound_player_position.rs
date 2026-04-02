@@ -7,11 +7,11 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::codec::types;
-use crate::codec::varint;
+use oxidized_codec::types;
+use oxidized_codec::varint;
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
 
 /// Bitflags indicating which position/rotation fields are relative.
 ///

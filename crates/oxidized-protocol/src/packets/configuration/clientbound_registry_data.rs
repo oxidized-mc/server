@@ -5,11 +5,11 @@
 
 use bytes::{Buf, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::types;
-use crate::codec::varint;
-use crate::types::resource_location::ResourceLocation;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::types;
+use oxidized_codec::varint;
+use oxidized_mc_types::resource_location::ResourceLocation;
 
 /// A single entry in a registry data packet.
 #[derive(Debug, Clone, PartialEq)]

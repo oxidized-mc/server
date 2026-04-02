@@ -10,8 +10,8 @@ use super::components::{
     BoundingBox, Dimensions, NetworkId, NoGravity, OnGround, Position, SynchedData, TickCount,
     Velocity,
 };
+use oxidized_mc_types::aabb::Aabb;
 use oxidized_protocol::packets::play::{ClientboundSetEntityDataPacket, EntityDataEntry};
-use oxidized_protocol::types::aabb::Aabb;
 
 use super::components::PlayerMarker;
 
@@ -96,7 +96,7 @@ pub fn entity_data_sync_system(
     mut query: Query<(&NetworkId, &mut SynchedData)>,
     mut outbound: ResMut<OutboundEntityPackets>,
 ) {
-    use oxidized_protocol::codec::Packet;
+    use oxidized_codec::Packet;
 
     for (net_id, mut synched) in &mut query {
         if synched.0.is_dirty() {

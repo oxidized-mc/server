@@ -10,10 +10,10 @@ use uuid::Uuid;
 
 use crate::entity::synched_data::SynchedEntityData;
 use crate::player::GameMode;
-use oxidized_protocol::auth::GameProfile;
-use oxidized_protocol::types::BlockPos;
-use oxidized_protocol::types::aabb::Aabb;
-use oxidized_protocol::types::resource_location::ResourceLocation;
+use oxidized_auth::GameProfile;
+use oxidized_mc_types::BlockPos;
+use oxidized_mc_types::aabb::Aabb;
+use oxidized_mc_types::resource_location::ResourceLocation;
 
 // ---------------------------------------------------------------------------
 // Entity base (vanilla Entity.java fields)
@@ -415,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_bounding_box_component() {
-        use oxidized_protocol::types::aabb::Aabb;
+        use oxidized_mc_types::aabb::Aabb;
         let bbox = BoundingBox(Aabb::from_center(0.0, 0.0, 0.0, 0.6, 1.8));
         let mut world = World::new();
         let entity = world.spawn(bbox).id();

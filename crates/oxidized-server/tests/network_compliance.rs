@@ -13,11 +13,11 @@
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
-use oxidized_protocol::channel::{
+use oxidized_protocol::transport::channel::{
     INBOUND_CHANNEL_CAPACITY, InboundPacket, OUTBOUND_CHANNEL_CAPACITY, OutboundPacket,
 };
-use oxidized_protocol::connection::Connection;
-use oxidized_protocol::handle::ConnectionHandle;
+use oxidized_protocol::transport::connection::Connection;
+use oxidized_protocol::transport::handle::ConnectionHandle;
 use oxidized_server::network::reader::reader_loop;
 use oxidized_server::network::writer::{DEFAULT_WRITE_TIMEOUT, writer_loop};
 use tokio::net::{TcpListener, TcpStream};
@@ -29,10 +29,12 @@ struct TaskPairFixture {
     inbound_rx: mpsc::Receiver<InboundPacket>,
     client: Connection,
     conn_handle: ConnectionHandle,
-    reader_handle:
-        tokio::task::JoinHandle<Result<(), oxidized_protocol::connection::ConnectionError>>,
-    writer_handle:
-        tokio::task::JoinHandle<Result<(), oxidized_protocol::connection::ConnectionError>>,
+    reader_handle: tokio::task::JoinHandle<
+        Result<(), oxidized_protocol::transport::connection::ConnectionError>,
+    >,
+    writer_handle: tokio::task::JoinHandle<
+        Result<(), oxidized_protocol::transport::connection::ConnectionError>,
+    >,
 }
 
 async fn setup_task_pair() -> TaskPairFixture {

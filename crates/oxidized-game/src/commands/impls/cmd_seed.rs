@@ -1,13 +1,13 @@
 //! `/seed` command — show the world seed.
 
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::literal;
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::ChatFormatting;
-use oxidized_protocol::chat::Component;
-use oxidized_protocol::chat::{ClickEvent, HoverEvent, TextColor};
+use oxidized_chat::ChatFormatting;
+use oxidized_chat::Component;
+use oxidized_chat::{ClickEvent, HoverEvent, TextColor};
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::literal;
 
 /// Registers the `/seed` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {

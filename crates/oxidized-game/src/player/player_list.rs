@@ -126,8 +126,8 @@ impl PlayerList {
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
-    use oxidized_protocol::auth::GameProfile;
-    use oxidized_protocol::types::ResourceLocation;
+    use oxidized_auth::GameProfile;
+    use oxidized_mc_types::ResourceLocation;
 
     use super::*;
     use crate::player::game_mode::GameMode;

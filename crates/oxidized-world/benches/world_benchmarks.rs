@@ -2,7 +2,7 @@
 #![allow(missing_docs, clippy::unwrap_used)]
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use oxidized_world::registry::{BlockStateId, BlockTags};
+use oxidized_registry::{BlockStateId, BlockTags};
 
 // -----------------------------------------------------------------------
 // Block state lookups

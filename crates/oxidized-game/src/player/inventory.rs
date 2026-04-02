@@ -10,7 +10,7 @@
 //! [`PlayerInventory::to_protocol_slot`] and [`PlayerInventory::from_protocol_slot`]
 //! to convert between internal and protocol indices.
 
-use crate::inventory::item_stack::{ItemStack, max_stack_size};
+use oxidized_inventory::item_stack::{ItemStack, max_stack_size};
 
 /// The number of protocol slots for window 0 (includes crafting grid).
 pub const PROTOCOL_SLOT_COUNT: usize = 46;
@@ -26,7 +26,7 @@ pub const PROTOCOL_SLOT_COUNT: usize = 46;
 ///
 /// ```
 /// use oxidized_game::player::PlayerInventory;
-/// use oxidized_game::inventory::ItemStack;
+/// use oxidized_inventory::ItemStack;
 ///
 /// let mut inv = PlayerInventory::new();
 /// inv.set(0, ItemStack::new("minecraft:stone", 64));
@@ -201,7 +201,7 @@ impl PlayerInventory {
     ///
     /// ```
     /// use oxidized_game::player::inventory::PlayerInventory;
-    /// use oxidized_game::inventory::item_stack::ItemStack;
+    /// use oxidized_inventory::item_stack::ItemStack;
     ///
     /// let mut inv = PlayerInventory::new();
     /// inv.set(0, ItemStack::new("minecraft:diamond_sword", 1));

@@ -5,8 +5,8 @@
 
 use std::collections::VecDeque;
 
+use oxidized_registry::BlockStateId;
 use oxidized_world::chunk::LevelChunk;
-use oxidized_world::registry::BlockStateId;
 
 use super::propagation::{
     BoundaryEntry, LightEntry, propagate_block_light_increase, propagate_sky_light_increase,
@@ -196,7 +196,8 @@ fn resolve_neighbor<'a>(
 mod tests {
     use super::*;
     use crate::lighting::propagation::ALL_DIRECTIONS;
-    use oxidized_world::chunk::{ChunkPos, LevelChunk};
+    use oxidized_types::ChunkPos;
+    use oxidized_world::chunk::LevelChunk;
 
     #[test]
     fn test_missing_neighbor_no_panic() {

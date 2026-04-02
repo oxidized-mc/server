@@ -7,7 +7,7 @@
 //!
 //! [`BlockShapeProvider`] maps block state IDs to their collision shapes.
 
-use oxidized_protocol::types::aabb::Aabb;
+use oxidized_mc_types::aabb::Aabb;
 
 /// An axis-aligned box in block-local space (0.0–1.0 per axis).
 ///

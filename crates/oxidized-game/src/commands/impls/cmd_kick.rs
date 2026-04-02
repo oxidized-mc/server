@@ -6,14 +6,15 @@
 //! TODO: Wire `kick_player()` to actually disconnect the player's TCP
 //! connection with a disconnect packet.
 
-use crate::commands::argument_access::{get_entities, get_string};
-use crate::commands::arguments::{ArgumentType, StringKind};
-use crate::commands::context::CommandContext;
-use crate::commands::dispatcher::CommandDispatcher;
-use crate::commands::nodes::{argument, literal};
+use crate::commands::argument_access::get_entities;
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
-use oxidized_protocol::chat::Component;
+use oxidized_chat::Component;
+use oxidized_commands::argument_access::get_string;
+use oxidized_commands::arguments::{ArgumentType, StringKind};
+use oxidized_commands::context::CommandContext;
+use oxidized_commands::dispatcher::CommandDispatcher;
+use oxidized_commands::nodes::{argument, literal};
 
 /// Registers the `/kick` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -50,7 +51,7 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
 fn kick_targets(
     ctx: &CommandContext<CommandSourceStack>,
     reason: &str,
-) -> Result<i32, crate::commands::CommandError> {
+) -> Result<i32, oxidized_commands::CommandError> {
     let targets = get_entities(ctx, "targets")?;
     for target in &targets {
         let kicked = ctx.source.server.kick_player(&target.name, reason);

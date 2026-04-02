@@ -13,8 +13,10 @@
 use bytes::BytesMut;
 use sha2::{Digest, Sha256};
 
-use oxidized_protocol::codec::Packet;
-use oxidized_protocol::codec::slot::{ComponentPatchData, SlotData};
+use oxidized_codec::Packet;
+use oxidized_codec::slot::{ComponentPatchData, SlotData};
+use oxidized_mc_types::ResourceLocation;
+use oxidized_mc_types::block_pos::BlockPos;
 use oxidized_protocol::packets::play::{
     ClientboundChangeDifficultyPacket, ClientboundContainerSetContentPacket,
     ClientboundLoginPacket, ClientboundPlayerAbilitiesPacket, ClientboundPlayerInfoUpdatePacket,
@@ -23,18 +25,16 @@ use oxidized_protocol::packets::play::{
     ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo, PlayerInfoActions,
     PlayerInfoEntry, RelativeFlags,
 };
-use oxidized_protocol::types::ResourceLocation;
-use oxidized_protocol::types::block_pos::BlockPos;
 use oxidized_world::storage::PrimaryLevelData;
 
 use super::game_mode::GameMode;
 use super::player_list::PlayerList;
 use super::server_player::ServerPlayer;
-use crate::inventory::ItemStack;
-use crate::inventory::item_ids::item_name_to_id;
 use crate::level::game_rules::{GameRuleKey, GameRules};
 use crate::player::PlayerInventory;
 use crate::player::inventory::PROTOCOL_SLOT_COUNT;
+use oxidized_inventory::ItemStack;
+use oxidized_inventory::item_ids::item_name_to_id;
 
 /// Bitmask for the hat model part (bit 6) in the model customisation byte.
 const HAT_MASK: u8 = 1 << 6;
@@ -355,9 +355,9 @@ pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) 
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
+    use oxidized_auth::GameProfile;
+    use oxidized_mc_types::Vec3;
     use oxidized_nbt::NbtCompound;
-    use oxidized_protocol::auth::GameProfile;
-    use oxidized_protocol::types::Vec3;
     use uuid::Uuid;
 
     use super::*;
@@ -576,7 +576,7 @@ mod tests {
     #[test]
     fn chunk_cache_center_matches_player_position() {
         let mut player = make_player(1, "Test");
-        player.movement.pos = oxidized_protocol::types::Vec3::new(100.0, 64.0, -200.0);
+        player.movement.pos = oxidized_mc_types::Vec3::new(100.0, 64.0, -200.0);
 
         let level_data = make_level_data();
         let player_list = PlayerList::new(20);
@@ -602,7 +602,7 @@ mod tests {
     #[test]
     fn position_packet_uses_player_pos_and_teleport_id() {
         let mut player = make_player(1, "Test");
-        player.movement.pos = oxidized_protocol::types::Vec3::new(50.5, 70.0, -100.25);
+        player.movement.pos = oxidized_mc_types::Vec3::new(50.5, 70.0, -100.25);
         player.movement.yaw = 90.0;
         player.movement.pitch = -15.0;
 

@@ -7,10 +7,10 @@
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use crate::codec::Packet;
-use crate::codec::packet::PacketDecodeError;
-use crate::codec::slot::{self, SlotData};
-use crate::codec::varint;
+use oxidized_codec::Packet;
+use oxidized_codec::packet::PacketDecodeError;
+use oxidized_codec::slot::{self, SlotData};
+use oxidized_codec::varint;
 
 /// Equipment slot indices as sent on the wire.
 ///
@@ -106,7 +106,7 @@ impl Packet for ClientboundSetEquipmentPacket {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::codec::slot::ComponentPatchData;
+    use oxidized_codec::slot::ComponentPatchData;
 
     #[test]
     fn test_packet_id() {

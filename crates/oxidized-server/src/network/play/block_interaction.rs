@@ -5,17 +5,17 @@
 
 use std::sync::Arc;
 
+use oxidized_chat::Component;
+use oxidized_codec::Packet;
 use oxidized_game::lighting::queue::LightUpdate;
-use oxidized_protocol::chat::Component;
-use oxidized_protocol::codec::Packet;
+use oxidized_mc_types::{BlockPos, Direction};
 use oxidized_protocol::packets::play::{
     ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket,
     ClientboundSetPlayerInventoryPacket,
 };
-use oxidized_protocol::types::{BlockPos, Direction};
-use oxidized_world::chunk::ChunkPos;
+use oxidized_registry::{AIR, BlockStateId};
+use oxidized_types::ChunkPos;
 use oxidized_world::chunk::level_chunk::{OVERWORLD_MAX_Y, OVERWORLD_MIN_Y};
-use oxidized_world::registry::{AIR, BlockStateId};
 
 use super::PlayContext;
 use crate::network::{BroadcastMessage, ConnectionError, ServerContext};
@@ -27,7 +27,7 @@ pub use super::placement::{handle_use_item, handle_use_item_on};
 pub use super::sign_editing::handle_sign_update;
 
 use oxidized_game::player::GameMode;
-use oxidized_protocol::types::Vec3;
+use oxidized_mc_types::Vec3;
 
 /// Survival block interaction reach (squared).
 ///
@@ -278,7 +278,7 @@ pub(super) async fn sync_inventory_slot(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use oxidized_world::registry::BlockRegistry;
+    use oxidized_registry::BlockRegistry;
 
     #[test]
     fn test_get_set_block_on_loaded_chunk() {
@@ -584,7 +584,7 @@ mod tests {
         use oxidized_game::level::game_rules::GameRules;
         use oxidized_game::level::tick_rate::ServerTickRateManager;
         use oxidized_game::player::PlayerList;
-        use oxidized_protocol::types::resource_location::ResourceLocation;
+        use oxidized_mc_types::resource_location::ResourceLocation;
         use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
         use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
         use parking_lot::RwLock;
@@ -650,7 +650,7 @@ mod tests {
         use oxidized_game::level::game_rules::GameRules;
         use oxidized_game::level::tick_rate::ServerTickRateManager;
         use oxidized_game::player::PlayerList;
-        use oxidized_protocol::types::resource_location::ResourceLocation;
+        use oxidized_mc_types::resource_location::ResourceLocation;
         use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
         use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
         use parking_lot::RwLock;
