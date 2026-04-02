@@ -10,6 +10,7 @@ use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
+use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
 use crate::player::game_mode::GameMode;
 use oxidized_protocol::chat::Component;

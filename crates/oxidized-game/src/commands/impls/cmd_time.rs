@@ -10,6 +10,7 @@ use crate::commands::arguments::ArgumentType;
 use crate::commands::context::CommandContext;
 use crate::commands::dispatcher::CommandDispatcher;
 use crate::commands::nodes::{argument, literal};
+use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::CommandSourceStack;
 use oxidized_protocol::chat::Component;
 use oxidized_protocol::constants::{

@@ -86,7 +86,7 @@ pub async fn handle_command_suggestion(
             .map(|s| {
                 oxidized_protocol::packets::play::clientbound_command_suggestions::SuggestionEntry {
                     text: s.text,
-                    tooltip: s.tooltip,
+                    tooltip: s.tooltip.map(oxidized_protocol::chat::Component::text),
                 }
             })
             .collect(),

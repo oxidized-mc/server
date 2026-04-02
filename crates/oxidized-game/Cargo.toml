@@ -15,6 +15,7 @@ oxidized-nbt      = { workspace = true }
 oxidized-world    = { workspace = true }
 oxidized-protocol = { workspace = true }
 oxidized-registry = { workspace = true }
+oxidized-commands = { workspace = true }
 
 bevy_ecs     = { workspace = true }
 bytes        = { workspace = true }

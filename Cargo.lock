@@ -1912,6 +1912,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "oxidized-commands"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "oxidized-compression"
 version = "0.1.0"
 source = "git+https://github.com/oxidized-mc/compression.git#e3f77dbe6cfb19e9d54ac8fa9836b8d843c2aebe"
@@ -1948,6 +1957,7 @@ dependencies = [
  "indexmap",
  "insta",
  "lru",
+ "oxidized-commands",
  "oxidized-nbt",
  "oxidized-protocol",
  "oxidized-registry",
