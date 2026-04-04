@@ -1890,6 +1890,7 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 [[package]]
 name = "oxidized-anvil"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/anvil.git#a57cdf02e73bd0375fe73a552de498d0c5f439bb"
 dependencies = [
  "ahash",
  "flate2",
@@ -1906,6 +1907,7 @@ dependencies = [
 [[package]]
 name = "oxidized-auth"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/auth.git#0b44e91da89e3fd1919825fafbb140d383d07909"
 dependencies = [
  "reqwest",
  "serde",
@@ -1918,6 +1920,7 @@ dependencies = [
 [[package]]
 name = "oxidized-chat"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/chat.git#da2e7bab5a4c011cee04b65636284c61dd426fa1"
 dependencies = [
  "oxidized-mc-types",
  "oxidized-nbt",
@@ -1928,6 +1931,7 @@ dependencies = [
 [[package]]
 name = "oxidized-chunks"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/chunks.git#6a3f01ed51223641108c5a4bc000b1494f752d3d"
 dependencies = [
  "ahash",
  "oxidized-registry",
@@ -1938,6 +1942,7 @@ dependencies = [
 [[package]]
 name = "oxidized-codec"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/codec.git#fd3113c247101013f3af41e3b69dcb6e74cdeec1"
 dependencies = [
  "bytes",
  "oxidized-nbt",
@@ -1949,6 +1954,7 @@ dependencies = [
 [[package]]
 name = "oxidized-commands"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/commands.git#a3a002f9b632953cc4ff9101426b91bf901e53d5"
 dependencies = [
  "bytes",
  "thiserror 2.0.18",
@@ -1958,6 +1964,7 @@ dependencies = [
 [[package]]
 name = "oxidized-compression"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/compression.git#e3f77dbe6cfb19e9d54ac8fa9836b8d843c2aebe"
 dependencies = [
  "flate2",
  "thiserror 2.0.18",
@@ -1966,6 +1973,7 @@ dependencies = [
 [[package]]
 name = "oxidized-crypto"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/crypto.git#afe42b7a8fc7d1cac59f0002b5a84fe80a29babf"
 dependencies = [
  "aes",
  "md-5 0.11.0",
@@ -2021,6 +2029,7 @@ dependencies = [
 [[package]]
 name = "oxidized-inventory"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/inventory.git#6038ec69e9ad6b0a4c9ce8d28055071bdf5ee715"
 dependencies = [
  "oxidized-nbt",
  "oxidized-registry",
@@ -2030,6 +2039,7 @@ dependencies = [
 [[package]]
 name = "oxidized-lighting"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/lighting.git#c7762c99d0c0c4a3f82794c81be1d0ae98207900"
 dependencies = [
  "ahash",
  "oxidized-chunks",
@@ -2051,6 +2061,7 @@ dependencies = [
 [[package]]
 name = "oxidized-mc-types"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/mc-types.git#967381366dc0aea63cf04f67e8e4f02230455d74"
 dependencies = [
  "bytes",
  "oxidized-codec",
@@ -2061,6 +2072,7 @@ dependencies = [
 [[package]]
 name = "oxidized-nbt"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/nbt.git#fc4a249a3b36ebe370630fc3ebcbd68e17069879"
 dependencies = [
  "bytes",
  "flate2",
@@ -2073,6 +2085,7 @@ dependencies = [
 [[package]]
 name = "oxidized-physics"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/physics.git#b17222a1f0f880972b0707dc446d6872d63feecb"
 dependencies = [
  "glam 0.30.10",
  "oxidized-mc-types",
@@ -2119,6 +2132,7 @@ dependencies = [
 [[package]]
 name = "oxidized-registry"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/registry.git#b8e702e5299e6fbb94e866755b869c84275f1981"
 dependencies = [
  "bitflags",
  "flate2",
@@ -2173,6 +2187,7 @@ dependencies = [
 [[package]]
 name = "oxidized-transport"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/transport.git#0a644ad8e815b286d6b36fcebdd136db11740189"
 dependencies = [
  "bytes",
  "oxidized-codec",
@@ -2185,6 +2200,7 @@ dependencies = [
 [[package]]
 name = "oxidized-types"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/types.git#bc330d15759b86baaea59655b9f5a4f3890f706d"
 
 [[package]]
 name = "oxidized-world"
@@ -2218,6 +2234,7 @@ dependencies = [
 [[package]]
 name = "oxidized-worldgen"
 version = "0.1.0"
+source = "git+https://github.com/oxidized-mc/worldgen.git#fc9e5da63d130b266ba0377dda8c047042c7eaca"
 dependencies = [
  "dashmap",
  "oxidized-chunks",

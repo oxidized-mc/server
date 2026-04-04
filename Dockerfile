@@ -10,18 +10,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy manifests first for dependency caching
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
-COPY crates/oxidized-nbt/Cargo.toml crates/oxidized-nbt/Cargo.toml
 COPY crates/oxidized-macros/Cargo.toml crates/oxidized-macros/Cargo.toml
-COPY crates/oxidized-types/Cargo.toml crates/oxidized-types/Cargo.toml
 COPY crates/oxidized-protocol/Cargo.toml crates/oxidized-protocol/Cargo.toml
 COPY crates/oxidized-world/Cargo.toml crates/oxidized-world/Cargo.toml
 COPY crates/oxidized-game/Cargo.toml crates/oxidized-game/Cargo.toml
 COPY crates/oxidized-server/Cargo.toml crates/oxidized-server/Cargo.toml
 
+# Strip [patch] sections (local dev overrides that don't apply in Docker)
+RUN sed -i '/^\[patch\./,$d' Cargo.toml
+
 # Create stub source files so cargo can resolve the dependency graph
-RUN mkdir -p crates/oxidized-nbt/src && echo "" > crates/oxidized-nbt/src/lib.rs && \
-    mkdir -p crates/oxidized-macros/src && echo "" > crates/oxidized-macros/src/lib.rs && \
-    mkdir -p crates/oxidized-types/src && echo "" > crates/oxidized-types/src/lib.rs && \
+RUN mkdir -p crates/oxidized-macros/src && echo "" > crates/oxidized-macros/src/lib.rs && \
     mkdir -p crates/oxidized-protocol/src && echo "" > crates/oxidized-protocol/src/lib.rs && \
     mkdir -p crates/oxidized-world/src && echo "" > crates/oxidized-world/src/lib.rs && \
     mkdir -p crates/oxidized-game/src && echo "" > crates/oxidized-game/src/lib.rs && \
