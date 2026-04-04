@@ -204,3 +204,4 @@ oxidized-physics = { path = "../physics" }
 
 [patch."https://github.com/oxidized-mc/worldgen.git"]
 oxidized-worldgen = { path = "../worldgen" }
+
