@@ -1876,6 +1876,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
+name = "oxidized-anvil"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "flate2",
+ "lz4_flex",
+ "oxidized-chunks",
+ "oxidized-nbt",
+ "oxidized-registry",
+ "oxidized-types",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "oxidized-auth"
 version = "0.1.0"
 dependencies = [
@@ -1895,6 +1911,16 @@ dependencies = [
  "oxidized-nbt",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "oxidized-chunks"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "oxidized-registry",
+ "oxidized-types",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2127,6 +2153,8 @@ dependencies = [
  "glam 0.32.1",
  "insta",
  "lz4_flex",
+ "oxidized-anvil",
+ "oxidized-chunks",
  "oxidized-nbt",
  "oxidized-registry",
  "oxidized-types",

@@ -104,6 +104,8 @@ oxidized-mc-types    = { version = "0.1" }
 oxidized-chat        = { version = "0.1" }
 oxidized-transport   = { version = "0.1" }
 oxidized-registry    = { version = "0.1" }
+oxidized-chunks      = { version = "0.1" }
+oxidized-anvil       = { version = "0.1" }
 oxidized-commands    = { version = "0.1" }
 oxidized-inventory   = { version = "0.1" }
 
@@ -160,5 +162,7 @@ oxidized-mc-types    = { path = "../mc-types" }
 oxidized-chat        = { path = "../chat" }
 oxidized-transport   = { path = "../transport" }
 oxidized-registry    = { path = "../registry" }
+oxidized-chunks      = { path = "../chunks" }
+oxidized-anvil       = { path = "../anvil" }
 oxidized-commands    = { path = "../commands" }
 oxidized-inventory   = { path = "../inventory" }

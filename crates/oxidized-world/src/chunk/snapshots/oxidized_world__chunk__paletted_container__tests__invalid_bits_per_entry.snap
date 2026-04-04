@@ -1,5 +1,0 @@
----
-source: crates/oxidized-world/src/chunk/paletted_container.rs
-expression: "format!(\"{}\", PalettedContainerError::InvalidBitsPerEntry(99))"
----
-invalid bits per entry on wire: 99

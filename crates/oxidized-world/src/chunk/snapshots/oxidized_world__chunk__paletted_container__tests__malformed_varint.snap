@@ -1,5 +1,0 @@
----
-source: crates/oxidized-world/src/chunk/paletted_container.rs
-expression: "format!(\"{}\", PalettedContainerError::MalformedVarInt)"
----
-malformed VarInt: exceeded 5-byte limit
