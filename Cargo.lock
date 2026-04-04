@@ -2099,6 +2099,7 @@ dependencies = [
  "oxidized-macros",
  "oxidized-mc-types",
  "oxidized-nbt",
+ "oxidized-transport",
  "oxidized-types",
  "proptest",
  "rand 0.10.0",
@@ -2172,6 +2173,14 @@ dependencies = [
 [[package]]
 name = "oxidized-transport"
 version = "0.1.0"
+dependencies = [
+ "bytes",
+ "oxidized-codec",
+ "oxidized-compression",
+ "oxidized-crypto",
+ "thiserror 2.0.18",
+ "tokio",
+]
 
 [[package]]
 name = "oxidized-types"

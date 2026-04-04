@@ -9,4 +9,6 @@ pub mod constants;
 pub mod packets;
 pub mod registry;
 pub mod status;
-pub mod transport;
+
+// Re-export extracted transport crate for backward compatibility.
+pub use oxidized_transport as transport;
