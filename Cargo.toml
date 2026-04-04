@@ -91,26 +91,26 @@ criterion      = { version = "0.5", features = ["html_reports"] }
 
 # Internal workspace crates
 oxidized-protocol = { path = "crates/oxidized-protocol" }
-oxidized-nbt         = { git = "https://github.com/oxidized-mc/nbt.git" }
+oxidized-nbt         = "0.1.0-dev"
 oxidized-world    = { path = "crates/oxidized-world" }
 oxidized-game     = { path = "crates/oxidized-game" }
 oxidized-macros   = { path = "crates/oxidized-macros" }
-oxidized-types       = { git = "https://github.com/oxidized-mc/types.git" }
-oxidized-compression = { git = "https://github.com/oxidized-mc/compression.git" }
-oxidized-crypto      = { git = "https://github.com/oxidized-mc/crypto.git" }
-oxidized-auth        = { git = "https://github.com/oxidized-mc/auth.git" }
-oxidized-codec       = { git = "https://github.com/oxidized-mc/codec.git" }
-oxidized-mc-types    = { git = "https://github.com/oxidized-mc/mc-types.git" }
-oxidized-chat        = { git = "https://github.com/oxidized-mc/chat.git" }
-oxidized-transport   = { git = "https://github.com/oxidized-mc/transport.git" }
-oxidized-registry    = { git = "https://github.com/oxidized-mc/registry.git" }
-oxidized-chunks      = { git = "https://github.com/oxidized-mc/chunks.git" }
-oxidized-anvil       = { git = "https://github.com/oxidized-mc/anvil.git" }
-oxidized-commands    = { git = "https://github.com/oxidized-mc/commands.git" }
-oxidized-inventory   = { git = "https://github.com/oxidized-mc/inventory.git" }
-oxidized-lighting    = { git = "https://github.com/oxidized-mc/lighting.git" }
-oxidized-physics     = { git = "https://github.com/oxidized-mc/physics.git" }
-oxidized-worldgen    = { git = "https://github.com/oxidized-mc/worldgen.git" }
+oxidized-types       = "0.1.0-dev"
+oxidized-compression = "0.1.0-dev"
+oxidized-crypto      = "0.1.0-dev"
+oxidized-auth        = "0.1.0-dev"
+oxidized-codec       = "0.1.0-dev"
+oxidized-mc-types    = "0.1.0-dev"
+oxidized-chat        = "0.1.0-dev"
+oxidized-transport   = "0.1.0-dev"
+oxidized-registry    = "0.1.0-dev"
+oxidized-chunks      = "0.1.0-dev"
+oxidized-anvil       = "0.1.0-dev"
+oxidized-commands    = "0.1.0-dev"
+oxidized-inventory   = "0.1.0-dev"
+oxidized-lighting    = "0.1.0-dev"
+oxidized-physics     = "0.1.0-dev"
+oxidized-worldgen    = "0.1.0-dev"
 
 [profile.release]
 opt-level     = 3
@@ -154,54 +154,21 @@ cast_possible_truncation = "allow"
 cast_sign_loss           = "allow"
 cast_possible_wrap       = "allow"
 
-[patch."https://github.com/oxidized-mc/nbt.git"]
-oxidized-nbt = { path = "../nbt" }
-
-[patch."https://github.com/oxidized-mc/types.git"]
-oxidized-types = { path = "../types" }
-
-[patch."https://github.com/oxidized-mc/compression.git"]
-oxidized-compression = { path = "../compression" }
-
-[patch."https://github.com/oxidized-mc/crypto.git"]
-oxidized-crypto = { path = "../crypto" }
-
-[patch."https://github.com/oxidized-mc/auth.git"]
-oxidized-auth = { path = "../auth" }
-
-[patch."https://github.com/oxidized-mc/codec.git"]
-oxidized-codec = { path = "../codec" }
-
-[patch."https://github.com/oxidized-mc/mc-types.git"]
-oxidized-mc-types = { path = "../mc-types" }
-
-[patch."https://github.com/oxidized-mc/chat.git"]
-oxidized-chat = { path = "../chat" }
-
-[patch."https://github.com/oxidized-mc/transport.git"]
-oxidized-transport = { path = "../transport" }
-
-[patch."https://github.com/oxidized-mc/registry.git"]
-oxidized-registry = { path = "../registry" }
-
-[patch."https://github.com/oxidized-mc/chunks.git"]
-oxidized-chunks = { path = "../chunks" }
-
-[patch."https://github.com/oxidized-mc/anvil.git"]
+[patch.crates-io]
 oxidized-anvil = { path = "../anvil" }
-
-[patch."https://github.com/oxidized-mc/commands.git"]
+oxidized-auth = { path = "../auth" }
+oxidized-chat = { path = "../chat" }
+oxidized-chunks = { path = "../chunks" }
+oxidized-codec = { path = "../codec" }
 oxidized-commands = { path = "../commands" }
-
-[patch."https://github.com/oxidized-mc/inventory.git"]
+oxidized-compression = { path = "../compression" }
+oxidized-crypto = { path = "../crypto" }
 oxidized-inventory = { path = "../inventory" }
-
-[patch."https://github.com/oxidized-mc/lighting.git"]
 oxidized-lighting = { path = "../lighting" }
-
-[patch."https://github.com/oxidized-mc/physics.git"]
+oxidized-mc-types = { path = "../mc-types" }
+oxidized-nbt = { path = "../nbt" }
 oxidized-physics = { path = "../physics" }
-
-[patch."https://github.com/oxidized-mc/worldgen.git"]
+oxidized-registry = { path = "../registry" }
+oxidized-transport = { path = "../transport" }
+oxidized-types = { path = "../types" }
 oxidized-worldgen = { path = "../worldgen" }
-
