@@ -9,8 +9,10 @@ pub mod commands;
 pub mod entity;
 pub mod event;
 pub mod level;
-pub mod lighting;
 pub mod net;
-pub mod physics;
 pub mod player;
-pub mod worldgen;
+
+// Re-export extracted crates for backward compatibility.
+pub use oxidized_lighting as lighting;
+pub use oxidized_physics as physics;
+pub use oxidized_worldgen as worldgen;

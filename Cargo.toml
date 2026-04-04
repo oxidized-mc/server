@@ -108,6 +108,9 @@ oxidized-chunks      = { version = "0.1" }
 oxidized-anvil       = { version = "0.1" }
 oxidized-commands    = { version = "0.1" }
 oxidized-inventory   = { version = "0.1" }
+oxidized-lighting    = { version = "0.1" }
+oxidized-physics     = { version = "0.1" }
+oxidized-worldgen    = { version = "0.1" }
 
 [profile.release]
 opt-level     = 3
@@ -166,3 +169,6 @@ oxidized-chunks      = { path = "../chunks" }
 oxidized-anvil       = { path = "../anvil" }
 oxidized-commands    = { path = "../commands" }
 oxidized-inventory   = { path = "../inventory" }
+oxidized-lighting    = { path = "../lighting" }
+oxidized-physics     = { path = "../physics" }
+oxidized-worldgen    = { path = "../worldgen" }

@@ -22,6 +22,9 @@ oxidized-mc-types = { workspace = true }
 oxidized-codec    = { workspace = true }
 oxidized-chat     = { workspace = true }
 oxidized-types    = { workspace = true }
+oxidized-lighting = { workspace = true }
+oxidized-physics  = { workspace = true }
+oxidized-worldgen = { workspace = true }
 
 bevy_ecs     = { workspace = true }
 bytes        = { workspace = true }
