@@ -45,7 +45,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   GZIP/zlib I/O, SNBT parser+formatter, serde integration (Phase 5)
 
 ### Changed
-- Configuration format from Java `.properties` to TOML (ADR-033 supersedes ADR-005)
+- Configuration format from Java `.properties` to TOML
 
 ### Security
 - URL-encode all query parameters in Mojang session authentication (Phase 4)
