@@ -4,8 +4,8 @@
 //! they enqueue [`EntityCommand`] values which the tick thread drains
 //! at the start of each tick during the [`PreTick`](super::phases::TickPhase::PreTick) phase.
 //!
-//! See ADR-020 (Player Session) for the
-//! split architecture rationale.
+//! This channel-based bridge keeps `bevy_ecs::World` on a single dedicated
+//! thread while allowing async network tasks to enqueue commands safely.
 
 use glam::DVec3;
 use tokio::sync::mpsc;

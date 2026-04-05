@@ -1,7 +1,7 @@
 //! Logging initialization for the Oxidized server.
 //!
 //! Uses [`tracing_subscriber`] with structured logging and env-filter
-//! support. See ADR-004 (Logging & Observability).
+//! support, providing structured logging with env-filter-based level control.
 
 use tracing_subscriber::EnvFilter;
 

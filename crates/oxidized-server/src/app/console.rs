@@ -118,7 +118,7 @@ pub fn run_console_loop(server_ctx: Arc<ServerContext>) {
                     server: server_ctx.clone(),
                     feedback_sender: Arc::new(|component: &Component| {
                         // Console output goes directly to stdout — not a logging
-                        // concern, so write! is the correct choice (ADR-004).
+                        // concern, so write! is the correct choice here.
                         #[allow(clippy::print_stdout)]
                         {
                             let mut out = std::io::stdout().lock();

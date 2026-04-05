@@ -61,7 +61,7 @@ pub struct LoginContext {
     pub http_client: reqwest::Client,
     /// Shared game server state for PLAY-state operations.
     pub server_ctx: Arc<ServerContext>,
-    /// Sender for entity commands to the tick thread's ECS world (ADR-020).
+    /// Sender for entity commands to the tick thread's ECS world.
     pub entity_cmd_tx: oxidized_game::entity::commands::EntityCommandSender,
 }
 
@@ -269,7 +269,7 @@ impl ServerContext {
 
 impl ServerHandle for ServerContext {
     fn broadcast_to_ops(&self, _message: &Component, _min_level: u32) {
-        // TODO(phase-18): broadcast to ops via broadcast_tx
+        // TODO: broadcast to ops via broadcast_tx
     }
 
     fn request_shutdown(&self) {

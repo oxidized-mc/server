@@ -1,6 +1,6 @@
 //! Writer task — batches outbound packets and flushes to the network.
 //!
-//! The writer task is the core of the ADR-006 (Network I/O) performance model.
+//! The writer task is the core of the per-connection network I/O performance model.
 //! Instead of flushing after every packet (one syscall per packet), it
 //! drains all queued outbound packets and flushes once per drain cycle.
 
@@ -69,7 +69,7 @@ pub async fn writer_loop(
         while let Ok(packet) = outbound_rx.try_recv() {
             writer.encode_to_batch(packet.id, &packet.data)?;
 
-            // Memory budget check (ADR-006: 256 KB per connection)
+            // Memory budget check (256 KB per connection)
             if writer.batch_buf_len() > MAX_CONNECTION_MEMORY {
                 debug!(
                     peer = %writer.remote_addr(),

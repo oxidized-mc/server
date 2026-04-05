@@ -36,7 +36,6 @@ use oxidized_server::{app, ecs, network, tick};
 
 /// Use mimalloc as the global allocator for improved throughput and
 /// reduced fragmentation under the server's allocation patterns.
-/// See ADR-029 (Memory Management).
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
@@ -60,7 +59,7 @@ fn main() -> anyhow::Result<()> {
     // Load (or create) oxidized.toml.
     let mut config = ServerConfig::load_or_create(&args.config)?;
 
-    // Environment variable overrides (ADR-005/033 precedence: CLI > env > file > defaults).
+    // Environment variable overrides (precedence: CLI > env > file > defaults).
     config.apply_env_overrides();
 
     // CLI overrides take precedence over environment variables and oxidized.toml.
@@ -281,7 +280,7 @@ fn main() -> anyhow::Result<()> {
         });
         server_ctx.init_self_ref();
 
-        // Create the entity command channel (ADR-020: network ↔ tick bridge).
+        // Create the entity command channel (network ↔ tick thread bridge).
         let (entity_cmd_tx, entity_cmd_rx) =
             oxidized_game::entity::commands::entity_command_channel(
                 oxidized_game::entity::commands::DEFAULT_COMMAND_CHANNEL_CAPACITY,
@@ -339,7 +338,7 @@ fn main() -> anyhow::Result<()> {
         let console_server_ctx = login_ctx.server_ctx.clone();
         let shutdown_server_ctx = login_ctx.server_ctx.clone();
 
-        // Spawn the server tick loop on a dedicated OS thread (ADR-019).
+        // Spawn the server tick loop on a dedicated OS thread (not on the async runtime).
         let tick_shutdown = Arc::new(AtomicBool::new(false));
         let tick_ctx = login_ctx.server_ctx.clone();
         let tick_shutdown_clone = tick_shutdown.clone();
@@ -383,8 +382,8 @@ fn main() -> anyhow::Result<()> {
         tick_shutdown.store(true, Ordering::Relaxed);
         let _ = shutdown_tx.send(());
 
-        // Save level.dat on shutdown (ADR-030: graceful shutdown saves).
-        // Uses the shared save helper which runs on a blocking thread (ADR-015).
+        // Save level.dat on graceful shutdown.
+        // Uses the shared save helper which runs on a blocking thread via spawn_blocking.
         {
             info!("Saving level.dat...");
             match tick::save_level_dat(&shutdown_server_ctx).await {

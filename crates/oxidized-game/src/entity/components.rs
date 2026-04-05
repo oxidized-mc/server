@@ -1,7 +1,7 @@
 //! Core ECS component types for entity representation.
 //!
 //! These components decompose vanilla's entity class hierarchy into
-//! individual `bevy_ecs` components per ADR-018 (Entity System). Each field in vanilla's
+//! individual `bevy_ecs` components following a composition-over-inheritance model. Each field in vanilla's
 //! `Entity`, `LivingEntity`, and `Player` classes maps to a named component.
 
 use bevy_ecs::prelude::*;

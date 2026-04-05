@@ -1,7 +1,6 @@
 //! Tick phase enum and schedule labels for entity system scheduling.
 //!
-//! Defines the strict phase order within each server tick as specified
-//! by ADR-018 §System Scheduling (Entity System). Within each phase, `bevy_ecs`
+//! Defines the strict phase order within each server tick. Within each phase, `bevy_ecs`
 //! automatically parallelizes non-conflicting systems.
 //!
 //! Each [`TickPhase`] maps to a [`PhaseSchedule`] label via
@@ -39,7 +38,7 @@ pub enum BehaviorOrder {
 /// maintain determinism and vanilla compatibility, while systems
 /// *within* a phase may run in parallel.
 ///
-/// # Phase Order (ADR-018)
+/// # Phase Order
 ///
 /// 1. [`PreTick`](Self::PreTick) — bookkeeping, spawns/despawns
 /// 2. [`Physics`](Self::Physics) — gravity, velocity, collisions
@@ -95,8 +94,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tick_phase_ordering_matches_adr018() {
-        // ADR-018 specifies this strict order
+    fn test_tick_phase_ordering_is_strictly_sequential() {
+        // Phases must execute in this strict order for determinism
         assert!(TickPhase::PreTick < TickPhase::Physics);
         assert!(TickPhase::Physics < TickPhase::Ai);
         assert!(TickPhase::Ai < TickPhase::EntityBehavior);

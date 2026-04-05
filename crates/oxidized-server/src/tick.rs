@@ -1,6 +1,6 @@
 //! Server tick loop — 20 TPS game-state advancement.
 //!
-//! Runs on a **dedicated OS thread** (ADR-019), advancing game time,
+//! Runs on a **dedicated OS thread** (not on the async runtime), advancing game time,
 //! day/night cycle, and weather each tick. Broadcasts
 //! [`ClientboundSetTimePacket`] every 20 ticks so clients stay synchronised.
 //!
@@ -60,7 +60,7 @@ struct WeatherLevels {
 
 /// Runs the main server tick loop until `shutdown` is set to `true`.
 ///
-/// Must be called on a **dedicated OS thread** (ADR-019):
+/// Must be called on a **dedicated OS thread** (not on the async runtime):
 /// ```ignore
 /// let shutdown = Arc::new(AtomicBool::new(false));
 /// std::thread::Builder::new()
@@ -111,7 +111,7 @@ pub fn run_tick_loop(ctx: &ServerContext, mut ecs: crate::ecs::EcsContext, shutd
         if should_tick {
             do_tick(ctx, tick_count, &mut rng, &mut weather);
 
-            // Run all 7 ECS phases sequentially (ADR-018, ADR-019).
+            // Run all 7 ECS phases sequentially for deterministic tick ordering.
             ecs.run_tick();
 
             // Drain outbound entity packets and broadcast them.
@@ -589,7 +589,7 @@ fn save_level_dat_blocking(ctx: &ServerContext) -> Result<(), Box<dyn std::error
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)
 }
 
-/// Saves level.dat asynchronously via `spawn_blocking` (ADR-015).
+/// Saves level.dat asynchronously via `spawn_blocking` for blocking disk I/O.
 ///
 /// Takes a snapshot of `level_data` under a read lock, then writes to disk
 /// on a blocking thread. Returns `Ok(())` on success or the error.
@@ -713,7 +713,7 @@ fn autosave_chunks(ctx: &ServerContext) {
     }
 }
 
-/// Saves dirty chunks asynchronously via `spawn_blocking` (ADR-015).
+/// Saves dirty chunks asynchronously via `spawn_blocking` for blocking disk I/O.
 ///
 /// Used by the shutdown save path (which runs in async context).
 /// Serializes all dirty chunks in the current thread, then writes

@@ -183,7 +183,7 @@ pub async fn handle_movement(
             }
         }
 
-        // Forward movement to the ECS world (ADR-020).
+        // Forward movement to the ECS world via the entity command channel.
         let _ = ctx.entity_cmd_tx.try_send(
             oxidized_game::entity::commands::EntityCommand::PlayerMoved {
                 uuid: ctx.player_uuid,

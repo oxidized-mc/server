@@ -3,10 +3,11 @@
 //! The [`EcsContext`] is created on startup and moved to the tick thread,
 //! which has exclusive ownership. Network tasks communicate with it via
 //! the [`EntityCommandSender`](oxidized_game::entity::commands::EntityCommandSender)
-//! channel (ADR-020).
+//! channel bridge between network async tasks and the ECS tick thread.
 //!
 //! `bevy_ecs::World` is `!Sync` — it cannot be shared behind `Arc`.
-//! This matches ADR-019 (dedicated tick thread) and ADR-020 (channel bridge).
+//! This is why the tick loop runs on a dedicated OS thread and network tasks
+//! communicate via bounded channels rather than direct `World` access.
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::schedule::Schedule;

@@ -1,7 +1,7 @@
 //! Server configuration loaded from `oxidized.toml`.
 //!
 //! Uses TOML format with serde derives for type-safe deserialization.
-//! See ADR-033 (Configuration Format) for rationale.
+//! TOML was chosen for readability and broad Rust ecosystem support.
 
 mod admin;
 mod advanced;
@@ -199,7 +199,7 @@ impl ServerConfig {
     /// Applies `OXIDIZED_{SECTION}_{FIELD}` environment variable overrides.
     ///
     /// Call **after** loading from file and **before** CLI flag overrides,
-    /// giving the precedence: CLI > env vars > file > defaults (ADR-005/033).
+    /// giving the precedence: CLI > env vars > file > defaults.
     ///
     /// Invalid values are logged at `warn` level and silently skipped.
     pub fn apply_env_overrides(&mut self) {

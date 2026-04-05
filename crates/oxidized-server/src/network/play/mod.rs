@@ -87,7 +87,7 @@ pub struct PlayContext<'a> {
     pub chunk_tracker: &'a mut PlayerChunkTracker,
     /// Per-player chat rate limiter.
     pub rate_limiter: &'a mut ChatRateLimiter,
-    /// Channel to send entity commands to the tick thread (ADR-020).
+    /// Channel to send entity commands to the tick thread.
     pub entity_cmd_tx: &'a oxidized_game::entity::commands::EntityCommandSender,
 }
 
@@ -150,7 +150,7 @@ fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacke
 
 /// Handles the PLAY-state login sequence for a newly joined player.
 ///
-/// Splits the [`Connection`] into reader/writer task pair (ADR-006),
+/// Splits the [`Connection`] into a per-connection reader/writer task pair,
 /// creates bounded inbound/outbound channels, spawns the reader and
 /// writer tasks, sends the join sequence through the outbound channel,
 /// and enters the main play loop to process inbound packets.
@@ -167,10 +167,10 @@ pub async fn handle_play_split(
     let server_ctx = &ctx.server_ctx;
     let addr = conn.remote_addr();
 
-    // Split connection into reader/writer halves (ADR-006).
+    // Split connection into reader/writer halves.
     let (reader, writer) = conn.into_split();
 
-    // Create bounded channels (ADR-006: configurable capacity).
+    // Create bounded inbound/outbound channels with configurable capacity.
     let (inbound_tx, mut inbound_rx) = mpsc::channel(server_ctx.settings.inbound_channel_capacity);
     let (outbound_tx, outbound_rx) = mpsc::channel(server_ctx.settings.outbound_channel_capacity);
 
@@ -190,7 +190,7 @@ pub async fn handle_play_split(
     let uuid = join_state.uuid;
     let entity_id = join_state.entity_id;
 
-    // Send SpawnPlayer command to the tick thread's ECS world (ADR-020).
+    // Send SpawnPlayer command to the tick thread's ECS world via the entity command channel.
     {
         use oxidized_game::entity::commands::EntityCommand;
         use oxidized_game::entity::components::{ExperienceData, SpawnData};
@@ -269,7 +269,7 @@ pub async fn handle_play_split(
         entity_cmd_tx: &ctx.entity_cmd_tx,
     };
 
-    // PLAY read loop — reads from inbound channel instead of socket (ADR-006).
+    // PLAY read loop — reads from the bounded inbound channel fed by the reader task.
     loop {
         tokio::select! {
             // Kick signal from another task (e.g., duplicate login replacement).
@@ -379,7 +379,7 @@ pub async fn handle_play_split(
                     },
                 }
             },
-            // Read incoming packets from inbound channel (ADR-006: reader task dispatches here).
+            // Read incoming packets dispatched by the reader task via the inbound channel.
             inbound = inbound_rx.recv() => {
                 match inbound {
                     Some(pkt) => {
