@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use oxidized_codec::Packet;
 use oxidized_game::level::game_rules::GameRuleKey;
-use oxidized_game::lighting::cross_chunk::{
+use oxidized_lighting::cross_chunk::{
     ChunkNeighbors, propagate_block_light_cross_chunk, propagate_sky_light_cross_chunk,
 };
 use oxidized_game::net::light_serializer::build_light_data_filtered;
@@ -24,7 +24,7 @@ use oxidized_protocol::packets::play::{
     ClientboundTickingStepPacket, ClockNetworkState, ClockUpdate, GameEventType,
 };
 use oxidized_types::ChunkPos;
-use oxidized_world::anvil::{RegionFile, compress_zlib};
+use oxidized_anvil::anvil::{RegionFile, compress_zlib};
 use rand::Rng;
 use rand::RngExt;
 use rand::SeedableRng;
@@ -218,7 +218,7 @@ fn process_light_updates(ctx: &ServerContext) {
     };
 
     // Group updates by chunk position.
-    let mut by_chunk: HashMap<ChunkPos, Vec<oxidized_game::lighting::queue::LightUpdate>> =
+    let mut by_chunk: HashMap<ChunkPos, Vec<oxidized_lighting::queue::LightUpdate>> =
         HashMap::new();
     for (chunk_pos, update) in updates {
         by_chunk.entry(chunk_pos).or_default().push(update);
@@ -276,8 +276,8 @@ fn process_light_updates(ctx: &ServerContext) {
 fn propagate_cross_chunk_light(
     ctx: &ServerContext,
     center: &ChunkPos,
-    block_boundary: &[oxidized_game::lighting::propagation::BoundaryEntry],
-    sky_boundary: &[oxidized_game::lighting::propagation::BoundaryEntry],
+    block_boundary: &[oxidized_lighting::propagation::BoundaryEntry],
+    sky_boundary: &[oxidized_lighting::propagation::BoundaryEntry],
 ) {
     let cx = center.x;
     let cz = center.z;
@@ -295,7 +295,7 @@ fn propagate_cross_chunk_light(
     // Collect neighbor chunks that exist. We get() each from DashMap, clone
     // the Arc, and release the DashMap ref before acquiring write locks.
     let mut neighbor_arcs: [Option<
-        std::sync::Arc<parking_lot::RwLock<oxidized_world::chunk::LevelChunk>>,
+        std::sync::Arc<parking_lot::RwLock<oxidized_chunks::LevelChunk>>,
     >; 4] = [None, None, None, None];
     for (i, (pos, _)) in neighbor_positions.iter().enumerate() {
         if let Some(arc) = ctx.world.chunks.get(pos) {
@@ -361,8 +361,8 @@ fn propagate_cross_chunk_light(
         let mut grouped: HashMap<
             ChunkPos,
             (
-                Vec<oxidized_game::lighting::propagation::BoundaryEntry>,
-                Vec<oxidized_game::lighting::propagation::BoundaryEntry>,
+                Vec<oxidized_lighting::propagation::BoundaryEntry>,
+                Vec<oxidized_lighting::propagation::BoundaryEntry>,
             ),
         > = HashMap::new();
         for entry in further_block {
@@ -639,7 +639,7 @@ pub fn save_dirty_chunks_blocking(
     let region_dir = ctx
         .world
         .storage
-        .region_dir(oxidized_world::storage::Dimension::Overworld);
+        .region_dir(oxidized_anvil::storage::Dimension::Overworld);
 
     // Group chunks by region coordinates.
     let mut by_region: HashMap<(i32, i32), Vec<ChunkPos>> = HashMap::new();
@@ -729,7 +729,7 @@ pub async fn save_dirty_chunks(
     let region_dir = ctx
         .world
         .storage
-        .region_dir(oxidized_world::storage::Dimension::Overworld);
+        .region_dir(oxidized_anvil::storage::Dimension::Overworld);
     let serializer = ctx.world.chunk_serializer.clone();
 
     // Serialize all dirty chunks, skipping failures (they stay dirty).
@@ -812,7 +812,7 @@ mod tests {
     use oxidized_game::level::{GameRules, ServerTickRateManager};
     use oxidized_game::player::PlayerList;
     use oxidized_mc_types::resource_location::ResourceLocation;
-    use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
+    use oxidized_anvil::storage::{LevelStorageSource, PrimaryLevelData};
     use parking_lot::RwLock;
     use rand::SeedableRng;
     use std::sync::Arc;
@@ -821,7 +821,7 @@ mod tests {
 
     fn test_ctx() -> Arc<ServerContext> {
         use oxidized_registry::BlockRegistry;
-        use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
+        use oxidized_anvil::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
         use tokio::sync::broadcast;
 
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
@@ -836,14 +836,14 @@ mod tests {
                 dirty_chunks: dashmap::DashSet::new(),
                 storage: LevelStorageSource::new(""),
                 block_registry: block_registry.clone(),
-                chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                chunk_generator: Arc::new(oxidized_worldgen::flat::FlatChunkGenerator::new(
+                    oxidized_worldgen::flat::FlatWorldConfig::default(),
                 )),
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
                 lighting: parking_lot::Mutex::new(
-                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                    oxidized_lighting::world_lighting::WorldLighting::new(),
                 ),
             },
             network: crate::network::NetworkContext {

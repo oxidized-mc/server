@@ -8,7 +8,7 @@
 use bytes::{Bytes, BytesMut};
 use oxidized_game::net::light_serializer::build_light_data;
 use oxidized_protocol::packets::play::LightUpdateData;
-use oxidized_world::chunk::DataLayer;
+use oxidized_chunks::DataLayer;
 
 /// Helper: serialize `LightUpdateData` to bytes and back.
 fn roundtrip(data: &LightUpdateData) -> LightUpdateData {

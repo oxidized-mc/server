@@ -6,8 +6,8 @@
 use oxidized_protocol::packets::play::{
     ChunkPacketData, ClientboundLevelChunkWithLightPacket, HeightmapEntry,
 };
-use oxidized_world::chunk::LevelChunk;
-use oxidized_world::chunk::heightmap::HeightmapType;
+use oxidized_chunks::LevelChunk;
+use oxidized_chunks::heightmap::HeightmapType;
 
 use super::light_serializer::build_light_data;
 
@@ -68,8 +68,8 @@ mod tests {
     use super::*;
     use oxidized_codec::Packet;
     use oxidized_types::ChunkPos;
-    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-    use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
+    use oxidized_chunks::heightmap::{Heightmap, HeightmapType};
+    use oxidized_chunks::level_chunk::OVERWORLD_HEIGHT;
 
     #[test]
     fn test_empty_chunk_packet() {

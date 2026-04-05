@@ -10,7 +10,7 @@ use oxidized_game::chunk::chunk_tracker::PlayerChunkTracker;
 use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload, spiral_chunks};
 use oxidized_game::net::light_serializer::build_light_data;
 use oxidized_types::ChunkPos;
-use oxidized_world::chunk::DataLayer;
+use oxidized_chunks::DataLayer;
 
 proptest! {
     /// Spiral chunk count is always (2r+1)² for any center and radius.
@@ -415,7 +415,7 @@ proptest! {
 // Worldgen pipeline property tests (chunk generation status ordering & priority)
 // ---------------------------------------------------------------------------
 
-use oxidized_game::worldgen::{CHUNK_STATUS_COUNT, ChunkGenPriority, ChunkStatus};
+use oxidized_worldgen::{CHUNK_STATUS_COUNT, ChunkGenPriority, ChunkStatus};
 
 fn arb_chunk_status() -> impl Strategy<Value = ChunkStatus> {
     (0u8..CHUNK_STATUS_COUNT as u8).prop_map(|v| ChunkStatus::from_u8(v).unwrap())

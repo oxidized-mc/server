@@ -6,7 +6,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use oxidized_world::chunk::paletted_container::{PalettedContainer, Strategy};
+use oxidized_chunks::paletted_container::{PalettedContainer, Strategy};
 
 fuzz_target!(|data: &[u8]| {
     // Try decoding as block states (4096 entries, the common hot path).

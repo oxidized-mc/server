@@ -7,7 +7,7 @@
 use oxidized_codec::Packet;
 use oxidized_protocol::constants::VERSION_NAME;
 use oxidized_protocol::packets::handshake::{ClientIntent, ClientIntentionPacket};
-use oxidized_protocol::transport::connection::{
+use oxidized_transport::connection::{
     Connection, ConnectionError, ConnectionState, RawPacket,
 };
 use tracing::{debug, warn};

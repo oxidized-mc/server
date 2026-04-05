@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use oxidized_chat::Component;
 use oxidized_codec::Packet;
-use oxidized_game::lighting::queue::LightUpdate;
+use oxidized_lighting::queue::LightUpdate;
 use oxidized_mc_types::{BlockPos, Direction};
 use oxidized_protocol::packets::play::{
     ClientboundBlockChangedAckPacket, ClientboundBlockUpdatePacket,
@@ -15,7 +15,7 @@ use oxidized_protocol::packets::play::{
 };
 use oxidized_registry::{AIR, BlockStateId};
 use oxidized_types::ChunkPos;
-use oxidized_world::chunk::level_chunk::{OVERWORLD_MAX_Y, OVERWORLD_MIN_Y};
+use oxidized_chunks::level_chunk::{OVERWORLD_MAX_Y, OVERWORLD_MIN_Y};
 
 use super::PlayContext;
 use crate::network::{BroadcastMessage, ConnectionError, ServerContext};
@@ -284,7 +284,7 @@ mod tests {
     fn test_get_set_block_on_loaded_chunk() {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
-        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        let chunk = oxidized_chunks::LevelChunk::new(chunk_pos);
         ctx.world
             .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
@@ -305,7 +305,7 @@ mod tests {
     fn test_set_block_marks_chunk_dirty() {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
-        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        let chunk = oxidized_chunks::LevelChunk::new(chunk_pos);
         ctx.world
             .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
@@ -343,7 +343,7 @@ mod tests {
     fn test_slab_to_full_block_triggers_light_update() {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
-        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        let chunk = oxidized_chunks::LevelChunk::new(chunk_pos);
         ctx.world
             .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
@@ -369,7 +369,7 @@ mod tests {
     fn test_air_to_air_no_light_update() {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
-        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        let chunk = oxidized_chunks::LevelChunk::new(chunk_pos);
         ctx.world
             .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
@@ -388,7 +388,7 @@ mod tests {
     fn test_stone_to_granite_no_light_update() {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
-        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        let chunk = oxidized_chunks::LevelChunk::new(chunk_pos);
         ctx.world
             .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
@@ -555,7 +555,7 @@ mod tests {
     fn test_placement_on_air_allowed() {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
-        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        let chunk = oxidized_chunks::LevelChunk::new(chunk_pos);
         ctx.world
             .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
@@ -569,7 +569,7 @@ mod tests {
     fn test_placement_on_solid_block_rejected() {
         let ctx = test_server_ctx();
         let chunk_pos = ChunkPos::from_block_coords(0, 0);
-        let chunk = oxidized_world::chunk::LevelChunk::new(chunk_pos);
+        let chunk = oxidized_chunks::LevelChunk::new(chunk_pos);
         ctx.world
             .chunks
             .insert(chunk_pos, Arc::new(parking_lot::RwLock::new(chunk)));
@@ -585,8 +585,8 @@ mod tests {
         use oxidized_game::level::tick_rate::ServerTickRateManager;
         use oxidized_game::player::PlayerList;
         use oxidized_mc_types::resource_location::ResourceLocation;
-        use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
-        use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
+        use oxidized_anvil::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
+        use oxidized_anvil::storage::{LevelStorageSource, PrimaryLevelData};
         use parking_lot::RwLock;
         use tokio::sync::broadcast;
 
@@ -602,14 +602,14 @@ mod tests {
                 dirty_chunks: dashmap::DashSet::new(),
                 storage: LevelStorageSource::new(""),
                 block_registry: block_registry.clone(),
-                chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                chunk_generator: Arc::new(oxidized_worldgen::flat::FlatChunkGenerator::new(
+                    oxidized_worldgen::flat::FlatWorldConfig::default(),
                 )),
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
                 lighting: parking_lot::Mutex::new(
-                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                    oxidized_lighting::world_lighting::WorldLighting::new(),
                 ),
             },
             network: crate::network::NetworkContext {
@@ -651,8 +651,8 @@ mod tests {
         use oxidized_game::level::tick_rate::ServerTickRateManager;
         use oxidized_game::player::PlayerList;
         use oxidized_mc_types::resource_location::ResourceLocation;
-        use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
-        use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
+        use oxidized_anvil::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
+        use oxidized_anvil::storage::{LevelStorageSource, PrimaryLevelData};
         use parking_lot::RwLock;
         use tokio::sync::broadcast;
 
@@ -672,14 +672,14 @@ mod tests {
                 dirty_chunks: dashmap::DashSet::new(),
                 storage: LevelStorageSource::new(""),
                 block_registry: block_registry.clone(),
-                chunk_generator: Arc::new(oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                    oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                chunk_generator: Arc::new(oxidized_worldgen::flat::FlatChunkGenerator::new(
+                    oxidized_worldgen::flat::FlatWorldConfig::default(),
                 )),
                 chunk_loader: Arc::new(AsyncChunkLoader::new(loader)),
                 chunk_serializer: Arc::new(ChunkSerializer::new(block_registry)),
                 game_rules: RwLock::new(GameRules::default()),
                 lighting: parking_lot::Mutex::new(
-                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                    oxidized_lighting::world_lighting::WorldLighting::new(),
                 ),
             },
             network: crate::network::NetworkContext {

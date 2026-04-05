@@ -18,7 +18,7 @@ use oxidized_protocol::packets::play::{
     ServerboundMovePlayerPosPacket, ServerboundMovePlayerPosRotPacket,
     ServerboundMovePlayerRotPacket, ServerboundMovePlayerStatusOnlyPacket,
 };
-use oxidized_protocol::transport::connection::ConnectionError;
+use oxidized_transport::connection::ConnectionError;
 use oxidized_types::ChunkPos;
 use tracing::{debug, trace, warn};
 

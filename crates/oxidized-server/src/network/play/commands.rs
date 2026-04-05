@@ -12,7 +12,7 @@ use oxidized_protocol::packets::play::{
     ClientboundCommandSuggestionsPacket, ClientboundCommandsPacket,
     ServerboundCommandSuggestionPacket,
 };
-use oxidized_protocol::transport::connection::ConnectionError;
+use oxidized_transport::connection::ConnectionError;
 use tracing::debug;
 
 use super::PlayContext;

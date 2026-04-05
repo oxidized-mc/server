@@ -11,26 +11,6 @@ keywords    = ["minecraft", "world", "chunks", "anvil", "blocks"]
 categories  = ["game-development", "data-structures"]
 
 [dependencies]
-oxidized-nbt = { workspace = true }
-oxidized-types = { workspace = true }
-oxidized-registry = { workspace = true }
-oxidized-chunks = { workspace = true }
-oxidized-anvil  = { workspace = true }
-
-serde        = { workspace = true }
-serde_json   = { workspace = true }
-thiserror    = { workspace = true }
-tokio        = { workspace = true }
-tracing      = { workspace = true }
-uuid         = { workspace = true }
-bytes        = { workspace = true }
-flate2       = { workspace = true }
-lz4_flex     = { workspace = true }
-ahash        = { workspace = true }
-parking_lot  = { workspace = true }
-bitflags     = { workspace = true }
-glam         = { workspace = true }
-dashmap      = { workspace = true }
 
 [dev-dependencies]
 tokio    = { workspace = true }
@@ -38,6 +18,11 @@ proptest = { workspace = true }
 tempfile = { workspace = true }
 insta    = { workspace = true }
 criterion = { workspace = true }
+oxidized-nbt      = { workspace = true }
+oxidized-types    = { workspace = true }
+oxidized-registry = { workspace = true }
+oxidized-chunks   = { workspace = true }
+oxidized-anvil    = { workspace = true }
 
 [[bench]]
 name    = "world_benchmarks"

@@ -20,8 +20,11 @@ path = "src/main.rs"
 [dependencies]
 oxidized-protocol = { workspace = true }
 oxidized-nbt      = { workspace = true }
-oxidized-world    = { workspace = true }
+oxidized-chunks   = { workspace = true }
+oxidized-anvil    = { workspace = true }
 oxidized-game     = { workspace = true }
+oxidized-lighting = { workspace = true }
+oxidized-worldgen = { workspace = true }
 oxidized-auth     = { workspace = true }
 oxidized-crypto   = { workspace = true }
 oxidized-chat     = { workspace = true }

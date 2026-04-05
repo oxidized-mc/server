@@ -27,8 +27,8 @@ use oxidized_protocol::packets::play::{
     ClientboundSetSimulationDistancePacket,
 };
 use oxidized_types::ChunkPos;
-use oxidized_world::chunk::{DataLayer, LevelChunk};
-use oxidized_world::storage::PrimaryLevelData;
+use oxidized_chunks::{DataLayer, LevelChunk};
+use oxidized_anvil::storage::PrimaryLevelData;
 use uuid::Uuid;
 
 // ---------------------------------------------------------------------------
@@ -310,8 +310,8 @@ fn test_chunks_to_load_no_movement() {
 
 #[test]
 fn test_full_chunk_packet_with_blocks_heightmaps_light() {
-    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-    use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
+    use oxidized_chunks::heightmap::{Heightmap, HeightmapType};
+    use oxidized_chunks::level_chunk::OVERWORLD_HEIGHT;
 
     let mut chunk = LevelChunk::new(ChunkPos::new(10, -20));
 
@@ -853,10 +853,10 @@ fn test_tracking_range_boundary_conditions() {
 // Flat world generation — integration tests
 // =============================================================================
 
-use oxidized_game::worldgen::ChunkGenerator;
-use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
+use oxidized_worldgen::ChunkGenerator;
+use oxidized_worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
 use oxidized_registry::{BEDROCK, DIRT, GRASS_BLOCK};
-use oxidized_world::chunk::heightmap::HeightmapType;
+use oxidized_chunks::heightmap::HeightmapType;
 
 /// A full generate→serialize round-trip: the generated chunk must produce a
 /// valid chunk packet that the client can decode (non-empty, starts with
@@ -1015,17 +1015,17 @@ fn biome_ids_match_protocol_registry_order() {
 // ============== Cross-chunk light propagation tests (23a.10) ==============
 
 mod cross_chunk_light {
-    use oxidized_game::lighting::cross_chunk::{
+    use oxidized_lighting::cross_chunk::{
         ChunkNeighbors, propagate_block_light_cross_chunk, propagate_sky_light_cross_chunk,
     };
-    use oxidized_game::lighting::engine::LightEngine;
-    use oxidized_game::lighting::queue::LightUpdate;
+    use oxidized_lighting::engine::LightEngine;
+    use oxidized_lighting::queue::LightUpdate;
     use oxidized_mc_types::BlockPos;
     use oxidized_registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
     use oxidized_types::ChunkPos;
-    use oxidized_world::chunk::LevelChunk;
-    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-    use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
+    use oxidized_chunks::LevelChunk;
+    use oxidized_chunks::heightmap::{Heightmap, HeightmapType};
+    use oxidized_chunks::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
 
     fn flat_chunk(pos: ChunkPos) -> LevelChunk {
         let mut chunk = LevelChunk::new(pos);
@@ -1269,15 +1269,15 @@ mod cross_chunk_light {
 // ============== Persistent WorldLighting tests (23a.11) ==============
 
 mod world_lighting_integration {
-    use oxidized_game::lighting::engine::LightEngine;
-    use oxidized_game::lighting::queue::LightUpdate;
-    use oxidized_game::lighting::world_lighting::WorldLighting;
+    use oxidized_lighting::engine::LightEngine;
+    use oxidized_lighting::queue::LightUpdate;
+    use oxidized_lighting::world_lighting::WorldLighting;
     use oxidized_mc_types::BlockPos;
     use oxidized_registry::{BEDROCK, BlockRegistry, BlockStateId, DIRT, GRASS_BLOCK};
     use oxidized_types::ChunkPos;
-    use oxidized_world::chunk::LevelChunk;
-    use oxidized_world::chunk::heightmap::{Heightmap, HeightmapType};
-    use oxidized_world::chunk::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
+    use oxidized_chunks::LevelChunk;
+    use oxidized_chunks::heightmap::{Heightmap, HeightmapType};
+    use oxidized_chunks::level_chunk::{OVERWORLD_HEIGHT, OVERWORLD_MIN_Y};
 
     fn flat_chunk(pos: ChunkPos) -> LevelChunk {
         let mut chunk = LevelChunk::new(pos);
@@ -1414,7 +1414,7 @@ mod world_lighting_integration {
     /// produces boundary entries; tick 2 propagates them into the neighbor.
     #[test]
     fn test_two_tick_cross_chunk_propagation_via_world_lighting() {
-        use oxidized_game::lighting::cross_chunk::{
+        use oxidized_lighting::cross_chunk::{
             ChunkNeighbors, propagate_block_light_cross_chunk,
         };
 

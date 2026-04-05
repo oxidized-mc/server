@@ -1,6 +1,6 @@
 //! [`LevelError`] — typed errors for level operations.
 
-use oxidized_world::chunk::level_chunk::ChunkError;
+use oxidized_chunks::level_chunk::ChunkError;
 
 /// Errors that can occur during level operations.
 #[derive(Debug, thiserror::Error)]

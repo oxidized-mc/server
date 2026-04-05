@@ -26,16 +26,16 @@ use oxidized_game::event::EventBus;
 use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::level::tick_rate::ServerTickRateManager;
 use oxidized_game::level::weather::WeatherType;
-use oxidized_game::lighting::world_lighting::WorldLighting;
-use oxidized_game::worldgen::ChunkGenerator;
+use oxidized_lighting::world_lighting::WorldLighting;
+use oxidized_worldgen::ChunkGenerator;
 use oxidized_mc_types::resource_location::ResourceLocation;
 use oxidized_protocol::status::ServerStatus;
-use oxidized_protocol::transport::connection::{Connection, ConnectionError, ConnectionState};
+use oxidized_transport::connection::{Connection, ConnectionError, ConnectionState};
 use oxidized_registry::BlockRegistry;
 use oxidized_types::ChunkPos;
-use oxidized_world::anvil::{AsyncChunkLoader, ChunkSerializer};
-use oxidized_world::chunk::LevelChunk;
-use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
+use oxidized_anvil::anvil::{AsyncChunkLoader, ChunkSerializer};
+use oxidized_chunks::LevelChunk;
+use oxidized_anvil::storage::{LevelStorageSource, PrimaryLevelData};
 use parking_lot::{Mutex, RwLock};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
@@ -1013,7 +1013,7 @@ mod tests {
 
     fn test_login_context() -> Arc<LoginContext> {
         let block_registry = Arc::new(BlockRegistry::load().unwrap());
-        let loader = oxidized_world::anvil::AnvilChunkLoader::new(
+        let loader = oxidized_anvil::anvil::AnvilChunkLoader::new(
             std::path::Path::new(""),
             block_registry.clone(),
         );
@@ -1036,17 +1036,17 @@ mod tests {
                     storage: LevelStorageSource::new(""),
                     block_registry: block_registry.clone(),
                     chunk_generator: Arc::new(
-                        oxidized_game::worldgen::flat::FlatChunkGenerator::new(
-                            oxidized_game::worldgen::flat::FlatWorldConfig::default(),
+                        oxidized_worldgen::flat::FlatChunkGenerator::new(
+                            oxidized_worldgen::flat::FlatWorldConfig::default(),
                         ),
                     ),
-                    chunk_loader: Arc::new(oxidized_world::anvil::AsyncChunkLoader::new(loader)),
-                    chunk_serializer: Arc::new(oxidized_world::anvil::ChunkSerializer::new(
+                    chunk_loader: Arc::new(oxidized_anvil::anvil::AsyncChunkLoader::new(loader)),
+                    chunk_serializer: Arc::new(oxidized_anvil::anvil::ChunkSerializer::new(
                         block_registry,
                     )),
                     game_rules: RwLock::new(oxidized_game::level::GameRules::default()),
                     lighting: parking_lot::Mutex::new(
-                        oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                        oxidized_lighting::world_lighting::WorldLighting::new(),
                     ),
                 },
                 network: NetworkContext {

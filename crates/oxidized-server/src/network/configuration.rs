@@ -14,7 +14,7 @@ use oxidized_protocol::packets::configuration::{
     ServerboundSelectKnownPacksPacket,
 };
 use oxidized_protocol::registry;
-use oxidized_protocol::transport::connection::{Connection, ConnectionError, ConnectionState};
+use oxidized_transport::connection::{Connection, ConnectionError, ConnectionState};
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 

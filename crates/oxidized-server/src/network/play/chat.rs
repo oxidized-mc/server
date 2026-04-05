@@ -9,8 +9,8 @@ use std::sync::Arc;
 use oxidized_chat::Component;
 use oxidized_codec::Packet;
 use oxidized_protocol::packets::play::ClientboundSystemChatPacket;
-use oxidized_protocol::transport::connection::ConnectionError;
-use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_transport::connection::ConnectionError;
+use oxidized_transport::handle::ConnectionHandle;
 use tracing::{debug, info, warn};
 
 use super::PlayContext;

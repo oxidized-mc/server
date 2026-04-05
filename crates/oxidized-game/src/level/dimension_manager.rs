@@ -84,8 +84,8 @@ mod tests {
     use std::path::Path;
 
     use oxidized_registry::BlockRegistry;
-    use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader};
-    use oxidized_world::storage::PrimaryLevelData;
+    use oxidized_anvil::anvil::{AnvilChunkLoader, AsyncChunkLoader};
+    use oxidized_anvil::storage::PrimaryLevelData;
 
     use crate::level::dimension::DimensionType;
 

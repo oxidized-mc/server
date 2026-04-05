@@ -6,7 +6,7 @@
 
 use oxidized_mc_types::SectionPos;
 use oxidized_protocol::packets::play::LightUpdateData;
-use oxidized_world::chunk::DataLayer;
+use oxidized_chunks::DataLayer;
 
 /// Builds [`LightUpdateData`] including only sections in `changed_sections`.
 ///
@@ -169,7 +169,7 @@ fn bitset_to_longs(bits: u64) -> Vec<i64> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use oxidized_world::chunk::DataLayer;
+    use oxidized_chunks::DataLayer;
 
     #[test]
     fn test_empty_light_produces_zero_masks() {

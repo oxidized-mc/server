@@ -9,9 +9,9 @@ use std::sync::Arc;
 
 use oxidized_registry::BlockRegistry;
 use oxidized_types::ChunkPos;
-use oxidized_world::anvil::{AnvilChunkLoader, ChunkSerializer, RegionFile, compress_zlib};
-use oxidized_world::chunk::LevelChunk;
-use oxidized_world::storage::{DirtyChunkTracker, PrimaryLevelData};
+use oxidized_anvil::anvil::{AnvilChunkLoader, ChunkSerializer, RegionFile, compress_zlib};
+use oxidized_chunks::LevelChunk;
+use oxidized_anvil::storage::{DirtyChunkTracker, PrimaryLevelData};
 
 fn test_registry() -> Arc<BlockRegistry> {
     Arc::new(BlockRegistry::load().unwrap())

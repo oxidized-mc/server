@@ -7,12 +7,12 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use bytes::Bytes;
-use oxidized_protocol::transport::channel::{
+use oxidized_transport::channel::{
     INBOUND_CHANNEL_CAPACITY, MAX_CONNECTION_MEMORY, MAX_PACKETS_PER_TICK,
     OUTBOUND_CHANNEL_CAPACITY,
 };
-use oxidized_protocol::transport::connection::Connection;
-use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_transport::connection::Connection;
+use oxidized_transport::handle::ConnectionHandle;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::mpsc;
 

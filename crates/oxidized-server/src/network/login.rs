@@ -14,7 +14,7 @@ use oxidized_protocol::packets::login::{
     ClientboundHelloPacket, ClientboundLoginCompressionPacket, ClientboundLoginFinishedPacket,
     ServerboundHelloPacket, ServerboundKeyPacket, ServerboundLoginAcknowledgedPacket,
 };
-use oxidized_protocol::transport::connection::{
+use oxidized_transport::connection::{
     Connection, ConnectionError, ConnectionState, RawPacket,
 };
 use tokio::time::timeout;

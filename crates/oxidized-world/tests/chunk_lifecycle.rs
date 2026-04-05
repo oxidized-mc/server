@@ -3,8 +3,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use oxidized_types::ChunkPos;
-use oxidized_world::chunk::level_chunk::OVERWORLD_HEIGHT;
-use oxidized_world::chunk::{Heightmap, HeightmapType, LevelChunk, LevelChunkSection};
+use oxidized_chunks::level_chunk::OVERWORLD_HEIGHT;
+use oxidized_chunks::{Heightmap, HeightmapType, LevelChunk, LevelChunkSection};
 
 #[test]
 fn test_new_chunk_is_all_air() {

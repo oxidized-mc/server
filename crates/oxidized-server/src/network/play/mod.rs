@@ -56,8 +56,8 @@ use oxidized_protocol::packets::play::{
     ServerboundSignUpdatePacket, ServerboundSwingPacket, ServerboundUseItemOnPacket,
     ServerboundUseItemPacket, equipment_slot,
 };
-use oxidized_protocol::transport::connection::{Connection, ConnectionError};
-use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_transport::connection::{Connection, ConnectionError};
+use oxidized_transport::handle::ConnectionHandle;
 use oxidized_types::ChunkPos;
 use parking_lot::RwLock;
 use tokio::sync::{broadcast, mpsc};

@@ -11,8 +11,8 @@
 use std::time::{Duration, Instant};
 
 use oxidized_protocol::constants::MILLIS_PER_TICK;
-use oxidized_protocol::transport::channel::{InboundPacket, MAX_PACKETS_PER_TICK};
-use oxidized_protocol::transport::connection::{ConnectionError, ConnectionReader};
+use oxidized_transport::channel::{InboundPacket, MAX_PACKETS_PER_TICK};
+use oxidized_transport::connection::{ConnectionError, ConnectionReader};
 use tokio::sync::mpsc;
 use tracing::debug;
 
@@ -96,8 +96,8 @@ mod tests {
     use super::*;
 
     use bytes::Bytes;
-    use oxidized_protocol::transport::channel::{INBOUND_CHANNEL_CAPACITY, InboundPacket};
-    use oxidized_protocol::transport::connection::Connection;
+    use oxidized_transport::channel::{INBOUND_CHANNEL_CAPACITY, InboundPacket};
+    use oxidized_transport::connection::Connection;
     use tokio::net::{TcpListener, TcpStream};
     use tokio::sync::mpsc;
 

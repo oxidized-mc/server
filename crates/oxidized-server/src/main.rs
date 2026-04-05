@@ -15,15 +15,15 @@ use oxidized_chat::Component;
 use oxidized_crypto::ServerKeyPair;
 use oxidized_game::commands::Commands;
 use oxidized_game::player::PlayerList;
-use oxidized_game::worldgen::ChunkGenerator;
-use oxidized_game::worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
+use oxidized_worldgen::ChunkGenerator;
+use oxidized_worldgen::flat::{FlatChunkGenerator, FlatWorldConfig};
 use oxidized_mc_types::resource_location::ResourceLocation;
 use oxidized_nbt::NbtCompound;
 use oxidized_protocol::constants;
 use oxidized_protocol::status::{ServerStatus, StatusPlayers, StatusVersion};
 use oxidized_registry::BlockRegistry;
-use oxidized_world::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
-use oxidized_world::storage::{LevelStorageSource, PrimaryLevelData};
+use oxidized_anvil::anvil::{AnvilChunkLoader, AsyncChunkLoader, ChunkSerializer};
+use oxidized_anvil::storage::{LevelStorageSource, PrimaryLevelData};
 use tokio::sync::broadcast;
 use tracing::{error, info, warn};
 
@@ -181,7 +181,7 @@ fn main() -> anyhow::Result<()> {
             Arc::new(FlatChunkGenerator::new(FlatWorldConfig::default()));
 
         // Create the chunk loader and serializer for disk I/O.
-        let region_dir = storage.region_dir(oxidized_world::storage::Dimension::Overworld);
+        let region_dir = storage.region_dir(oxidized_anvil::storage::Dimension::Overworld);
         let anvil_loader = AnvilChunkLoader::new(&region_dir, Arc::clone(&block_registry));
         let chunk_loader = Arc::new(AsyncChunkLoader::new(anvil_loader));
         let chunk_serializer = Arc::new(ChunkSerializer::new(Arc::clone(&block_registry)));
@@ -243,7 +243,7 @@ fn main() -> anyhow::Result<()> {
                 chunk_serializer,
                 game_rules: parking_lot::RwLock::new(oxidized_game::level::GameRules::default()),
                 lighting: parking_lot::Mutex::new(
-                    oxidized_game::lighting::world_lighting::WorldLighting::new(),
+                    oxidized_lighting::world_lighting::WorldLighting::new(),
                 ),
             },
             network: NetworkContext {

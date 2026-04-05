@@ -10,9 +10,9 @@ use parking_lot::Mutex;
 
 use oxidized_mc_types::BlockPos;
 use oxidized_types::ChunkPos;
-use oxidized_world::anvil::AsyncChunkLoader;
-use oxidized_world::chunk::LevelChunk;
-use oxidized_world::storage::PrimaryLevelData;
+use oxidized_anvil::anvil::AsyncChunkLoader;
+use oxidized_chunks::LevelChunk;
+use oxidized_anvil::storage::PrimaryLevelData;
 
 use super::chunk_cache::ChunkCache;
 use super::dimension::DimensionType;
@@ -226,7 +226,7 @@ mod tests {
     use std::sync::Arc;
 
     use oxidized_registry::BlockRegistry;
-    use oxidized_world::anvil::AnvilChunkLoader;
+    use oxidized_anvil::anvil::AnvilChunkLoader;
 
     fn test_level() -> ServerLevel {
         let registry = Arc::new(BlockRegistry::load().unwrap());

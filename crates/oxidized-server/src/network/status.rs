@@ -9,7 +9,7 @@ use oxidized_protocol::packets::status::{
     ServerboundStatusRequestPacket,
 };
 use oxidized_protocol::status::ServerStatus;
-use oxidized_protocol::transport::connection::{Connection, ConnectionError, RawPacket};
+use oxidized_transport::connection::{Connection, ConnectionError, RawPacket};
 use tracing::{debug, warn};
 
 use super::LoginContext;

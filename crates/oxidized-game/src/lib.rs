@@ -11,8 +11,3 @@ pub mod event;
 pub mod level;
 pub mod net;
 pub mod player;
-
-// Re-export extracted crates for backward compatibility.
-pub use oxidized_lighting as lighting;
-pub use oxidized_physics as physics;
-pub use oxidized_worldgen as worldgen;

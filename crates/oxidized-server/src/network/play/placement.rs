@@ -15,7 +15,7 @@ use oxidized_protocol::packets::play::{
     ServerboundUseItemOnPacket, ServerboundUseItemPacket,
 };
 use oxidized_registry::{BlockRegistry, BlockStateId, BlockTags};
-use oxidized_world::chunk::level_chunk::OVERWORLD_MAX_Y;
+use oxidized_chunks::level_chunk::OVERWORLD_MAX_Y;
 
 use super::PlayContext;
 use super::block_interaction::{

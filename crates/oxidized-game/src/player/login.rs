@@ -25,7 +25,7 @@ use oxidized_protocol::packets::play::{
     ClientboundSetSimulationDistancePacket, CommonPlayerSpawnInfo, PlayerInfoActions,
     PlayerInfoEntry, RelativeFlags,
 };
-use oxidized_world::storage::PrimaryLevelData;
+use oxidized_anvil::storage::PrimaryLevelData;
 
 use super::game_mode::GameMode;
 use super::player_list::PlayerList;

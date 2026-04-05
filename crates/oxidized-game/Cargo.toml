@@ -12,7 +12,8 @@ categories  = ["game-development", "games"]
 
 [dependencies]
 oxidized-nbt      = { workspace = true }
-oxidized-world    = { workspace = true }
+oxidized-chunks   = { workspace = true }
+oxidized-anvil    = { workspace = true }
 oxidized-protocol = { workspace = true }
 oxidized-registry = { workspace = true }
 oxidized-commands = { workspace = true }
@@ -22,9 +23,6 @@ oxidized-mc-types = { workspace = true }
 oxidized-codec    = { workspace = true }
 oxidized-chat     = { workspace = true }
 oxidized-types    = { workspace = true }
-oxidized-lighting = { workspace = true }
-oxidized-physics  = { workspace = true }
-oxidized-worldgen = { workspace = true }
 
 bevy_ecs     = { workspace = true }
 bytes        = { workspace = true }
@@ -51,6 +49,9 @@ tokio    = { workspace = true }
 proptest = { workspace = true }
 insta    = { workspace = true }
 criterion = { workspace = true }
+oxidized-lighting = { workspace = true }
+oxidized-physics  = { workspace = true }
+oxidized-worldgen = { workspace = true }
 
 [[bench]]
 name    = "game_benchmarks"

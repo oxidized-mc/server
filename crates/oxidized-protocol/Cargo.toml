@@ -20,8 +20,6 @@ oxidized-auth = { workspace = true }
 oxidized-codec = { workspace = true }
 oxidized-mc-types = { workspace = true }
 oxidized-chat = { workspace = true }
-oxidized-transport = { workspace = true }
-
 tokio        = { workspace = true }
 tokio-util   = { workspace = true }
 bytes        = { workspace = true }
@@ -48,6 +46,7 @@ criterion = { workspace = true }
 oxidized-codec = { workspace = true }
 oxidized-mc-types = { workspace = true }
 oxidized-chat = { workspace = true }
+oxidized-transport = { workspace = true }
 
 [[bench]]
 name    = "codec_benchmarks"

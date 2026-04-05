@@ -9,8 +9,8 @@
 
 use std::time::Duration;
 
-use oxidized_protocol::transport::channel::{MAX_CONNECTION_MEMORY, OutboundPacket};
-use oxidized_protocol::transport::connection::{ConnectionError, ConnectionWriter};
+use oxidized_transport::channel::{MAX_CONNECTION_MEMORY, OutboundPacket};
+use oxidized_transport::connection::{ConnectionError, ConnectionWriter};
 use tokio::sync::mpsc;
 use tracing::debug;
 
@@ -107,8 +107,8 @@ mod tests {
     use super::*;
 
     use bytes::Bytes;
-    use oxidized_protocol::transport::channel::OutboundPacket;
-    use oxidized_protocol::transport::connection::Connection;
+    use oxidized_transport::channel::OutboundPacket;
+    use oxidized_transport::connection::Connection;
     use tokio::net::{TcpListener, TcpStream};
     use tokio::sync::mpsc;
 

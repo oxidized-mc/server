@@ -6,8 +6,8 @@
 
 use oxidized_codec::Packet;
 use oxidized_protocol::packets::login::ClientboundDisconnectPacket;
-use oxidized_protocol::transport::connection::{Connection, ConnectionError};
-use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_transport::connection::{Connection, ConnectionError};
+use oxidized_transport::handle::ConnectionHandle;
 use tracing::debug;
 
 /// Decodes a typed packet from raw body bytes using the [`Packet`] trait,

@@ -14,8 +14,8 @@ use oxidized_protocol::packets::play::{
     ClientboundSetTimePacket, ClientboundSystemChatPacket, ClockNetworkState, ClockUpdate,
     GameEventType, PlayerInfoActions, PlayerInfoEntry,
 };
-use oxidized_protocol::transport::connection::ConnectionError;
-use oxidized_protocol::transport::handle::ConnectionHandle;
+use oxidized_transport::connection::ConnectionError;
+use oxidized_transport::handle::ConnectionHandle;
 use oxidized_types::ChunkPos;
 use parking_lot::RwLock;
 use tracing::{debug, info, warn};
