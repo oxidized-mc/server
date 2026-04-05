@@ -1,4 +1,4 @@
-//! Transport-layer compliance tests for ADR-006.
+//! Transport-layer compliance tests for the network I/O architecture.
 //!
 //! Validates the protocol-level transport guarantees:
 //! TCP_NODELAY, encryption roundtrips through split halves,
@@ -31,7 +31,7 @@ async fn loopback_pair() -> (Connection, Connection) {
 }
 
 // ---------------------------------------------------------------------------
-// TCP_NODELAY (ADR-006 §4)
+// TCP_NODELAY (required to minimize latency on small packet writes)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -46,7 +46,7 @@ async fn compliance_tcp_nodelay_set_on_accepted_connections() {
     // Before Connection::new, verify nodelay is NOT already set (so test is meaningful)
     let before = server_stream.nodelay().unwrap_or(false);
 
-    // Connection::new() MUST call set_nodelay(true) per ADR-006.
+    // Connection::new() MUST call set_nodelay(true) per the network I/O architecture.
     // It returns Err if set_nodelay fails, so a successful call proves it was set.
     let conn = Connection::new(server_stream, peer_addr);
     assert!(
@@ -64,7 +64,7 @@ async fn compliance_tcp_nodelay_set_on_accepted_connections() {
 }
 
 // ---------------------------------------------------------------------------
-// Encryption roundtrip through split halves (ADR-009 + ADR-006)
+// Encryption roundtrip through split halves (encryption pipeline + network I/O)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -140,7 +140,7 @@ async fn compliance_encryption_compression_roundtrip_split() {
 }
 
 // ---------------------------------------------------------------------------
-// Batch encoding correctness (ADR-006 §Writer)
+// Batch encoding correctness (writer-side batch flushing)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -196,7 +196,7 @@ async fn compliance_batch_encoding_with_compression() {
 }
 
 // ---------------------------------------------------------------------------
-// Memory budget constant (ADR-006 §Budget)
+// Memory budget constant (256 KB per connection)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -204,27 +204,27 @@ fn compliance_memory_budget_constant() {
     assert_eq!(
         MAX_CONNECTION_MEMORY,
         256 * 1024,
-        "Per-connection memory budget must be 256 KB (ADR-006)"
+        "Per-connection memory budget must be 256 KB"
     );
 }
 
 // ---------------------------------------------------------------------------
-// Channel capacity constants (ADR-006)
+// Channel capacity constants (network I/O bounded channels)
 // ---------------------------------------------------------------------------
 
 #[test]
 fn compliance_channel_capacity_constants() {
     assert_eq!(
         INBOUND_CHANNEL_CAPACITY, 128,
-        "Inbound channel: 128 (ADR-006)"
+        "Inbound channel capacity must be 128"
     );
     assert_eq!(
         OUTBOUND_CHANNEL_CAPACITY, 512,
-        "Outbound channel: 512 (ADR-006)"
+        "Outbound channel capacity must be 512"
     );
     assert_eq!(
         MAX_PACKETS_PER_TICK, 500,
-        "Rate limit: 500 packets/tick (ADR-006)"
+        "Rate limit must be 500 packets/tick"
     );
 }
 

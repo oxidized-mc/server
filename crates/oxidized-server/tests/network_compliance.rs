@@ -1,4 +1,4 @@
-//! ADR-006 network compliance tests — full reader/writer task pipeline.
+//! Network I/O compliance tests — full reader/writer task pipeline.
 //!
 //! Tests the reader task + writer task working together, exercising
 //! the complete data path: client → reader → inbound channel →
@@ -102,7 +102,7 @@ async fn setup_encrypted_task_pair() -> TaskPairFixture {
 }
 
 // ---------------------------------------------------------------------------
-// Throughput: >5000 packets/sec (ADR-006 §Compliance)
+// Throughput: >5000 packets/sec required by the network I/O architecture
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -147,7 +147,7 @@ async fn compliance_throughput_exceeds_5000_per_sec() {
 
     assert!(
         pps > 5000.0,
-        "Throughput {pps:.0} packets/sec must exceed 5000 (ADR-006); elapsed={elapsed:?}"
+        "Throughput {pps:.0} packets/sec must exceed 5000; elapsed={elapsed:?}"
     );
 
     drop(outbound_tx);
@@ -157,7 +157,7 @@ async fn compliance_throughput_exceeds_5000_per_sec() {
 }
 
 // ---------------------------------------------------------------------------
-// Memory: connection memory stays under 256 KB (ADR-006 §Budget)
+// Memory: connection memory stays under 256 KB budget
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -198,7 +198,7 @@ async fn compliance_memory_under_budget_normal_load() {
 }
 
 // ---------------------------------------------------------------------------
-// Backpressure: slow client → disconnect, no OOM (ADR-006 §Compliance)
+// Backpressure: slow client → disconnect, no OOM
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -250,7 +250,7 @@ async fn compliance_backpressure_slow_client() {
 }
 
 // ---------------------------------------------------------------------------
-// Rate limit: 600 packets in 50ms → terminated (ADR-006 §Rate Limiting)
+// Rate limit: 600 packets in 50ms → terminated (500 packets/tick limit)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -300,7 +300,7 @@ async fn compliance_rate_limit_600_packets_in_50ms() {
 }
 
 // ---------------------------------------------------------------------------
-// Clean shutdown: dropping senders causes both tasks to exit (ADR-006)
+// Clean shutdown: dropping senders causes both tasks to exit
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -341,7 +341,7 @@ async fn compliance_clean_shutdown_both_tasks() {
 }
 
 // ---------------------------------------------------------------------------
-// Encryption roundtrip through task pair (ADR-009 + ADR-006)
+// Encryption roundtrip through task pair (encryption pipeline + network I/O)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -459,7 +459,7 @@ async fn compliance_full_connection_lifecycle() {
 }
 
 // ---------------------------------------------------------------------------
-// Batch flush: 50 packets result in correct delivery (ADR-006 §Batching)
+// Batch flush: 50 packets result in correct delivery (writer batching)
 // ---------------------------------------------------------------------------
 
 #[tokio::test]

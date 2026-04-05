@@ -1,4 +1,4 @@
-//! Light packet compliance tests (R3.9 / ADR-017).
+//! Light packet compliance tests for the lighting engine.
 //!
 //! Verifies that `LightUpdateData` wire format matches vanilla,
 //! BitSet mask encoding is correct, and serialize-deserialize roundtrips.

@@ -412,7 +412,7 @@ proptest! {
 }
 
 // ---------------------------------------------------------------------------
-// Worldgen pipeline property tests (R3.8 — ADR-016)
+// Worldgen pipeline property tests (chunk generation status ordering & priority)
 // ---------------------------------------------------------------------------
 
 use oxidized_game::worldgen::{CHUNK_STATUS_COUNT, ChunkGenPriority, ChunkStatus};
