@@ -10,3 +10,23 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+
+  binaries:
+    needs: [release]
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    uses: oxidized-mc/ci/.github/workflows/release-binaries.yml@main
+    with:
+      binary-name: oxidized
+      package-name: oxidized-server
+      tag: ${{ needs.release.outputs.tag_name }}
+      extra-files: "oxidized.toml"
+    permissions:
+      contents: write
+
+  docker:
+    needs: [release]
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    uses: oxidized-mc/ci/.github/workflows/docker.yml@main
+    permissions:
+      contents: read
+      packages: write
