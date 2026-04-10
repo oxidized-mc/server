@@ -1,4 +1,4 @@
-# Contributing to Oxidized
+# Contributing to oxidized-mc server
 
 Thank you for your interest in contributing! This document explains the process.
 
@@ -63,7 +63,7 @@ For trivial changes (typo fixes, dependency bumps), an abbreviated lifecycle app
 ```bash
 # 1. Fork and clone
 git clone https://github.com/oxidized-mc/server.git
-cd Oxidized
+cd server
 
 # 2. Rust stable (toolchain pinned via rust-toolchain.toml)
 rustup update stable
@@ -91,16 +91,18 @@ cargo install cargo-watch   # auto-rebuild on save
 
 ## Architecture
 
-The workspace has six crates — keep concerns separated:
+The workspace has five crates — keep concerns separated:
 
 | Crate | Responsibility | Must NOT depend on |
 |---|---|---|
-| `oxidized-nbt` | NBT binary format | all other oxidized crates |
 | `oxidized-macros` | Proc-macro derives | all other oxidized crates |
 | `oxidized-protocol` | Packet codec, connection state | `oxidized-world`, `oxidized-game` |
 | `oxidized-world` | Chunks, blocks, Anvil I/O | `oxidized-protocol`, `oxidized-game` |
 | `oxidized-game` | Entities, AI, commands | — |
 | `oxidized-server` | Server bootstrap, tick loop | — (depends on all) |
+
+> **Note:** NBT support lives in the standalone
+> [oxidized-mc/nbt](https://github.com/oxidized-mc/nbt) library crate.
 
 **Reference code:** The decompiled vanilla server lives in `mc-server-ref/decompiled/`
 (gitignored). When implementing something, always check the Java reference first.
@@ -139,7 +141,7 @@ All commits **must** follow [Conventional Commits](https://www.conventionalcommi
 
 ### Scopes
 
-Use the crate name as scope: `nbt`, `macros`, `protocol`, `world`, `game`, `server`.
+Use the crate name as scope: `macros`, `protocol`, `world`, `game`, `server`.
 Use `ci` for workflow files, `deps` for dependency updates.
 
 ### Examples
@@ -148,7 +150,7 @@ Use `ci` for workflow files, `deps` for dependency updates.
 feat(protocol): implement VarInt read/write
 fix(world): correct PalettedContainer bit packing for edge case
 perf(game): cache entity bounding boxes to avoid recomputation
-test(nbt): add round-trip tests for all 13 tag types
+test(protocol): add round-trip tests for VarInt encoding
 chore(deps): bump tokio from 1.43 to 1.44
 ```
 
@@ -203,7 +205,6 @@ cargo bench --workspace
 Run a single crate's benchmarks:
 
 ```bash
-cargo bench -p oxidized-nbt
 cargo bench -p oxidized-protocol
 cargo bench -p oxidized-world
 cargo bench -p oxidized-game
@@ -225,7 +226,6 @@ cargo install cargo-fuzz
 List available targets for a crate:
 
 ```bash
-cd crates/oxidized-nbt && cargo +nightly fuzz list
 cd crates/oxidized-protocol && cargo +nightly fuzz list
 cd crates/oxidized-world && cargo +nightly fuzz list
 ```
@@ -233,7 +233,6 @@ cd crates/oxidized-world && cargo +nightly fuzz list
 Run a fuzz target (runs until stopped with Ctrl-C):
 
 ```bash
-cd crates/oxidized-nbt && cargo +nightly fuzz run fuzz_nbt_read
 cd crates/oxidized-protocol && cargo +nightly fuzz run fuzz_varint
 cd crates/oxidized-protocol && cargo +nightly fuzz run fuzz_packet_decode
 cd crates/oxidized-world && cargo +nightly fuzz run fuzz_paletted_container

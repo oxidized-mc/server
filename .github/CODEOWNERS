@@ -1,4 +1,4 @@
-# Oxidized — Code Owners
+# oxidized-mc server — Code Owners
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 #
 # These owners are automatically requested for review when a PR touches
@@ -17,7 +17,6 @@ Cargo.toml                          @dodoflix
 .github/copilot-instructions.md     @dodoflix
 
 # Crate-level ownership (all crates owned by project owner for now)
-crates/oxidized-nbt/                @dodoflix
 crates/oxidized-macros/             @dodoflix
 crates/oxidized-protocol/           @dodoflix
 crates/oxidized-world/              @dodoflix
