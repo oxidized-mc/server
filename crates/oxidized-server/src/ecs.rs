@@ -238,7 +238,7 @@ mod tests {
             profile: oxidized_auth::GameProfile::new(uuid, "test".into()),
             position: glam::DVec3::new(0.0, 64.0, 0.0),
             rotation: (90.0, 0.0),
-            game_mode: oxidized_game::player::GameMode::Survival,
+            game_mode: oxidized_mc_types::GameType::Survival,
             inventory: Box::new(oxidized_game::player::inventory::PlayerInventory::new()),
             health: 20.0,
             food_level: 20,
@@ -279,7 +279,7 @@ mod tests {
             .world
             .get::<oxidized_game::entity::components::GameModeComponent>(entity)
             .unwrap();
-        assert_eq!(gm.current, oxidized_game::player::GameMode::Survival);
+        assert_eq!(gm.current, oxidized_mc_types::GameType::Survival);
 
         assert!(
             ecs.world
@@ -321,7 +321,7 @@ mod tests {
             profile: oxidized_auth::GameProfile::new(uuid, "test".into()),
             position: glam::DVec3::ZERO,
             rotation: (0.0, 0.0),
-            game_mode: oxidized_game::player::GameMode::Survival,
+            game_mode: oxidized_mc_types::GameType::Survival,
             inventory: Box::new(oxidized_game::player::inventory::PlayerInventory::new()),
             health: 20.0,
             food_level: 20,
@@ -379,7 +379,7 @@ mod tests {
             profile: oxidized_auth::GameProfile::new(uuid, "test".into()),
             position: glam::DVec3::ZERO,
             rotation: (0.0, 0.0),
-            game_mode: oxidized_game::player::GameMode::Survival,
+            game_mode: oxidized_mc_types::GameType::Survival,
             inventory: Box::new(oxidized_game::player::inventory::PlayerInventory::new()),
             health: 20.0,
             food_level: 20,

@@ -10,7 +10,7 @@ use bytes::Bytes;
 use tracing::debug;
 
 use oxidized_codec::Packet;
-use oxidized_game::player::GameMode;
+use oxidized_mc_types::GameType;
 use oxidized_mc_types::BlockPos;
 use oxidized_mc_types::direction::Direction;
 use oxidized_protocol::constants::MILLIS_PER_TICK;
@@ -53,7 +53,7 @@ pub async fn handle_player_action(
     )?;
 
     // Spectators cannot interact with blocks.
-    if play_ctx.player.read().game_mode == GameMode::Spectator {
+    if play_ctx.player.read().game_mode == GameType::Spectator {
         resync_block(play_ctx, pkt.pos, Some(pkt.direction)).await?;
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
@@ -129,7 +129,7 @@ pub async fn handle_player_action(
     match pkt.action {
         PlayerAction::StartDestroyBlock => {
             let game_mode = play_ctx.player.read().game_mode;
-            if game_mode == GameMode::Creative {
+            if game_mode == GameType::Creative {
                 do_block_break(play_ctx, pkt.pos, pkt.sequence).await?;
             } else {
                 // Record mining start position and time for StopDestroyBlock validation.
@@ -240,7 +240,7 @@ async fn handle_stop_destroy(
     sequence: i32,
 ) -> Result<(), ConnectionError> {
     let game_mode = play_ctx.player.read().game_mode;
-    if game_mode == GameMode::Creative {
+    if game_mode == GameType::Creative {
         send_ack(play_ctx, sequence).await?;
         return Ok(());
     }

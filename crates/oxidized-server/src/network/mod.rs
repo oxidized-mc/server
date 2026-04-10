@@ -508,7 +508,7 @@ impl ServerHandle for ServerContext {
     fn set_player_game_mode(
         &self,
         uuid: uuid::Uuid,
-        mode: oxidized_game::player::game_mode::GameMode,
+        mode: oxidized_mc_types::GameType,
     ) -> bool {
         use oxidized_codec::Packet;
         use oxidized_game::player::abilities::PlayerAbilities;
@@ -732,7 +732,7 @@ impl ServerHandle for ServerContext {
     fn get_player_game_mode(
         &self,
         uuid: &uuid::Uuid,
-    ) -> Option<oxidized_game::player::game_mode::GameMode> {
+    ) -> Option<oxidized_mc_types::GameType> {
         let player_list = self.network.player_list.read();
         let player_arc = player_list.get(uuid)?;
         Some(player_arc.read().game_mode)

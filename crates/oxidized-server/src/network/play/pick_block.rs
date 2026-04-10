@@ -12,7 +12,7 @@
 use bytes::Bytes;
 use tracing::debug;
 
-use oxidized_game::player::{GameMode, PlayerInventory};
+use oxidized_game::player::{GameType, PlayerInventory};
 use oxidized_inventory::item_ids::item_name_to_id;
 use oxidized_inventory::item_stack::ItemStack;
 use oxidized_protocol::packets::play::{
@@ -42,7 +42,7 @@ pub async fn handle_pick_item_from_block(
 
     let game_mode = play_ctx.player.read().game_mode;
     // Spectators and adventure cannot pick blocks.
-    if game_mode == GameMode::Spectator || game_mode == GameMode::Adventure {
+    if game_mode == GameType::Spectator || game_mode == GameType::Adventure {
         return Ok(());
     }
 
@@ -85,7 +85,7 @@ pub async fn handle_pick_item_from_block(
                 let (hotbar, main) = player.inventory.pick_slot(slot);
                 vec![hotbar, main]
             },
-            None if game_mode == GameMode::Creative => {
+            None if game_mode == GameType::Creative => {
                 // Creative: add fresh stack to best hotbar slot.
                 player.inventory.add_and_pick_item(target)
             },

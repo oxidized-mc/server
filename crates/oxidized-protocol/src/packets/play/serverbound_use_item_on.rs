@@ -9,39 +9,7 @@ use oxidized_codec::Packet;
 use oxidized_codec::packet::PacketDecodeError;
 use oxidized_codec::types;
 use oxidized_codec::varint;
-use oxidized_mc_types::{BlockPos, Direction};
-
-/// Which hand the player used for the interaction.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum InteractionHand {
-    /// Main (right) hand.
-    MainHand = 0,
-    /// Off (left) hand.
-    OffHand = 1,
-}
-
-impl InteractionHand {
-    /// Reads from a VarInt on the wire.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`PacketDecodeError::InvalidData`] if the value is not 0 or 1.
-    pub fn read(buf: &mut Bytes) -> Result<Self, PacketDecodeError> {
-        match varint::read_varint_buf(buf)? {
-            0 => Ok(Self::MainHand),
-            1 => Ok(Self::OffHand),
-            other => Err(PacketDecodeError::InvalidData(format!(
-                "unknown InteractionHand: {other}"
-            ))),
-        }
-    }
-
-    /// Writes as a VarInt.
-    pub fn write(&self, buf: &mut BytesMut) {
-        varint::write_varint_buf(*self as i32, buf);
-    }
-}
+use oxidized_mc_types::{BlockPos, Direction, InteractionHand};
 
 /// Result of a block hit — the exact position and face the player clicked.
 #[derive(Debug, Clone, PartialEq)]

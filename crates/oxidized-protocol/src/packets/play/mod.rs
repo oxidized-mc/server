@@ -127,7 +127,7 @@ pub use clientbound_set_entity_data::{
     ClientboundSetEntityDataPacket, DATA_EOF_MARKER, EntityDataEntry,
 };
 pub use clientbound_set_entity_motion::ClientboundSetEntityMotionPacket;
-pub use clientbound_set_equipment::{ClientboundSetEquipmentPacket, equipment_slot};
+pub use clientbound_set_equipment::ClientboundSetEquipmentPacket;
 pub use clientbound_set_held_slot::ClientboundSetHeldSlotPacket;
 pub use clientbound_set_player_inventory::ClientboundSetPlayerInventoryPacket;
 pub use clientbound_set_simulation_distance::ClientboundSetSimulationDistancePacket;
@@ -158,4 +158,5 @@ pub use serverbound_set_creative_mode_slot::ServerboundSetCreativeModeSlotPacket
 pub use serverbound_sign_update::ServerboundSignUpdatePacket;
 pub use serverbound_swing::ServerboundSwingPacket;
 pub use serverbound_use_item::ServerboundUseItemPacket;
-pub use serverbound_use_item_on::{BlockHitResult, InteractionHand, ServerboundUseItemOnPacket};
+pub use serverbound_use_item_on::{BlockHitResult, ServerboundUseItemOnPacket};
+pub use oxidized_mc_types::InteractionHand;

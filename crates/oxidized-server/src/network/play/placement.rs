@@ -7,7 +7,7 @@ use bytes::Bytes;
 use tracing::debug;
 
 use oxidized_chat::Component;
-use oxidized_game::player::GameMode;
+use oxidized_mc_types::GameType;
 use oxidized_mc_types::BlockPos;
 use oxidized_mc_types::direction::{Axis, Direction};
 use oxidized_protocol::packets::play::{
@@ -44,7 +44,7 @@ pub async fn handle_use_item_on(
     )?;
 
     // Spectators cannot place or interact with blocks.
-    if play_ctx.player.read().game_mode == GameMode::Spectator {
+    if play_ctx.player.read().game_mode == GameType::Spectator {
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
     }
@@ -172,7 +172,7 @@ pub async fn handle_use_item_on(
     }
 
     // In non-Creative modes, verify the player actually has items.
-    if game_mode != GameMode::Creative && !has_items {
+    if game_mode != GameType::Creative && !has_items {
         send_ack(play_ctx, pkt.sequence).await?;
         return Ok(());
     }
@@ -254,7 +254,7 @@ pub async fn handle_use_item_on(
     );
 
     // Decrement item count in survival/adventure modes.
-    if game_mode != GameMode::Creative {
+    if game_mode != GameType::Creative {
         decrement_held_item(play_ctx).await?;
     }
 

@@ -10,7 +10,7 @@ use oxidized_codec::packet::PacketDecodeError;
 use oxidized_codec::types;
 use oxidized_codec::varint;
 
-use super::serverbound_use_item_on::InteractionHand;
+use oxidized_mc_types::InteractionHand;
 
 /// Serverbound packet for using an item (not targeting a block).
 ///

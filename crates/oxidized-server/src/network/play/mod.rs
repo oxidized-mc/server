@@ -38,6 +38,7 @@ use oxidized_game::player::{ServerPlayer, handle_accept_teleportation};
 use oxidized_chat::Component;
 use oxidized_codec::Packet;
 use oxidized_codec::slot::SlotData;
+use oxidized_mc_types::EquipmentSlot;
 use oxidized_protocol::constants::MILLIS_PER_TICK;
 use oxidized_protocol::packets::configuration::ClientInformation;
 use oxidized_protocol::packets::play::{
@@ -54,7 +55,7 @@ use oxidized_protocol::packets::play::{
     ServerboundPlayerActionPacket, ServerboundPlayerCommandPacket, ServerboundPlayerInputPacket,
     ServerboundSetCarriedItemPacket, ServerboundSetCreativeModeSlotPacket,
     ServerboundSignUpdatePacket, ServerboundSwingPacket, ServerboundUseItemOnPacket,
-    ServerboundUseItemPacket, equipment_slot,
+    ServerboundUseItemPacket,
 };
 use oxidized_transport::connection::{Connection, ConnectionError};
 use oxidized_transport::handle::ConnectionHandle;
@@ -138,12 +139,12 @@ fn build_equipment_packet(player: &ServerPlayer) -> ClientboundSetEquipmentPacke
     ClientboundSetEquipmentPacket {
         entity_id: player.entity_id,
         equipments: vec![
-            (equipment_slot::MAIN_HAND, to_slot(inv.get_selected())),
-            (equipment_slot::OFF_HAND, to_slot(inv.get_offhand())),
-            (equipment_slot::FEET, to_slot(inv.get_armor(3))),
-            (equipment_slot::LEGS, to_slot(inv.get_armor(2))),
-            (equipment_slot::CHEST, to_slot(inv.get_armor(1))),
-            (equipment_slot::HEAD, to_slot(inv.get_armor(0))),
+            (EquipmentSlot::MainHand, to_slot(inv.get_selected())),
+            (EquipmentSlot::OffHand, to_slot(inv.get_offhand())),
+            (EquipmentSlot::Feet, to_slot(inv.get_armor(3))),
+            (EquipmentSlot::Legs, to_slot(inv.get_armor(2))),
+            (EquipmentSlot::Chest, to_slot(inv.get_armor(1))),
+            (EquipmentSlot::Head, to_slot(inv.get_armor(0))),
         ],
     }
 }

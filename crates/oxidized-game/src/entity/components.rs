@@ -9,9 +9,9 @@ use glam::DVec3;
 use uuid::Uuid;
 
 use crate::entity::synched_data::SynchedEntityData;
-use crate::player::GameMode;
 use oxidized_auth::GameProfile;
 use oxidized_mc_types::BlockPos;
+use oxidized_mc_types::GameType;
 use oxidized_mc_types::aabb::Aabb;
 use oxidized_mc_types::resource_location::ResourceLocation;
 
@@ -209,9 +209,9 @@ pub struct Profile(pub GameProfile);
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GameModeComponent {
     /// Current active game mode.
-    pub current: GameMode,
+    pub current: GameType,
     /// Previous game mode (for F3+N toggle).
-    pub previous: Option<GameMode>,
+    pub previous: Option<GameType>,
 }
 
 /// Player abilities derived from game mode.
@@ -394,11 +394,11 @@ mod tests {
     #[test]
     fn test_game_mode_component() {
         let gm = GameModeComponent {
-            current: GameMode::Survival,
-            previous: Some(GameMode::Creative),
+            current: GameType::Survival,
+            previous: Some(GameType::Creative),
         };
-        assert_eq!(gm.current, GameMode::Survival);
-        assert_eq!(gm.previous, Some(GameMode::Creative));
+        assert_eq!(gm.current, GameType::Survival);
+        assert_eq!(gm.previous, Some(GameType::Creative));
     }
 
     #[test]

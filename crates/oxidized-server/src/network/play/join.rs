@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 use crate::network::{BroadcastMessage, ServerContext};
 use oxidized_game::player::{
-    GameMode, ServerPlayer, build_container_set_content_packet, build_login_sequence,
+    GameType, ServerPlayer, build_container_set_content_packet, build_login_sequence,
     build_spawn_position_packet,
 };
 
@@ -88,7 +88,9 @@ pub(super) async fn send_join_sequence(
 
     // Create ServerPlayer with entity ID from the player list.
     let entity_id = server_ctx.network.player_list.read().next_entity_id();
-    let game_mode = GameMode::from_id(server_ctx.world.level_data.read().settings.game_type);
+    let game_mode =
+        GameType::by_id(server_ctx.world.level_data.read().settings.game_type)
+            .unwrap_or(GameType::Survival);
     let dimension = ResourceLocation::from_string("minecraft:overworld").map_err(|e| {
         ConnectionError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidData,

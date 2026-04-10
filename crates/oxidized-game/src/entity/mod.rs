@@ -30,6 +30,7 @@ use self::synched_data::{DataSerializerType, SynchedEntityData};
 use oxidized_mc_types::Vec3;
 use oxidized_mc_types::aabb::Aabb;
 use oxidized_mc_types::resource_location::ResourceLocation;
+use oxidized_mc_types::EntityDimensions;
 
 /// Entity rotation in degrees (yaw, pitch, and head yaw).
 ///
@@ -52,15 +53,6 @@ impl EntityRotation {
         pitch: 0.0,
         head_yaw: 0.0,
     };
-}
-
-/// Entity hitbox width and height.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct EntityDimensions {
-    /// Width of the hitbox (meters).
-    pub width: f32,
-    /// Height of the hitbox (meters).
-    pub height: f32,
 }
 
 /// Base entity containing all fields common to every entity type.

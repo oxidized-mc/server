@@ -2,8 +2,8 @@
 
 use crate::event::EventBus;
 use crate::level::weather::WeatherType;
-use crate::player::game_mode::GameMode;
 use oxidized_chat::Component;
+use oxidized_mc_types::GameType;
 use std::sync::Arc;
 
 /// A handle to the server, used by commands that need to affect global state.
@@ -122,7 +122,7 @@ pub trait ServerHandle: Send + Sync {
     ///
     /// Returns `true` if the game mode actually changed (`false` if already
     /// in the requested mode or the player was not found).
-    fn set_player_game_mode(&self, _uuid: uuid::Uuid, _mode: GameMode) -> bool {
+    fn set_player_game_mode(&self, _uuid: uuid::Uuid, _mode: GameType) -> bool {
         false
     }
 
@@ -190,7 +190,7 @@ pub trait ServerHandle: Send + Sync {
     }
 
     /// Returns the game mode of a player by UUID, or `None` if not found.
-    fn get_player_game_mode(&self, _uuid: &uuid::Uuid) -> Option<GameMode> {
+    fn get_player_game_mode(&self, _uuid: &uuid::Uuid) -> Option<GameType> {
         None
     }
 

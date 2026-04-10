@@ -281,7 +281,7 @@ pub struct PlayerBundle {
 impl PlayerBundle {
     /// Creates a player bundle at the given position with default state.
     pub fn new(pos: DVec3) -> Self {
-        use crate::player::GameMode;
+        use crate::player::GameType;
         use crate::player::abilities::PlayerAbilities;
         use crate::player::inventory::PlayerInventory;
         use oxidized_auth::GameProfile;
@@ -304,10 +304,10 @@ impl PlayerBundle {
             },
             profile: Profile(GameProfile::new(Uuid::new_v4(), String::new())),
             game_mode: GameModeComponent {
-                current: GameMode::Survival,
+                current: GameType::Survival,
                 previous: None,
             },
-            abilities: Abilities(PlayerAbilities::for_game_mode(GameMode::Survival)),
+            abilities: Abilities(PlayerAbilities::for_game_mode(GameType::Survival)),
             inventory: Inventory(PlayerInventory::new()),
             combat: CombatData {
                 food_level: 20,
@@ -346,7 +346,7 @@ impl PlayerBundle {
         profile: oxidized_auth::GameProfile,
         position: DVec3,
         rotation: (f32, f32),
-        game_mode: crate::player::GameMode,
+        game_mode: crate::player::GameType,
         inventory: crate::player::inventory::PlayerInventory,
         health: f32,
         food_level: i32,
@@ -498,7 +498,7 @@ mod tests {
         assert_eq!(slot.0, 0);
 
         let gm = world.get::<GameModeComponent>(entity).unwrap();
-        assert_eq!(gm.current, crate::player::GameMode::Survival);
+        assert_eq!(gm.current, crate::player::GameType::Survival);
         assert!(gm.previous.is_none());
     }
 
@@ -579,7 +579,7 @@ mod tests {
 
     #[test]
     fn test_player_from_spawn_data() {
-        use crate::player::GameMode;
+        use crate::player::GameType;
         use crate::player::inventory::PlayerInventory;
         use oxidized_auth::GameProfile;
         use oxidized_mc_types::BlockPos;
@@ -594,7 +594,7 @@ mod tests {
                 profile,
                 DVec3::new(100.0, 72.0, -50.0),
                 (90.0, -15.0),
-                GameMode::Creative,
+                GameType::Creative,
                 PlayerInventory::new(),
                 18.5,
                 15,
@@ -622,7 +622,7 @@ mod tests {
         assert!((hp.current - 18.5).abs() < 1e-6);
 
         let gm = world.get::<GameModeComponent>(entity).unwrap();
-        assert_eq!(gm.current, GameMode::Creative);
+        assert_eq!(gm.current, GameType::Creative);
 
         let ab = world.get::<Abilities>(entity).unwrap();
         assert!(ab.0.can_fly);

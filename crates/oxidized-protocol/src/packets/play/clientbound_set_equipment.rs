@@ -11,27 +11,42 @@ use oxidized_codec::Packet;
 use oxidized_codec::packet::PacketDecodeError;
 use oxidized_codec::slot::{self, SlotData};
 use oxidized_codec::varint;
-
-/// Equipment slot indices as sent on the wire.
-///
-/// These match the vanilla `EquipmentSlot` ordinal values.
-pub mod equipment_slot {
-    /// Main hand (selected hotbar slot).
-    pub const MAIN_HAND: u8 = 0;
-    /// Off-hand.
-    pub const OFF_HAND: u8 = 1;
-    /// Feet armor (boots).
-    pub const FEET: u8 = 2;
-    /// Legs armor (leggings).
-    pub const LEGS: u8 = 3;
-    /// Chest armor (chestplate).
-    pub const CHEST: u8 = 4;
-    /// Head armor (helmet).
-    pub const HEAD: u8 = 5;
-}
+use oxidized_mc_types::EquipmentSlot;
 
 /// Bit mask for the "more entries follow" continuation flag.
 const CONTINUE_MASK: u8 = 0x80;
+
+/// Converts an `EquipmentSlot` to the Java enum ordinal used on the wire.
+///
+/// The SetEquipment packet uses ordinals (matching the Java enum declaration
+/// order), not the non-sequential `EquipmentSlot::id()` values.
+const fn slot_to_ordinal(slot: EquipmentSlot) -> u8 {
+    match slot {
+        EquipmentSlot::MainHand => 0,
+        EquipmentSlot::OffHand => 1,
+        EquipmentSlot::Feet => 2,
+        EquipmentSlot::Legs => 3,
+        EquipmentSlot::Chest => 4,
+        EquipmentSlot::Head => 5,
+        EquipmentSlot::Body => 6,
+        EquipmentSlot::Saddle => 7,
+    }
+}
+
+/// Converts a wire ordinal back to an `EquipmentSlot`.
+const fn ordinal_to_slot(ordinal: u8) -> Option<EquipmentSlot> {
+    match ordinal {
+        0 => Some(EquipmentSlot::MainHand),
+        1 => Some(EquipmentSlot::OffHand),
+        2 => Some(EquipmentSlot::Feet),
+        3 => Some(EquipmentSlot::Legs),
+        4 => Some(EquipmentSlot::Chest),
+        5 => Some(EquipmentSlot::Head),
+        6 => Some(EquipmentSlot::Body),
+        7 => Some(EquipmentSlot::Saddle),
+        _ => None,
+    }
+}
 
 /// Set equipment packet (0x66).
 ///
@@ -40,17 +55,19 @@ const CONTINUE_MASK: u8 = 0x80;
 /// ```text
 /// VarInt    entity_id
 /// repeat:
-///   u8      slot_id | (has_more ? 0x80 : 0x00)
+///   u8      slot_ordinal | (has_more ? 0x80 : 0x00)
 ///   Slot    item_stack (optional-item format)
 /// ```
 ///
 /// The top bit of the slot byte indicates whether more entries follow.
+/// The lower 7 bits are the Java `EquipmentSlot` ordinal (not the slot's
+/// `getIndex()` value).
 #[derive(Debug, Clone)]
 pub struct ClientboundSetEquipmentPacket {
     /// Entity network ID.
     pub entity_id: i32,
-    /// Equipment entries: `(slot_index, item)`.
-    pub equipments: Vec<(u8, Option<SlotData>)>,
+    /// Equipment entries: `(slot, item)`.
+    pub equipments: Vec<(EquipmentSlot, Option<SlotData>)>,
 }
 
 impl Packet for ClientboundSetEquipmentPacket {
@@ -69,11 +86,16 @@ impl Packet for ClientboundSetEquipmentPacket {
             let raw_slot = data[0];
             data = data.slice(1..);
 
-            let slot_id = raw_slot & !CONTINUE_MASK;
+            let ordinal = raw_slot & !CONTINUE_MASK;
             let has_more = (raw_slot & CONTINUE_MASK) != 0;
 
+            let slot = ordinal_to_slot(ordinal).ok_or_else(|| {
+                PacketDecodeError::InvalidData(format!(
+                    "unknown equipment slot ordinal: {ordinal}"
+                ))
+            })?;
             let item = slot::read_slot(&mut data)?;
-            equipments.push((slot_id, item));
+            equipments.push((slot, item));
 
             if !has_more {
                 break;
@@ -93,7 +115,9 @@ impl Packet for ClientboundSetEquipmentPacket {
         let len = self.equipments.len();
         for (i, (slot, item)) in self.equipments.iter().enumerate() {
             let has_more = i + 1 < len;
-            let slot_byte = slot & !CONTINUE_MASK | if has_more { CONTINUE_MASK } else { 0 };
+            let ordinal = slot_to_ordinal(*slot);
+            let slot_byte =
+                ordinal & !CONTINUE_MASK | if has_more { CONTINUE_MASK } else { 0 };
             buf.put_u8(slot_byte);
             slot::write_slot(&mut buf, item.as_ref());
         }
@@ -117,13 +141,13 @@ mod tests {
     fn test_encode_single_empty_slot() {
         let pkt = ClientboundSetEquipmentPacket {
             entity_id: 42,
-            equipments: vec![(equipment_slot::MAIN_HAND, None)],
+            equipments: vec![(EquipmentSlot::MainHand, None)],
         };
         let encoded = pkt.encode();
         let decoded = ClientboundSetEquipmentPacket::decode(encoded.freeze()).unwrap();
         assert_eq!(decoded.entity_id, 42);
         assert_eq!(decoded.equipments.len(), 1);
-        assert_eq!(decoded.equipments[0].0, equipment_slot::MAIN_HAND);
+        assert_eq!(decoded.equipments[0].0, EquipmentSlot::MainHand);
         assert!(decoded.equipments[0].1.is_none());
     }
 
@@ -137,9 +161,9 @@ mod tests {
         let pkt = ClientboundSetEquipmentPacket {
             entity_id: 7,
             equipments: vec![
-                (equipment_slot::MAIN_HAND, Some(stone.clone())),
-                (equipment_slot::OFF_HAND, None),
-                (equipment_slot::HEAD, Some(stone)),
+                (EquipmentSlot::MainHand, Some(stone.clone())),
+                (EquipmentSlot::OffHand, None),
+                (EquipmentSlot::Head, Some(stone)),
             ],
         };
         let encoded = pkt.encode();
@@ -147,11 +171,11 @@ mod tests {
 
         assert_eq!(decoded.entity_id, 7);
         assert_eq!(decoded.equipments.len(), 3);
-        assert_eq!(decoded.equipments[0].0, equipment_slot::MAIN_HAND);
+        assert_eq!(decoded.equipments[0].0, EquipmentSlot::MainHand);
         assert!(decoded.equipments[0].1.is_some());
-        assert_eq!(decoded.equipments[1].0, equipment_slot::OFF_HAND);
+        assert_eq!(decoded.equipments[1].0, EquipmentSlot::OffHand);
         assert!(decoded.equipments[1].1.is_none());
-        assert_eq!(decoded.equipments[2].0, equipment_slot::HEAD);
+        assert_eq!(decoded.equipments[2].0, EquipmentSlot::Head);
         assert!(decoded.equipments[2].1.is_some());
     }
 
@@ -160,8 +184,8 @@ mod tests {
         let pkt = ClientboundSetEquipmentPacket {
             entity_id: 1,
             equipments: vec![
-                (equipment_slot::MAIN_HAND, None),
-                (equipment_slot::CHEST, None),
+                (EquipmentSlot::MainHand, None),
+                (EquipmentSlot::Chest, None),
             ],
         };
         let buf = pkt.encode();
@@ -178,5 +202,25 @@ mod tests {
             0,
             "last entry should NOT have continue bit"
         );
+    }
+
+    #[test]
+    fn test_ordinal_roundtrip_all_slots() {
+        let all_slots = [
+            EquipmentSlot::MainHand,
+            EquipmentSlot::OffHand,
+            EquipmentSlot::Feet,
+            EquipmentSlot::Legs,
+            EquipmentSlot::Chest,
+            EquipmentSlot::Head,
+            EquipmentSlot::Body,
+            EquipmentSlot::Saddle,
+        ];
+        for (i, &slot) in all_slots.iter().enumerate() {
+            let ordinal = slot_to_ordinal(slot);
+            assert_eq!(ordinal, i as u8, "ordinal mismatch for {slot:?}");
+            let back = ordinal_to_slot(ordinal).unwrap();
+            assert_eq!(back, slot, "roundtrip failed for {slot:?}");
+        }
     }
 }

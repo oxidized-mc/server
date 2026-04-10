@@ -14,7 +14,7 @@ use oxidized_game::chunk::view_distance::{chunks_to_load, chunks_to_unload, spir
 use oxidized_game::level::game_rules::GameRules;
 use oxidized_game::net::chunk_serializer::build_chunk_packet;
 use oxidized_game::net::light_serializer::build_light_data;
-use oxidized_game::player::game_mode::GameMode;
+use oxidized_game::player::GameType;
 use oxidized_game::player::login::build_login_sequence;
 use oxidized_game::player::player_list::PlayerList;
 use oxidized_game::player::server_player::ServerPlayer;
@@ -42,7 +42,7 @@ fn make_player(id: i32, name: &str) -> ServerPlayer {
         id,
         profile,
         ResourceLocation::minecraft("overworld"),
-        GameMode::Survival,
+        GameType::Survival,
     )
 }
 
@@ -204,7 +204,7 @@ fn test_build_login_sequence() {
 
     // 8 packets: Login + Difficulty + Abilities + HeldSlot +
     // PlayerInfo + ChunkCenter + SimDistance + Position
-    // (SpawnPos, Inventory, and GameMode event are now sent separately)
+    // (SpawnPos, Inventory, and game mode event are now sent separately)
     assert_eq!(packets.len(), 8);
 
     // Verify packet IDs in the correct order
@@ -573,7 +573,7 @@ fn test_teleport_accept_correct_id() {
     let uuid = uuid::Uuid::new_v4();
     let profile = GameProfile::new(uuid, "TeleportTest".into());
     let dim = oxidized_mc_types::resource_location::ResourceLocation::minecraft("overworld");
-    let mut player = ServerPlayer::new(1, profile, dim, GameMode::Survival);
+    let mut player = ServerPlayer::new(1, profile, dim, GameType::Survival);
     player
         .teleport
         .pending
@@ -599,7 +599,7 @@ fn test_teleport_accept_wrong_id_fails() {
     let uuid = uuid::Uuid::new_v4();
     let profile = GameProfile::new(uuid, "TeleportTest2".into());
     let dim = oxidized_mc_types::resource_location::ResourceLocation::minecraft("overworld");
-    let mut player = ServerPlayer::new(2, profile, dim, GameMode::Survival);
+    let mut player = ServerPlayer::new(2, profile, dim, GameType::Survival);
     player
         .teleport
         .pending
@@ -623,7 +623,7 @@ fn test_teleport_accept_empty_queue_fails() {
     let uuid = uuid::Uuid::new_v4();
     let profile = GameProfile::new(uuid, "TeleportTest3".into());
     let dim = oxidized_mc_types::resource_location::ResourceLocation::minecraft("overworld");
-    let mut player = ServerPlayer::new(3, profile, dim, GameMode::Survival);
+    let mut player = ServerPlayer::new(3, profile, dim, GameType::Survival);
 
     assert!(
         !handle_accept_teleportation(&mut player, 1),

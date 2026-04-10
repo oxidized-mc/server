@@ -3,7 +3,7 @@
 //! Maps game mode to the correct ability flags and provides
 //! serialization to the wire `flags` byte.
 
-use super::game_mode::GameMode;
+use oxidized_mc_types::GameType;
 
 /// A player's current ability state.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,19 +36,19 @@ impl Default for PlayerAbilities {
 }
 
 impl PlayerAbilities {
-    /// Returns the default abilities for a given game mode.
-    pub fn for_game_mode(mode: GameMode) -> Self {
+    /// Returns the default abilities for a given game type.
+    pub fn for_game_mode(mode: GameType) -> Self {
         match mode {
-            GameMode::Survival => Self::default(),
-            GameMode::Creative => Self {
+            GameType::Survival => Self::default(),
+            GameType::Creative => Self {
                 is_invulnerable: true,
                 is_flying: false,
                 can_fly: true,
                 is_instabuild: true,
                 ..Self::default()
             },
-            GameMode::Adventure => Self::default(),
-            GameMode::Spectator => Self {
+            GameType::Adventure => Self::default(),
+            GameType::Spectator => Self {
                 is_invulnerable: true,
                 is_flying: true,
                 can_fly: true,
@@ -97,13 +97,13 @@ mod tests {
 
     #[test]
     fn test_survival_abilities() {
-        let a = PlayerAbilities::for_game_mode(GameMode::Survival);
+        let a = PlayerAbilities::for_game_mode(GameType::Survival);
         assert_eq!(a.flags_byte(), 0x00);
     }
 
     #[test]
     fn test_creative_abilities() {
-        let a = PlayerAbilities::for_game_mode(GameMode::Creative);
+        let a = PlayerAbilities::for_game_mode(GameType::Creative);
         assert!(a.is_invulnerable);
         assert!(a.can_fly);
         assert!(a.is_instabuild);
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_spectator_abilities() {
-        let a = PlayerAbilities::for_game_mode(GameMode::Spectator);
+        let a = PlayerAbilities::for_game_mode(GameType::Spectator);
         assert!(a.is_invulnerable);
         assert!(a.is_flying);
         assert!(a.can_fly);
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_adventure_abilities() {
-        let a = PlayerAbilities::for_game_mode(GameMode::Adventure);
+        let a = PlayerAbilities::for_game_mode(GameType::Adventure);
         assert_eq!(a.flags_byte(), 0x00);
     }
 

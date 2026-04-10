@@ -14,7 +14,7 @@ use uuid::Uuid;
 use oxidized_auth::GameProfile;
 
 use super::components::{ExperienceData, SpawnData};
-use crate::player::GameMode;
+use crate::player::GameType;
 use crate::player::inventory::PlayerInventory;
 
 /// Commands sent from network tasks to the tick thread's ECS world.
@@ -37,7 +37,7 @@ pub enum EntityCommand {
         /// Initial (yaw, pitch).
         rotation: (f32, f32),
         /// Starting game mode.
-        game_mode: GameMode,
+        game_mode: GameType,
         /// Player's inventory.
         inventory: Box<PlayerInventory>,
         /// Starting health.
@@ -122,7 +122,7 @@ mod tests {
                 profile: GameProfile::new(Uuid::nil(), "test".into()),
                 position: DVec3::new(0.0, 64.0, 0.0),
                 rotation: (0.0, 0.0),
-                game_mode: GameMode::Survival,
+                game_mode: GameType::Survival,
                 inventory: Box::new(PlayerInventory::new()),
                 health: 20.0,
                 food_level: 20,

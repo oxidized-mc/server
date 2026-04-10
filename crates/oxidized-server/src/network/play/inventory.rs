@@ -7,13 +7,14 @@ use tracing::{debug, warn};
 use oxidized_codec::Packet;
 use oxidized_codec::slot::{ComponentPatchData, SlotData};
 use oxidized_game::player::inventory::PROTOCOL_SLOT_COUNT;
-use oxidized_game::player::{GameMode, PlayerInventory};
+use oxidized_game::player::{GameType, PlayerInventory};
 use oxidized_inventory::ItemStack;
 use oxidized_inventory::item_ids::{item_id_to_name, item_name_to_id};
+use oxidized_mc_types::EquipmentSlot;
 use oxidized_protocol::packets::play::{
     ClientboundContainerSetContentPacket, ClientboundSetEquipmentPacket,
     ClientboundSetHeldSlotPacket, ServerboundSetCarriedItemPacket,
-    ServerboundSetCreativeModeSlotPacket, equipment_slot,
+    ServerboundSetCreativeModeSlotPacket,
 };
 
 use super::PlayContext;
@@ -55,7 +56,7 @@ pub async fn handle_set_carried_item(
     };
     let equip_pkt = ClientboundSetEquipmentPacket {
         entity_id: player.entity_id,
-        equipments: vec![(equipment_slot::MAIN_HAND, slot_data)],
+        equipments: vec![(EquipmentSlot::MainHand, slot_data)],
     };
     let encoded = equip_pkt.encode();
     play_ctx.server_ctx.broadcast(BroadcastMessage {
@@ -93,7 +94,7 @@ pub async fn handle_set_creative_mode_slot(
     )?;
 
     let game_mode = play_ctx.player.read().game_mode;
-    if game_mode != GameMode::Creative {
+    if game_mode != GameType::Creative {
         warn!(
             peer = %play_ctx.addr,
             name = %play_ctx.player_name,
@@ -267,18 +268,18 @@ fn slot_data_to_item_stack(data: &SlotData) -> ItemStack {
     ItemStack::new(item_name, data.count)
 }
 
-/// Maps an internal inventory slot index to an equipment slot ID, if the slot
+/// Maps an internal inventory slot index to an equipment slot, if the slot
 /// is visible to other players.
 ///
 /// Returns `None` for main-inventory slots that are not currently selected.
-fn internal_slot_to_equipment(internal: usize, selected: usize) -> Option<u8> {
+fn internal_slot_to_equipment(internal: usize, selected: usize) -> Option<EquipmentSlot> {
     match internal {
-        i if i == selected && i < PlayerInventory::HOTBAR_END => Some(equipment_slot::MAIN_HAND),
-        PlayerInventory::OFFHAND_SLOT => Some(equipment_slot::OFF_HAND),
-        36 => Some(equipment_slot::HEAD),
-        37 => Some(equipment_slot::CHEST),
-        38 => Some(equipment_slot::LEGS),
-        39 => Some(equipment_slot::FEET),
+        i if i == selected && i < PlayerInventory::HOTBAR_END => Some(EquipmentSlot::MainHand),
+        PlayerInventory::OFFHAND_SLOT => Some(EquipmentSlot::OffHand),
+        36 => Some(EquipmentSlot::Head),
+        37 => Some(EquipmentSlot::Chest),
+        38 => Some(EquipmentSlot::Legs),
+        39 => Some(EquipmentSlot::Feet),
         _ => None,
     }
 }

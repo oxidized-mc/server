@@ -26,7 +26,7 @@ pub use super::pick_block::handle_pick_item_from_block;
 pub use super::placement::{handle_use_item, handle_use_item_on};
 pub use super::sign_editing::handle_sign_update;
 
-use oxidized_game::player::GameMode;
+use oxidized_mc_types::GameType;
 use oxidized_mc_types::Vec3;
 
 /// Survival block interaction reach (squared).
@@ -69,7 +69,7 @@ pub(super) fn player_distance_to_block_sq(play_ctx: &PlayContext<'_>, pos: Block
 ///
 /// Creative mode players have a longer reach (6.5 blocks) than survival/adventure (6.0).
 pub(super) fn is_within_reach(play_ctx: &PlayContext<'_>, pos: BlockPos) -> bool {
-    let limit = if play_ctx.player.read().game_mode == GameMode::Creative {
+    let limit = if play_ctx.player.read().game_mode == GameType::Creative {
         CREATIVE_REACH_DISTANCE_SQ
     } else {
         SURVIVAL_REACH_DISTANCE_SQ

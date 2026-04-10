@@ -16,9 +16,9 @@ use oxidized_protocol::constants::{DEFAULT_SIMULATION_DISTANCE, DEFAULT_VIEW_DIS
 use uuid::Uuid;
 
 use super::abilities::PlayerAbilities;
-use super::game_mode::GameMode;
 use super::inventory::PlayerInventory;
 use oxidized_inventory::ItemStack;
+use oxidized_mc_types::GameType;
 
 // ---------------------------------------------------------------------------
 // Sub-structs — logical groupings extracted from ServerPlayer (R5.11).
@@ -172,7 +172,7 @@ pub struct RawPlayerNbt {
 ///
 /// ```
 /// use oxidized_game::player::ServerPlayer;
-/// use oxidized_game::player::GameMode;
+/// use oxidized_game::player::GameType;
 /// use oxidized_auth::GameProfile;
 /// use oxidized_mc_types::ResourceLocation;
 /// use uuid::Uuid;
@@ -183,7 +183,7 @@ pub struct RawPlayerNbt {
 ///     1,
 ///     profile,
 ///     ResourceLocation::minecraft("overworld"),
-///     GameMode::Survival,
+///     GameType::Survival,
 /// );
 /// assert_eq!(player.name, "Steve");
 /// assert_eq!(player.entity_id, 1);
@@ -216,9 +216,9 @@ pub struct ServerPlayer {
     // -- Game state --
     /// Current game mode.
     // TODO(23b): migrate to ECS-only
-    pub game_mode: GameMode,
+    pub game_mode: GameType,
     /// Previous game mode (for respawn packets). `None` = no previous.
-    pub previous_game_mode: Option<GameMode>,
+    pub previous_game_mode: Option<GameType>,
     /// Current abilities derived from game mode.
     // TODO(23b): migrate to ECS-only
     pub abilities: PlayerAbilities,
@@ -257,7 +257,7 @@ impl ServerPlayer {
         entity_id: i32,
         profile: GameProfile,
         dimension: ResourceLocation,
-        game_mode: GameMode,
+        game_mode: GameType,
     ) -> Self {
         let uuid = profile.uuid().unwrap_or(Uuid::nil());
         let name = profile.name().to_owned();
@@ -352,12 +352,12 @@ impl ServerPlayer {
 
         // Game mode
         if let Some(v) = nbt.get_int("playerGameType") {
-            self.game_mode = GameMode::from_id(v);
+            self.game_mode = GameType::by_id(v).unwrap_or(GameType::Survival);
             self.abilities = PlayerAbilities::for_game_mode(self.game_mode);
         }
 
         if let Some(v) = nbt.get_int("previousPlayerGameType") {
-            let mode = GameMode::from_id(v);
+            let mode = GameType::by_id(v).unwrap_or(GameType::Survival);
             self.previous_game_mode = Some(mode);
         }
 
@@ -583,7 +583,7 @@ mod tests {
             id,
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         )
     }
 
@@ -595,14 +595,14 @@ mod tests {
             1,
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         );
 
         assert_eq!(player.entity_id, 1);
         assert_eq!(player.uuid, uuid);
         assert_eq!(player.name, "Steve");
         assert_eq!(player.movement.pos, Vec3::ZERO);
-        assert_eq!(player.game_mode, GameMode::Survival);
+        assert_eq!(player.game_mode, GameType::Survival);
         assert_eq!(player.previous_game_mode, None);
         assert!((player.combat.health - 20.0).abs() < f32::EPSILON);
         assert!((player.combat.max_health - 20.0).abs() < f32::EPSILON);
@@ -669,8 +669,8 @@ mod tests {
         assert!((player.movement.pos.z + 100.25).abs() < 0.001);
         assert!((player.movement.yaw - 90.0).abs() < f32::EPSILON);
         assert!((player.movement.pitch + 15.0).abs() < f32::EPSILON);
-        assert_eq!(player.game_mode, GameMode::Creative);
-        assert_eq!(player.previous_game_mode, Some(GameMode::Survival));
+        assert_eq!(player.game_mode, GameType::Creative);
+        assert_eq!(player.previous_game_mode, Some(GameType::Survival));
         assert!((player.combat.health - 15.0).abs() < f32::EPSILON);
         assert_eq!(player.combat.food_level, 18);
         assert!((player.combat.food_saturation - 3.5).abs() < f32::EPSILON);
@@ -688,7 +688,7 @@ mod tests {
         // Position should remain unchanged with empty NBT.
         assert!((player.movement.pos.x - 10.0).abs() < 0.001);
         assert!((player.movement.pos.y - 64.0).abs() < 0.001);
-        assert_eq!(player.game_mode, GameMode::Survival);
+        assert_eq!(player.game_mode, GameType::Survival);
     }
 
     #[test]
@@ -697,8 +697,8 @@ mod tests {
         player.movement.pos = Vec3::new(50.5, 70.0, -100.25);
         player.movement.yaw = 90.0;
         player.movement.pitch = -15.0;
-        player.game_mode = GameMode::Creative;
-        player.previous_game_mode = Some(GameMode::Survival);
+        player.game_mode = GameType::Creative;
+        player.previous_game_mode = Some(GameType::Survival);
         player.combat.health = 15.0;
         player.combat.food_level = 18;
         player.movement.is_on_ground = true;
@@ -711,8 +711,8 @@ mod tests {
 
         assert!((player2.movement.pos.x - 50.5).abs() < 0.001);
         assert!((player2.movement.pos.y - 70.0).abs() < 0.001);
-        assert_eq!(player2.game_mode, GameMode::Creative);
-        assert_eq!(player2.previous_game_mode, Some(GameMode::Survival));
+        assert_eq!(player2.game_mode, GameType::Creative);
+        assert_eq!(player2.previous_game_mode, Some(GameType::Survival));
         assert!((player2.combat.health - 15.0).abs() < f32::EPSILON);
         assert_eq!(player2.combat.food_level, 18);
         assert!(player2.movement.is_on_ground);
@@ -725,7 +725,7 @@ mod tests {
             1,
             GameProfile::new(Uuid::new_v4(), "Creative".into()),
             ResourceLocation::minecraft("overworld"),
-            GameMode::Creative,
+            GameType::Creative,
         );
         assert!(player.abilities.is_invulnerable);
         assert!(player.abilities.can_fly);

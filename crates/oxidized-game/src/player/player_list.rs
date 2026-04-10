@@ -130,7 +130,7 @@ mod tests {
     use oxidized_mc_types::ResourceLocation;
 
     use super::*;
-    use crate::player::game_mode::GameMode;
+    use crate::player::GameType;
 
     fn make_player(name: &str) -> ServerPlayer {
         let uuid = Uuid::new_v4();
@@ -139,7 +139,7 @@ mod tests {
             1, // entity_id doesn't matter for these tests
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         )
     }
 
@@ -150,7 +150,7 @@ mod tests {
             list.next_entity_id(),
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         )
     }
 
@@ -163,7 +163,7 @@ mod tests {
             list.next_entity_id(),
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         );
 
         let (arc, old) = list.add(player);
@@ -199,7 +199,7 @@ mod tests {
             list.next_entity_id(),
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         );
 
         let (_, old) = list.add(player);
@@ -241,7 +241,7 @@ mod tests {
             list.next_entity_id(),
             profile2,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         );
         let p3 = make_player("Charlie");
 
@@ -264,7 +264,7 @@ mod tests {
             list.next_entity_id(),
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         );
 
         assert!(!list.contains(&uuid));
@@ -283,14 +283,14 @@ mod tests {
             list.next_entity_id(),
             profile1,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         );
         let profile2 = GameProfile::new(uuid, "Steve2".into());
         let p2 = ServerPlayer::new(
             list.next_entity_id(),
             profile2,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         );
 
         let (first, old1) = list.add(p1);

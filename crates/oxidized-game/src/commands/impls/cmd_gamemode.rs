@@ -7,13 +7,13 @@
 use crate::commands::argument_access::{get_entities, get_gamemode};
 use crate::commands::nodes::LiteralBuilderExt;
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
-use crate::player::game_mode::GameMode;
 use oxidized_chat::Component;
 use oxidized_commands::CommandError;
 use oxidized_commands::arguments::ArgumentType;
 use oxidized_commands::context::CommandContext;
 use oxidized_commands::dispatcher::CommandDispatcher;
 use oxidized_commands::nodes::{argument, literal};
+use oxidized_mc_types::GameType;
 
 /// Registers the `/gamemode` command.
 pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
@@ -26,7 +26,8 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                     // /gamemode <mode> — apply to self
                     .executes(|ctx: &CommandContext<CommandSourceStack>| {
                         let gm = get_gamemode(ctx, "gamemode")?;
-                        let mode = GameMode::from_id(gm.id());
+                        let mode =
+                            GameType::by_id(gm.id()).unwrap_or(GameType::Survival);
                         let uuid = require_player_uuid(ctx)?;
                         set_game_mode(ctx, uuid, &ctx.source.display_name.clone(), mode, true)
                     })
@@ -42,7 +43,8 @@ pub fn register(d: &mut CommandDispatcher<CommandSourceStack>) {
                         .executes(
                             |ctx: &CommandContext<CommandSourceStack>| {
                                 let gm = get_gamemode(ctx, "gamemode")?;
-                                let mode = GameMode::from_id(gm.id());
+                                let mode =
+                                    GameType::by_id(gm.id()).unwrap_or(GameType::Survival);
                                 let targets = get_entities(ctx, "target")?;
                                 if targets.is_empty() {
                                     return Err(CommandError::Parse(
@@ -96,7 +98,7 @@ fn set_game_mode(
     ctx: &CommandContext<CommandSourceStack>,
     target_uuid: uuid::Uuid,
     target_name: &str,
-    mode: GameMode,
+    mode: GameType,
     is_self: bool,
 ) -> Result<i32, CommandError> {
     if !ctx.source.server.set_player_game_mode(target_uuid, mode) {
@@ -104,7 +106,7 @@ fn set_game_mode(
         return Err(CommandError::Parse("Game mode unchanged".to_string()));
     }
 
-    let mode_component = Component::translatable(mode_translation_key(mode), vec![]);
+    let mode_component = Component::translatable(mode.translation_key(), vec![]);
 
     if is_self {
         ctx.source.send_translatable_success(
@@ -128,16 +130,6 @@ fn set_game_mode(
     Ok(1)
 }
 
-/// Returns the vanilla translation key for a game mode.
-fn mode_translation_key(mode: GameMode) -> &'static str {
-    match mode {
-        GameMode::Survival => "gameMode.survival",
-        GameMode::Creative => "gameMode.creative",
-        GameMode::Adventure => "gameMode.adventure",
-        GameMode::Spectator => "gameMode.spectator",
-    }
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -146,19 +138,19 @@ mod tests {
     #[test]
     fn test_mode_translation_keys() {
         assert_eq!(
-            mode_translation_key(GameMode::Survival),
+            GameType::Survival.translation_key(),
             "gameMode.survival"
         );
         assert_eq!(
-            mode_translation_key(GameMode::Creative),
+            GameType::Creative.translation_key(),
             "gameMode.creative"
         );
         assert_eq!(
-            mode_translation_key(GameMode::Adventure),
+            GameType::Adventure.translation_key(),
             "gameMode.adventure"
         );
         assert_eq!(
-            mode_translation_key(GameMode::Spectator),
+            GameType::Spectator.translation_key(),
             "gameMode.spectator"
         );
     }

@@ -121,7 +121,7 @@ pub async fn handle_movement(
     };
 
     let skip_speed_check = should_skip_speed_check(
-        game_mode.is_creative_or_spectator(),
+        matches!(game_mode, oxidized_mc_types::GameType::Creative | oxidized_mc_types::GameType::Spectator),
         player_movement_check,
         elytra_movement_check,
         is_fall_flying,

@@ -27,7 +27,6 @@ use oxidized_protocol::packets::play::{
 };
 use oxidized_anvil::storage::PrimaryLevelData;
 
-use super::game_mode::GameMode;
 use super::player_list::PlayerList;
 use super::server_player::ServerPlayer;
 use crate::level::game_rules::{GameRuleKey, GameRules};
@@ -139,7 +138,9 @@ fn build_login_packet(
             dimension: player.spawn.dimension.clone(),
             seed: obfuscate_seed(level_data.settings.world_seed),
             game_mode: player.game_mode.id() as u8,
-            previous_game_mode: GameMode::nullable_id(player.previous_game_mode),
+            previous_game_mode: player
+                .previous_game_mode
+                .map_or(-1, |m| m.id() as i8),
             is_debug: false,
             is_flat,
             last_death_location: player.combat.last_death_location.clone(),
@@ -356,7 +357,7 @@ pub fn handle_accept_teleportation(player: &mut ServerPlayer, teleport_id: i32) 
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use oxidized_auth::GameProfile;
-    use oxidized_mc_types::Vec3;
+    use oxidized_mc_types::{GameType, Vec3};
     use oxidized_nbt::NbtCompound;
     use uuid::Uuid;
 
@@ -382,7 +383,7 @@ mod tests {
             id,
             profile,
             ResourceLocation::minecraft("overworld"),
-            GameMode::Survival,
+            GameType::Survival,
         )
     }
 
@@ -481,9 +482,9 @@ mod tests {
         let player = make_player(1, "Creative");
         // Override to creative
         let mut player = player;
-        player.game_mode = GameMode::Creative;
+        player.game_mode = GameType::Creative;
         player.abilities =
-            super::super::abilities::PlayerAbilities::for_game_mode(GameMode::Creative);
+            super::super::abilities::PlayerAbilities::for_game_mode(GameType::Creative);
 
         let level_data = make_level_data();
         let player_list = PlayerList::new(20);

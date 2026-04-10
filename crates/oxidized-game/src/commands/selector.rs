@@ -7,9 +7,9 @@
 //! rotations, coordinates/volumes) are parsed and stored for future ECS use.
 
 use crate::commands::source::{CommandSourceKind, CommandSourceStack};
-use crate::player::game_mode::GameMode;
 use oxidized_commands::CommandError;
 use oxidized_commands::argument_parser::parse_range;
+use oxidized_mc_types::GameType;
 use rand::RngExt;
 use std::str::FromStr;
 
@@ -413,7 +413,7 @@ pub fn resolve_selector(
 
     // Apply gamemode filters.
     for (mode_name, is_negated) in &filters.gamemode {
-        let mode = GameMode::from_name(mode_name)
+        let mode = GameType::by_name(mode_name)
             .ok_or_else(|| CommandError::Parse(format!("Invalid game mode: '{mode_name}'")))?;
         targets.retain(|t| {
             let player_mode = source.server.get_player_game_mode(&t.uuid);
@@ -803,7 +803,7 @@ mod tests {
     // ── Resolution tests ──────────────────────────────────────────────
 
     use crate::commands::source::{CommandSourceKind, CommandSourceStack, ServerHandle};
-    use crate::player::game_mode::GameMode as GM;
+    use oxidized_mc_types::GameType as GM;
     use oxidized_chat::Component;
     use std::sync::Arc;
 
