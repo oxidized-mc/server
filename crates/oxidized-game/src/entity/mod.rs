@@ -146,7 +146,7 @@ impl Entity {
             is_removed: false,
             bounding_box: Aabb::from_center(0.0, 0.0, 0.0, f64::from(width), f64::from(height)),
             synched_data,
-            dimensions: EntityDimensions { width, height },
+            dimensions: EntityDimensions::new(width, height),
             fall_distance: 0.0,
         }
     }
