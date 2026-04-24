@@ -1919,7 +1919,9 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "oxidized-anvil"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410200248.8297638"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "336c293f6ecbae3f82785601ead7bafcb73ea962f50c21f620d80c7548b5bd0b"
 dependencies = [
  "ahash",
  "flate2",
@@ -1935,7 +1937,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-auth"
-version = "0.1.0"
+version = "0.1.0-dev.b605cfc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "706731d5d180430023a001f223703051508feafcb70cacd154150c900dc6b810"
 dependencies = [
  "reqwest",
  "serde",
@@ -1947,7 +1951,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-chat"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410203404.75b1717"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e2dc5dc281428d59c28414ea8ffd8c56dc9b05ab14e64be981c59ec96a02591"
 dependencies = [
  "oxidized-mc-types",
  "oxidized-nbt",
@@ -1957,7 +1963,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-chunks"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410200555.6b8d0ec"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a034daeb83ea876f434dbf628131a1978630271176bea697d6393912c3ed4646"
 dependencies = [
  "ahash",
  "oxidized-registry",
@@ -1967,7 +1975,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-codec"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410200616.7029a5b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5304e1deafb0263b40d9d4f97c74acc9e361a5c08108a75d1f9d2ffd70c32c9"
 dependencies = [
  "bytes",
  "oxidized-nbt",
@@ -1978,7 +1988,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-commands"
-version = "0.1.0"
+version = "0.1.0-dev.d93a27b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6210c40727e28fbe693b97345d4032af4ab4f1da4f805ddc919cf7f081756cbc"
 dependencies = [
  "bytes",
  "thiserror 2.0.18",
@@ -1987,7 +1999,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-compression"
-version = "0.1.0"
+version = "0.1.0-dev.e3f77db"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "736ddb61c9657809c7b514116ee95f92e4ef7df447c6ab103b697e5112fb9d51"
 dependencies = [
  "flate2",
  "thiserror 2.0.18",
@@ -1995,7 +2009,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-crypto"
-version = "0.1.0"
+version = "0.1.0-dev.ffe736c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bab11666b4f1a58fb1ba414859c6567974ce73bfbf87a91e6636e6c85960d669"
 dependencies = [
  "aes",
  "md-5 0.11.0",
@@ -2051,7 +2067,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-inventory"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410200556.12ad4bd"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c915e6388326da26650e21090953a245f481547da157672a86b7f281809c46c0"
 dependencies = [
  "oxidized-nbt",
  "oxidized-registry",
@@ -2060,7 +2078,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-lighting"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410203341.158d6d3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f327129cea6efacbdc7fa8e0990bc85a3a1486430fab58d90af742898695b67"
 dependencies = [
  "ahash",
  "oxidized-chunks",
@@ -2082,6 +2102,8 @@ dependencies = [
 [[package]]
 name = "oxidized-mc-types"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf664c2a9a9e9d5f5cfdfa45acdf7183ed283f5b9ced64960e81ed14cfde5cd1"
 dependencies = [
  "bytes",
  "oxidized-codec",
@@ -2091,7 +2113,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-nbt"
-version = "0.1.0"
+version = "0.1.0-dev.fc4a249"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a708205f1c8e59e6093103e4a1b891d6f69a01bd5d3ec36ffb5abbd98ba3287"
 dependencies = [
  "bytes",
  "flate2",
@@ -2103,7 +2127,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-physics"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410203337.26fd814"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf1bd5d81a5c70fd5688aca53757fa26fbedcea7ff621e30baa3821209f77eea"
 dependencies = [
  "glam 0.30.10",
  "oxidized-mc-types",
@@ -2149,7 +2175,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-registry"
-version = "0.1.0"
+version = "0.1.0-dev.b8e702e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a74af38aed528adda02ecf6aebabd572907a330913f7f6a33a8f13cfa7ce94a5"
 dependencies = [
  "bitflags",
  "flate2",
@@ -2206,7 +2234,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-transport"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410200602.b359409"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45a1fb1fbdfd146eb447ee1ef927ab3b0da5de52575948a8a5cf9a7052709626"
 dependencies = [
  "bytes",
  "oxidized-codec",
@@ -2218,7 +2248,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-types"
-version = "0.1.0"
+version = "0.1.0-dev.c3e288c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1a33071143cf3e2ea190c9c738b320fa47aeffa90b5da2caceebf67e10d50ea6"
 
 [[package]]
 name = "oxidized-world"
@@ -2238,7 +2270,9 @@ dependencies = [
 
 [[package]]
 name = "oxidized-worldgen"
-version = "0.1.0"
+version = "0.1.0-dev.t20260410203431.e7832c5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0af92f0847d8cdd56f8dd76e54e392fad5f620339839dd12ee34657574f11744"
 dependencies = [
  "dashmap",
  "oxidized-chunks",
@@ -2846,9 +2880,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.11"
+version = "0.103.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20a6af516fea4b20eccceaf166e8aa666ac996208e8a644ce3ef5aa783bc7cd4"
+checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
 dependencies = [
  "aws-lc-rs",
  "ring",
